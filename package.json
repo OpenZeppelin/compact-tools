@@ -1,0 +1,32 @@
+{
+  "name": "@openzeppelin/compact-tools",
+  "description": "Tools for compiling, building and testing Compact smart contracts",
+  "private": true,
+  "packageManager": "yarn@4.10.3",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "compact": "turbo run compact --filter=@openzeppelin/compact-tools-compact --log-prefix=none",
+    "build": "turbo run build --log-prefix=none",
+    "test": "turbo run test --filter=@openzeppelin/compact-tools-compact --log-prefix=none",
+    "fmt-and-lint": "biome check . --changed",
+    "fmt-and-lint:fix": "biome check . --changed --write",
+    "fmt-and-lint:ci": "biome ci . --changed --no-errors-on-unmatched",
+    "types": "turbo run types",
+    "clean": "turbo run clean"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.9.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.4",
+    "@midnight-ntwrk/ledger": "^4.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
+    "@types/node": "22.18.0",
+    "ts-node": "^10.9.2",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.5"
+  }
+}
