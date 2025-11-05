@@ -1,0 +1,102 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "compact:security": {
+      "dependsOn": ["^build"],
+      "env": ["COMPACT_HOME", "SKIP_ZK"],
+      "inputs": ["src/security/**/*.compact"],
+      "outputLogs": "new-only",
+      "outputs": ["artifacts/**/"]
+    },
+    "compact:utils": {
+      "dependsOn": ["^build"],
+      "env": ["COMPACT_HOME", "SKIP_ZK"],
+      "inputs": ["src/utils/**/*.compact"],
+      "outputLogs": "new-only",
+      "outputs": ["artifacts/**/"]
+    },
+    "compact:access": {
+      "dependsOn": ["^build", "compact:security", "compact:utils"],
+      "env": ["COMPACT_HOME", "SKIP_ZK"],
+      "inputs": ["src/access/**/*.compact"],
+      "outputLogs": "new-only",
+      "outputs": ["artifacts/**/"]
+    },
+    "compact:archive": {
+      "dependsOn": ["^build", "compact:utils"],
+      "env": ["COMPACT_HOME", "SKIP_ZK"],
+      "inputs": ["src/archive/**/*.compact"],
+      "outputLogs": "new-only",
+      "outputs": ["artifacts/**/"]
+    },
+    "compact:token": {
+      "dependsOn": ["^build", "compact:security", "compact:utils"],
+      "env": ["COMPACT_HOME", "SKIP_ZK"],
+      "inputs": ["src/token/**/*.compact"],
+      "outputLogs": "new-only",
+      "outputs": ["artifacts/**/"]
+    },
+    "compact": {
+      "dependsOn": [
+        "compact:security",
+        "compact:utils",
+        "compact:access",
+        "compact:archive",
+        "compact:token"
+      ],
+      "env": ["COMPACT_HOME", "SKIP_ZK"],
+      "inputs": ["src/**/*.compact", "test/**/*.compact"],
+      "outputLogs": "new-only",
+      "outputs": ["artifacts/**"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["COMPACT_HOME"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.compact",
+        "vitest.config.ts",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "env": ["COMPACT_HOME"],
+      "inputs": [
+        "src/**/*.ts",
+        "!src/**/*.test.ts",
+        "tsconfig.json",
+        "tsconfig.build.json",
+        ".env"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "types": {
+      "dependsOn": [
+        "@openzeppelin-compact/compact#build",
+        "@openzeppelin-compact/contracts#compact"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#fmt-and-lint": {},
+    "//#fmt-and-lint:ci": {},
+    "//#fmt-and-lint:fix": {
+      "cache": false
+    },
+    "clean": {
+      "outputs": [],
+      "cache": false
+    },
+    "docs": {
+      "outputs": [],
+      "cache": false
+    },
+    "docs:watch": {
+      "outputs": [],
+      "cache": false
+    }
+  }
+}

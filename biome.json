@@ -1,0 +1,114 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true,
+    "defaultBranch": "main"
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!**/tsconfig.base.json",
+      "!**/tsconfig*.json",
+      "!**/*.compact",
+      "!**/artifacts/**/*",
+      "!**/test-artifacts/**/*",
+      "!**/coverage/**/*",
+      "!**/dist/**/*",
+      "!**/reports/**/*"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "includes": ["**"]
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "a11y": {},
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "noChildrenProp": "off",
+        "noInvalidDirectionInLinearGradient": "off",
+        "noInvalidGridAreas": "off",
+        "noInvalidPositionAtImportRule": "off",
+        "noRenderReturnValue": "off",
+        "noUnknownFunction": "off",
+        "noUnknownMediaFeatureName": "off",
+        "noUnknownProperty": "off",
+        "noUnknownUnit": "off",
+        "noUnmatchableAnbSelector": "off",
+        "useExhaustiveDependencies": "off",
+        "useJsxKeyInIterable": "off"
+      },
+      "performance": {
+        "noBarrelFile": "error",
+        "noReExportAll": "error",
+        "noDelete": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off",
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error",
+        "useConsistentArrayType": {
+          "level": "error",
+          "options": {
+            "syntax": "shorthand"
+          }
+        }
+      },
+      "suspicious": {
+        "noArrayIndexKey": "off",
+        "noConfusingVoidType": "off",
+        "noExplicitAny": "off",
+        "noCommentText": "off",
+        "noDuplicateAtImportRules": "off",
+        "noDuplicateFontNames": "off",
+        "noDuplicateJsxProps": "off",
+        "noDuplicateSelectorsKeyframeBlock": "off",
+        "noEmptyBlock": "off",
+        "noImportantInKeyframe": "off",
+        "noShorthandPropertyOverrides": "off",
+        "noSuspiciousSemicolonInJsx": "off",
+        "useErrorMessage": "error",
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["log"]
+          }
+        }
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off",
+        "noDangerouslySetInnerHtmlWithChildren": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "indentStyle": "space"
+    }
+  }
+}
