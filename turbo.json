@@ -41,9 +41,9 @@
         "dist/**"
       ]
     },
-    "//#fmt-and-lint": {},
-    "//#fmt-and-lint:ci": {},
-    "//#fmt-and-lint:fix": {
+    "fmt-and-lint": {},
+    "fmt-and-lint:ci": {},
+    "fmt-and-lint:fix": {
       "cache": false
     },
     "clean": {
