@@ -1,0 +1,36 @@
+name: Compact Tools Test Suite
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  COMPILER_VERSION: "0.26.0"
+  LANGUAGE_VERSION: "0.18.0"
+
+jobs:
+  run-suite:
+    name: Run Test Suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    env:
+      COMPACT_INSTALLER_URL: ${{ vars.COMPACT_INSTALLER_URL }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2 # Recommended by turbo team
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+
+      - name: Run type checks
+        run: turbo types
+
+      - name: Run tests
+        run: turbo test
