@@ -388,9 +388,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openzeppelin/compact-tools-compact@workspace:packages/compact":
+"@openzeppelin/compact-tools-cli@workspace:packages/cli":
   version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-tools-compact@workspace:packages/compact"
+  resolution: "@openzeppelin/compact-tools-cli@workspace:packages/cli"
   dependencies:
     "@tsconfig/node24": "npm:^24.0.1"
     "@types/node": "npm:24.9.0"

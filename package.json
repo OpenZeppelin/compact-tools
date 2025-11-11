@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build": "turbo run build --log-prefix=none",
-    "test": "turbo run test --filter=@openzeppelin/compact-tools-compact --log-prefix=none",
+    "test": "turbo run test --filter=@openzeppelin/compact-tools-cli --log-prefix=none",
     "fmt-and-lint": "biome check . --changed",
     "fmt-and-lint:fix": "biome check . --changed --write",
     "fmt-and-lint:ci": "biome ci . --changed --no-errors-on-unmatched",

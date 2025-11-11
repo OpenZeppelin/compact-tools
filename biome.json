@@ -14,7 +14,6 @@
       "!**/tsconfig*.json",
       "!**/*.compact",
       "!**/artifacts/**/*",
-      "!**/test-artifacts/**/*",
       "!**/coverage/**/*",
       "!**/dist/**/*",
       "!**/reports/**/*"

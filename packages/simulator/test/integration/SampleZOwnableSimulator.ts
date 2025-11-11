@@ -9,7 +9,7 @@ import {
   ledger,
   Contract as SampleZOwnable,
   type ZswapCoinPublicKey,
-} from '../fixtures/test-artifacts/SampleZOwnable/contract/index.cjs';
+} from '../fixtures/artifacts/SampleZOwnable/contract/index.cjs';
 
 /**
  * Type constructor args

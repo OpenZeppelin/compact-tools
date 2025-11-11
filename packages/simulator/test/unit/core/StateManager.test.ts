@@ -16,7 +16,7 @@ import {
   type SimplePrivateState,
   SimpleWitnesses,
 } from '../../fixtures/sample-contracts/witnesses/SimpleWitnesses';
-import { Contract as MockSimple } from '../../fixtures/test-artifacts/Simple/contract/index.cjs';
+import { Contract as MockSimple } from '../../fixtures/artifacts/Simple/contract/index.cjs';
 import { encodeToAddress, toHexPadded } from '../../fixtures/utils/address';
 
 // Constants

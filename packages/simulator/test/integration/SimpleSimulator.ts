@@ -6,7 +6,7 @@ import {
 import {
   ledger,
   Contract as SimpleContract,
-} from '../fixtures/test-artifacts/Simple/contract/index.cjs';
+} from '../fixtures/artifacts/Simple/contract/index.cjs';
 
 /**
  * Base simulator

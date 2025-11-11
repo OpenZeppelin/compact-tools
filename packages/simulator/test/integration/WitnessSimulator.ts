@@ -6,7 +6,7 @@ import {
 import {
   ledger,
   Contract as SampleZOwnable,
-} from '../fixtures/test-artifacts/Witness/contract/index.cjs';
+} from '../fixtures/artifacts/Witness/contract/index.cjs';
 
 /**
  * Type constructor args

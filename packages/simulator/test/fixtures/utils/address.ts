@@ -3,7 +3,7 @@ import {
   encodeCoinPublicKey,
 } from '@midnight-ntwrk/compact-runtime';
 import { encodeContractAddress } from '@midnight-ntwrk/ledger';
-import type * as Compact from '../test-artifacts/SampleZOwnable/contract/index.cjs';
+import type * as Compact from '../artifacts/SampleZOwnable/contract/index.cjs';
 
 const PREFIX_ADDRESS = '0200';
 

@@ -5,7 +5,7 @@
 
 Tools for compiling, building, and testing Compact smart contracts. This is a monorepo containing:
 
-- `packages/compact`: CLI utilities to run the Compact compiler and builder
+- `packages/cli`: CLI utilities to run the Compact compiler and builder
 - `packages/simulator`: TypeScript simulator to run and test Compact contracts locally
 
 ## External usage (via git submodule until npm publish)
@@ -29,13 +29,13 @@ yarn --cwd tools/compact-tools build
 yarn install
 
 # Call the CLIs directly or via scripts
-node compact-tools/packages/compact/dist/runCompiler.js --help
-node compact-tools/packages/compact/dist/runBuilder.js --help
+node compact-tools/packages/cli/dist/runCompiler.js --help
+node compact-tools/packages/cli/dist/runBuilder.js --help
 ```
 
 ## Requirements
 
-- Node.js >= 20 (root and `packages/compact`), >= 22 for `packages/simulator`
+- Node.js >= 20 (root and `packages/cli`), >= 22 for `packages/simulator`
 - Yarn 4 (Berry)
 - Turbo
 - Optional: Midnight Compact toolchain installed and available in `PATH`
@@ -85,13 +85,13 @@ yarn clean
 
 ## Packages
 
-### `@openzeppelin/compact-tools-compact` (packages/compact)
+### `@openzeppelin/compact-tools-cli` (packages/cli)
 
 Utilities and CLIs around the Compact compiler and builder.
 
 - Binaries provided:
-  - `compact-compiler` → `packages/compact/dist/runCompiler.js`
-  - `compact-builder` → `packages/compact/dist/runBuilder.js`
+  - `compact-compiler` → `packages/cli/dist/runCompiler.js`
+  - `compact-builder` → `packages/cli/dist/runBuilder.js`
 
 Useful commands:
 
@@ -100,7 +100,7 @@ Useful commands:
 yarn compact
 
 # Or inside the package
-cd packages/compact
+cd packages/cli
 yarn build           # compile TypeScript
 yarn test            # run unit tests
 yarn types           # type-check only
