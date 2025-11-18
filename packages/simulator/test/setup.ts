@@ -21,6 +21,10 @@ const ARTIFACTS_DIR = join(__dirname, 'fixtures', 'artifacts');
 
 const CONTRACT_FILES = ['Simple.compact', 'Witness.compact', 'SampleZOwnable.compact'];
 
+// Singleton pattern to ensure setup only runs once across all test workers
+let setupPromise: Promise<void> | null = null;
+let setupComplete = false;
+
 async function compileContract(contractFile: string): Promise<void> {
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
   const contractName = contractFile.replace('.compact', '');
@@ -30,14 +34,15 @@ async function compileContract(contractFile: string): Promise<void> {
     throw new Error(`Contract file not found: ${inputPath}`);
   }
 
-  // Ensure output directory exists
+  // Ensure output directory and keys subdirectory exist
+  // compact compile requires the keys directory to exist
   mkdirSync(outputDir, { recursive: true });
-
-  // Use Compact developer tools CLI to compile a single contract file
-  const command = `compact compile "${inputPath}" "${outputDir}"`;
+  mkdirSync(join(outputDir, 'keys'), { recursive: true });
 
   try {
+    const command = `compact compile --skip-zk "${inputPath}" "${outputDir}"`;
     const { stderr } = await execAsync(command);
+    
     if (stderr && !stderr.includes('warning')) {
       console.log(`Warning for ${contractFile}: ${stderr}`);
     }
@@ -49,21 +54,44 @@ async function compileContract(contractFile: string): Promise<void> {
 }
 
 async function setup(): Promise<void> {
-  console.log('🔨 Compiling sample contracts for tests...\n');
-
-  // Ensure artifacts directory exists
-  mkdirSync(ARTIFACTS_DIR, { recursive: true });
-
-  // Compile each contract
-  for (const contractFile of CONTRACT_FILES) {
-    await compileContract(contractFile);
+  // If setup is already complete, return immediately
+  if (setupComplete) {
+    return;
   }
 
-  console.log('\n✅ Test artifacts compiled successfully!\n');
+  // If setup is in progress, wait for it
+  if (setupPromise) {
+    return setupPromise;
+  }
+
+  // Start setup
+  setupPromise = (async () => {
+    console.log('🔨 Compiling sample contracts for tests...\n');
+
+    // Ensure artifacts directory exists
+    mkdirSync(ARTIFACTS_DIR, { recursive: true });
+
+    // Compile each contract
+    for (const contractFile of CONTRACT_FILES) {
+      await compileContract(contractFile);
+    }
+
+    console.log('\n✅ Test artifacts compiled successfully!\n');
+    setupComplete = true;
+  })();
+
+  try {
+    await setupPromise;
+  } catch (error) {
+    // Reset promise on error so it can be retried
+    setupPromise = null;
+    throw error;
+  }
 }
 
 // Always run setup when this file is loaded by vitest
 // Vitest's `setupFiles` loads (imports) this module, so execute on import.
+// The singleton pattern ensures it only runs once even with parallel workers.
 await setup().catch((error) => {
   console.log(`❌ Setup failed: ${error}`);
   process.exit(1);
