@@ -2,12 +2,8 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "test": {
-      "dependsOn": [
-        "^build"
-      ],
-      "env": [
-        "COMPACT_HOME"
-      ],
+      "dependsOn": ["^build"],
+      "env": ["COMPACT_HOME"],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.compact",
@@ -18,12 +14,8 @@
       "cache": false
     },
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "env": [
-        "COMPACT_HOME"
-      ],
+      "dependsOn": ["^build"],
+      "env": ["COMPACT_HOME"],
       "inputs": [
         "src/**/*.ts",
         "!src/**/*.test.ts",
@@ -31,15 +23,11 @@
         "tsconfig.build.json",
         ".env"
       ],
-      "outputs": [
-        "dist/**"
-      ]
+      "outputs": ["dist/**"]
     },
     "types": {
       "dependsOn": [],
-      "outputs": [
-        "dist/**"
-      ]
+      "outputs": ["dist/**"]
     },
     "fmt-and-lint": {},
     "fmt-and-lint:ci": {},

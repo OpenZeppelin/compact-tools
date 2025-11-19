@@ -4,10 +4,10 @@
  */
 
 import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
@@ -17,7 +17,11 @@ const __dirname = dirname(__filename);
 const SAMPLE_CONTRACTS_DIR = join(__dirname, 'fixtures', 'sample-contracts');
 const ARTIFACTS_DIR = join(__dirname, 'fixtures', 'artifacts');
 
-const CONTRACT_FILES = ['Simple.compact', 'Witness.compact', 'SampleZOwnable.compact'];
+const CONTRACT_FILES = [
+  'Simple.compact',
+  'Witness.compact',
+  'SampleZOwnable.compact',
+];
 
 async function compileContract(contractFile: string): Promise<void> {
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
@@ -67,5 +71,4 @@ export default async function globalSetup(): Promise<void> {
     console.log(`❌ Setup failed: ${error}`);
     process.exit(1);
   }
-};
-
+}
