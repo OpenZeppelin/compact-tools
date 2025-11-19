@@ -178,7 +178,6 @@ export function createSimulator<P, L, W, TArgs extends readonly any[]>(
     }
 
     /**
-     * Gets the current Zswap local state
      * Gets the current Zswap local state containing coin inputs/outputs and transaction data.
      *
      * @returns The encoded Zswap state including:
