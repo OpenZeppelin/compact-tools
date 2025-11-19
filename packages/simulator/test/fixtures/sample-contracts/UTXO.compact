@@ -1,0 +1,38 @@
+pragma language_version >= 0.18.0;
+
+import CompactStandardLibrary;
+
+export { ZswapCoinPublicKey, ContractAddress, Either, Maybe, CoinInfo, QualifiedCoinInfo };
+
+export ledger _coin: QualifiedCoinInfo;
+
+export circuit mint(
+  domain: Bytes<32>,
+  amount: Uint<64>,
+  nonce: Bytes<32>,
+  recipient: Either<ZswapCoinPublicKey, ContractAddress>
+): [] {
+  mintToken(disclose(domain), disclose(amount), disclose(nonce), disclose(recipient));
+}
+
+export circuit sendToken(
+  input: QualifiedCoinInfo,
+  recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+  value: Uint<64>
+): [] {
+  send(disclose(input), disclose(recipient), disclose(value));
+}
+
+export circuit receiveToken(coin: CoinInfo): [] {
+  const disclosedCoin = disclose(coin);
+  receive(disclosedCoin);
+  const thisContract = right<ZswapCoinPublicKey, ContractAddress>(kernel.self());
+  _coin.writeCoin(disclosedCoin, thisContract);
+}
+
+export circuit receiveTokenSendChange(coin: CoinInfo, change: Uint<64>): [] {
+  const dislosedCoin = disclose(coin);
+  receive(dislosedCoin);
+  const eitherCaller = left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey());
+  sendImmediate(dislosedCoin, eitherCaller, disclose(change));
+}
