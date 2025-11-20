@@ -27,7 +27,7 @@ jobs:
         uses: ./.github/actions/setup
 
       - name: Format & Lint
-        run: yarn fmt-and-lint:ci
+        run: yarn lint:ci
 
       - name: Run type checks
         run: yarn types

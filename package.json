@@ -9,9 +9,9 @@
   "scripts": {
     "build": "turbo run build --log-prefix=none",
     "test": "turbo run test --log-prefix=none",
-    "fmt-and-lint": "biome check . --changed",
-    "fmt-and-lint:fix": "biome check . --changed --write",
-    "fmt-and-lint:ci": "biome ci . --changed --no-errors-on-unmatched",
+    "lint": "biome check .",
+    "lint:fix": "biome check . --write",
+    "lint:ci": "biome ci . --no-errors-on-unmatched",
     "types": "turbo run types",
     "clean": "turbo run clean"
   },

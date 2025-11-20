@@ -73,8 +73,8 @@ yarn test
 Format and lint (Biome):
 
 ```bash
-yarn fmt-and-lint
-yarn fmt-and-lint:fix
+yarn lint
+yarn lint:fix
 ```
 
 Clean generated artifacts:

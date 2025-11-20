@@ -29,9 +29,9 @@
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
-    "fmt-and-lint": {},
-    "fmt-and-lint:ci": {},
-    "fmt-and-lint:fix": {
+    "lint": {},
+    "lint:ci": {},
+    "lint:fix": {
       "cache": false
     },
     "clean": {
