@@ -49,8 +49,6 @@ async function compileContract(contractFile: string): Promise<void> {
 }
 
 async function setup(): Promise<void> {
-  console.log('🔨 Compiling sample contracts for tests...\n');
-
   mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
   // Compile each contract sequentially

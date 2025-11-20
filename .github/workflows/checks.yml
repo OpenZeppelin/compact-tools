@@ -31,3 +31,6 @@ jobs:
 
       - name: Run type checks
         run: yarn types
+
+      - name: Run tests
+        run: yarn test
