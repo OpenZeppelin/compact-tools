@@ -1,0 +1,36 @@
+name: Format and Lint
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  checks:
+    name: Run Checks
+    runs-on: ubuntu-24.04
+
+    env:
+      COMPACT_INSTALLER_URL: ${{ vars.COMPACT_INSTALLER_URL }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2 # Recommended by turbo team
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+
+      - name: Format & Lint
+        run: yarn lint:ci
+
+      - name: Run type checks
+        run: yarn types
+
+      - name: Run tests
+        run: yarn test

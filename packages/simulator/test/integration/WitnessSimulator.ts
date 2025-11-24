@@ -1,12 +1,12 @@
 import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
 import {
+  ledger,
+  Contract as SampleZOwnable,
+} from '../fixtures/artifacts/Witness/contract/index.cjs';
+import {
   WitnessPrivateState,
   WitnessWitnesses,
 } from '../fixtures/sample-contracts/witnesses/WitnessWitnesses';
-import {
-  ledger,
-  Contract as SampleZOwnable,
-} from '../fixtures/test-artifacts/Witness/contract/index.cjs';
 
 /**
  * Type constructor args

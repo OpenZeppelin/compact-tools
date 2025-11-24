@@ -1,15 +1,15 @@
 import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
 import {
-  SampleZOwnablePrivateState,
-  SampleZOwnableWitnesses,
-} from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses';
-import {
   type ContractAddress,
   type Either,
   ledger,
   Contract as SampleZOwnable,
   type ZswapCoinPublicKey,
-} from '../fixtures/test-artifacts/SampleZOwnable/contract/index.cjs';
+} from '../fixtures/artifacts/SampleZOwnable/contract/index.cjs';
+import {
+  SampleZOwnablePrivateState,
+  SampleZOwnableWitnesses,
+} from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses';
 
 /**
  * Type constructor args

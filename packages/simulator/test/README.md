@@ -18,8 +18,8 @@ test/
 Test fixtures contain reusable components and resources shared across tests.
 These help keep test files clean and consistent.
 
-- `test-contracts/` – Smart contracts and associated simulators used exclusively for testing.
-- `artifacts/` – Precompiled contract artifacts needed by tests.
+- `sample-contracts/` – Smart contracts and associated simulators used exclusively for testing.
+- `artifacts/` – Dynamically compiled contract artifacts (generated during test setup, not committed to git).
 - `utils/` – Helper functions and common utilities for key encoding and keypair generation.
 
 ### 🔗 Integration Tests (`test/integration`)

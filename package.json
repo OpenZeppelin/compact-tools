@@ -8,10 +8,10 @@
   ],
   "scripts": {
     "build": "turbo run build --log-prefix=none",
-    "test": "turbo run test --filter=@openzeppelin/compact-tools-compact --log-prefix=none",
-    "fmt-and-lint": "biome check . --changed",
-    "fmt-and-lint:fix": "biome check . --changed --write",
-    "fmt-and-lint:ci": "biome ci . --changed --no-errors-on-unmatched",
+    "test": "turbo run test --log-prefix=none",
+    "lint": "biome check .",
+    "lint:fix": "biome check . --write",
+    "lint:ci": "biome ci . --no-errors-on-unmatched",
     "types": "turbo run types",
     "clean": "turbo run clean"
   },
@@ -19,13 +19,13 @@
     "@midnight-ntwrk/compact-runtime": "^0.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.2.5",
+    "@biomejs/biome": "2.3.7",
     "@midnight-ntwrk/ledger": "^4.0.0",
     "@midnight-ntwrk/zswap": "^4.0.0",
-    "@types/node": "24.10.0",
+    "@types/node": "24.10.1",
     "ts-node": "^10.9.2",
-    "turbo": "^2.5.8",
+    "turbo": "^2.6.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.8"
+    "vitest": "^4.0.12"
   }
 }

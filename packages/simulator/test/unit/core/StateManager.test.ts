@@ -12,11 +12,11 @@ import {
 } from '@midnight-ntwrk/compact-runtime';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CircuitContextManager } from '../../../src/core/CircuitContextManager';
+import { Contract as MockSimple } from '../../fixtures/artifacts/Simple/contract/index.cjs';
 import {
   type SimplePrivateState,
   SimpleWitnesses,
 } from '../../fixtures/sample-contracts/witnesses/SimpleWitnesses';
-import { Contract as MockSimple } from '../../fixtures/test-artifacts/Simple/contract/index.cjs';
 import { encodeToAddress, toHexPadded } from '../../fixtures/utils/address';
 
 // Constants

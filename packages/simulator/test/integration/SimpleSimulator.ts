@@ -1,12 +1,12 @@
 import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
 import {
+  ledger,
+  Contract as SimpleContract,
+} from '../fixtures/artifacts/Simple/contract/index.cjs';
+import {
   SimplePrivateState,
   SimpleWitnesses,
 } from '../fixtures/sample-contracts/witnesses/SimpleWitnesses';
-import {
-  ledger,
-  Contract as SimpleContract,
-} from '../fixtures/test-artifacts/Simple/contract/index.cjs';
 
 /**
  * Base simulator
