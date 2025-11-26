@@ -17,4 +17,4 @@
    - Create a git tag.
    - Publish the package to npm.
 
-6. Once published, go to Releases and create a GitHub release using the generated tag.
+6. Once published, go to "Releases" and create a GitHub release using the generated tag.
