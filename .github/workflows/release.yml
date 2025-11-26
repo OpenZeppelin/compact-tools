@@ -21,7 +21,6 @@ on:
 
 permissions:
   contents: write  # Required to push commits and tags
-  id-token: write  # Required for npm provenance
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
@@ -30,7 +29,7 @@ jobs:
   release:
     name: Release ${{ inputs.package }}
     runs-on: ubuntu-24.04
-    # environment: compact-npm-prod  # Requires approval
+    environment: compact-npm-prod  # Requires approval
 
     env:
       COMPACT_INSTALLER_URL: ${{ vars.COMPACT_INSTALLER_URL }}
@@ -40,6 +39,18 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Set package directory
+        id: pkg
+        run: |
+          case "${{ inputs.package }}" in
+            "compact-tools-cli")
+              echo "dir=cli" >> $GITHUB_OUTPUT
+              ;;
+            "compact-tools-simulator")
+              echo "dir=simulator" >> $GITHUB_OUTPUT
+              ;;
+          esac
 
       - name: Setup Environment
         uses: ./.github/actions/setup
@@ -53,8 +64,8 @@ jobs:
       - name: Bump version
         id: version
         run: |
-          cd packages/${{ inputs.package }}
-          yarn version ${{ inputs.version_bump }} --no-git-tag-version
+          cd packages/${{ steps.pkg.outputs.dir }}
+          yarn version ${{ inputs.version_bump }}
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "### Release Summary" >> $GITHUB_STEP_SUMMARY
@@ -64,19 +75,20 @@ jobs:
 
       - name: Verify package contents
         run: |
-          cd packages/${{ inputs.package }}
+          cd packages/${{ steps.pkg.outputs.dir }}
           yarn pack --dry-run
 
       - name: Commit and tag version bump
         uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3  # v7.0.0
         with:
-          commit_message: "Release ${{ inputs.package }} v${{ steps.version.outputs.new }}"
-          file_pattern: "packages/${{ inputs.package }}/package.json"
+          commit_message: "chore: release ${{ inputs.package }} v${{ steps.version.outputs.new }}"
+          file_pattern: "packages/${{ steps.pkg.outputs.dir }}/package.json"
           tagging_message: "${{ inputs.package }}/v${{ steps.version.outputs.new }}"
 
       - name: Publish to npm
         run: |
-          cd packages/${{ inputs.package }}
-          yarn npm publish --access public --provenance
+          yarn config set npmAuthToken "$NPM_TOKEN"
+          cd packages/${{ steps.pkg.outputs.dir }}
+          yarn npm publish --access public
         env:
-          YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
