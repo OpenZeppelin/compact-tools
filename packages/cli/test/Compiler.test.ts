@@ -297,6 +297,40 @@ describe('CompilerService', () => {
       );
     });
 
+    it('should preserve directory structure in artifacts output', async () => {
+      mockExec.mockResolvedValue({
+        stdout: 'Compilation successful',
+        stderr: '',
+      });
+
+      const result = await service.compileFile(
+        'access/AccessControl.compact',
+        '--skip-zk',
+      );
+
+      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(mockExec).toHaveBeenCalledWith(
+        'compact compile --skip-zk "src/access/AccessControl.compact" "artifacts/access/AccessControl"',
+      );
+    });
+
+    it('should preserve nested directory structure in artifacts output', async () => {
+      mockExec.mockResolvedValue({
+        stdout: 'Compilation successful',
+        stderr: '',
+      });
+
+      const result = await service.compileFile(
+        'access/test/AccessControl.mock.compact',
+        '--skip-zk',
+      );
+
+      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(mockExec).toHaveBeenCalledWith(
+        'compact compile --skip-zk "src/access/test/AccessControl.mock.compact" "artifacts/access/test/AccessControl.mock"',
+      );
+    });
+
     it('should throw CompilationError when compilation fails', async () => {
       mockExec.mockRejectedValue(new Error('Syntax error on line 10'));
 

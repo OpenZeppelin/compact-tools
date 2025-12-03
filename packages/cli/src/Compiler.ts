@@ -3,7 +3,7 @@
 import { exec as execCallback } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -263,7 +263,12 @@ export class CompilerService {
     version?: string,
   ): Promise<{ stdout: string; stderr: string }> {
     const inputPath = join(SRC_DIR, file);
-    const outputDir = join(ARTIFACTS_DIR, basename(file, '.compact'));
+    // Preserve directory structure from source in artifacts output
+    const fileDir = dirname(file);
+    const fileName = basename(file, '.compact');
+    const outputDir = fileDir !== '.' 
+      ? join(ARTIFACTS_DIR, fileDir, fileName)
+      : join(ARTIFACTS_DIR, fileName);
 
     const versionFlag = version ? `+${version}` : '';
     const flagsStr = flags ? ` ${flags}` : '';
