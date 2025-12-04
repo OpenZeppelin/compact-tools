@@ -11,7 +11,12 @@ import {
 /**
  * Base simulator
  */
-const SimpleSimulatorBase = createSimulator({
+const SimpleSimulatorBase = createSimulator<
+  SimplePrivateState,
+  ReturnType<typeof ledger>,
+  ReturnType<typeof SimpleWitnesses>,
+  SimpleContract<SimplePrivateState>
+>({
   contractFactory: (witnesses) =>
     new SimpleContract<SimplePrivateState>(witnesses),
   defaultPrivateState: () => SimplePrivateState,
