@@ -3,6 +3,11 @@ import { sampleContractAddress } from '@midnight-ntwrk/zswap';
 import { CircuitContextManager } from '../core/CircuitContextManager.js';
 import { ContractSimulator } from '../core/ContractSimulator.js';
 import type { IMinimalContract } from '../types/Contract.js';
+import type {
+  ContextlessCircuits,
+  ExtractImpureCircuits,
+  ExtractPureCircuits,
+} from '../types/index.js';
 import type { BaseSimulatorOptions } from '../types/Options.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
@@ -19,11 +24,15 @@ import type { SimulatorConfig } from './SimulatorConfig.js';
  * @param config - Configuration object defining how to create and manage the simulator
  * @returns A class constructor that can be extended to create specific simulators
  */
-export function createSimulator<P, L, W, TArgs extends readonly any[]>(
-  config: SimulatorConfig<P, L, W, TArgs>,
-) {
+export function createSimulator<
+  P,
+  L,
+  W,
+  TContract extends IMinimalContract,
+  TArgs extends readonly any[] = readonly any[],
+>(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
   return class GeneratedSimulator extends ContractSimulator<P, L> {
-    contract: IMinimalContract;
+    contract: TContract;
     readonly contractAddress: string;
     public _witnesses: W;
 
@@ -59,18 +68,27 @@ export function createSimulator<P, L, W, TArgs extends readonly any[]>(
       this.contractAddress = this.circuitContext.transactionContext.address;
     }
 
-    public _pureCircuitProxy?: any;
-    public _impureCircuitProxy?: any;
+    public _pureCircuitProxy?: ContextlessCircuits<
+      ExtractPureCircuits<TContract>,
+      P
+    >;
+    public _impureCircuitProxy?: ContextlessCircuits<
+      ExtractImpureCircuits<TContract>,
+      P
+    >;
 
     /**
      * Gets the pure circuit proxy, creating it lazily if it doesn't exist.
      *
      * @returns The pure circuit proxy for executing read-only contract methods
      */
-    public get pureCircuit() {
+    public get pureCircuit(): ContextlessCircuits<
+      ExtractPureCircuits<TContract>,
+      P
+    > {
       if (!this._pureCircuitProxy) {
         this._pureCircuitProxy = this.createPureCircuitProxy(
-          this.contract.circuits,
+          this.contract.circuits as ExtractPureCircuits<TContract>,
           () => this.circuitContext,
         );
       }
@@ -82,10 +100,13 @@ export function createSimulator<P, L, W, TArgs extends readonly any[]>(
      *
      * @returns The impure circuit proxy for executing state-modifying contract methods
      */
-    public get impureCircuit() {
+    public get impureCircuit(): ContextlessCircuits<
+      ExtractImpureCircuits<TContract>,
+      P
+    > {
       if (!this._impureCircuitProxy) {
         this._impureCircuitProxy = this.createImpureCircuitProxy(
-          this.contract.impureCircuits,
+          this.contract.impureCircuits as ExtractImpureCircuits<TContract>,
           () => this.getCallerContext(),
           (ctx) => {
             this.circuitContext = ctx;
