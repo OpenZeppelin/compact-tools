@@ -266,9 +266,10 @@ export class CompilerService {
     // Preserve directory structure from source in artifacts output
     const fileDir = dirname(file);
     const fileName = basename(file, '.compact');
-    const outputDir = fileDir !== '.' 
-      ? join(ARTIFACTS_DIR, fileDir, fileName)
-      : join(ARTIFACTS_DIR, fileName);
+    const outputDir =
+      fileDir !== '.'
+        ? join(ARTIFACTS_DIR, fileDir, fileName)
+        : join(ARTIFACTS_DIR, fileName);
 
     const versionFlag = version ? `+${version}` : '';
     const flagsStr = flags ? ` ${flags}` : '';
