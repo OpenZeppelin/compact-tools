@@ -93,7 +93,75 @@ Utilities and CLIs around the Compact compiler and builder.
   - `compact-compiler` → `packages/cli/dist/runCompiler.js`
   - `compact-builder` → `packages/cli/dist/runBuilder.js`
 
-Useful commands:
+#### Compiler CLI Options
+
+```bash
+compact-compiler [options]
+
+Options:
+  --dir <directory>   Compile specific subdirectory within src
+  --src <directory>   Source directory (default: src)
+  --out <directory>   Output directory (default: artifacts)
+  --hierarchical      Preserve source directory structure in artifacts output
+  --skip-zk           Skip zero-knowledge proof generation
+  +<version>          Use specific toolchain version (e.g., +0.26.0)
+```
+
+#### Artifact Output Structure
+
+By default, artifacts are output in a **flattened structure**:
+
+```
+<out>/
+  ContractA/
+  ContractB/
+```
+
+Use `--hierarchical` to preserve the source directory structure:
+
+```bash
+compact-compiler --hierarchical
+```
+
+This produces:
+
+```
+<out>/
+  subdir/
+    ContractA/
+  another/
+    ContractB/
+```
+
+#### Examples
+
+```bash
+# Compile all contracts (flattened output)
+compact-compiler
+
+# Compile with hierarchical artifact structure
+compact-compiler --hierarchical
+
+# Compile specific directory
+compact-compiler --dir security
+
+# Skip ZK proof generation (faster compilation)
+compact-compiler --skip-zk
+
+# Use specific toolchain version
+compact-compiler +0.26.0
+
+# Use custom source and output directories
+compact-compiler --src contracts --out build
+
+# Combine options
+compact-compiler --dir access --skip-zk --hierarchical
+
+# Use environment variable for skip-zk
+SKIP_ZK=true compact-compiler
+```
+
+#### Useful commands
 
 ```bash
 # From repo root (via Turbo filters)
@@ -106,7 +174,7 @@ yarn test            # run unit tests
 yarn types           # type-check only
 ```
 
-After building, you can invoke the CLIs directly, for example:
+After building, you can invoke the CLIs directly:
 
 ```bash
 node dist/runCompiler.js --help
