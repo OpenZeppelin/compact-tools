@@ -405,6 +405,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@openzeppelin/compact-tools-docs@workspace:packages/docs":
+  version: 0.0.0-use.local
+  resolution: "@openzeppelin/compact-tools-docs@workspace:packages/docs"
+  dependencies:
+    "@tsconfig/node24": "npm:^24.0.3"
+    "@types/node": "npm:24.10.1"
+    chalk: "npm:^5.6.2"
+    log-symbols: "npm:^7.0.0"
+    typescript: "npm:^5.9.3"
+    vitest: "npm:^4.0.14"
+  bin:
+    compact-docslint: dist/runDocslint.js
+  languageName: unknown
+  linkType: soft
+
 "@openzeppelin/compact-tools-simulator@workspace:packages/simulator":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-tools-simulator@workspace:packages/simulator"

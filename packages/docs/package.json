@@ -1,0 +1,38 @@
+{
+  "name": "@openzeppelin/compact-tools-docs",
+  "private": true,
+  "description": "Documentation linter for Compact smart contracts",
+  "version": "0.0.1",
+  "keywords": [
+    "compact",
+    "docs",
+    "linter",
+    "documentation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "exports": "./dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "compact-docslint": "dist/runDocslint.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "types": "tsc -p tsconfig.json --noEmit",
+    "test": "yarn vitest run",
+    "clean": "git clean -fXd"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.3",
+    "@types/node": "24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "log-symbols": "^7.0.0"
+  }
+}
