@@ -39,22 +39,3 @@ export type CompactcVersion = (typeof COMPACTC_VERSIONS)[number];
 
 /** Type derived from supported compact-tools versions */
 export type CompactToolVersion = (typeof COMPACT_TOOL_VERSIONS)[number];
-
-/**
- * Compares two semver version strings.
- * @param a - First version string (e.g., "0.26.0")
- * @param b - Second version string (e.g., "0.27.0")
- * @returns -1 if a < b, 0 if a === b, 1 if a > b
- */
-export function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number);
-  const partsB = b.split('.').map(Number);
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const numA = partsA[i] ?? 0;
-    const numB = partsB[i] ?? 0;
-    if (numA < numB) return -1;
-    if (numA > numB) return 1;
-  }
-  return 0;
-}

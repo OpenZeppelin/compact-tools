@@ -17,13 +17,15 @@ import {
 import { FileDiscovery } from '../src/services/FileDiscovery.js';
 import { ManifestService } from '../src/services/ManifestService.js';
 import { UIService } from '../src/services/UIService.js';
-import { StructureMismatchError } from '../src/types/manifest.js';
 import {
   CompactCliNotFoundError,
   CompilationError,
   DirectoryNotFoundError,
 } from '../src/types/errors.js';
-import { MANIFEST_FILENAME } from '../src/types/manifest.js';
+import {
+  MANIFEST_FILENAME,
+  StructureMismatchError,
+} from '../src/types/manifest.js';
 
 // Mock Node.js modules
 vi.mock('node:fs');
@@ -263,7 +265,9 @@ describe('CompilerService', () => {
         stderr: '',
       });
 
-      const result = await service.compileFile('MyToken.compact', ['--skip-zk']);
+      const result = await service.compileFile('MyToken.compact', [
+        '--skip-zk',
+      ]);
 
       expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
       expect(mockExec).toHaveBeenCalledWith(
@@ -309,10 +313,9 @@ describe('CompilerService', () => {
         stderr: '',
       });
 
-      const result = await service.compileFile(
-        'access/AccessControl.compact',
-        ['--skip-zk'],
-      );
+      const result = await service.compileFile('access/AccessControl.compact', [
+        '--skip-zk',
+      ]);
 
       expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
       expect(mockExec).toHaveBeenCalledWith(
@@ -380,10 +383,9 @@ describe('CompilerService', () => {
         stderr: '',
       });
 
-      const result = await service.compileFile(
-        'access/AccessControl.compact',
-        ['--skip-zk'],
-      );
+      const result = await service.compileFile('access/AccessControl.compact', [
+        '--skip-zk',
+      ]);
 
       expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
       expect(mockExec).toHaveBeenCalledWith(
@@ -414,7 +416,9 @@ describe('CompilerService', () => {
         stderr: '',
       });
 
-      const result = await service.compileFile('MyToken.compact', ['--skip-zk']);
+      const result = await service.compileFile('MyToken.compact', [
+        '--skip-zk',
+      ]);
 
       expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
       expect(mockExec).toHaveBeenCalledWith(
@@ -437,7 +441,9 @@ describe('CompilerService', () => {
         stderr: '',
       });
 
-      const result = await service.compileFile('MyToken.compact', ['--skip-zk']);
+      const result = await service.compileFile('MyToken.compact', [
+        '--skip-zk',
+      ]);
 
       expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
       expect(mockExec).toHaveBeenCalledWith(
@@ -456,10 +462,9 @@ describe('CompilerService', () => {
         stderr: '',
       });
 
-      const result = await service.compileFile(
-        'access/AccessControl.compact',
-        ['--skip-zk'],
-      );
+      const result = await service.compileFile('access/AccessControl.compact', [
+        '--skip-zk',
+      ]);
 
       expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
       expect(mockExec).toHaveBeenCalledWith(
@@ -619,8 +624,13 @@ describe('CompactCompiler', () => {
     });
 
     it('should handle flags array', () => {
-      compiler = new CompactCompiler({ flags: ['--skip-zk', '--trace-passes'] });
-      expect(compiler.testOptions.flags).toEqual(['--skip-zk', '--trace-passes']);
+      compiler = new CompactCompiler({
+        flags: ['--skip-zk', '--trace-passes'],
+      });
+      expect(compiler.testOptions.flags).toEqual([
+        '--skip-zk',
+        '--trace-passes',
+      ]);
     });
   });
 
@@ -662,7 +672,10 @@ describe('CompactCompiler', () => {
       ]);
 
       expect(compiler.testOptions.targetDir).toBe('security');
-      expect(compiler.testOptions.flags).toEqual(['--skip-zk', '--trace-passes']);
+      expect(compiler.testOptions.flags).toEqual([
+        '--skip-zk',
+        '--trace-passes',
+      ]);
     });
 
     it('should parse version flag', () => {
@@ -682,17 +695,26 @@ describe('CompactCompiler', () => {
       ]);
 
       expect(compiler.testOptions.targetDir).toBe('security');
-      expect(compiler.testOptions.flags).toEqual(['--skip-zk', '--trace-passes']);
+      expect(compiler.testOptions.flags).toEqual([
+        '--skip-zk',
+        '--trace-passes',
+      ]);
       expect(compiler.testOptions.version).toBe('0.26.0');
     });
 
     it('should combine environment variables with CLI flags', () => {
-      compiler = CompactCompiler.fromArgs(['--dir', 'access', '--trace-passes'], {
-        SKIP_ZK: 'true',
-      });
+      compiler = CompactCompiler.fromArgs(
+        ['--dir', 'access', '--trace-passes'],
+        {
+          SKIP_ZK: 'true',
+        },
+      );
 
       expect(compiler.testOptions.targetDir).toBe('access');
-      expect(compiler.testOptions.flags).toEqual(['--skip-zk', '--trace-passes']);
+      expect(compiler.testOptions.flags).toEqual([
+        '--skip-zk',
+        '--trace-passes',
+      ]);
     });
 
     it('should deduplicate flags when both env var and CLI flag are present', () => {
@@ -700,7 +722,10 @@ describe('CompactCompiler', () => {
         SKIP_ZK: 'true',
       });
 
-      expect(compiler.testOptions.flags).toEqual(['--skip-zk', '--trace-passes']);
+      expect(compiler.testOptions.flags).toEqual([
+        '--skip-zk',
+        '--trace-passes',
+      ]);
     });
 
     it('should throw error for --dir without argument', () => {
