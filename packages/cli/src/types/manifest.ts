@@ -2,18 +2,44 @@
 import type { CompactcVersion, CompactToolVersion } from '../config.ts';
 
 /**
- * Hierarchical artifacts organized by subdirectory.
- * Keys are subdirectory names, values are arrays of artifact names.
+ * A node in the hierarchical artifacts tree.
+ * Each node can contain artifacts at its level and child directory nodes.
+ *
+ * @interface HierarchicalArtifactNode
+ */
+export interface HierarchicalArtifactNode {
+  /** Artifacts at this directory level */
+  artifacts?: string[];
+  /** Child directories mapped by name to their artifact nodes */
+  [directory: string]: string[] | HierarchicalArtifactNode | undefined;
+}
+
+/**
+ * Hierarchical artifacts organized as a nested tree structure.
+ * Each top-level key is a root directory, containing nested subdirectories.
  *
  * @example
  * ```typescript
  * const artifacts: HierarchicalArtifacts = {
- *   ledger: ['Counter'],
- *   reference: ['Boolean', 'Field', 'Uint']
+ *   math: {
+ *     artifacts: ['Bytes32', 'Field254', 'Uint128'],
+ *     interfaces: {
+ *       artifacts: ['IUint128', 'IUint256', 'IUint64']
+ *     },
+ *     test: {
+ *       artifacts: ['Bytes32.mock', 'Field254.mock', 'Uint128.mock']
+ *     }
+ *   },
+ *   access: {
+ *     artifacts: ['AccessControl'],
+ *     test: {
+ *       artifacts: ['AccessControl.mock']
+ *     }
+ *   }
  * };
  * ```
  */
-export type HierarchicalArtifacts = Record<string, string[]>;
+export type HierarchicalArtifacts = Record<string, HierarchicalArtifactNode>;
 
 /**
  * Artifact structure type for output organization.
@@ -97,7 +123,7 @@ export interface ArtifactManifest {
   /**
    * Artifact names that were created.
    * - For 'flattened' structure: flat array of artifact names
-   * - For 'hierarchical' structure: object with subdirectory keys and artifact name arrays
+   * - For 'hierarchical' structure: nested tree structure with directories containing artifacts and child directories
    */
   artifacts: string[] | HierarchicalArtifacts;
 }

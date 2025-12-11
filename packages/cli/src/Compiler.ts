@@ -25,6 +25,8 @@ import {
 } from './types/errors.ts';
 import {
   type CompilerFlag,
+  type HierarchicalArtifactNode,
+  type HierarchicalArtifacts,
   type NodeVersion,
   type Platform,
   StructureMismatchError,
@@ -424,25 +426,17 @@ export class CompactCompiler {
 
     UIService.showCompilationStart(compactFiles.length, this.options.targetDir);
 
-    // Track artifacts: hierarchical uses Record<string, string[]>, flattened uses string[]
-    const hierarchicalArtifacts: Record<string, string[]> = {};
+    // Track artifacts: hierarchical uses nested tree, flattened uses string[]
+    const hierarchicalArtifacts: HierarchicalArtifacts = {};
     const flatArtifacts: string[] = [];
 
     for (const [index, file] of compactFiles.entries()) {
       await this.compileFile(file, index, compactFiles.length);
-      // Extract artifact name from file path
-      const artifactName = basename(file, '.compact');
 
       if (requestedStructure === 'hierarchical') {
-        // Get the subdirectory from the file path (e.g., 'ledger' from 'ledger/Counter.compact')
-        const subDir = dirname(file);
-        const category = subDir === '.' ? 'root' : subDir.split('/')[0];
-        if (!hierarchicalArtifacts[category]) {
-          hierarchicalArtifacts[category] = [];
-        }
-        hierarchicalArtifacts[category].push(artifactName);
+        this.addArtifactToTree(hierarchicalArtifacts, file);
       } else {
-        flatArtifacts.push(artifactName);
+        flatArtifacts.push(basename(file, '.compact'));
       }
     }
 
@@ -559,5 +553,42 @@ export class CompactCompiler {
    */
   get testOptions(): ResolvedCompilerOptions {
     return this.options;
+  }
+
+  /**
+   * Adds an artifact to the hierarchical tree structure.
+   * Creates nested nodes as needed based on the file path.
+   *
+   * @param tree - The hierarchical artifacts tree to add to
+   * @param file - The file path (e.g., 'math/test/Uint128.mock.compact')
+   */
+  private addArtifactToTree(tree: HierarchicalArtifacts, file: string): void {
+    const artifactName = basename(file, '.compact');
+    const subDir = dirname(file);
+
+    if (subDir === '.') {
+      // Root level artifacts go into a 'root' node
+      if (!tree.root) {
+        tree.root = { artifacts: [] };
+      }
+      (tree.root.artifacts as string[]).push(artifactName);
+    } else {
+      // Navigate/create nested structure
+      const pathParts = subDir.split('/');
+      let current: HierarchicalArtifactNode = tree;
+
+      for (const part of pathParts) {
+        if (!current[part]) {
+          current[part] = { artifacts: [] };
+        }
+        current = current[part] as HierarchicalArtifactNode;
+      }
+
+      // Add artifact to the current node
+      if (!current.artifacts) {
+        current.artifacts = [];
+      }
+      (current.artifacts as string[]).push(artifactName);
+    }
   }
 }

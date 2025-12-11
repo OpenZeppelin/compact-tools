@@ -1327,3 +1327,144 @@ describe('StructureMismatchError', () => {
     expect(error.message).toContain('hierarchical');
   });
 });
+
+describe('Hierarchical artifact tree structure', () => {
+  let mockExec: MockedFunction<ExecFunction>;
+  let compiler: CompactCompiler;
+  let writtenManifest: unknown;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    writtenManifest = undefined;
+    mockExec = vi.fn().mockResolvedValue({ stdout: 'success', stderr: '' });
+    // existsSync returns true for src dir but false for manifest (no existing manifest)
+    mockExistsSync.mockImplementation((path: string) => {
+      if (path.includes('manifest.json')) return false;
+      return true;
+    });
+    mockWriteFile.mockImplementation(async (_path, content) => {
+      writtenManifest = JSON.parse(content as string);
+    });
+  });
+
+  it('should create nested tree structure for hierarchical artifacts', async () => {
+    // Mock: src/ has 'math' dir, math/ has Uint128.compact and 'test' dir, test/ has Uint128.mock.compact
+    const mockSrcDir = [
+      { name: 'math', isFile: () => false, isDirectory: () => true },
+    ];
+    const mockMathDir = [
+      { name: 'Uint128.compact', isFile: () => true, isDirectory: () => false },
+      { name: 'test', isFile: () => false, isDirectory: () => true },
+    ];
+    const mockTestDir = [
+      {
+        name: 'Uint128.mock.compact',
+        isFile: () => true,
+        isDirectory: () => false,
+      },
+    ];
+
+    mockReaddir
+      .mockResolvedValueOnce(mockSrcDir as any)
+      .mockResolvedValueOnce(mockMathDir as any)
+      .mockResolvedValueOnce(mockTestDir as any);
+
+    compiler = new CompactCompiler({ hierarchical: true }, mockExec);
+    await compiler.compile();
+
+    const manifest = writtenManifest as {
+      structure: string;
+      artifacts: Record<string, unknown>;
+    };
+    expect(manifest.structure).toBe('hierarchical');
+    expect(manifest.artifacts).toHaveProperty('math');
+    const math = manifest.artifacts.math as {
+      artifacts: string[];
+      test: { artifacts: string[] };
+    };
+    expect(math).toHaveProperty('artifacts');
+    expect(math.artifacts).toContain('Uint128');
+    expect(math).toHaveProperty('test');
+    expect(math.test.artifacts).toContain('Uint128.mock');
+  });
+
+  it('should add root level artifacts to root node', async () => {
+    const mockDirents = [
+      {
+        name: 'MyToken.compact',
+        isFile: () => true,
+        isDirectory: () => false,
+      },
+    ];
+    mockReaddir.mockResolvedValue(mockDirents as any);
+
+    compiler = new CompactCompiler({ hierarchical: true }, mockExec);
+    await compiler.compile();
+
+    const manifest = writtenManifest as {
+      artifacts: { root: { artifacts: string[] } };
+    };
+    expect(manifest.artifacts).toHaveProperty('root');
+    expect(manifest.artifacts.root.artifacts).toContain('MyToken');
+  });
+
+  it('should create flat array for flattened structure', async () => {
+    const mockDirents = [
+      {
+        name: 'MyToken.compact',
+        isFile: () => true,
+        isDirectory: () => false,
+      },
+      {
+        name: 'Ownable.compact',
+        isFile: () => true,
+        isDirectory: () => false,
+      },
+    ];
+    mockReaddir.mockResolvedValue(mockDirents as any);
+
+    compiler = new CompactCompiler({ hierarchical: false }, mockExec);
+    await compiler.compile();
+
+    const manifest = writtenManifest as {
+      structure: string;
+      artifacts: string[];
+    };
+    expect(manifest.structure).toBe('flattened');
+    expect(Array.isArray(manifest.artifacts)).toBe(true);
+    expect(manifest.artifacts).toContain('MyToken');
+    expect(manifest.artifacts).toContain('Ownable');
+  });
+
+  it('should handle deeply nested directories', async () => {
+    // Simulate: src/ -> access/ -> roles/ -> admin/ -> Admin.compact
+    const mockSrcDir = [
+      { name: 'access', isFile: () => false, isDirectory: () => true },
+    ];
+    const mockAccessDir = [
+      { name: 'roles', isFile: () => false, isDirectory: () => true },
+    ];
+    const mockRolesDir = [
+      { name: 'admin', isFile: () => false, isDirectory: () => true },
+    ];
+    const mockAdminDir = [
+      { name: 'Admin.compact', isFile: () => true, isDirectory: () => false },
+    ];
+
+    mockReaddir
+      .mockResolvedValueOnce(mockSrcDir as any)
+      .mockResolvedValueOnce(mockAccessDir as any)
+      .mockResolvedValueOnce(mockRolesDir as any)
+      .mockResolvedValueOnce(mockAdminDir as any);
+
+    compiler = new CompactCompiler({ hierarchical: true }, mockExec);
+    await compiler.compile();
+
+    const manifest = writtenManifest as {
+      artifacts: {
+        access: { roles: { admin: { artifacts: string[] } } };
+      };
+    };
+    expect(manifest.artifacts.access.roles.admin.artifacts).toContain('Admin');
+  });
+});
