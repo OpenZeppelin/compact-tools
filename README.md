@@ -85,125 +85,42 @@ yarn clean
 
 ## Packages
 
-### `@openzeppelin/compact-tools-cli` (packages/cli)
+### `@openzeppelin/compact-tools-cli` ([packages/cli](./packages/cli))
 
-Utilities and CLIs around the Compact compiler and builder.
+CLI utilities for compiling and building Compact smart contracts.
 
-- Binaries provided:
-  - `compact-compiler` → `packages/cli/dist/runCompiler.js`
-  - `compact-builder` → `packages/cli/dist/runBuilder.js`
-
-#### Compiler CLI Options
+**Quickstart:**
 
 ```bash
-compact-compiler [options]
-
-Options:
-  --dir <directory>   Compile specific subdirectory within src
-  --src <directory>   Source directory (default: src)
-  --out <directory>   Output directory (default: artifacts)
-  --hierarchical      Preserve source directory structure in artifacts output
-  --skip-zk           Skip zero-knowledge proof generation
-  +<version>          Use specific toolchain version (e.g., +0.26.0)
-```
-
-#### Artifact Output Structure
-
-By default, artifacts are output in a **flattened structure**:
-
-```
-<out>/
-  ContractA/
-  ContractB/
-```
-
-Use `--hierarchical` to preserve the source directory structure:
-
-```bash
-compact-compiler --hierarchical
-```
-
-This produces:
-
-```
-<out>/
-  subdir/
-    ContractA/
-  another/
-    ContractB/
-```
-
-#### Examples
-
-```bash
-# Compile all contracts (flattened output)
+# Compile all .compact files
 compact-compiler
 
-# Compile with hierarchical artifact structure
-compact-compiler --hierarchical
+# Skip ZK proofs for faster development builds
+compact-compiler --skip-zk
 
 # Compile specific directory
 compact-compiler --dir security
 
-# Skip ZK proof generation (faster compilation)
-compact-compiler --skip-zk
-
-# Use specific toolchain version
-compact-compiler +0.26.0
-
-# Use custom source and output directories
-compact-compiler --src contracts --out build
-
-# Combine options
-compact-compiler --dir access --skip-zk --hierarchical
-
-# Use environment variable for skip-zk
-SKIP_ZK=true compact-compiler
+# Full build (compile + TypeScript + copy artifacts)
+compact-builder
 ```
 
-#### Useful commands
+See [packages/cli/README.md](./packages/cli/README.md) for full documentation including all options, programmatic API, and examples.
 
-```bash
-# From repo root (via Turbo filters)
-yarn compact
+### `@openzeppelin/compact-tools-simulator` ([packages/simulator](./packages/simulator))
 
-# Or inside the package
-cd packages/cli
-yarn build           # compile TypeScript
-yarn test            # run unit tests
-yarn types           # type-check only
-```
+TypeScript simulator for testing Compact contracts locally.
 
-After building, you can invoke the CLIs directly:
-
-```bash
-node dist/runCompiler.js --help
-node dist/runBuilder.js --help
-```
-
-### `@openzeppelin/compact-tools-simulator` (packages/simulator)
-
-A local simulator to execute Compact contracts in tests.
-
-Build and test:
-
-```bash
-cd packages/simulator
-yarn build
-yarn test
-```
-
-Minimal usage example:
+**Quickstart:**
 
 ```ts
 import { createSimulator } from '@openzeppelin/compact-tools-simulator';
 
-// Create a simulator instance (see package docs and tests for full examples)
 const simulator = createSimulator({});
-
-// Use simulator to deploy/execute contract circuits, inspect state, etc.
-// (Refer to `packages/simulator/src/integration` and `src/unit` tests.)
+// Deploy and execute contract circuits, inspect state, etc.
 ```
+
+See package tests in `packages/simulator/src/integration` and `src/unit` for full examples.
 
 ## Contributing
 
@@ -212,5 +129,3 @@ Before opening a PR, please read `CODE_OF_CONDUCT.md`. Use the root scripts to b
 ## License
 
 MIT
-
- 
