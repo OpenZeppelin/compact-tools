@@ -86,57 +86,42 @@ yarn clean
 
 ## Packages
 
-### `@openzeppelin/compact-tools-cli` (packages/cli)
+### `@openzeppelin/compact-tools-cli` ([packages/cli](./packages/cli))
 
-Utilities and CLIs around the Compact compiler and builder.
+CLI utilities for compiling and building Compact smart contracts.
 
-- Binaries provided:
-  - `compact-compiler` → `packages/cli/dist/runCompiler.js`
-  - `compact-builder` → `packages/cli/dist/runBuilder.js`
-
-Useful commands:
+**Quickstart:**
 
 ```bash
-# From repo root (via Turbo filters)
-yarn compact
+# Compile all .compact files
+compact-compiler
 
-# Or inside the package
-cd packages/cli
-yarn build           # compile TypeScript
-yarn test            # run unit tests
-yarn types           # type-check only
+# Skip ZK proofs for faster development builds
+compact-compiler --skip-zk
+
+# Compile specific directory
+compact-compiler --dir security
+
+# Full build (compile + TypeScript + copy artifacts)
+compact-builder
 ```
 
-After building, you can invoke the CLIs directly, for example:
+See [packages/cli/README.md](./packages/cli/README.md) for full documentation including all options, programmatic API, and examples.
 
-```bash
-node dist/runCompiler.js --help
-node dist/runBuilder.js --help
-```
+### `@openzeppelin/compact-tools-simulator` ([packages/simulator](./packages/simulator))
 
-### `@openzeppelin/compact-tools-simulator` (packages/simulator)
+TypeScript simulator for testing Compact contracts locally.
 
-A local simulator to execute Compact contracts in tests.
-
-Build and test:
-
-```bash
-cd packages/simulator
-yarn build
-yarn test
-```
-
-Minimal usage example:
+**Quickstart:**
 
 ```ts
 import { createSimulator } from '@openzeppelin/compact-tools-simulator';
 
-// Create a simulator instance (see package docs and tests for full examples)
 const simulator = createSimulator({});
-
-// Use simulator to deploy/execute contract circuits, inspect state, etc.
-// (Refer to `packages/simulator/src/integration` and `src/unit` tests.)
+// Deploy and execute contract circuits, inspect state, etc.
 ```
+
+See package tests in `packages/simulator/src/integration` and `src/unit` for full examples.
 
 ## Contributing
 
@@ -145,5 +130,3 @@ Before opening a PR, please read `CODE_OF_CONDUCT.md`. Use the root scripts to b
 ## License
 
 MIT
-
- 
