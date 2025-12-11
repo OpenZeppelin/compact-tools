@@ -1,5 +1,6 @@
 [![Generic badge](https://img.shields.io/badge/Compact%20Compiler-0.26.0-1abc9c.svg)](https://docs.midnight.network/relnotes/compact/minokawa-0-18-26-0)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools/badge)](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools)
 
 # OpenZeppelin Compact Tools
 
