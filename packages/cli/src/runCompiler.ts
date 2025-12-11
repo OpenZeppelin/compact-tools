@@ -4,11 +4,11 @@ import * as readline from 'node:readline';
 import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
 import { CompactCompiler } from './Compiler.ts';
-import { StructureMismatchError } from './types/manifest.ts';
 import {
   type CompilationError,
   isPromisifiedChildProcessError,
 } from './types/errors.ts';
+import { StructureMismatchError } from './types/manifest.ts';
 
 /**
  * Executes the Compact compiler CLI with improved error handling and user feedback.
