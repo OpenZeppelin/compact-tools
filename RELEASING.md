@@ -4,7 +4,7 @@
 2. Click on the "Run workflow" dropdown menu.
 3. Choose the package to release and the version bump type.
    Following [SemVer](https://semver.org/):
-   - **Patch** - Backward compatible bug fixes.
+   - **Patch** - Backward-compatible bug fixes.
    - **Minor** - New functionality in a backward compatible way.
    - **Major** - Breaking API changes.
 
