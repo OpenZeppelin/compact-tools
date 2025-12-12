@@ -23,7 +23,7 @@ jobs:
   release:
     name: Release ${{ inputs.package }}
     runs-on: ubuntu-24.04
-    environment: compact-npm-prod # Requires approval
+    environment: compact-npm-prod  # Requires approval
 
     permissions:
       contents: write # Required to push commits and tags
