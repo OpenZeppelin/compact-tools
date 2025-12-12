@@ -26,16 +26,20 @@ const CONTRACT_FILES = [
 function isSpawnSyncRet(
   err: unknown,
 ): err is SpawnSyncReturns<string | Buffer> {
-  if (typeof err !== "object" || err === null) {
+  if (typeof err !== 'object' || err === null) {
     return false;
   }
 
-  const typedErr = err as Partial<SpawnSyncReturns<string | Buffer>> & Record<string, unknown>;
+  const typedErr = err as Partial<SpawnSyncReturns<string | Buffer>> &
+    Record<string, unknown>;
 
   const okErr = typedErr.error instanceof Error;
-  const okStdout = typeof typedErr.stdout === "string" || Buffer.isBuffer(typedErr.stdout);
-  const okStderr = typeof typedErr.stderr === "string" || Buffer.isBuffer(typedErr.stderr);
-  const okStatus = typeof typedErr.status === "number" || typedErr.status === null;
+  const okStdout =
+    typeof typedErr.stdout === 'string' || Buffer.isBuffer(typedErr.stdout);
+  const okStderr =
+    typeof typedErr.stderr === 'string' || Buffer.isBuffer(typedErr.stderr);
+  const okStatus =
+    typeof typedErr.status === 'number' || typedErr.status === null;
 
   return okErr && okStdout && okStderr && okStatus;
 }
@@ -73,7 +77,9 @@ async function compileContract(contractFile: string): Promise<void> {
     }
 
     if (err.status === 127) {
-      throw new Error("`compact` not found (exit code 127). Is it installed and on PATH?");
+      throw new Error(
+        '`compact` not found (exit code 127). Is it installed and on PATH?',
+      );
     }
 
     throw err;
