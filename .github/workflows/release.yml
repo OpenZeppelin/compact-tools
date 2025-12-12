@@ -19,20 +19,14 @@ on:
           - minor
           - major
 
-permissions:
-  contents: write # Required to push commits and tags
-
-env:
-  TURBO_TELEMETRY_DISABLED: 1
-
 jobs:
   release:
     name: Release ${{ inputs.package }}
     runs-on: ubuntu-24.04
     environment: compact-npm-prod # Requires approval
 
-    env:
-      COMPACT_INSTALLER_URL: ${{ vars.COMPACT_INSTALLER_URL }}
+    permissions:
+      contents: write # Required to push commits and tags
 
     steps:
       - name: Check out code
@@ -51,6 +45,7 @@ jobs:
               echo "dir=simulator" >> $GITHUB_OUTPUT
               ;;
           esac
+
       - name: Setup Environment
         uses: ./.github/actions/setup
 
@@ -71,10 +66,12 @@ jobs:
           echo "- Package: ${{ inputs.package }}" >> $GITHUB_STEP_SUMMARY
           echo "- New version: $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
           echo "- Bump type: ${{ inputs.version_bump }}" >> $GITHUB_STEP_SUMMARY
+
       - name: Verify package contents
         run: |
           cd packages/${{ steps.pkg.outputs.dir }}
           yarn pack --dry-run
+
       - name: Commit and tag version bump
         uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
         with:
