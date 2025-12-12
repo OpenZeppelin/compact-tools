@@ -1,0 +1,88 @@
+name: Release Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Which package to release"
+        required: true
+        type: choice
+        options:
+          - compact-tools-cli
+          - compact-tools-simulator
+      version_bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    name: Release ${{ inputs.package }}
+    runs-on: ubuntu-24.04
+    environment: compact-npm-prod # Requires approval
+
+    permissions:
+      contents: write # Required to push commits and tags
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set package directory
+        id: pkg
+        run: |
+          case "${{ inputs.package }}" in
+            "compact-tools-cli")
+              echo "dir=cli" >> $GITHUB_OUTPUT
+              ;;
+            "compact-tools-simulator")
+              echo "dir=simulator" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+
+      - name: Run tests for package
+        run: yarn test --filter=@openzeppelin/${{ inputs.package }}
+
+      - name: Build package
+        run: yarn build --filter=@openzeppelin/${{ inputs.package }}
+
+      - name: Bump version
+        id: version
+        run: |
+          cd packages/${{ steps.pkg.outputs.dir }}
+          yarn version ${{ inputs.version_bump }}
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "### Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Package: ${{ inputs.package }}" >> $GITHUB_STEP_SUMMARY
+          echo "- New version: $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- Bump type: ${{ inputs.version_bump }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify package contents
+        run: |
+          cd packages/${{ steps.pkg.outputs.dir }}
+          yarn pack --dry-run
+
+      - name: Commit and tag version bump
+        uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
+        with:
+          commit_message: "chore: release ${{ inputs.package }} v${{ steps.version.outputs.new }}"
+          file_pattern: "packages/${{ steps.pkg.outputs.dir }}/package.json"
+          tagging_message: "${{ inputs.package }}/v${{ steps.version.outputs.new }}"
+
+      - name: Publish to npm
+        run: |
+          yarn config set npmAuthToken "$NPM_TOKEN"
+          cd packages/${{ steps.pkg.outputs.dir }}
+          yarn npm publish --access public --provenance
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
