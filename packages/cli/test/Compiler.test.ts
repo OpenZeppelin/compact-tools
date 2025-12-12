@@ -9,7 +9,11 @@ import {
   vi,
 } from 'vitest';
 import { CompactCompiler } from '../src/Compiler.js';
-import { CompilerService } from '../src/services/CompilerService.js';
+import {
+  CompilerService,
+  parseCircuitInfo,
+  parseContractMetadata,
+} from '../src/services/CompilerService.js';
 import {
   EnvironmentValidator,
   type ExecFunction,
@@ -43,11 +47,17 @@ vi.mock('chalk', () => ({
 
 // Mock spinner
 const mockSpinner = {
-  start: () => ({ succeed: vi.fn(), fail: vi.fn(), text: '' }),
+  start: () => ({
+    succeed: vi.fn(),
+    fail: vi.fn(),
+    stopAndPersist: vi.fn(),
+    text: '',
+  }),
   info: vi.fn(),
   warn: vi.fn(),
   fail: vi.fn(),
   succeed: vi.fn(),
+  stopAndPersist: vi.fn(),
 };
 
 vi.mock('ora', () => ({
@@ -269,9 +279,15 @@ describe('CompilerService', () => {
         '--skip-zk',
       ]);
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata).toEqual({ type: 'module' });
+      // Check core command parts (quotes may be escaped differently on Linux due to script wrapper)
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "src/MyToken.compact" "artifacts/MyToken"',
+        expect.stringContaining('compact compile --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/MyToken.compact'),
       );
     });
 
@@ -287,9 +303,14 @@ describe('CompilerService', () => {
         '0.26.0',
       );
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata.type).toBe('module');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile +0.26.0 --skip-zk "src/MyToken.compact" "artifacts/MyToken"',
+        expect.stringContaining('compact compile +0.26.0 --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/MyToken.compact'),
       );
     });
 
@@ -301,9 +322,14 @@ describe('CompilerService', () => {
 
       const result = await service.compileFile('MyToken.compact', []);
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata.type).toBe('module');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile "src/MyToken.compact" "artifacts/MyToken"',
+        expect.stringContaining('compact compile'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/MyToken.compact'),
       );
     });
 
@@ -317,9 +343,16 @@ describe('CompilerService', () => {
         '--skip-zk',
       ]);
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "src/access/AccessControl.compact" "artifacts/AccessControl"',
+        expect.stringContaining('compact compile --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/access/AccessControl.compact'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('artifacts/AccessControl'),
       );
     });
 
@@ -334,10 +367,39 @@ describe('CompilerService', () => {
         ['--skip-zk'],
       );
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "src/access/test/AccessControl.mock.compact" "artifacts/AccessControl.mock"',
+        expect.stringContaining('compact compile --skip-zk'),
       );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/access/test/AccessControl.mock.compact'),
+      );
+    });
+
+    it('should parse circuit info and return top-level metadata', async () => {
+      const circuitOutput = `Compiling 4 circuits:
+  circuit "gt" (k=12, rows=2639)  
+  circuit "gte" (k=12, rows=2643)  
+  circuit "lt" (k=12, rows=2639)  
+  circuit "lte" (k=12, rows=2643)  
+Overall progress [====================] 4/4`;
+
+      mockExec.mockResolvedValue({
+        stdout: 'compactc 0.26.0',
+        stderr: circuitOutput,
+      });
+
+      const result = await service.compileFile('Bytes32.mock.compact', []);
+
+      expect(result.metadata.type).toBe('top-level');
+      expect(result.metadata.circuits).toHaveLength(4);
+      expect(result.metadata.circuits).toEqual([
+        { name: 'gt', k: 12, rows: 2639 },
+        { name: 'gte', k: 12, rows: 2643 },
+        { name: 'lt', k: 12, rows: 2639 },
+        { name: 'lte', k: 12, rows: 2643 },
+      ]);
     });
 
     it('should throw CompilationError when compilation fails', async () => {
@@ -387,9 +449,17 @@ describe('CompilerService', () => {
         '--skip-zk',
       ]);
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata.type).toBe('module');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "src/access/AccessControl.compact" "artifacts/access/AccessControl"',
+        expect.stringContaining('compact compile --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/access/AccessControl.compact'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('artifacts/access/AccessControl'),
       );
     });
 
@@ -404,9 +474,17 @@ describe('CompilerService', () => {
         ['--skip-zk'],
       );
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata.type).toBe('module');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "src/access/test/AccessControl.mock.compact" "artifacts/access/test/AccessControl.mock"',
+        expect.stringContaining('compact compile --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/access/test/AccessControl.mock.compact'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('artifacts/access/test/AccessControl.mock'),
       );
     });
 
@@ -420,9 +498,14 @@ describe('CompilerService', () => {
         '--skip-zk',
       ]);
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata.type).toBe('module');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "src/MyToken.compact" "artifacts/MyToken"',
+        expect.stringContaining('compact compile --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('src/MyToken.compact'),
       );
     });
   });
@@ -445,9 +528,17 @@ describe('CompilerService', () => {
         '--skip-zk',
       ]);
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata.type).toBe('module');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "contracts/MyToken.compact" "build/MyToken"',
+        expect.stringContaining('compact compile --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('contracts/MyToken.compact'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('build/MyToken'),
       );
     });
 
@@ -466,11 +557,123 @@ describe('CompilerService', () => {
         '--skip-zk',
       ]);
 
-      expect(result).toEqual({ stdout: 'Compilation successful', stderr: '' });
+      expect(result.stdout).toBe('Compilation successful');
+      expect(result.stderr).toBe('');
+      expect(result.metadata.type).toBe('module');
       expect(mockExec).toHaveBeenCalledWith(
-        'compact compile --skip-zk "contracts/access/AccessControl.compact" "dist/artifacts/access/AccessControl"',
+        expect.stringContaining('compact compile --skip-zk'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('contracts/access/AccessControl.compact'),
+      );
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('dist/artifacts/access/AccessControl'),
       );
     });
+  });
+});
+
+describe('parseCircuitInfo', () => {
+  it('should parse single circuit info', () => {
+    const output = 'circuit "transfer" (k=14, rows=8192)';
+
+    const circuits = parseCircuitInfo(output);
+
+    expect(circuits).toEqual([{ name: 'transfer', k: 14, rows: 8192 }]);
+  });
+
+  it('should parse multiple circuits', () => {
+    const output = `Compiling 4 circuits:
+  circuit "gt" (k=12, rows=2639)  
+  circuit "gte" (k=12, rows=2643)  
+  circuit "lt" (k=12, rows=2639)  
+  circuit "lte" (k=12, rows=2643)  
+Overall progress [====================] 4/4`;
+
+    const circuits = parseCircuitInfo(output);
+
+    expect(circuits).toHaveLength(4);
+    expect(circuits[0]).toEqual({ name: 'gt', k: 12, rows: 2639 });
+    expect(circuits[1]).toEqual({ name: 'gte', k: 12, rows: 2643 });
+    expect(circuits[2]).toEqual({ name: 'lt', k: 12, rows: 2639 });
+    expect(circuits[3]).toEqual({ name: 'lte', k: 12, rows: 2643 });
+  });
+
+  it('should return empty array for module contracts (no circuits)', () => {
+    const output = 'compactc 0.26.0\nCompilation successful';
+
+    const circuits = parseCircuitInfo(output);
+
+    expect(circuits).toEqual([]);
+  });
+
+  it('should handle circuits with different k and rows values', () => {
+    const output = `circuit "small" (k=10, rows=512)
+circuit "large" (k=20, rows=1048576)`;
+
+    const circuits = parseCircuitInfo(output);
+
+    expect(circuits).toEqual([
+      { name: 'small', k: 10, rows: 512 },
+      { name: 'large', k: 20, rows: 1048576 },
+    ]);
+  });
+
+  it('should handle circuit names with special characters', () => {
+    const output = 'circuit "verify_signature_v2" (k=15, rows=4096)';
+
+    const circuits = parseCircuitInfo(output);
+
+    expect(circuits).toEqual([
+      { name: 'verify_signature_v2', k: 15, rows: 4096 },
+    ]);
+  });
+
+  it('should be reentrant (handle multiple calls)', () => {
+    const output1 = 'circuit "first" (k=10, rows=100)';
+    const output2 = 'circuit "second" (k=11, rows=200)';
+
+    const circuits1 = parseCircuitInfo(output1);
+    const circuits2 = parseCircuitInfo(output2);
+
+    expect(circuits1).toEqual([{ name: 'first', k: 10, rows: 100 }]);
+    expect(circuits2).toEqual([{ name: 'second', k: 11, rows: 200 }]);
+  });
+});
+
+describe('parseContractMetadata', () => {
+  it('should return module type for contracts without circuits', () => {
+    const output = 'compactc 0.26.0\nCompilation successful';
+
+    const metadata = parseContractMetadata(output);
+
+    expect(metadata).toEqual({ type: 'module' });
+    expect(metadata.circuits).toBeUndefined();
+  });
+
+  it('should return top-level type with circuits for contracts with circuits', () => {
+    const output = `Compiling 2 circuits:
+  circuit "mint" (k=14, rows=5000)  
+  circuit "burn" (k=14, rows=4800)  
+Overall progress [====================] 2/2`;
+
+    const metadata = parseContractMetadata(output);
+
+    expect(metadata.type).toBe('top-level');
+    expect(metadata.circuits).toHaveLength(2);
+    expect(metadata.circuits).toEqual([
+      { name: 'mint', k: 14, rows: 5000 },
+      { name: 'burn', k: 14, rows: 4800 },
+    ]);
+  });
+
+  it('should handle single circuit', () => {
+    const output = 'circuit "init" (k=12, rows=1024)';
+
+    const metadata = parseContractMetadata(output);
+
+    expect(metadata.type).toBe('top-level');
+    expect(metadata.circuits).toEqual([{ name: 'init', k: 12, rows: 1024 }]);
   });
 });
 
@@ -1386,6 +1589,8 @@ describe('Hierarchical artifact tree structure', () => {
     expect(math.artifacts).toContain('Uint128');
     expect(math).toHaveProperty('test');
     expect(math.test.artifacts).toContain('Uint128.mock');
+    // Contracts metadata is now in benchmarks.json, not in manifest
+    expect(manifest).not.toHaveProperty('contracts');
   });
 
   it('should add root level artifacts to root node', async () => {
@@ -1466,5 +1671,95 @@ describe('Hierarchical artifact tree structure', () => {
       };
     };
     expect(manifest.artifacts.access.roles.admin.artifacts).toContain('Admin');
+  });
+
+  it('should write benchmarks file with contract metadata when benchmarksPath is set', async () => {
+    const circuitOutput = `Compiling 2 circuits:
+  circuit "mint" (k=14, rows=5000)
+  circuit "burn" (k=14, rows=4800)
+Overall progress [====================] 2/2`;
+
+    // Return different outputs for module vs top-level contracts
+    let compileCallCount = 0;
+    mockExec.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('--version')) {
+        return { stdout: 'compact 0.3.0', stderr: '' };
+      }
+      compileCallCount++;
+      // First compile is module (Uint128), second is top-level (Uint128.mock)
+      if (compileCallCount === 1) {
+        return { stdout: 'compactc 0.26.0', stderr: '' };
+      }
+      return { stdout: 'compactc 0.26.0', stderr: circuitOutput };
+    });
+
+    const mockSrcDir = [
+      { name: 'math', isFile: () => false, isDirectory: () => true },
+    ];
+    const mockMathDir = [
+      { name: 'Uint128.compact', isFile: () => true, isDirectory: () => false },
+      { name: 'test', isFile: () => false, isDirectory: () => true },
+    ];
+    const mockTestDir = [
+      {
+        name: 'Uint128.mock.compact',
+        isFile: () => true,
+        isDirectory: () => false,
+      },
+    ];
+
+    mockReaddir
+      .mockResolvedValueOnce(mockSrcDir as any)
+      .mockResolvedValueOnce(mockMathDir as any)
+      .mockResolvedValueOnce(mockTestDir as any);
+
+    // Track what's written to the benchmarks file
+    let writtenBenchmarks: string | null = null;
+    vi.mocked(writeFile).mockImplementation(async (path, content) => {
+      const pathStr = String(path);
+      if (pathStr.includes('benchmarks.json')) {
+        writtenBenchmarks = String(content);
+      } else if (pathStr.includes('manifest.json')) {
+        writtenManifest = JSON.parse(String(content));
+      }
+    });
+
+    compiler = new CompactCompiler(
+      { hierarchical: true, benchmarksPath: './benchmarks.json' },
+      mockExec,
+    );
+    await compiler.compile();
+
+    // Verify benchmarks file was written
+    expect(writtenBenchmarks).not.toBeNull();
+    const benchmarks = JSON.parse(writtenBenchmarks as string);
+
+    // Verify structure and compactToolVersion are present
+    expect(benchmarks).toHaveProperty('structure', 'hierarchical');
+    expect(benchmarks).toHaveProperty('compactToolVersion');
+    expect(benchmarks).toHaveProperty('compactcVersion');
+
+    // Verify hierarchical structure matches artifacts structure
+    expect(benchmarks.contracts).toHaveProperty('math');
+    expect(benchmarks.contracts.math).toHaveProperty('contracts');
+    expect(benchmarks.contracts.math).toHaveProperty('test');
+
+    // Verify module contract (no circuits)
+    expect(benchmarks.contracts.math.contracts.Uint128).toEqual({
+      type: 'module',
+    });
+
+    // Verify top-level contract (with circuits)
+    const mockContract =
+      benchmarks.contracts.math.test.contracts['Uint128.mock'];
+    expect(mockContract.type).toBe('top-level');
+    expect(mockContract.circuits).toHaveLength(2);
+    expect(mockContract.circuits).toEqual([
+      { name: 'mint', k: 14, rows: 5000 },
+      { name: 'burn', k: 14, rows: 4800 },
+    ]);
+
+    // Manifest should not have contracts
+    expect(writtenManifest).not.toHaveProperty('contracts');
   });
 });

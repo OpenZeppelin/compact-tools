@@ -1,7 +1,11 @@
-import { exec as execCallback } from 'node:child_process';
+import { exec as execCallback, spawn } from 'node:child_process';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { DEFAULT_OUT_DIR, DEFAULT_SRC_DIR } from '../config.ts';
+import type {
+  CircuitInfo,
+  ContractMetadata,
+} from '../types/benchmark.ts';
 import { CompilationError } from '../types/errors.ts';
 import type { CompilerFlag } from '../types/manifest.ts';
 import type { ExecFunction } from './EnvironmentValidator.ts';
@@ -16,10 +20,97 @@ export interface CompilerServiceOptions {
   srcDir?: string;
   /** Output directory for compiled artifacts */
   outDir?: string;
+  /** Show detailed compiler output (circuit progress, etc.) */
+  verbose?: boolean;
+  /** Whether to capture output for parsing circuit details (needed for benchmarks) */
+  captureOutput?: boolean;
 }
 
 /** Resolved options for CompilerService with defaults applied */
 type ResolvedCompilerServiceOptions = Required<CompilerServiceOptions>;
+
+/**
+ * Result of compiling a file, including raw output and parsed metadata.
+ */
+export interface CompileResult {
+  /** Raw stdout from the compiler */
+  stdout: string;
+  /** Raw stderr from the compiler */
+  stderr: string;
+  /** Parsed contract metadata (type and circuits) */
+  metadata: ContractMetadata;
+}
+
+/**
+ * Regex pattern to match circuit information in compiler output.
+ * Matches lines like: `  circuit "gt" (k=12, rows=2639)`
+ */
+const CIRCUIT_PATTERN = /circuit\s+"([^"]+)"\s+\(k=(\d+),\s*rows=(\d+)\)/g;
+
+/**
+ * Parses circuit information from compiler output.
+ * Extracts circuit names, k values, and row counts.
+ *
+ * @param output - The compiler stdout/stderr output
+ * @returns Array of CircuitInfo objects, empty if no circuits found
+ * @example
+ * ```typescript
+ * const output = `Compiling 2 circuits:
+ *   circuit "gt" (k=12, rows=2639)
+ *   circuit "gte" (k=12, rows=2643)
+ * Overall progress [====================] 2/2`;
+ *
+ * const circuits = parseCircuitInfo(output);
+ * // Returns: [{ name: "gt", k: 12, rows: 2639 }, { name: "gte", k: 12, rows: 2643 }]
+ * ```
+ */
+export function parseCircuitInfo(output: string): CircuitInfo[] {
+  // Use a Map to deduplicate circuits by name (spinner animation can cause duplicates)
+  const circuitMap = new Map<string, CircuitInfo>();
+
+  // Reset regex state for multiple calls
+  CIRCUIT_PATTERN.lastIndex = 0;
+
+  for (
+    let match = CIRCUIT_PATTERN.exec(output);
+    match !== null;
+    match = CIRCUIT_PATTERN.exec(output)
+  ) {
+    const name = match[1];
+    // Only add if not already seen (first occurrence wins)
+    if (!circuitMap.has(name)) {
+      circuitMap.set(name, {
+        name,
+        k: Number.parseInt(match[2], 10),
+        rows: Number.parseInt(match[3], 10),
+      });
+    }
+  }
+
+  return Array.from(circuitMap.values());
+}
+
+/**
+ * Determines contract metadata from compiler output.
+ * A contract is 'top-level' if it has circuits, 'module' otherwise.
+ *
+ * @param output - The compiler stdout/stderr output
+ * @returns ContractMetadata with type and optional circuits
+ */
+export function parseContractMetadata(output: string): ContractMetadata {
+  const circuits = parseCircuitInfo(output);
+
+  if (circuits.length > 0) {
+    return {
+      type: 'top-level',
+      circuits,
+    };
+  }
+
+  return {
+    type: 'module',
+  };
+}
 
 /**
  * Service responsible for compiling individual .compact files.
@@ -40,6 +131,7 @@ type ResolvedCompilerServiceOptions = Required<CompilerServiceOptions>;
 export class CompilerService {
   private execFn: ExecFunction;
   private options: ResolvedCompilerServiceOptions;
+  private useSpawn: boolean;
 
   /**
    * Creates a new CompilerService instance.
@@ -48,14 +140,19 @@ export class CompilerService {
    * @param options - Compiler service options
    */
   constructor(
-    execFn: ExecFunction = promisify(execCallback),
+    execFn?: ExecFunction,
     options: CompilerServiceOptions = {},
   ) {
-    this.execFn = execFn;
+    // If no custom execFn provided, use spawn for real compilation (streams output)
+    // If custom execFn provided (testing), use that instead
+    this.useSpawn = execFn === undefined;
+    this.execFn = execFn ?? promisify(execCallback);
     this.options = {
       hierarchical: options.hierarchical ?? false,
       srcDir: options.srcDir ?? DEFAULT_SRC_DIR,
       outDir: options.outDir ?? DEFAULT_OUT_DIR,
+      verbose: options.verbose ?? false,
+      captureOutput: options.captureOutput ?? false,
     };
   }
 
@@ -69,7 +166,7 @@ export class CompilerService {
    * @param file - Relative path to the .compact file from srcDir
    * @param flags - Array of compiler flags (e.g., ['--skip-zk', '--verbose'])
    * @param version - Optional specific toolchain version to use
-   * @returns Promise resolving to compilation output (stdout/stderr)
+   * @returns Promise resolving to compilation output with parsed metadata
    * @throws {CompilationError} If compilation fails for any reason
    * @example
    * ```typescript
@@ -80,6 +177,10 @@ export class CompilerService {
    *     '0.26.0'
    *   );
    *   console.log('Success:', result.stdout);
+   *   console.log('Contract type:', result.metadata.type);
+   *   if (result.metadata.circuits) {
+   *     console.log('Circuits:', result.metadata.circuits);
+   *   }
    * } catch (error) {
    *   if (error instanceof CompilationError) {
    *     console.error('Compilation failed for', error.file);
@@ -91,7 +192,7 @@ export class CompilerService {
     file: string,
     flags: CompilerFlag[],
     version?: string,
-  ): Promise<{ stdout: string; stderr: string }> {
+  ): Promise<CompileResult> {
     const inputPath = join(this.options.srcDir, file);
     const fileDir = dirname(file);
     const fileName = basename(file, '.compact');
@@ -104,25 +205,143 @@ export class CompilerService {
         : join(this.options.outDir, fileName);
 
     const versionFlag = version ? `+${version}` : '';
+
     const flagsStr = flags.length > 0 ? ` ${flags.join(' ')}` : '';
-    const command = `compact compile${versionFlag ? ` ${versionFlag}` : ''}${flagsStr} "${inputPath}" "${outputDir}"`;
+    const baseCommand = `compact compile${versionFlag ? ` ${versionFlag}` : ''}${flagsStr} "${inputPath}" "${outputDir}"`;
 
-    try {
-      return await this.execFn(command);
-    } catch (error: unknown) {
-      let message: string;
+    // For testing, use the provided exec function directly
+    if (!this.useSpawn) {
+      try {
+        const { stdout, stderr } = await this.execFn(baseCommand);
+        const combinedOutput = `${stdout}\n${stderr}`;
+        const metadata = parseContractMetadata(combinedOutput);
+        return { stdout, stderr, metadata };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new CompilationError(
+          `Failed to compile ${file}: ${message}`,
+          file,
+          error,
+        );
+      }
+    }
 
-      if (error instanceof Error) {
-        message = error.message;
+    // Build command arguments for spawn
+    const args: string[] = ['compile'];
+    if (versionFlag) {
+      args.push(versionFlag);
+    }
+    for (const flag of flags) {
+      args.push(flag);
+    }
+    args.push(inputPath, outputDir);
+
+    // When capturing output for benchmarks, use 'script' command to create PTY
+    // This properly captures animated progress bar output (circuit details)
+    if (this.options.captureOutput) {
+      const baseCommand = `compact ${args.join(' ')}`;
+      let wrapperCommand: string;
+      let wrapperArgs: string[];
+
+      if (process.platform === 'darwin') {
+        // macOS: script -q /dev/null sh -c "command"
+        wrapperCommand = 'script';
+        wrapperArgs = ['-q', '/dev/null', 'sh', '-c', baseCommand];
       } else {
-        message = String(error);
+        // Linux: script -q -c "command" /dev/null
+        wrapperCommand = 'script';
+        wrapperArgs = ['-q', '-c', baseCommand, '/dev/null'];
       }
 
-      throw new CompilationError(
-        `Failed to compile ${file}: ${message}`,
-        file,
-        error,
-      );
+      return new Promise((resolve, reject) => {
+        const child = spawn(wrapperCommand, wrapperArgs, {
+          stdio: ['inherit', 'pipe', 'pipe'],
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout?.on('data', (data: Buffer) => {
+          const chunk = data.toString();
+          stdout += chunk;
+          // Show output since verbose is enabled when capturing
+          process.stdout.write(chunk);
+        });
+
+        child.stderr?.on('data', (data: Buffer) => {
+          const chunk = data.toString();
+          stderr += chunk;
+          // Show output since verbose is enabled when capturing
+          process.stderr.write(chunk);
+        });
+
+        child.on('close', async (code) => {
+          if (code === 0) {
+            const combinedOutput = `${stdout}\n${stderr}`;
+            const metadata = parseContractMetadata(combinedOutput);
+            resolve({ stdout, stderr, metadata });
+          } else {
+            reject(
+              new CompilationError(
+                `Failed to compile ${file}: exit code ${code}`,
+                file,
+                new Error(stderr || stdout || `Compilation failed with exit code ${code}`),
+              ),
+            );
+          }
+        });
+
+        child.on('error', (error) => {
+          reject(
+            new CompilationError(
+              `Failed to compile ${file}: ${error.message}`,
+              file,
+              error,
+            ),
+          );
+        });
+      });
     }
+
+    // Use spawn with stdio based on verbose option
+    // - verbose: inherit stdio to show full animated output
+    // - quiet: ignore stdio for cleaner output
+    return new Promise((resolve, reject) => {
+      const child = spawn('compact', args, {
+        stdio: this.options.verbose ? 'inherit' : 'ignore',
+      });
+
+      child.on('close', async (code) => {
+        if (code === 0) {
+          // Check if compiled output contains circuits by looking for keys directory
+          // Top-level contracts have circuit keys, modules don't
+          const keysDir = join(outputDir, 'keys');
+          const { existsSync } = await import('node:fs');
+          const isTopLevel = existsSync(keysDir);
+          const metadata: ContractMetadata = isTopLevel
+            ? { type: 'top-level' }
+            : { type: 'module' };
+          resolve({ stdout: '', stderr: '', metadata });
+        } else {
+          reject(
+            new CompilationError(
+              `Failed to compile ${file}: exit code ${code}`,
+              file,
+              new Error(`Compilation failed with exit code ${code}`),
+            ),
+          );
+        }
+      });
+
+      child.on('error', (error) => {
+        reject(
+          new CompilationError(
+            `Failed to compile ${file}: ${error.message}`,
+            file,
+            error,
+          ),
+        );
+      });
+    });
   }
 }
