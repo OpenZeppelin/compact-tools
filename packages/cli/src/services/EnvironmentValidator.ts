@@ -5,8 +5,8 @@ import ora from 'ora';
 import {
   type CompactcVersion,
   type CompactToolVersion,
+  LATEST_COMPACT_TOOL_VERSION,
   MAX_COMPACTC_VERSION,
-  MIN_COMPACT_TOOL_VERSION,
 } from '../config.ts';
 import { CompactCliNotFoundError } from '../types/errors.ts';
 
@@ -155,13 +155,13 @@ export class EnvironmentValidator {
     const compactToolVersion = await this.getCompactToolVersion();
     const compactcVersion = await this.getCompactcVersion(version);
 
-    // Warn if compact-tools version is older than minimum
-    if (compareVersions(compactToolVersion, MIN_COMPACT_TOOL_VERSION) < 0) {
+    // Warn if compact-tools version is older than latest
+    if (compareVersions(compactToolVersion, LATEST_COMPACT_TOOL_VERSION) < 0) {
       const spinner = ora();
       spinner.warn(
         chalk.yellow(
           `[COMPILE] compact-tools ${compactToolVersion} is outdated. ` +
-            `Run 'compact self update' to update to ${MIN_COMPACT_TOOL_VERSION} or later.`,
+            `Run 'compact self update' to update to ${LATEST_COMPACT_TOOL_VERSION} or later.`,
         ),
       );
     }

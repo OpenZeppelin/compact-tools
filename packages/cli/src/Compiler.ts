@@ -10,7 +10,10 @@ import {
   DEFAULT_OUT_DIR,
   DEFAULT_SRC_DIR,
 } from './config.ts';
-import { CompilerService } from './services/CompilerService.ts';
+import {
+  CompilerService,
+  type ExecFileFunction,
+} from './services/CompilerService.ts';
 import {
   EnvironmentValidator,
   type ExecFunction,
@@ -135,7 +138,7 @@ export class CompactCompiler {
    * @example
    * ```typescript
    * // Compile all files with flags (flattened artifacts)
-   * const compiler = new CompactCompiler({ flags: '--skip-zk --verbose' });
+   * const compiler = new CompactCompiler({ flags: '--skip-zk --trace-passes' });
    *
    * // Compile specific directory
    * const compiler = new CompactCompiler({ targetDir: 'security' });
@@ -163,7 +166,18 @@ export class CompactCompiler {
     };
     this.environmentValidator = new EnvironmentValidator(execFn);
     this.fileDiscovery = new FileDiscovery(this.options.srcDir);
-    this.compilerService = new CompilerService(execFn, {
+
+    // Convert ExecFunction to ExecFileFunction if provided
+    // If execFn is provided, create an adapter; otherwise use default execFile
+    const execFileFn: ExecFileFunction | undefined = execFn
+      ? async (command: string, args: string[]) => {
+          // Convert execFile-style call to exec-style command string
+          const commandStr = `${command} ${args.join(' ')}`;
+          return execFn(commandStr);
+        }
+      : undefined;
+
+    this.compilerService = new CompilerService(execFileFn, {
       hierarchical: this.options.hierarchical,
       srcDir: this.options.srcDir,
       outDir: this.options.outDir,

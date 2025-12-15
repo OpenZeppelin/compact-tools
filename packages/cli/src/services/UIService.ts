@@ -95,13 +95,15 @@ export const UIService = {
    * ```typescript
    * UIService.showNoFiles('security');
    * // Output: "No .compact files found in security/."
+   * UIService.showNoFiles();
+   * // Output: "No .compact files found."
    * ```
    */
   showNoFiles(targetDir?: string): void {
-    const searchLocation = targetDir ? `${targetDir}/` : '';
+    const searchLocation = targetDir ? ` in ${targetDir}/` : '';
     const spinner = ora();
     spinner.warn(
-      chalk.yellow(`[COMPILE] No .compact files found in ${searchLocation}.`),
+      chalk.yellow(`[COMPILE] No .compact files found${searchLocation}.`),
     );
   },
 };

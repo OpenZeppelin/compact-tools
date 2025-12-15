@@ -26,8 +26,8 @@ export const COMPACTC_VERSIONS = [
  */
 export const COMPACT_TOOL_VERSIONS = ['0.1.0', '0.2.0', '0.3.0'] as const;
 
-/** Minimum supported compact-tools version */
-export const MIN_COMPACT_TOOL_VERSION =
+/** Latest supported compact-tools version */
+export const LATEST_COMPACT_TOOL_VERSION =
   COMPACT_TOOL_VERSIONS[COMPACT_TOOL_VERSIONS.length - 1];
 
 /** Maximum supported compactc version */
