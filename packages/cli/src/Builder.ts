@@ -4,11 +4,18 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
-import { CompactCompiler } from './Compiler.ts';
+import { CompactCompiler, type CompilerOptions } from './Compiler.ts';
 import { isPromisifiedChildProcessError } from './types/errors.ts';
 
 // Promisified exec for async execution
 const execAsync = promisify(exec);
+
+/**
+ * Configuration options for the Builder CLI.
+ * Inherits from CompilerOptions but excludes `flags` (which would allow --skip-zk).
+ * Builds should always include ZK proofs.
+ */
+export type BuilderOptions = Omit<CompilerOptions, 'flags'>;
 
 /**
  * A class to handle the build process for a project.
@@ -21,7 +28,7 @@ const execAsync = promisify(exec);
  *
  * @example
  * ```typescript
- * const builder = new ProjectBuilder('--skip-zk'); // Optional flags for compactc
+ * const builder = new CompactBuilder({ flags: '--skip-zk' });
  * builder.build().catch(err => console.error(err));
  * ```
  *
@@ -56,7 +63,7 @@ const execAsync = promisify(exec);
  * ```
  */
 export class CompactBuilder {
-  private readonly compilerFlags: string;
+  private readonly options: BuilderOptions;
   private readonly steps: Array<{ cmd: string; msg: string; shell?: string }> =
     [
       {
@@ -76,11 +83,27 @@ export class CompactBuilder {
     ];
 
   /**
-   * Constructs a new ProjectBuilder instance.
-   * @param compilerFlags - Optional space-separated string of `compactc` flags (e.g., "--skip-zk")
+   * Constructs a new CompactBuilder instance.
+   * @param options - Compiler options (flags, srcDir, outDir, hierarchical, etc.)
    */
-  constructor(compilerFlags = '') {
-    this.compilerFlags = compilerFlags;
+  constructor(options: CompilerOptions = {}) {
+    this.options = options;
+  }
+
+  /**
+   * Factory method to create a CompactBuilder from command-line arguments.
+   * Reuses CompactCompiler.parseArgs for consistent argument parsing.
+   *
+   * @param args - Array of command-line arguments
+   * @param env - Environment variables (defaults to process.env)
+   * @returns New CompactBuilder instance configured from arguments
+   */
+  static fromArgs(
+    args: string[],
+    env: NodeJS.ProcessEnv = process.env,
+  ): CompactBuilder {
+    const options = CompactCompiler.parseArgs(args, env);
+    return new CompactBuilder(options);
   }
 
   /**
@@ -92,7 +115,7 @@ export class CompactBuilder {
    */
   public async build(): Promise<void> {
     // Run compact compilation as a prerequisite
-    const compiler = new CompactCompiler(this.compilerFlags);
+    const compiler = new CompactCompiler(this.options);
     await compiler.compile();
 
     // Proceed with build steps
