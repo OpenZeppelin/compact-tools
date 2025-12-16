@@ -24,7 +24,7 @@
     "@midnight-ntwrk/zswap": "^4.0.0",
     "@types/node": "24.10.1",
     "ts-node": "^10.9.2",
-    "turbo": "^2.6.1",
+    "turbo": "^2.6.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
   }
