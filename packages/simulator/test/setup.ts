@@ -17,6 +17,15 @@ const __dirname = dirname(__filename);
 const SAMPLE_CONTRACTS_DIR = join(__dirname, 'fixtures', 'sample-contracts');
 const ARTIFACTS_DIR = join(__dirname, 'fixtures', 'artifacts');
 
+// Compact toolchain version - must be set via COMPACT_VERSION env var
+const TEST_COMPACT_VERSION = process.env.TEST_COMPACT_VERSION;
+if (!TEST_COMPACT_VERSION) {
+  throw new Error(
+    'TEST_COMPACT_VERSION environment variable is required.\n' +
+    'Example: TEST_COMPACT_VERSION=0.27.0-rc.1 yarn test'
+  );
+}
+
 const CONTRACT_FILES = [
   'Simple.compact',
   'Witness.compact',
@@ -47,7 +56,7 @@ async function compileContract(contractFile: string): Promise<void> {
   mkdirSync(outputDir, { recursive: true });
   mkdirSync(join(outputDir, 'keys'), { recursive: true });
 
-  const command = `compact compile --skip-zk "${inputPath}" "${outputDir}"`;
+  const command = `compact compile +${TEST_COMPACT_VERSION} --skip-zk "${inputPath}" "${outputDir}"`;
   await execAsync(command);
   console.log(`✓ Compiled ${contractFile}`);
 }

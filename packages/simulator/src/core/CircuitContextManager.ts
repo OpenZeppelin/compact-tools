@@ -4,7 +4,7 @@ import {
   type ConstructorContext,
   type ContractAddress,
   type ContractState,
-  constructorContext,
+  createConstructorContext,
   type EncodedZswapLocalState,
   QueryContext,
 } from '@midnight-ntwrk/compact-runtime';
@@ -44,7 +44,7 @@ export class CircuitContextManager<P> {
     contractAddress: ContractAddress,
     ...contractArgs: any[]
   ) {
-    const initCtx = constructorContext(privateState, coinPK);
+    const initCtx = createConstructorContext(privateState, coinPK);
 
     const {
       currentPrivateState,
