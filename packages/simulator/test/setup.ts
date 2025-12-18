@@ -57,7 +57,7 @@ async function compileContract(contractFile: string): Promise<void> {
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && err.code === 127) {
       throw new Error(
-        `\`compact\` compiler version ${COMPILER_VERSION} not found. Is it installed?`
+        `\`compact\` compiler version ${COMPILER_VERSION} not found. Is it installed?`,
       );
     }
     throw err;
