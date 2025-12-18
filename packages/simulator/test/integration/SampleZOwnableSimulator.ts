@@ -5,7 +5,7 @@ import {
   ledger,
   Contract as SampleZOwnable,
   type ZswapCoinPublicKey,
-} from '../fixtures/artifacts/SampleZOwnable/contract/index.cjs';
+} from '../fixtures/artifacts/SampleZOwnable/contract/index.js';
 import {
   SampleZOwnablePrivateState,
   SampleZOwnableWitnesses,

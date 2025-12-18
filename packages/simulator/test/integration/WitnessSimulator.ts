@@ -2,7 +2,7 @@ import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
 import {
   ledger,
   Contract as WitnessContract,
-} from '../fixtures/artifacts/Witness/contract/index.cjs';
+} from '../fixtures/artifacts/Witness/contract/index.js';
 import {
   WitnessPrivateState,
   WitnessWitnesses,
