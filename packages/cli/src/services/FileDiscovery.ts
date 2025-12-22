@@ -29,13 +29,13 @@ export class FileDiscovery {
   }
 
   /**
-   * Validates and normalizes a file path to prevent command injection.
+   * Validates and normalizes a file path
    * Ensures the path exists, resolves symlinks, and is within allowed directories.
    *
    * @param filePath - The file path to validate
    * @param allowedBaseDir - Base directory that the path must be within
    * @returns Normalized absolute path
-   * @throws {CompilationError} If path is invalid or contains unsafe characters
+   * @throws {CompilationError} If path is invalid or outside allowed directory
    * @example
    * ```typescript
    * const discovery = new FileDiscovery('src');
@@ -48,14 +48,6 @@ export class FileDiscovery {
   validateAndNormalizePath(filePath: string, allowedBaseDir: string): string {
     // Normalize the path to resolve '..' and '.' segments
     const normalized = normalize(filePath);
-
-    // Check for shell metacharacters and embedded quotes
-    if (/[;&|`$(){}[\]<>'"\\]/.test(normalized)) {
-      throw new CompilationError(
-        `Invalid file path: contains unsafe characters: ${filePath}`,
-        filePath,
-      );
-    }
 
     // Resolve to absolute path
     const absolutePath = resolve(normalized);
@@ -102,7 +94,7 @@ export class FileDiscovery {
   /**
    * Recursively discovers all .compact files in a directory.
    * Returns relative paths from the srcDir for consistent processing.
-   * Validates paths during discovery to prevent command injection.
+   * Validates paths during discovery
    *
    * @param dir - Directory path to search (relative or absolute)
    * @returns Promise resolving to array of relative file paths
@@ -124,7 +116,7 @@ export class FileDiscovery {
           }
 
           if (entry.isFile() && fullPath.endsWith('.compact')) {
-            // Validate path during discovery to prevent command injection
+            // Validate path during discovery
             this.validateAndNormalizePath(fullPath, this.srcDir);
             return [relative(this.srcDir, fullPath)];
           }

@@ -7,6 +7,7 @@ import {
   type CompactToolVersion,
   LATEST_COMPACT_TOOL_VERSION,
   MAX_COMPACTC_VERSION,
+  resolveCompactExecutable,
 } from '../config.ts';
 import { CompactCliNotFoundError } from '../types/errors.ts';
 
@@ -55,6 +56,7 @@ export type ExecFunction = (
  */
 export class EnvironmentValidator {
   private execFn: ExecFunction;
+  private compactExecutable: string;
 
   /**
    * Creates a new EnvironmentValidator instance.
@@ -63,6 +65,8 @@ export class EnvironmentValidator {
    */
   constructor(execFn: ExecFunction = promisify(execCallback)) {
     this.execFn = execFn;
+    // Resolve compact executable path from standard install locations
+    this.compactExecutable = resolveCompactExecutable();
   }
 
   /**
@@ -79,7 +83,7 @@ export class EnvironmentValidator {
    */
   async checkCompactAvailable(): Promise<boolean> {
     try {
-      await this.execFn('compact --version');
+      await this.execFn(`${this.compactExecutable} --version`);
       return true;
     } catch {
       return false;
@@ -98,7 +102,7 @@ export class EnvironmentValidator {
    * ```
    */
   async getCompactToolVersion(): Promise<string> {
-    const { stdout } = await this.execFn('compact --version');
+    const { stdout } = await this.execFn(`${this.compactExecutable} --version`);
     return stdout.trim();
   }
 
@@ -117,7 +121,7 @@ export class EnvironmentValidator {
   async getCompactcVersion(version?: string): Promise<string> {
     const versionFlag = version ? `+${version}` : '';
     const { stdout } = await this.execFn(
-      `compact compile ${versionFlag} --version`,
+      `${this.compactExecutable} compile ${versionFlag} --version`,
     );
     return stdout.trim();
   }

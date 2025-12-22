@@ -34,6 +34,15 @@ import {
 // Mock Node.js modules
 vi.mock('node:fs');
 vi.mock('node:fs/promises');
+
+// Mock resolveCompactExecutable to return 'compact' for consistent test expectations
+vi.mock('../src/config.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/config.ts')>();
+  return {
+    ...original,
+    resolveCompactExecutable: () => 'compact',
+  };
+});
 vi.mock('chalk', () => ({
   default: {
     blue: (text: string) => text,

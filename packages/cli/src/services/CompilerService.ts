@@ -1,7 +1,11 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import { basename, dirname, join, normalize, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { DEFAULT_OUT_DIR, DEFAULT_SRC_DIR } from '../config.ts';
+import {
+  DEFAULT_OUT_DIR,
+  DEFAULT_SRC_DIR,
+  resolveCompactExecutable,
+} from '../config.ts';
 import { CompilationError } from '../types/errors.ts';
 import type { CompilerFlag } from '../types/manifest.ts';
 import { FileDiscovery } from './FileDiscovery.ts';
@@ -54,6 +58,7 @@ export class CompilerService {
   private execFileFn: ExecFileFunction;
   private options: ResolvedCompilerServiceOptions;
   private pathValidator: FileDiscovery;
+  private compactExecutable: string;
 
   /**
    * Creates a new CompilerService instance.
@@ -80,6 +85,8 @@ export class CompilerService {
     // Use FileDiscovery for path validation (defense in depth - paths should already be validated during discovery)
     this.pathValidator =
       pathValidator ?? new FileDiscovery(this.options.srcDir);
+    // Resolve compact executable path from standard install locations
+    this.compactExecutable = resolveCompactExecutable();
   }
 
   /**
@@ -126,7 +133,7 @@ export class CompilerService {
         ? join(this.options.outDir, fileDir, fileName)
         : join(this.options.outDir, fileName);
 
-    // Validate and normalize input path to prevent command injection
+    // Validate and normalize input path
     const validatedInputPath = this.pathValidator.validateAndNormalizePath(
       inputPath,
       this.options.srcDir,
@@ -150,7 +157,7 @@ export class CompilerService {
     args.push(validatedInputPath, normalizedOutputDir);
 
     try {
-      return await this.execFileFn('compact', args);
+      return await this.execFileFn(this.compactExecutable, args);
     } catch (error: unknown) {
       let message: string;
 
