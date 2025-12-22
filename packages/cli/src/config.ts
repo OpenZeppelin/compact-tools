@@ -67,7 +67,8 @@ export function getCompactInstallPaths(): string[] {
   }
 
   // $XDG_DATA_HOME/../bin (defaults to ~/.local/share/../bin = ~/.local/bin)
-  const xdgDataHome = process.env.XDG_DATA_HOME ?? join(home, '.local', 'share');
+  const xdgDataHome =
+    process.env.XDG_DATA_HOME ?? join(home, '.local', 'share');
   paths.push(join(xdgDataHome, '..', 'bin'));
 
   // ~/.local/bin as fallback
