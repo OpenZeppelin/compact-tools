@@ -9,11 +9,15 @@ import {
 } from '../src/types/errors.js';
 
 // Mock CompactCompiler
-vi.mock('../src/Compiler.js', () => ({
-  CompactCompiler: {
-    fromArgs: vi.fn(),
-  },
-}));
+vi.mock('../src/Compiler.js', async () => {
+  const actual = await vi.importActual('../src/types/manifest.js');
+  return {
+    CompactCompiler: {
+      fromArgs: vi.fn(),
+    },
+    StructureMismatchError: (actual as any).StructureMismatchError,
+  };
+});
 
 // Mock error utilities
 vi.mock('../src/types/errors.js', async () => {

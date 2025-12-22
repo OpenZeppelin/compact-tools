@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import * as readline from 'node:readline';
 import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
 import { CompactCompiler } from './Compiler.ts';
@@ -7,6 +8,7 @@ import {
   type CompilationError,
   isPromisifiedChildProcessError,
 } from './types/errors.ts';
+import { StructureMismatchError } from './types/manifest.ts';
 
 /**
  * Executes the Compact compiler CLI with improved error handling and user feedback.
@@ -51,9 +53,88 @@ async function runCompiler(): Promise<void> {
     const compiler = CompactCompiler.fromArgs(args);
     await compiler.compile();
   } catch (error) {
+    // Handle structure mismatch with interactive prompt
+    if (error instanceof StructureMismatchError) {
+      await handleStructureMismatch(error, spinner);
+      return;
+    }
+
     handleError(error, spinner);
     process.exit(1);
   }
+}
+
+/**
+ * Handles structure mismatch by prompting the user for confirmation.
+ * In non-interactive mode (non-TTY), exits with instructions to use --force.
+ *
+ * @param error - The StructureMismatchError that was thrown
+ * @param spinner - Ora spinner instance for consistent UI messaging
+ */
+async function handleStructureMismatch(
+  error: StructureMismatchError,
+  spinner: Ora,
+): Promise<void> {
+  spinner.warn(
+    chalk.yellow(
+      `[COMPILE] Existing artifacts use "${error.existingStructure}" structure.`,
+    ),
+  );
+  spinner.warn(
+    chalk.yellow(
+      `[COMPILE] You are compiling with "${error.requestedStructure}" structure.`,
+    ),
+  );
+
+  // Check if we're in an interactive terminal
+  if (!process.stdin.isTTY) {
+    spinner.fail(
+      chalk.red(
+        '[COMPILE] Structure mismatch detected. Use --force to auto-delete existing artifacts.',
+      ),
+    );
+    process.exit(1);
+  }
+
+  // Prompt user for confirmation
+  const confirmed = await promptConfirmation(
+    'Delete existing artifacts and recompile? (y/N) ',
+  );
+
+  if (confirmed) {
+    try {
+      const args = process.argv.slice(2);
+      const compiler = CompactCompiler.fromArgs(args);
+      await compiler.cleanAndCompile();
+    } catch (retryError) {
+      handleError(retryError, spinner);
+      process.exit(1);
+    }
+  } else {
+    spinner.info(chalk.blue('[COMPILE] Compilation aborted by user.'));
+    process.exit(0);
+  }
+}
+
+/**
+ * Prompts the user for a yes/no confirmation.
+ *
+ * @param question - The question to display
+ * @returns Promise resolving to true if user confirms, false otherwise
+ */
+function promptConfirmation(question: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    rl.question(chalk.yellow(question), (answer) => {
+      rl.close();
+      const normalized = answer.trim().toLowerCase();
+      resolve(normalized === 'y' || normalized === 'yes');
+    });
+  });
 }
 
 /**
@@ -183,6 +264,11 @@ function showUsageHelp(): void {
   console.log(
     chalk.yellow(
       '  --hierarchical    Preserve source directory structure in artifacts output',
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      '  --force, -f       Force delete existing artifacts on structure mismatch',
     ),
   );
   console.log(
