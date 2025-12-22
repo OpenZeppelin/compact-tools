@@ -334,14 +334,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/compact-runtime@npm:^0.9.0":
-  version: 0.9.0
-  resolution: "@midnight-ntwrk/compact-runtime@npm:0.9.0"
+"@midnight-ntwrk/compact-runtime@npm:0.11.0-rc.1":
+  version: 0.11.0-rc.1
+  resolution: "@midnight-ntwrk/compact-runtime@npm:0.11.0-rc.1"
   dependencies:
-    "@midnight-ntwrk/onchain-runtime": "npm:^0.3.0"
+    "@midnight-ntwrk/onchain-runtime-v1": "npm:^1.0.0-alpha.5"
     "@types/object-inspect": "npm:^1.8.1"
     object-inspect: "npm:^1.12.3"
-  checksum: 10/51b6769cdfac42e9f640d8ad052a6ddc8be3438b43d4c49b5e4bbf660658f3a1ae1be2f026da672af26baaed89fbd54809d5476a4c3ba2a9c97a3fcbc9754777
+  checksum: 10/873e557fe4673891b75780b9f5c5b704c3b14b57e48f4b2f9f75c3adcbd76fc460532c048500fffc05da78a12db39dd3be87397d837f3a1aed7ea3b69e69e519
   languageName: node
   linkType: hard
 
@@ -352,10 +352,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/onchain-runtime@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@midnight-ntwrk/onchain-runtime@npm:0.3.0"
-  checksum: 10/e0d6a9a96314dbce99345b9794395682a3471568fde13d90122227f52082dba7b83dc05d419e4745e5bf997e93274c2a01f3938ccd20351de8249923c0c9ab45
+"@midnight-ntwrk/onchain-runtime-v1@npm:^1.0.0-alpha.5":
+  version: 1.0.0-rc.2
+  resolution: "@midnight-ntwrk/onchain-runtime-v1@npm:1.0.0-rc.2"
+  checksum: 10/17ae13d7b3fbfc24c25d8fc5340d74f50621bdfeaa01eaa7912d1bcb1c3f6e046005a6079e1990c58de2f9f5c20073e115338531b34e68e1a7e5136d79d354ac
   languageName: node
   linkType: hard
 
@@ -409,7 +409,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-tools-simulator@workspace:packages/simulator"
   dependencies:
-    "@midnight-ntwrk/compact-runtime": "npm:^0.9.0"
+    "@midnight-ntwrk/compact-runtime": "npm:0.11.0-rc.1"
     "@midnight-ntwrk/ledger": "npm:^4.0.0"
     "@midnight-ntwrk/zswap": "npm:^4.0.0"
     "@tsconfig/node24": "npm:^24.0.3"
@@ -425,7 +425,7 @@ __metadata:
   resolution: "@openzeppelin/compact-tools@workspace:."
   dependencies:
     "@biomejs/biome": "npm:2.3.8"
-    "@midnight-ntwrk/compact-runtime": "npm:^0.9.0"
+    "@midnight-ntwrk/compact-runtime": "npm:0.11.0-rc.1"
     "@midnight-ntwrk/ledger": "npm:^4.0.0"
     "@midnight-ntwrk/zswap": "npm:^4.0.0"
     "@types/node": "npm:24.10.1"

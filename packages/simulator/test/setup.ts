@@ -3,7 +3,7 @@
  * Runs once before all tests via Vitest's globalSetup.
  */
 
-import { exec, type SpawnSyncReturns } from 'node:child_process';
+import { exec } from 'node:child_process';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,32 +17,14 @@ const __dirname = dirname(__filename);
 const SAMPLE_CONTRACTS_DIR = join(__dirname, 'fixtures', 'sample-contracts');
 const ARTIFACTS_DIR = join(__dirname, 'fixtures', 'artifacts');
 
+// TODO: Remove version pin once 0.27.0 is released
+const COMPILER_VERSION = '0.27.0-rc.1';
+
 const CONTRACT_FILES = [
   'Simple.compact',
   'Witness.compact',
   'SampleZOwnable.compact',
 ];
-
-function isSpawnSyncRet(
-  err: unknown,
-): err is SpawnSyncReturns<string | Buffer> {
-  if (typeof err !== 'object' || err === null) {
-    return false;
-  }
-
-  const typedErr = err as Partial<SpawnSyncReturns<string | Buffer>> &
-    Record<string, unknown>;
-
-  const okErr = typedErr.error instanceof Error;
-  const okStdout =
-    typeof typedErr.stdout === 'string' || Buffer.isBuffer(typedErr.stdout);
-  const okStderr =
-    typeof typedErr.stderr === 'string' || Buffer.isBuffer(typedErr.stderr);
-  const okStatus =
-    typeof typedErr.status === 'number' || typedErr.status === null;
-
-  return okErr && okStdout && okStderr && okStatus;
-}
 
 async function compileContract(contractFile: string): Promise<void> {
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
@@ -56,7 +38,7 @@ async function compileContract(contractFile: string): Promise<void> {
     const sourceTime = statSync(inputPath).mtime;
     if (artifactTime >= sourceTime) {
       console.log(`✓ ${contractFile} (already compiled)`);
-      return; // Already compiled and up to date
+      return;
     }
   }
 
@@ -68,20 +50,16 @@ async function compileContract(contractFile: string): Promise<void> {
   mkdirSync(outputDir, { recursive: true });
   mkdirSync(join(outputDir, 'keys'), { recursive: true });
 
-  const command = `compact compile --skip-zk "${inputPath}" "${outputDir}"`;
+  const command = `compact compile +${COMPILER_VERSION} --skip-zk "${inputPath}" "${outputDir}"`;
+
   try {
     await execAsync(command);
   } catch (err: unknown) {
-    if (!isSpawnSyncRet(err)) {
-      throw err;
-    }
-
-    if (err.status === 127) {
+    if (err && typeof err === 'object' && 'code' in err && err.code === 127) {
       throw new Error(
-        '`compact` not found (exit code 127). Is it installed and on PATH?',
+        `\`compact\` compiler version ${COMPILER_VERSION} not found. Is it installed?`,
       );
     }
-
     throw err;
   }
 
@@ -91,13 +69,11 @@ async function compileContract(contractFile: string): Promise<void> {
 async function setup(): Promise<void> {
   mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
-  // Compile each contract sequentially
   for (const contractFile of CONTRACT_FILES) {
     await compileContract(contractFile);
   }
 }
 
-// Export setup function for Vitest's globalSetup
 export default async function globalSetup(): Promise<void> {
   try {
     await setup();

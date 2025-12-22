@@ -38,16 +38,15 @@ node compact-tools/packages/cli/dist/runBuilder.js --help
 
 - Node.js >= 20 (root and `packages/cli`), >= 22 for `packages/simulator`
 - Yarn 4 (Berry)
-- Turbo
-- Optional: Midnight Compact toolchain installed and available in `PATH`
+- Midnight Compact toolchain installed and available in `PATH`
+- Prerelease of [compactc 0.27.0-rc.1](https://github.com/midnight-ntwrk/artifacts/releases/tag/compactc-v0.27.0-rc.1)
 
 Confirm your Compact toolchain:
 
 ```bash
-$ compact compile --version
+$ compact compile +0.27.0-rc.1 --version
 
-Compactc version: 0.26.0
-0.26.0
+0.27.0
 ```
 
 ## Getting started
