@@ -110,7 +110,46 @@ compact-compiler --hierarchical --force
 
 ### Manifest File
 
-The compiler generates a `manifest.json` in the output directory with build metadata:
+The compiler generates a `manifest.json` in the output directory containing build metadata and artifact information. This file is used for structure mismatch detection and build reproducibility.
+
+#### Manifest Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `structure` | `"flattened"` \| `"hierarchical"` | Artifact output structure used during compilation |
+| `compactcVersion` | `CompactcVersion` | Supported compiler version (e.g., `"0.25.0"` \| `"0.26.0"`) |
+| `compactToolVersion` | `CompactToolVersion` | Supported CLI version (e.g., `"0.2.0"` \| `"0.3.0"`) |
+| `createdAt` | `string` | ISO 8601 timestamp (e.g., `"2025-12-11T10:09:46.023Z"`) |
+| `buildDuration` | `number` | Total compilation duration in milliseconds |
+| `nodeVersion` | `NodeVersion` | Node.js major version (`"18"` \| `"20"` \| `"21"` \| `"22"` \| `"23"` \| `"24"` \| `"25"`) |
+| `platform` | `Platform` | Platform identifier (`"linux-x64"` \| `"linux-arm64"` \| `"darwin-x64"` \| `"darwin-arm64"` \| `"win32-x64"` \| `"win32-arm64"`) |
+| `sourcePath` | `string` | Path to source directory containing `.compact` files |
+| `outputPath` | `string` | Path to output directory where artifacts were written |
+| `compilerFlags` | `CompilerFlag[]` | Compiler flags (`"--skip-zk"` \| `"--vscode"` \| `"--no-communications-commitment"` \| `"--trace-passes"` \| `"--sourceRoot <value>"`) |
+| `artifacts` | `string[]` \| `HierarchicalArtifacts` | Compiled contracts (format depends on structure, see below) |
+
+#### Artifacts Format
+
+The `artifacts` format depends on the output structure:
+
+- **Flattened structure**: A flat array of contract names
+
+```json
+"artifacts": ["Counter", "Boolean", "Bytes", "Field"]
+```
+
+- **Hierarchical structure**: An object where keys are source subdirectory names and values are arrays of contract names compiled from that subdirectory
+
+```json
+"artifacts": {
+  "ledger": ["Counter"],
+  "reference": ["Boolean", "Bytes", "Field"]
+}
+```
+
+This corresponds to source files like `src/ledger/Counter.compact` and `src/reference/Boolean.compact`.
+
+#### Example Manifest
 
 ```json
 {
