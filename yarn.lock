@@ -425,7 +425,6 @@ __metadata:
   resolution: "@openzeppelin/compact-tools@workspace:."
   dependencies:
     "@biomejs/biome": "npm:2.3.8"
-    "@midnight-ntwrk/compact-runtime": "npm:^0.9.0"
     "@types/node": "npm:24.10.1"
     ts-node: "npm:^10.9.2"
     turbo: "npm:^2.6.1"
