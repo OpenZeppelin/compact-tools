@@ -6,8 +6,11 @@ pragma language_version >= 0.18.0;
 import CompactStandardLibrary;
 
 export { ZswapCoinPublicKey, ContractAddress, Either };
+
 export ledger _ownerCommitment: Bytes<32>;
+
 export ledger _counter: Counter;
+
 export sealed ledger _instanceSalt: Bytes<32>;
 
 witness secretNonce(): Bytes<32>;
@@ -35,36 +38,24 @@ export circuit renounceOwnership(): [] {
 
 export circuit assertOnlyOwner(): [] {
   const nonce = secretNonce();
-  const callerAsEither = Either<ZswapCoinPublicKey, ContractAddress> {
-    is_left: true,
-    left: ownPublicKey(),
-    right: ContractAddress { bytes: pad(32, "") }
-  };
+  const callerAsEither =
+                Either<ZswapCoinPublicKey, ContractAddress> { is_left: true,
+                                                              left: ownPublicKey(),
+                                                              right: ContractAddress { bytes: pad(32, "") } };
   const id = _computeOwnerId(callerAsEither, nonce);
   assert(_ownerCommitment == _computeOwnerCommitment(id, _counter), "SampleZOwnable: caller is not the owner");
 }
 
-export circuit _computeOwnerCommitment(
-  id: Bytes<32>,
-  counter: Uint<64>,
-): Bytes<32> {
+export circuit _computeOwnerCommitment(id: Bytes<32>, counter: Uint<64>,): Bytes<32> {
   // the value variable is necessary to force the circuit to be impure
   // this avoids a compiler bug in compactc v0.26.0
   const value = _instanceSalt;
   return persistentHash<Vector<4, Bytes<32>>>(
-    [
-      id,
-      value,
-      counter as Field as Bytes<32>,
-      pad(32, "SampleZOwnable:shield:")
-    ]
-  );
+           [id, value, counter as Field as Bytes<32>, pad(32, "SampleZOwnable:shield:")]);
 }
 
 export pure circuit _computeOwnerId(
-  pk: Either<ZswapCoinPublicKey, ContractAddress>,
-  nonce: Bytes<32>
-): Bytes<32> {
+                      pk: Either<ZswapCoinPublicKey, ContractAddress>, nonce: Bytes<32>): Bytes<32> {
   assert(pk.is_left, "SampleZOwnable: contract address owners are not yet supported");
   return persistentHash<Vector<2, Bytes<32>>>([pk.left.bytes, nonce]);
 }
