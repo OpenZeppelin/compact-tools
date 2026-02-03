@@ -1,0 +1,51 @@
+name: "CodeQL Analysis"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-24.04
+    if: github.event.repository.private == false
+    timeout-minutes: 30
+    permissions:
+      # required to fetch internal or private CodeQL packs
+      packages: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript-typescript", "actions"]
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - name: Check out code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 2 # Recommended by turbo team
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          skip-compact: "true"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@fe4161a26a8629af62121b670040955b330f9af2 # v4
+        with:
+          languages: ${{ matrix.language }}
+          # We can add custom queries later when needed
+          # queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@fe4161a26a8629af62121b670040955b330f9af2 # v4
+        with:
+          category: "/language:${{ matrix.language }}"
