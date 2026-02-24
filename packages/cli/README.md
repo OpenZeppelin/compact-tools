@@ -111,19 +111,6 @@ compact-compiler --exclude "**/*.mock.compact" --exclude "**/test/**"
 compact-compiler --exclude "*.mock.compact"  # Only matches root-level mocks
 ```
 
-**Programmatic usage:**
-```typescript
-import { matchGlob, globToRegExp } from '@openzeppelin/compact-tools-cli';
-
-// Test if a path matches a pattern
-matchGlob('foo/bar.mock.compact', '**/*.mock.compact'); // true
-matchGlob('bar.mock.compact', '*.mock.compact');        // true
-
-// Get the underlying RegExp
-const re = globToRegExp('**/*.mock.compact');
-re.test('nested/file.mock.compact'); // true
-```
-
 ### Dry run
 
 Use `--dry-run` to see which files would be compiled without running the compiler. No environment validation or compilation is performed. Useful to verify `--exclude` patterns or to see the file list before a full run.
@@ -218,77 +205,6 @@ compact-builder --src contracts --out build
 
 # Build excluding mock contracts
 compact-builder --exclude "**/*.mock.compact"
-```
-
-## Programmatic API
-
-The compiler can be used programmatically:
-
-```typescript
-import { CompactCompiler } from '@openzeppelin/compact-tools-cli';
-
-// Using options object
-const compiler = new CompactCompiler({
-  flags: '--skip-zk',
-  targetDir: 'security',
-  version: '0.28.0',
-  hierarchical: true,
-  srcDir: 'src',
-  outDir: 'artifacts',
-});
-
-await compiler.compile();
-
-// Using factory method (parses CLI-style args)
-const compiler = CompactCompiler.fromArgs([
-  '--dir', 'security',
-  '--skip-zk',
-  '+0.28.0'
-]);
-
-await compiler.compile();
-```
-
-### Classes and Types
-
-```typescript
-// Main compiler class
-class CompactCompiler {
-  constructor(options?: CompilerOptions, execFn?: ExecFunction);
-  static fromArgs(args: string[], env?: NodeJS.ProcessEnv): CompactCompiler;
-  static parseArgs(args: string[], env?: NodeJS.ProcessEnv): CompilerOptions;
-  compile(): Promise<void>;
-  validateEnvironment(): Promise<void>;
-}
-
-// Builder class
-class CompactBuilder {
-  constructor(options?: CompilerOptions);
-  static fromArgs(args: string[], env?: NodeJS.ProcessEnv): CompactBuilder;
-  build(): Promise<void>;
-}
-
-// Options interface
-interface CompilerOptions {
-  flags?: string;           // Compiler flags (e.g., '--skip-zk --verbose')
-  targetDir?: string;       // Subdirectory within srcDir to compile
-  version?: string;         // Toolchain version (e.g., '0.28.0')
-  hierarchical?: boolean;   // Preserve directory structure in output
-  srcDir?: string;          // Source directory (default: 'src')
-  outDir?: string;          // Output directory (default: 'artifacts')
-  exclude?: string[];       // Glob patterns to exclude (e.g., ['**/*.mock.compact'])
-  dryRun?: boolean;         // Preview files without compiling
-}
-```
-
-### Error Types
-
-```typescript
-import {
-  CompactCliNotFoundError,  // Compact CLI not in PATH
-  CompilationError,         // Compilation failed (includes file path)
-  DirectoryNotFoundError,   // Target directory doesn't exist
-} from '@openzeppelin/compact-tools-cli';
 ```
 
 ## Development
