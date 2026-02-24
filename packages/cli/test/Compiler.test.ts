@@ -266,10 +266,7 @@ describe('FileDiscovery', () => {
     });
 
     it('should exclude files matching any of multiple exclude patterns', async () => {
-      discovery = new FileDiscovery('src', [
-        '**/*.mock.compact',
-        '**/test/**',
-      ]);
+      discovery = new FileDiscovery('src', ['**/*.mock.compact', '**/test/**']);
       mockReaddir
         .mockResolvedValueOnce([
           {
@@ -831,10 +828,7 @@ describe('CompactCompiler', () => {
     });
 
     it('should parse --exclude flag', () => {
-      compiler = CompactCompiler.fromArgs([
-        '--exclude',
-        '**/*.mock.compact',
-      ]);
+      compiler = CompactCompiler.fromArgs(['--exclude', '**/*.mock.compact']);
 
       expect(compiler.testOptions.exclude).toEqual(['**/*.mock.compact']);
     });
@@ -1286,7 +1280,10 @@ describe('CompactCompiler', () => {
       await compiler.compile();
 
       // Should only show non-excluded files
-      expect(showDryRunSpy).toHaveBeenCalledWith(['MyToken.compact'], undefined);
+      expect(showDryRunSpy).toHaveBeenCalledWith(
+        ['MyToken.compact'],
+        undefined,
+      );
 
       showDryRunSpy.mockRestore();
     });

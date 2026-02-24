@@ -60,17 +60,22 @@ export function matchGlob(path: string, pattern: string): boolean {
  * re.test('bar.mock.compact'); // true (** matches zero segments)
  * ```
  */
+// Placeholders for glob-to-regex (private-use Unicode, not in patterns)
+const GLOB_STAR_STAR = '\uE001';
+const GLOB_STAR = '\uE002';
+const GLOB_STAR_STAR_END = '\uE003';
+
 export function globToRegExp(pattern: string): RegExp {
   const escaped = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*\//g, '\u0001')
-    .replace(/\/\*\*$/g, '/\u0003')
-    .replace(/\*\*/g, '\u0001')
-    .replace(/\*/g, '\u0002');
+    .replace(/\*\*\//g, GLOB_STAR_STAR)
+    .replace(/\/\*\*$/g, `/${GLOB_STAR_STAR_END}`)
+    .replace(/\*\*/g, GLOB_STAR_STAR)
+    .replace(/\*/g, GLOB_STAR);
   const reStr = escaped
-    .replace(/\u0001/g, '(?:[^/]*/)*')
-    .replace(/\u0002/g, '[^/]*')
-    .replace(/\u0003/g, '.*');
+    .replace(new RegExp(GLOB_STAR_STAR, 'g'), '(?:[^/]*/)*')
+    .replace(new RegExp(GLOB_STAR, 'g'), '[^/]*')
+    .replace(new RegExp(GLOB_STAR_STAR_END, 'g'), '.*');
   return new RegExp(`^${reStr}$`);
 }
 
@@ -124,7 +129,10 @@ export interface CompilerOptions {
 
 /** Resolved compiler options with defaults applied */
 type ResolvedCompilerOptions = Required<
-  Pick<CompilerOptions, 'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'dryRun'>
+  Pick<
+    CompilerOptions,
+    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'dryRun'
+  >
 > &
   Pick<CompilerOptions, 'targetDir' | 'version' | 'exclude'>;
 
