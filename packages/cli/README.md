@@ -50,6 +50,8 @@ compact-compiler [options]
 | `--dir <directory>` | Compile specific subdirectory within src | (all) |
 | `--src <directory>` | Source directory containing `.compact` files | `src` |
 | `--out <directory>` | Output directory for compiled artifacts | `artifacts` |
+| `--exclude <pattern>` | Glob pattern to exclude files (can be repeated) | (none) |
+| `--dry-run` | Preview which files would be compiled without compiling | `false` |
 | `--hierarchical` | Preserve source directory structure in output | `false` |
 | `--skip-zk` | Skip zero-knowledge proof generation | `false` |
 | `+<version>` | Use specific toolchain version (e.g., `+0.28.0`) | (default) |
@@ -86,6 +88,65 @@ artifacts/           # Hierarchical output
     Token/
 ```
 
+### Excluding Files
+
+Use `--exclude` to skip files matching glob patterns. This is useful for excluding mock contracts, test files, or any files you don't want to compile.
+
+**Supported glob patterns:**
+- `*` matches any characters except `/`
+- `**` matches zero or more path segments
+
+**Examples:**
+```bash
+# Exclude all mock contracts
+compact-compiler --exclude "**/*.mock.compact"
+
+# Exclude test directory
+compact-compiler --exclude "**/test/**"
+
+# Multiple patterns
+compact-compiler --exclude "**/*.mock.compact" --exclude "**/test/**"
+
+# Root-level only (no ** prefix)
+compact-compiler --exclude "*.mock.compact"  # Only matches root-level mocks
+```
+
+**Programmatic usage:**
+```typescript
+import { matchGlob, globToRegExp } from '@openzeppelin/compact-tools-cli';
+
+// Test if a path matches a pattern
+matchGlob('foo/bar.mock.compact', '**/*.mock.compact'); // true
+matchGlob('bar.mock.compact', '*.mock.compact');        // true
+
+// Get the underlying RegExp
+const re = globToRegExp('**/*.mock.compact');
+re.test('nested/file.mock.compact'); // true
+```
+
+### Dry run
+
+Use `--dry-run` to see which files would be compiled without running the compiler. No environment validation or compilation is performed. Useful to verify `--exclude` patterns or to see the file list before a full run.
+
+**Usage:**
+```bash
+# Preview all files that would be compiled
+compact-compiler --dry-run
+
+# Preview with exclusions (verify your exclude patterns)
+compact-compiler --exclude "**/*.mock.compact" --dry-run
+
+# Dry run in a specific directory
+compact-compiler --dir access --dry-run
+```
+
+**Example output:**
+```
+ℹ [DRY-RUN] Would compile 2 file(s):
+    Token.compact
+    AccessControl.compact
+```
+
 ### Examples
 
 ```bash
@@ -112,6 +173,18 @@ compact-compiler --dir access --skip-zk --hierarchical
 
 # Use environment variable
 SKIP_ZK=true compact-compiler
+
+# Exclude mock contracts
+compact-compiler --exclude "**/*.mock.compact"
+
+# Exclude multiple patterns
+compact-compiler --exclude "**/*.mock.compact" --exclude "**/test/**"
+
+# Preview which files would be compiled (dry run)
+compact-compiler --dry-run
+
+# Dry run with exclusions to verify patterns
+compact-compiler --exclude "**/*.mock.compact" --dry-run
 ```
 
 ## Builder CLI
@@ -129,7 +202,7 @@ The builder runs the compiler as a prerequisite, then executes additional build 
 compact-builder [options]
 ```
 
-Accepts all compiler options except `--skip-zk` (builds always include ZK proofs).
+Accepts all compiler options except `--skip-zk` (builds always include ZK proofs). Use `--exclude` to skip mock contracts or test files during the build.
 
 ### Examples
 
@@ -142,6 +215,9 @@ compact-builder --dir token
 
 # Build with custom directories
 compact-builder --src contracts --out build
+
+# Build excluding mock contracts
+compact-builder --exclude "**/*.mock.compact"
 ```
 
 ## Programmatic API
@@ -200,6 +276,8 @@ interface CompilerOptions {
   hierarchical?: boolean;   // Preserve directory structure in output
   srcDir?: string;          // Source directory (default: 'src')
   outDir?: string;          // Output directory (default: 'artifacts')
+  exclude?: string[];       // Glob patterns to exclude (e.g., ['**/*.mock.compact'])
+  dryRun?: boolean;         // Preview files without compiling
 }
 ```
 

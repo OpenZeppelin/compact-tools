@@ -12,7 +12,7 @@
   "author": "",
   "license": "MIT",
   "type": "module",
-  "exports": "./index.js",
+  "exports": "./dist/index.js",
   "engines": {
     "node": ">=20"
   },

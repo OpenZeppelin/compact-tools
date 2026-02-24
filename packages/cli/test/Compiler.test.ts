@@ -237,6 +237,100 @@ describe('FileDiscovery', () => {
 
       expect(files).toEqual(['Ownable.compact']);
     });
+
+    it('should exclude files matching exclude patterns', async () => {
+      discovery = new FileDiscovery('src', ['**/*.mock.compact']);
+      const mockDirents = [
+        {
+          name: 'MyToken.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'LunarswapFactory.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'AccessControl.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await discovery.getCompactFiles('src');
+
+      expect(files).toEqual(['MyToken.compact', 'AccessControl.compact']);
+    });
+
+    it('should exclude files matching any of multiple exclude patterns', async () => {
+      discovery = new FileDiscovery('src', [
+        '**/*.mock.compact',
+        '**/test/**',
+      ]);
+      mockReaddir
+        .mockResolvedValueOnce([
+          {
+            name: 'Token.compact',
+            isFile: () => true,
+            isDirectory: () => false,
+          },
+          {
+            name: 'test',
+            isFile: () => false,
+            isDirectory: () => true,
+          },
+        ] as any)
+        .mockResolvedValueOnce([
+          {
+            name: 'MockToken.mock.compact',
+            isFile: () => true,
+            isDirectory: () => false,
+          },
+        ] as any);
+
+      const files = await discovery.getCompactFiles('src');
+
+      expect(files).toEqual(['Token.compact']);
+    });
+
+    it('should exclude root-level files matching pattern without ** prefix', async () => {
+      discovery = new FileDiscovery('src', ['*.mock.compact']);
+      const mockDirents = [
+        {
+          name: 'Token.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'Factory.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'subdir',
+          isFile: () => false,
+          isDirectory: () => true,
+        },
+      ];
+
+      mockReaddir
+        .mockResolvedValueOnce(mockDirents as any)
+        .mockResolvedValueOnce([
+          {
+            name: 'Nested.mock.compact',
+            isFile: () => true,
+            isDirectory: () => false,
+          },
+        ] as any);
+
+      const files = await discovery.getCompactFiles('src');
+
+      // *.mock.compact should only match root-level files, not nested ones
+      expect(files).toEqual(['Token.compact', 'subdir/Nested.mock.compact']);
+    });
   });
 });
 
@@ -569,6 +663,26 @@ describe('UIService', () => {
       );
     });
   });
+
+  describe('showDryRun', () => {
+    it('should show dry-run output with file list', () => {
+      UIService.showDryRun(['Token.compact', 'AccessControl.compact']);
+
+      expect(mockSpinner.info).toHaveBeenCalledWith(
+        '[DRY-RUN] Would compile 2 file(s):',
+      );
+      expect(console.log).toHaveBeenCalledWith('    Token.compact');
+      expect(console.log).toHaveBeenCalledWith('    AccessControl.compact');
+    });
+
+    it('should show dry-run output with target directory', () => {
+      UIService.showDryRun(['Token.compact'], 'security');
+
+      expect(mockSpinner.info).toHaveBeenCalledWith(
+        '[DRY-RUN] Would compile 1 file(s) in security/:',
+      );
+    });
+  });
 });
 
 describe('CompactCompiler', () => {
@@ -604,6 +718,7 @@ describe('CompactCompiler', () => {
           hierarchical: true,
           srcDir: 'contracts',
           outDir: 'build',
+          exclude: ['**/*.mock.compact'],
         },
         mockExec,
       );
@@ -615,6 +730,7 @@ describe('CompactCompiler', () => {
       expect(compiler.testOptions.hierarchical).toBe(true);
       expect(compiler.testOptions.srcDir).toBe('contracts');
       expect(compiler.testOptions.outDir).toBe('build');
+      expect(compiler.testOptions.exclude).toEqual(['**/*.mock.compact']);
     });
 
     it('should trim flags', () => {
@@ -714,6 +830,41 @@ describe('CompactCompiler', () => {
       );
     });
 
+    it('should parse --exclude flag', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--exclude',
+        '**/*.mock.compact',
+      ]);
+
+      expect(compiler.testOptions.exclude).toEqual(['**/*.mock.compact']);
+    });
+
+    it('should parse multiple --exclude flags', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--exclude',
+        '**/*.mock.compact',
+        '--exclude',
+        '**/test/**',
+      ]);
+
+      expect(compiler.testOptions.exclude).toEqual([
+        '**/*.mock.compact',
+        '**/test/**',
+      ]);
+    });
+
+    it('should throw error for --exclude without argument', () => {
+      expect(() => CompactCompiler.fromArgs(['--exclude'])).toThrow(
+        '--exclude flag requires a glob pattern',
+      );
+    });
+
+    it('should throw error for --exclude followed by another flag', () => {
+      expect(() =>
+        CompactCompiler.fromArgs(['--exclude', '--skip-zk']),
+      ).toThrow('--exclude flag requires a glob pattern');
+    });
+
     it('should parse --hierarchical flag', () => {
       compiler = CompactCompiler.fromArgs(['--hierarchical']);
 
@@ -797,6 +948,31 @@ describe('CompactCompiler', () => {
       expect(() => CompactCompiler.fromArgs(['--out', '--skip-zk'])).toThrow(
         '--out flag requires a directory path',
       );
+    });
+
+    it('should parse --dry-run flag', () => {
+      compiler = CompactCompiler.fromArgs(['--dry-run']);
+
+      expect(compiler.testOptions.dryRun).toBe(true);
+    });
+
+    it('should parse --dry-run flag with other options', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--dry-run',
+        '--exclude',
+        '**/*.mock.compact',
+        '--skip-zk',
+      ]);
+
+      expect(compiler.testOptions.dryRun).toBe(true);
+      expect(compiler.testOptions.exclude).toEqual(['**/*.mock.compact']);
+      expect(compiler.testOptions.flags).toBe('--skip-zk');
+    });
+
+    it('should default dryRun to false', () => {
+      compiler = CompactCompiler.fromArgs([]);
+
+      expect(compiler.testOptions.dryRun).toBe(false);
     });
   });
 
@@ -985,6 +1161,36 @@ describe('CompactCompiler', () => {
       );
     });
 
+    it('should not compile files matching exclude patterns', async () => {
+      const mockDirents = [
+        {
+          name: 'MyToken.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'LunarswapFactory.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ];
+      mockReaddir.mockResolvedValue(mockDirents as any);
+      compiler = new CompactCompiler(
+        { flags: '--skip-zk', exclude: ['**/*.mock.compact'] },
+        mockExec,
+      );
+
+      await compiler.compile();
+
+      const compileCalls = (mockExec as any).mock.calls.filter(
+        (call: string[]) =>
+          call[0].includes('compact compile') && !call[0].includes('--version'),
+      );
+      expect(compileCalls).toHaveLength(1);
+      expect(compileCalls[0][0]).toContain('MyToken.compact');
+      expect(compileCalls[0][0]).not.toContain('mock.compact');
+    });
+
     it('should handle compilation errors gracefully', async () => {
       const brokenDirent = {
         name: 'Broken.compact',
@@ -1019,6 +1225,70 @@ describe('CompactCompiler', () => {
         `Failed to compile ${brokenDirent.name}: Compilation failed`,
       );
       expect(testMockExec).toHaveBeenCalledTimes(4);
+    });
+
+    it('should preview files without compiling when --dry-run is set', async () => {
+      const mockDirents = [
+        {
+          name: 'MyToken.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'Ownable.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ];
+      mockReaddir.mockResolvedValue(mockDirents as any);
+      const showDryRunSpy = vi
+        .spyOn(UIService, 'showDryRun')
+        .mockImplementation(() => {});
+
+      compiler = new CompactCompiler({ dryRun: true }, mockExec);
+
+      await compiler.compile();
+
+      // Should not call any exec commands (no environment validation, no compilation)
+      expect(mockExec).not.toHaveBeenCalled();
+      // Should call showDryRun with the discovered files
+      expect(showDryRunSpy).toHaveBeenCalledWith(
+        ['MyToken.compact', 'Ownable.compact'],
+        undefined,
+      );
+
+      showDryRunSpy.mockRestore();
+    });
+
+    it('should show excluded files in dry-run output', async () => {
+      const mockDirents = [
+        {
+          name: 'MyToken.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'Factory.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ];
+      mockReaddir.mockResolvedValue(mockDirents as any);
+      const showDryRunSpy = vi
+        .spyOn(UIService, 'showDryRun')
+        .mockImplementation(() => {});
+
+      compiler = new CompactCompiler(
+        { dryRun: true, exclude: ['**/*.mock.compact'] },
+        mockExec,
+      );
+
+      await compiler.compile();
+
+      // Should only show non-excluded files
+      expect(showDryRunSpy).toHaveBeenCalledWith(['MyToken.compact'], undefined);
+
+      showDryRunSpy.mockRestore();
     });
   });
 
