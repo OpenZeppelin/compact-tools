@@ -2,6 +2,8 @@
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools/badge)](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools)
 
+This project extends the Midnight Network with additional developer tooling.
+
 # OpenZeppelin Compact Tools
 
 Tools for compiling, building, and testing Compact smart contracts. This is a monorepo containing:
