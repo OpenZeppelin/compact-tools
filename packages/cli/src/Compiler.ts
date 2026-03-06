@@ -20,6 +20,66 @@ const DEFAULT_SRC_DIR = 'src';
 const DEFAULT_OUT_DIR = 'artifacts';
 
 /**
+ * Returns true if path matches the glob pattern.
+ * Supports ** (match zero or more path segments) and * (match within segment).
+ *
+ * @param path - The file path to test (use forward slashes)
+ * @param pattern - Glob pattern to match against
+ * @returns true if the path matches the pattern
+ * @example
+ * ```typescript
+ * // Pattern string: two asterisks, slash, asterisk, .mock.compact (backslash in code escapes slash for JSDoc)
+ * matchGlob('foo/bar.mock.compact', '**\/*.mock.compact'); // true
+ * matchGlob('bar.mock.compact', '*.mock.compact'); // true
+ * matchGlob('test/unit/foo.compact', '**\/test/**'); // true
+ * ```
+ */
+export function matchGlob(path: string, pattern: string): boolean {
+  const re = globToRegExp(pattern);
+  return re.test(path);
+}
+
+/**
+ * Converts a glob pattern to a RegExp.
+ * Supports:
+ * - `**` matches zero or more path segments
+ * - `*` matches any characters except `/`
+ *
+ * Does NOT support:
+ * - `?` (single character wildcard)
+ * - Brace expansion `{a,b}`
+ * - Negation `!pattern`
+ *
+ * @param pattern - Glob pattern to convert
+ * @returns RegExp that matches paths according to the glob pattern
+ * @example
+ * ```typescript
+ * // Pattern string: two asterisks, slash, asterisk, .mock.compact (backslash in code escapes slash for JSDoc)
+ * const re = globToRegExp('**\/*.mock.compact');
+ * re.test('foo/bar.mock.compact'); // true
+ * re.test('bar.mock.compact'); // true (** matches zero segments)
+ * ```
+ */
+// Placeholders for glob-to-regex (private-use Unicode, not in patterns)
+const GLOB_STAR_STAR = '\uE001';
+const GLOB_STAR = '\uE002';
+const GLOB_STAR_STAR_END = '\uE003';
+
+export function globToRegExp(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*\//g, GLOB_STAR_STAR)
+    .replace(/\/\*\*$/g, `/${GLOB_STAR_STAR_END}`)
+    .replace(/\*\*/g, GLOB_STAR_STAR)
+    .replace(/\*/g, GLOB_STAR);
+  const reStr = escaped
+    .replace(new RegExp(GLOB_STAR_STAR, 'g'), '(?:[^/]*/)*')
+    .replace(new RegExp(GLOB_STAR, 'g'), '[^/]*')
+    .replace(new RegExp(GLOB_STAR_STAR_END, 'g'), '.*');
+  return new RegExp(`^${reStr}$`);
+}
+
+/**
  * Function type for executing shell commands.
  * Allows dependency injection for testing and customization.
  *
@@ -61,13 +121,20 @@ export interface CompilerOptions {
   srcDir?: string;
   /** Output directory for compiled artifacts (default: 'artifacts') */
   outDir?: string;
+  /** Glob patterns to exclude from compilation (e.g. '*.mock.compact' or 'test/**') */
+  exclude?: string[];
+  /** If true, preview which files would be compiled without actually compiling */
+  dryRun?: boolean;
 }
 
 /** Resolved compiler options with defaults applied */
 type ResolvedCompilerOptions = Required<
-  Pick<CompilerOptions, 'flags' | 'hierarchical' | 'srcDir' | 'outDir'>
+  Pick<
+    CompilerOptions,
+    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'dryRun'
+  >
 > &
-  Pick<CompilerOptions, 'targetDir' | 'version'>;
+  Pick<CompilerOptions, 'targetDir' | 'version' | 'exclude'>;
 
 /**
  * Service responsible for validating the Compact CLI environment.
@@ -201,14 +268,26 @@ export class EnvironmentValidator {
  */
 export class FileDiscovery {
   private srcDir: string;
+  private excludePatterns: string[];
 
   /**
    * Creates a new FileDiscovery instance.
    *
    * @param srcDir - Base source directory for relative path calculation (default: 'src')
+   * @param exclude - Glob patterns to exclude from discovery (e.g. mock files)
    */
-  constructor(srcDir: string = DEFAULT_SRC_DIR) {
+  constructor(srcDir: string = DEFAULT_SRC_DIR, exclude: string[] = []) {
     this.srcDir = srcDir;
+    this.excludePatterns = exclude;
+  }
+
+  /**
+   * Returns true if the given relative file path matches any exclude pattern.
+   */
+  private isExcluded(relativePath: string): boolean {
+    return this.excludePatterns.some((pattern) =>
+      matchGlob(relativePath, pattern),
+    );
   }
 
   /**
@@ -234,7 +313,10 @@ export class FileDiscovery {
           }
 
           if (entry.isFile() && fullPath.endsWith('.compact')) {
-            return [relative(this.srcDir, fullPath)];
+            const relativePath = relative(this.srcDir, fullPath);
+            if (!this.isExcluded(relativePath)) {
+              return [relativePath];
+            }
           }
           return [];
         } catch (err) {
@@ -484,6 +566,33 @@ export const UIService = {
       chalk.yellow(`[COMPILE] No .compact files found in ${searchLocation}.`),
     );
   },
+
+  /**
+   * Displays dry-run output showing which files would be compiled.
+   *
+   * @param files - Array of file paths that would be compiled
+   * @param targetDir - Optional target directory being compiled
+   * @example
+   * ```typescript
+   * UIService.showDryRun(['Token.compact', 'AccessControl.compact']);
+   * // Output:
+   * // [DRY-RUN] Would compile 2 file(s):
+   * //     Token.compact
+   * //     AccessControl.compact
+   * ```
+   */
+  showDryRun(files: string[], targetDir?: string): void {
+    const searchLocation = targetDir ? ` in ${targetDir}/` : '';
+    const spinner = ora();
+    spinner.info(
+      chalk.cyan(
+        `[DRY-RUN] Would compile ${files.length} file(s)${searchLocation}:`,
+      ),
+    );
+    for (const file of files) {
+      console.log(chalk.cyan(`    ${file}`));
+    }
+  },
 };
 
 /**
@@ -566,9 +675,14 @@ export class CompactCompiler {
       hierarchical: options.hierarchical ?? false,
       srcDir: options.srcDir ?? DEFAULT_SRC_DIR,
       outDir: options.outDir ?? DEFAULT_OUT_DIR,
+      exclude: options.exclude,
+      dryRun: options.dryRun ?? false,
     };
     this.environmentValidator = new EnvironmentValidator(execFn);
-    this.fileDiscovery = new FileDiscovery(this.options.srcDir);
+    this.fileDiscovery = new FileDiscovery(
+      this.options.srcDir,
+      this.options.exclude ?? [],
+    );
     this.compilerService = new CompilerService(execFn, {
       hierarchical: this.options.hierarchical,
       srcDir: this.options.srcDir,
@@ -583,7 +697,9 @@ export class CompactCompiler {
    * - `--dir <directory>` - Target specific subdirectory within srcDir
    * - `--src <directory>` - Source directory containing .compact files (default: 'src')
    * - `--out <directory>` - Output directory for artifacts (default: 'artifacts')
+   * - `--exclude <pattern>` - Glob pattern to exclude from compilation (may be repeated)
    * - `--hierarchical` - Preserve source directory structure in artifacts output
+   * - `--dry-run` - Preview which files would be compiled without actually compiling
    * - `+<version>` - Use specific toolchain version
    * - Other arguments - Treated as compiler flags
    * - `SKIP_ZK=true` environment variable - Adds --skip-zk flag
@@ -591,7 +707,7 @@ export class CompactCompiler {
    * @param args - Array of command-line arguments
    * @param env - Environment variables (defaults to process.env)
    * @returns Parsed CompilerOptions object
-   * @throws {Error} If --dir, --src, or --out flag is provided without a value
+   * @throws {Error} If --dir, --src, --out, or --exclude flag is provided without a value
    */
   static parseArgs(
     args: string[],
@@ -634,8 +750,20 @@ export class CompactCompiler {
         } else {
           throw new Error('--out flag requires a directory path');
         }
+      } else if (args[i] === '--exclude') {
+        const valueExists =
+          i + 1 < args.length && !args[i + 1].startsWith('--');
+        if (valueExists) {
+          options.exclude = options.exclude ?? [];
+          options.exclude.push(args[i + 1]);
+          i++;
+        } else {
+          throw new Error('--exclude flag requires a glob pattern');
+        }
       } else if (args[i] === '--hierarchical') {
         options.hierarchical = true;
+      } else if (args[i] === '--dry-run') {
+        options.dryRun = true;
       } else if (args[i].startsWith('+')) {
         options.version = args[i].slice(1);
       } else {
@@ -658,7 +786,9 @@ export class CompactCompiler {
    * - `--dir <directory>` - Target specific subdirectory within srcDir
    * - `--src <directory>` - Source directory containing .compact files (default: 'src')
    * - `--out <directory>` - Output directory for artifacts (default: 'artifacts')
+   * - `--exclude <pattern>` - Glob pattern to exclude from compilation (may be repeated)
    * - `--hierarchical` - Preserve source directory structure in artifacts output
+   * - `--dry-run` - Preview which files would be compiled without actually compiling
    * - `+<version>` - Use specific toolchain version
    * - Other arguments - Treated as compiler flags
    * - `SKIP_ZK=true` environment variable - Adds --skip-zk flag
@@ -666,7 +796,7 @@ export class CompactCompiler {
    * @param args - Array of command-line arguments
    * @param env - Environment variables (defaults to process.env)
    * @returns New CompactCompiler instance configured from arguments
-   * @throws {Error} If --dir, --src, or --out flag is provided without a value
+   * @throws {Error} If --dir, --src, --out, or --exclude flag is provided without a value
    * @example
    * ```typescript
    * // Parse command line: compact-compiler --dir security --skip-zk +0.26.0
@@ -771,7 +901,9 @@ export class CompactCompiler {
    * ```
    */
   async compile(): Promise<void> {
-    await this.validateEnvironment();
+    if (!this.options.dryRun) {
+      await this.validateEnvironment();
+    }
 
     const searchDir = this.options.targetDir
       ? join(this.options.srcDir, this.options.targetDir)
@@ -789,6 +921,11 @@ export class CompactCompiler {
 
     if (compactFiles.length === 0) {
       UIService.showNoFiles(this.options.targetDir);
+      return;
+    }
+
+    if (this.options.dryRun) {
+      UIService.showDryRun(compactFiles, this.options.targetDir);
       return;
     }
 

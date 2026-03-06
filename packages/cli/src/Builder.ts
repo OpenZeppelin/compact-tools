@@ -41,7 +41,7 @@ export type BuilderOptions = Omit<CompilerOptions, 'flags'>;
  *     Compactc version: 0.26.0
  * ✔ [BUILD] [1/3] Compiling TypeScript
  * ✔ [BUILD] [2/3] Copying artifacts
- * ✔ [BUILD] [3/3] Copying and cleaning .compact files
+ * ✔ [BUILD] [3/3] Copying .compact files
  * ```
  *
  * @example <caption>Failed Compilation Output</caption>
@@ -76,8 +76,8 @@ export class CompactBuilder {
         shell: '/bin/bash',
       },
       {
-        cmd: 'mkdir -p dist && find src -type f -name "*.compact" -exec cp {} dist/ \\; 2>/dev/null && rm dist/Mock*.compact 2>/dev/null || true',
-        msg: 'Copying and cleaning .compact files',
+        cmd: 'mkdir -p dist && find src -type f -name "*.compact" -exec cp {} dist/ \\; 2>/dev/null || true',
+        msg: 'Copying .compact files',
         shell: '/bin/bash',
       },
     ];
