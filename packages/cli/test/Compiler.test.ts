@@ -328,6 +328,93 @@ describe('FileDiscovery', () => {
       // *.mock.compact should only match root-level files, not nested ones
       expect(files).toEqual(['Token.compact', 'subdir/Nested.mock.compact']);
     });
+
+    it('should include only files matching include patterns', async () => {
+      discovery = new FileDiscovery('src', [], ['**/*.mock.compact']);
+      const mockDirents = [
+        {
+          name: 'MyToken.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'LunarswapFactory.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'AccessControl.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await discovery.getCompactFiles('src');
+
+      expect(files).toEqual(['LunarswapFactory.mock.compact']);
+    });
+
+    it('should apply include before exclude', async () => {
+      discovery = new FileDiscovery(
+        'src',
+        ['**/archive/**'],
+        ['**/*.mock.compact'],
+      );
+      mockReaddir
+        .mockResolvedValueOnce([
+          {
+            name: 'Token.compact',
+            isFile: () => true,
+            isDirectory: () => false,
+          },
+          {
+            name: 'Factory.mock.compact',
+            isFile: () => true,
+            isDirectory: () => false,
+          },
+          {
+            name: 'archive',
+            isFile: () => false,
+            isDirectory: () => true,
+          },
+        ] as any)
+        .mockResolvedValueOnce([
+          {
+            name: 'Old.mock.compact',
+            isFile: () => true,
+            isDirectory: () => false,
+          },
+        ] as any);
+
+      const files = await discovery.getCompactFiles('src');
+
+      // Include keeps only *.mock.compact, then exclude removes archive/**
+      expect(files).toEqual(['Factory.mock.compact']);
+    });
+
+    it('should return all files when include is empty', async () => {
+      discovery = new FileDiscovery('src', [], []);
+      const mockDirents = [
+        {
+          name: 'Token.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'Mock.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await discovery.getCompactFiles('src');
+
+      expect(files).toEqual(['Token.compact', 'Mock.mock.compact']);
+    });
   });
 });
 
@@ -716,6 +803,7 @@ describe('CompactCompiler', () => {
           srcDir: 'contracts',
           outDir: 'build',
           exclude: ['**/*.mock.compact'],
+          include: ['**/test/**'],
         },
         mockExec,
       );
@@ -728,6 +816,7 @@ describe('CompactCompiler', () => {
       expect(compiler.testOptions.srcDir).toBe('contracts');
       expect(compiler.testOptions.outDir).toBe('build');
       expect(compiler.testOptions.exclude).toEqual(['**/*.mock.compact']);
+      expect(compiler.testOptions.include).toEqual(['**/test/**']);
     });
 
     it('should trim flags', () => {
@@ -774,7 +863,8 @@ describe('CompactCompiler', () => {
       ]);
 
       expect(compiler.testOptions.targetDir).toBe('security');
-      expect(compiler.testOptions.flags).toBe('--skip-zk --verbose');
+      expect(compiler.testOptions.flags).toBe('--skip-zk');
+      expect(compiler.testOptions.verbose).toBe(true);
     });
 
     it('should parse version flag', () => {
@@ -794,7 +884,8 @@ describe('CompactCompiler', () => {
       ]);
 
       expect(compiler.testOptions.targetDir).toBe('security');
-      expect(compiler.testOptions.flags).toBe('--skip-zk --verbose');
+      expect(compiler.testOptions.flags).toBe('--skip-zk');
+      expect(compiler.testOptions.verbose).toBe(true);
       expect(compiler.testOptions.version).toBe('0.26.0');
     });
 
@@ -804,7 +895,8 @@ describe('CompactCompiler', () => {
       });
 
       expect(compiler.testOptions.targetDir).toBe('access');
-      expect(compiler.testOptions.flags).toBe('--skip-zk --verbose');
+      expect(compiler.testOptions.flags).toBe('--skip-zk');
+      expect(compiler.testOptions.verbose).toBe(true);
     });
 
     it('should deduplicate flags when both env var and CLI flag are present', () => {
@@ -812,7 +904,8 @@ describe('CompactCompiler', () => {
         SKIP_ZK: 'true',
       });
 
-      expect(compiler.testOptions.flags).toBe('--skip-zk --verbose');
+      expect(compiler.testOptions.flags).toBe('--skip-zk');
+      expect(compiler.testOptions.verbose).toBe(true);
     });
 
     it('should throw error for --dir without argument', () => {
@@ -857,6 +950,50 @@ describe('CompactCompiler', () => {
       expect(() =>
         CompactCompiler.fromArgs(['--exclude', '--skip-zk']),
       ).toThrow('--exclude flag requires a glob pattern');
+    });
+
+    it('should parse --include flag', () => {
+      compiler = CompactCompiler.fromArgs(['--include', '**/*.mock.compact']);
+
+      expect(compiler.testOptions.include).toEqual(['**/*.mock.compact']);
+    });
+
+    it('should parse multiple --include flags', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--include',
+        '**/*.mock.compact',
+        '--include',
+        '**/test/**',
+      ]);
+
+      expect(compiler.testOptions.include).toEqual([
+        '**/*.mock.compact',
+        '**/test/**',
+      ]);
+    });
+
+    it('should throw error for --include without argument', () => {
+      expect(() => CompactCompiler.fromArgs(['--include'])).toThrow(
+        '--include flag requires a glob pattern',
+      );
+    });
+
+    it('should throw error for --include followed by another flag', () => {
+      expect(() =>
+        CompactCompiler.fromArgs(['--include', '--skip-zk']),
+      ).toThrow('--include flag requires a glob pattern');
+    });
+
+    it('should parse --include combined with --exclude', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--include',
+        '**/*.mock.compact',
+        '--exclude',
+        '**/archive/**',
+      ]);
+
+      expect(compiler.testOptions.include).toEqual(['**/*.mock.compact']);
+      expect(compiler.testOptions.exclude).toEqual(['**/archive/**']);
     });
 
     it('should parse --hierarchical flag', () => {

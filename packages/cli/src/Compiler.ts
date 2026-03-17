@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { exec as execCallback } from 'node:child_process';
+import { exec as execCallback, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
@@ -123,18 +123,22 @@ export interface CompilerOptions {
   outDir?: string;
   /** Glob patterns to exclude from compilation (e.g. '*.mock.compact' or 'test/**') */
   exclude?: string[];
+  /** Glob patterns to include - when set, only files matching at least one pattern are compiled (e.g. '**\/*.mock.compact') */
+  include?: string[];
   /** If true, preview which files would be compiled without actually compiling */
   dryRun?: boolean;
+  /** If true, passes --verbose to compact compile to show circuit compilation details */
+  verbose?: boolean;
 }
 
 /** Resolved compiler options with defaults applied */
 type ResolvedCompilerOptions = Required<
   Pick<
     CompilerOptions,
-    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'dryRun'
+    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'dryRun' | 'verbose'
   >
 > &
-  Pick<CompilerOptions, 'targetDir' | 'version' | 'exclude'>;
+  Pick<CompilerOptions, 'targetDir' | 'version' | 'exclude' | 'include'>;
 
 /**
  * Service responsible for validating the Compact CLI environment.
@@ -269,23 +273,38 @@ export class EnvironmentValidator {
 export class FileDiscovery {
   private srcDir: string;
   private excludePatterns: string[];
+  private includePatterns: string[];
 
   /**
    * Creates a new FileDiscovery instance.
    *
    * @param srcDir - Base source directory for relative path calculation (default: 'src')
    * @param exclude - Glob patterns to exclude from discovery (e.g. mock files)
+   * @param include - Glob patterns to include - when set, only matching files pass through
    */
-  constructor(srcDir: string = DEFAULT_SRC_DIR, exclude: string[] = []) {
+  constructor(
+    srcDir: string = DEFAULT_SRC_DIR,
+    exclude: string[] = [],
+    include: string[] = [],
+  ) {
     this.srcDir = srcDir;
     this.excludePatterns = exclude;
+    this.includePatterns = include;
   }
 
   /**
-   * Returns true if the given relative file path matches any exclude pattern.
+   * Returns true if the given relative file path should be kept.
+   * When include patterns are set, the file must match at least one.
+   * Then, the file must not match any exclude pattern.
    */
-  private isExcluded(relativePath: string): boolean {
-    return this.excludePatterns.some((pattern) =>
+  private isIncluded(relativePath: string): boolean {
+    if (
+      this.includePatterns.length > 0 &&
+      !this.includePatterns.some((pattern) => matchGlob(relativePath, pattern))
+    ) {
+      return false;
+    }
+    return !this.excludePatterns.some((pattern) =>
       matchGlob(relativePath, pattern),
     );
   }
@@ -314,7 +333,7 @@ export class FileDiscovery {
 
           if (entry.isFile() && fullPath.endsWith('.compact')) {
             const relativePath = relative(this.srcDir, fullPath);
-            if (!this.isExcluded(relativePath)) {
+            if (this.isIncluded(relativePath)) {
               return [relativePath];
             }
           }
@@ -342,7 +361,7 @@ export class FileDiscovery {
  */
 export type CompilerServiceOptions = Pick<
   CompilerOptions,
-  'hierarchical' | 'srcDir' | 'outDir'
+  'hierarchical' | 'srcDir' | 'outDir' | 'verbose'
 >;
 
 /** Resolved options for CompilerService with defaults applied */
@@ -383,6 +402,7 @@ export class CompilerService {
       hierarchical: options.hierarchical ?? false,
       srcDir: options.srcDir ?? DEFAULT_SRC_DIR,
       outDir: options.outDir ?? DEFAULT_OUT_DIR,
+      verbose: options.verbose ?? false,
     };
   }
 
@@ -434,6 +454,17 @@ export class CompilerService {
     const flagsStr = flags ? ` ${flags}` : '';
     const command = `compact compile${versionFlag ? ` ${versionFlag}` : ''}${flagsStr} "${inputPath}" "${outputDir}"`;
 
+    if (this.options.verbose) {
+      // Use spawn with inherited stdio so TTY-mode output (circuit details) streams directly
+      try {
+        await this.spawnInherit(command);
+        return { stdout: '', stderr: '' };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new CompilationError(`Failed to compile ${file}: ${message}`, file, error);
+      }
+    }
+
     try {
       return await this.execFn(command);
     } catch (error: unknown) {
@@ -451,6 +482,27 @@ export class CompilerService {
         error,
       );
     }
+  }
+
+  private spawnInherit(command: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Use piped stdout/stderr forwarded to process.stdout/stderr rather than direct fd
+      // inheritance — direct inherit can cause EOF errors in turbo's captured pipe environment.
+      const child = spawn(command, {
+        shell: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      child.stdout?.pipe(process.stdout);
+      child.stderr?.pipe(process.stderr);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Command failed with exit code ${code}: ${command}`));
+        }
+      });
+      child.on('error', (err) => reject(err));
+    });
   }
 }
 
@@ -676,17 +728,21 @@ export class CompactCompiler {
       srcDir: options.srcDir ?? DEFAULT_SRC_DIR,
       outDir: options.outDir ?? DEFAULT_OUT_DIR,
       exclude: options.exclude,
+      include: options.include,
       dryRun: options.dryRun ?? false,
+      verbose: options.verbose ?? false,
     };
     this.environmentValidator = new EnvironmentValidator(execFn);
     this.fileDiscovery = new FileDiscovery(
       this.options.srcDir,
       this.options.exclude ?? [],
+      this.options.include ?? [],
     );
     this.compilerService = new CompilerService(execFn, {
       hierarchical: this.options.hierarchical,
       srcDir: this.options.srcDir,
       outDir: this.options.outDir,
+      verbose: this.options.verbose,
     });
   }
 
@@ -760,10 +816,22 @@ export class CompactCompiler {
         } else {
           throw new Error('--exclude flag requires a glob pattern');
         }
+      } else if (args[i] === '--include') {
+        const valueExists =
+          i + 1 < args.length && !args[i + 1].startsWith('--');
+        if (valueExists) {
+          options.include = options.include ?? [];
+          options.include.push(args[i + 1]);
+          i++;
+        } else {
+          throw new Error('--include flag requires a glob pattern');
+        }
       } else if (args[i] === '--hierarchical') {
         options.hierarchical = true;
       } else if (args[i] === '--dry-run') {
         options.dryRun = true;
+      } else if (args[i] === '--verbose') {
+        options.verbose = true;
       } else if (args[i].startsWith('+')) {
         options.version = args[i].slice(1);
       } else {
@@ -952,6 +1020,28 @@ export class CompactCompiler {
     total: number,
   ): Promise<void> {
     const step = `[${index + 1}/${total}]`;
+
+    if (this.options.verbose) {
+      // In verbose mode, spawn with inherited stdio streams TTY output directly.
+      // Skip the spinner to avoid interleaving with circuit compilation details.
+      // biome-ignore lint/suspicious/noConsole: Needed to display verbose compilation status
+      console.log(chalk.blue(`  [COMPILE] ${step} Compiling ${file}...`));
+      try {
+        await this.compilerService.compileFile(
+          file,
+          this.options.flags,
+          this.options.version,
+        );
+        // biome-ignore lint/suspicious/noConsole: Needed to display compilation success
+        console.log(chalk.green(`✔ [COMPILE] ${step} Compiled ${file}`));
+      } catch (error) {
+        // biome-ignore lint/suspicious/noConsole: Needed to display compilation failure
+        console.log(chalk.red(`✖ [COMPILE] ${step} Failed ${file}`));
+        throw error;
+      }
+      return;
+    }
+
     const spinner = ora(
       chalk.blue(`[COMPILE] ${step} Compiling ${file}`),
     ).start();

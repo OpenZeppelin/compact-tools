@@ -12,10 +12,10 @@ const execAsync = promisify(exec);
 
 /**
  * Configuration options for the Builder CLI.
- * Inherits from CompilerOptions but excludes `flags` (which would allow --skip-zk).
- * Builds should always include ZK proofs.
+ * Accepts all CompilerOptions including flags (e.g. --verbose for circuit compilation details).
+ * Note: builds should always include ZK proofs — avoid using --skip-zk.
  */
-export type BuilderOptions = Omit<CompilerOptions, 'flags'>;
+export type BuilderOptions = CompilerOptions;
 
 /**
  * A class to handle the build process for a project.
@@ -86,7 +86,7 @@ export class CompactBuilder {
    * Constructs a new CompactBuilder instance.
    * @param options - Compiler options (flags, srcDir, outDir, hierarchical, etc.)
    */
-  constructor(options: CompilerOptions = {}) {
+  constructor(options: BuilderOptions = {}) {
     this.options = options;
   }
 
@@ -114,7 +114,6 @@ export class CompactBuilder {
    * @throws Error if compilation or any build step fails
    */
   public async build(): Promise<void> {
-    // Run compact compilation as a prerequisite
     const compiler = new CompactCompiler(this.options);
     await compiler.compile();
 

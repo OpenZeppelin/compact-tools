@@ -53,6 +53,7 @@ compact-compiler [options]
 | `--exclude <pattern>` | Glob pattern to exclude files (can be repeated) | (none) |
 | `--dry-run` | Preview which files would be compiled without compiling | `false` |
 | `--hierarchical` | Preserve source directory structure in output | `false` |
+| `--verbose` | Show circuit compilation details | `false` |
 | `--skip-zk` | Skip zero-knowledge proof generation | `false` |
 | `+<version>` | Use specific toolchain version (e.g., `+0.28.0`) | (default) |
 
@@ -191,6 +192,18 @@ compact-builder [options]
 
 Accepts all compiler options except `--skip-zk` (builds always include ZK proofs). Use `--exclude` to skip mock contracts or test files during the build.
 
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--dir <directory>` | Compile specific subdirectory within src | (all) |
+| `--src <directory>` | Source directory containing `.compact` files | `src` |
+| `--out <directory>` | Output directory for compiled artifacts | `artifacts` |
+| `--exclude <pattern>` | Glob pattern to exclude files (can be repeated) | (none) |
+| `--hierarchical` | Preserve source directory structure in output | `false` |
+| `--verbose` | Show circuit compilation details (requires TTY, run directly not via turbo) | `false` |
+| `+<version>` | Use specific toolchain version (e.g., `+0.28.0`) | (default) |
+
 ### Examples
 
 ```bash
@@ -205,6 +218,9 @@ compact-builder --src contracts --out build
 
 # Build excluding mock contracts
 compact-builder --exclude "**/*.mock.compact"
+
+# Show circuit compilation details (verbose mode)
+compact-builder --verbose
 ```
 
 ## Development
