@@ -12,10 +12,10 @@ const execAsync = promisify(exec);
 
 /**
  * Configuration options for the Builder CLI.
- * Inherits from CompilerOptions but excludes `flags` (which would allow --skip-zk).
- * Builds should always include ZK proofs.
+ * Accepts all CompilerOptions including flags (e.g. --verbose for circuit compilation details).
+ * Note: builds should always include ZK proofs — avoid using --skip-zk.
  */
-export type BuilderOptions = Omit<CompilerOptions, 'flags'>;
+export type BuilderOptions = CompilerOptions;
 
 /**
  * A class to handle the build process for a project.
@@ -41,7 +41,7 @@ export type BuilderOptions = Omit<CompilerOptions, 'flags'>;
  *     Compactc version: 0.26.0
  * ✔ [BUILD] [1/3] Compiling TypeScript
  * ✔ [BUILD] [2/3] Copying artifacts
- * ✔ [BUILD] [3/3] Copying and cleaning .compact files
+ * ✔ [BUILD] [3/3] Copying .compact files
  * ```
  *
  * @example <caption>Failed Compilation Output</caption>
@@ -76,8 +76,8 @@ export class CompactBuilder {
         shell: '/bin/bash',
       },
       {
-        cmd: 'mkdir -p dist && find src -type f -name "*.compact" -exec cp {} dist/ \\; 2>/dev/null && rm dist/Mock*.compact 2>/dev/null || true',
-        msg: 'Copying and cleaning .compact files',
+        cmd: 'mkdir -p dist && find src -type f -name "*.compact" -exec cp {} dist/ \\; 2>/dev/null || true',
+        msg: 'Copying .compact files',
         shell: '/bin/bash',
       },
     ];
@@ -86,7 +86,7 @@ export class CompactBuilder {
    * Constructs a new CompactBuilder instance.
    * @param options - Compiler options (flags, srcDir, outDir, hierarchical, etc.)
    */
-  constructor(options: CompilerOptions = {}) {
+  constructor(options: BuilderOptions = {}) {
     this.options = options;
   }
 
@@ -114,7 +114,6 @@ export class CompactBuilder {
    * @throws Error if compilation or any build step fails
    */
   public async build(): Promise<void> {
-    // Run compact compilation as a prerequisite
     const compiler = new CompactCompiler(this.options);
     await compiler.compile();
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { exec as execCallback } from 'node:child_process';
+import { exec as execCallback, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
@@ -18,6 +18,66 @@ import {
 const DEFAULT_SRC_DIR = 'src';
 /** Default output directory for compiled artifacts */
 const DEFAULT_OUT_DIR = 'artifacts';
+
+/**
+ * Returns true if path matches the glob pattern.
+ * Supports ** (match zero or more path segments) and * (match within segment).
+ *
+ * @param path - The file path to test (use forward slashes)
+ * @param pattern - Glob pattern to match against
+ * @returns true if the path matches the pattern
+ * @example
+ * ```typescript
+ * // Pattern string: two asterisks, slash, asterisk, .mock.compact (backslash in code escapes slash for JSDoc)
+ * matchGlob('foo/bar.mock.compact', '**\/*.mock.compact'); // true
+ * matchGlob('bar.mock.compact', '*.mock.compact'); // true
+ * matchGlob('test/unit/foo.compact', '**\/test/**'); // true
+ * ```
+ */
+export function matchGlob(path: string, pattern: string): boolean {
+  const re = globToRegExp(pattern);
+  return re.test(path);
+}
+
+/**
+ * Converts a glob pattern to a RegExp.
+ * Supports:
+ * - `**` matches zero or more path segments
+ * - `*` matches any characters except `/`
+ *
+ * Does NOT support:
+ * - `?` (single character wildcard)
+ * - Brace expansion `{a,b}`
+ * - Negation `!pattern`
+ *
+ * @param pattern - Glob pattern to convert
+ * @returns RegExp that matches paths according to the glob pattern
+ * @example
+ * ```typescript
+ * // Pattern string: two asterisks, slash, asterisk, .mock.compact (backslash in code escapes slash for JSDoc)
+ * const re = globToRegExp('**\/*.mock.compact');
+ * re.test('foo/bar.mock.compact'); // true
+ * re.test('bar.mock.compact'); // true (** matches zero segments)
+ * ```
+ */
+// Placeholders for glob-to-regex (private-use Unicode, not in patterns)
+const GLOB_STAR_STAR = '\uE001';
+const GLOB_STAR = '\uE002';
+const GLOB_STAR_STAR_END = '\uE003';
+
+export function globToRegExp(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*\//g, GLOB_STAR_STAR)
+    .replace(/\/\*\*$/g, `/${GLOB_STAR_STAR_END}`)
+    .replace(/\*\*/g, GLOB_STAR_STAR)
+    .replace(/\*/g, GLOB_STAR);
+  const reStr = escaped
+    .replace(new RegExp(GLOB_STAR_STAR, 'g'), '(?:[^/]*/)*')
+    .replace(new RegExp(GLOB_STAR, 'g'), '[^/]*')
+    .replace(new RegExp(GLOB_STAR_STAR_END, 'g'), '.*');
+  return new RegExp(`^${reStr}$`);
+}
 
 /**
  * Function type for executing shell commands.
@@ -61,13 +121,24 @@ export interface CompilerOptions {
   srcDir?: string;
   /** Output directory for compiled artifacts (default: 'artifacts') */
   outDir?: string;
+  /** Glob patterns to exclude from compilation (e.g. '*.mock.compact' or 'test/**') */
+  exclude?: string[];
+  /** Glob patterns to include - when set, only files matching at least one pattern are compiled (e.g. '**\/*.mock.compact') */
+  include?: string[];
+  /** If true, preview which files would be compiled without actually compiling */
+  dryRun?: boolean;
+  /** If true, passes --verbose to compact compile to show circuit compilation details */
+  verbose?: boolean;
 }
 
 /** Resolved compiler options with defaults applied */
 type ResolvedCompilerOptions = Required<
-  Pick<CompilerOptions, 'flags' | 'hierarchical' | 'srcDir' | 'outDir'>
+  Pick<
+    CompilerOptions,
+    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'dryRun' | 'verbose'
+  >
 > &
-  Pick<CompilerOptions, 'targetDir' | 'version'>;
+  Pick<CompilerOptions, 'targetDir' | 'version' | 'exclude' | 'include'>;
 
 /**
  * Service responsible for validating the Compact CLI environment.
@@ -201,14 +272,41 @@ export class EnvironmentValidator {
  */
 export class FileDiscovery {
   private srcDir: string;
+  private excludePatterns: string[];
+  private includePatterns: string[];
 
   /**
    * Creates a new FileDiscovery instance.
    *
    * @param srcDir - Base source directory for relative path calculation (default: 'src')
+   * @param exclude - Glob patterns to exclude from discovery (e.g. mock files)
+   * @param include - Glob patterns to include - when set, only matching files pass through
    */
-  constructor(srcDir: string = DEFAULT_SRC_DIR) {
+  constructor(
+    srcDir: string = DEFAULT_SRC_DIR,
+    exclude: string[] = [],
+    include: string[] = [],
+  ) {
     this.srcDir = srcDir;
+    this.excludePatterns = exclude;
+    this.includePatterns = include;
+  }
+
+  /**
+   * Returns true if the given relative file path should be kept.
+   * When include patterns are set, the file must match at least one.
+   * Then, the file must not match any exclude pattern.
+   */
+  private isIncluded(relativePath: string): boolean {
+    if (
+      this.includePatterns.length > 0 &&
+      !this.includePatterns.some((pattern) => matchGlob(relativePath, pattern))
+    ) {
+      return false;
+    }
+    return !this.excludePatterns.some((pattern) =>
+      matchGlob(relativePath, pattern),
+    );
   }
 
   /**
@@ -234,7 +332,10 @@ export class FileDiscovery {
           }
 
           if (entry.isFile() && fullPath.endsWith('.compact')) {
-            return [relative(this.srcDir, fullPath)];
+            const relativePath = relative(this.srcDir, fullPath);
+            if (this.isIncluded(relativePath)) {
+              return [relativePath];
+            }
           }
           return [];
         } catch (err) {
@@ -260,7 +361,7 @@ export class FileDiscovery {
  */
 export type CompilerServiceOptions = Pick<
   CompilerOptions,
-  'hierarchical' | 'srcDir' | 'outDir'
+  'hierarchical' | 'srcDir' | 'outDir' | 'verbose'
 >;
 
 /** Resolved options for CompilerService with defaults applied */
@@ -301,6 +402,7 @@ export class CompilerService {
       hierarchical: options.hierarchical ?? false,
       srcDir: options.srcDir ?? DEFAULT_SRC_DIR,
       outDir: options.outDir ?? DEFAULT_OUT_DIR,
+      verbose: options.verbose ?? false,
     };
   }
 
@@ -352,6 +454,17 @@ export class CompilerService {
     const flagsStr = flags ? ` ${flags}` : '';
     const command = `compact compile${versionFlag ? ` ${versionFlag}` : ''}${flagsStr} "${inputPath}" "${outputDir}"`;
 
+    if (this.options.verbose) {
+      // Use spawn with inherited stdio so TTY-mode output (circuit details) streams directly
+      try {
+        await this.spawnInherit(command);
+        return { stdout: '', stderr: '' };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new CompilationError(`Failed to compile ${file}: ${message}`, file, error);
+      }
+    }
+
     try {
       return await this.execFn(command);
     } catch (error: unknown) {
@@ -369,6 +482,27 @@ export class CompilerService {
         error,
       );
     }
+  }
+
+  private spawnInherit(command: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Use piped stdout/stderr forwarded to process.stdout/stderr rather than direct fd
+      // inheritance — direct inherit can cause EOF errors in turbo's captured pipe environment.
+      const child = spawn(command, {
+        shell: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      child.stdout?.pipe(process.stdout);
+      child.stderr?.pipe(process.stderr);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Command failed with exit code ${code}: ${command}`));
+        }
+      });
+      child.on('error', (err) => reject(err));
+    });
   }
 }
 
@@ -484,6 +618,33 @@ export const UIService = {
       chalk.yellow(`[COMPILE] No .compact files found in ${searchLocation}.`),
     );
   },
+
+  /**
+   * Displays dry-run output showing which files would be compiled.
+   *
+   * @param files - Array of file paths that would be compiled
+   * @param targetDir - Optional target directory being compiled
+   * @example
+   * ```typescript
+   * UIService.showDryRun(['Token.compact', 'AccessControl.compact']);
+   * // Output:
+   * // [DRY-RUN] Would compile 2 file(s):
+   * //     Token.compact
+   * //     AccessControl.compact
+   * ```
+   */
+  showDryRun(files: string[], targetDir?: string): void {
+    const searchLocation = targetDir ? ` in ${targetDir}/` : '';
+    const spinner = ora();
+    spinner.info(
+      chalk.cyan(
+        `[DRY-RUN] Would compile ${files.length} file(s)${searchLocation}:`,
+      ),
+    );
+    for (const file of files) {
+      console.log(chalk.cyan(`    ${file}`));
+    }
+  },
 };
 
 /**
@@ -566,13 +727,22 @@ export class CompactCompiler {
       hierarchical: options.hierarchical ?? false,
       srcDir: options.srcDir ?? DEFAULT_SRC_DIR,
       outDir: options.outDir ?? DEFAULT_OUT_DIR,
+      exclude: options.exclude,
+      include: options.include,
+      dryRun: options.dryRun ?? false,
+      verbose: options.verbose ?? false,
     };
     this.environmentValidator = new EnvironmentValidator(execFn);
-    this.fileDiscovery = new FileDiscovery(this.options.srcDir);
+    this.fileDiscovery = new FileDiscovery(
+      this.options.srcDir,
+      this.options.exclude ?? [],
+      this.options.include ?? [],
+    );
     this.compilerService = new CompilerService(execFn, {
       hierarchical: this.options.hierarchical,
       srcDir: this.options.srcDir,
       outDir: this.options.outDir,
+      verbose: this.options.verbose,
     });
   }
 
@@ -583,7 +753,9 @@ export class CompactCompiler {
    * - `--dir <directory>` - Target specific subdirectory within srcDir
    * - `--src <directory>` - Source directory containing .compact files (default: 'src')
    * - `--out <directory>` - Output directory for artifacts (default: 'artifacts')
+   * - `--exclude <pattern>` - Glob pattern to exclude from compilation (may be repeated)
    * - `--hierarchical` - Preserve source directory structure in artifacts output
+   * - `--dry-run` - Preview which files would be compiled without actually compiling
    * - `+<version>` - Use specific toolchain version
    * - Other arguments - Treated as compiler flags
    * - `SKIP_ZK=true` environment variable - Adds --skip-zk flag
@@ -591,7 +763,7 @@ export class CompactCompiler {
    * @param args - Array of command-line arguments
    * @param env - Environment variables (defaults to process.env)
    * @returns Parsed CompilerOptions object
-   * @throws {Error} If --dir, --src, or --out flag is provided without a value
+   * @throws {Error} If --dir, --src, --out, or --exclude flag is provided without a value
    */
   static parseArgs(
     args: string[],
@@ -634,8 +806,32 @@ export class CompactCompiler {
         } else {
           throw new Error('--out flag requires a directory path');
         }
+      } else if (args[i] === '--exclude') {
+        const valueExists =
+          i + 1 < args.length && !args[i + 1].startsWith('--');
+        if (valueExists) {
+          options.exclude = options.exclude ?? [];
+          options.exclude.push(args[i + 1]);
+          i++;
+        } else {
+          throw new Error('--exclude flag requires a glob pattern');
+        }
+      } else if (args[i] === '--include') {
+        const valueExists =
+          i + 1 < args.length && !args[i + 1].startsWith('--');
+        if (valueExists) {
+          options.include = options.include ?? [];
+          options.include.push(args[i + 1]);
+          i++;
+        } else {
+          throw new Error('--include flag requires a glob pattern');
+        }
       } else if (args[i] === '--hierarchical') {
         options.hierarchical = true;
+      } else if (args[i] === '--dry-run') {
+        options.dryRun = true;
+      } else if (args[i] === '--verbose') {
+        options.verbose = true;
       } else if (args[i].startsWith('+')) {
         options.version = args[i].slice(1);
       } else {
@@ -658,7 +854,9 @@ export class CompactCompiler {
    * - `--dir <directory>` - Target specific subdirectory within srcDir
    * - `--src <directory>` - Source directory containing .compact files (default: 'src')
    * - `--out <directory>` - Output directory for artifacts (default: 'artifacts')
+   * - `--exclude <pattern>` - Glob pattern to exclude from compilation (may be repeated)
    * - `--hierarchical` - Preserve source directory structure in artifacts output
+   * - `--dry-run` - Preview which files would be compiled without actually compiling
    * - `+<version>` - Use specific toolchain version
    * - Other arguments - Treated as compiler flags
    * - `SKIP_ZK=true` environment variable - Adds --skip-zk flag
@@ -666,7 +864,7 @@ export class CompactCompiler {
    * @param args - Array of command-line arguments
    * @param env - Environment variables (defaults to process.env)
    * @returns New CompactCompiler instance configured from arguments
-   * @throws {Error} If --dir, --src, or --out flag is provided without a value
+   * @throws {Error} If --dir, --src, --out, or --exclude flag is provided without a value
    * @example
    * ```typescript
    * // Parse command line: compact-compiler --dir security --skip-zk +0.26.0
@@ -771,7 +969,9 @@ export class CompactCompiler {
    * ```
    */
   async compile(): Promise<void> {
-    await this.validateEnvironment();
+    if (!this.options.dryRun) {
+      await this.validateEnvironment();
+    }
 
     const searchDir = this.options.targetDir
       ? join(this.options.srcDir, this.options.targetDir)
@@ -789,6 +989,11 @@ export class CompactCompiler {
 
     if (compactFiles.length === 0) {
       UIService.showNoFiles(this.options.targetDir);
+      return;
+    }
+
+    if (this.options.dryRun) {
+      UIService.showDryRun(compactFiles, this.options.targetDir);
       return;
     }
 
@@ -815,6 +1020,28 @@ export class CompactCompiler {
     total: number,
   ): Promise<void> {
     const step = `[${index + 1}/${total}]`;
+
+    if (this.options.verbose) {
+      // In verbose mode, spawn with inherited stdio streams TTY output directly.
+      // Skip the spinner to avoid interleaving with circuit compilation details.
+      // biome-ignore lint/suspicious/noConsole: Needed to display verbose compilation status
+      console.log(chalk.blue(`  [COMPILE] ${step} Compiling ${file}...`));
+      try {
+        await this.compilerService.compileFile(
+          file,
+          this.options.flags,
+          this.options.version,
+        );
+        // biome-ignore lint/suspicious/noConsole: Needed to display compilation success
+        console.log(chalk.green(`✔ [COMPILE] ${step} Compiled ${file}`));
+      } catch (error) {
+        // biome-ignore lint/suspicious/noConsole: Needed to display compilation failure
+        console.log(chalk.red(`✖ [COMPILE] ${step} Failed ${file}`));
+        throw error;
+      }
+      return;
+    }
+
     const spinner = ora(
       chalk.blue(`[COMPILE] ${step} Compiling ${file}`),
     ).start();

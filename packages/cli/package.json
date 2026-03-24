@@ -12,7 +12,6 @@
   "author": "",
   "license": "MIT",
   "type": "module",
-  "exports": "./index.js",
   "engines": {
     "node": ">=20"
   },

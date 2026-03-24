@@ -13,6 +13,7 @@ import { CompactBuilder } from './Builder.ts';
  * - `--src <directory>` - Source directory (default: src)
  * - `--out <directory>` - Output directory (default: artifacts)
  * - `--hierarchical` - Preserve directory structure in output
+ * - `--verbose` - Show circuit compilation details from compact compile
  * - `+<version>` - Use specific toolchain version
  *
  * @example

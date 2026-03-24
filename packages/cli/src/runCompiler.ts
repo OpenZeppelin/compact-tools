@@ -186,6 +186,19 @@ function showUsageHelp(): void {
     ),
   );
   console.log(
+    chalk.yellow('  --verbose         Show circuit compilation details'),
+  );
+  console.log(
+    chalk.yellow(
+      '  --exclude <glob>  Exclude files matching pattern (e.g. "**/*.mock.compact")',
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      '  --include <glob>  Only compile files matching pattern (e.g. "**/*.mock.compact")',
+    ),
+  );
+  console.log(
     chalk.yellow('  --skip-zk         Skip zero-knowledge proof generation'),
   );
   console.log(
