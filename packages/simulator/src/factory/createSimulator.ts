@@ -121,7 +121,10 @@ export function createSimulator<
      *
      * @returns Object containing both pure and impure circuit proxies
      */
-    public get circuits() {
+    public get circuits(): {
+      pure: ContextlessCircuits<ExtractPureCircuits<TContract>, P>;
+      impure: ContextlessCircuits<ExtractImpureCircuits<TContract>, P>;
+    } {
       return {
         pure: this.pureCircuit,
         impure: this.impureCircuit,
