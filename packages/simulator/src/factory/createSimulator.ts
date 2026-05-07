@@ -1,5 +1,5 @@
 import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
-import { sampleContractAddress } from '@midnight-ntwrk/zswap';
+import { dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { CircuitContextManager } from '../core/CircuitContextManager.js';
 import { ContractSimulator } from '../core/ContractSimulator.js';
 import type { IMinimalContract } from '../types/Contract.js';
@@ -49,7 +49,7 @@ export function createSimulator<
         privateState = config.defaultPrivateState(),
         witnesses = config.witnessesFactory(),
         coinPK = '0'.repeat(64),
-        contractAddress = sampleContractAddress(),
+        contractAddress = dummyContractAddress(),
       } = options;
 
       this._witnesses = witnesses;
@@ -65,7 +65,7 @@ export function createSimulator<
         ...processedArgs,
       );
 
-      this.contractAddress = this.circuitContext.transactionContext.address;
+      this.contractAddress = this.circuitContext.currentQueryContext.address;
     }
 
     public _pureCircuitProxy?: ContextlessCircuits<
@@ -143,7 +143,7 @@ export function createSimulator<
      */
     getPublicState(): L {
       return config.ledgerExtractor(
-        this.circuitContext.transactionContext.state,
+        this.circuitContext.currentQueryContext.state.state,
       );
     }
 
@@ -191,7 +191,7 @@ export function createSimulator<
       return {
         ledger: this.getPublicState(),
         privateState: circuitCtx.currentPrivateState,
-        contractAddress: circuitCtx.transactionContext.address,
+        contractAddress: circuitCtx.currentQueryContext.address,
       };
     }
   };

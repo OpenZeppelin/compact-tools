@@ -2,7 +2,7 @@ import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
 import {
   ledger,
   Contract as SimpleContract,
-} from '../fixtures/artifacts/Simple/contract/index.cjs';
+} from '../fixtures/artifacts/Simple/contract/index.js';
 import {
   SimplePrivateState,
   SimpleWitnesses,
