@@ -48,7 +48,7 @@ async function compileContract(contractFile: string): Promise<void> {
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
   const contractName = contractFile.replace('.compact', '');
   const outputDir = join(ARTIFACTS_DIR, contractName);
-  const contractArtifact = join(outputDir, 'contract', 'index.cjs');
+  const contractArtifact = join(outputDir, 'contract', 'index.js');
 
   // Skip if artifact already exists and is newer than source
   if (existsSync(contractArtifact) && existsSync(inputPath)) {
