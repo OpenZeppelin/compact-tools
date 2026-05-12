@@ -41,7 +41,13 @@ export abstract class AbstractSimulator<P, L>
   /**
    * Sets the caller context for the next circuit call only (auto-resets).
    *
-   * @param caller - The public key to use as the caller for the next circuit execution
+   * @notice ownPublicKey() is a witness value and MUST NOT be used
+   * as an authentication mechanism. Any contract using ownPublicKey()
+   * directly for access control is insecure. This method exists to
+   * support circuits that use ownPublicKey() as an input to other
+   * computations (e.g., commitment derivation).
+   *
+   * @param caller - The coin public key to use as the caller for the next circuit execution
    * @returns This simulator instance for method chaining
    */
   public as(caller: CoinPublicKey): this {
@@ -52,6 +58,12 @@ export abstract class AbstractSimulator<P, L>
   /**
    * Sets a persistent caller that will be used for all subsequent circuit calls.
    *
+   * @notice ownPublicKey() is a witness value and MUST NOT be used
+   * as an authentication mechanism. Any contract using ownPublicKey()
+   * directly for access control is insecure. This method exists to
+   * support circuits that use ownPublicKey() as an input to other
+   * computations (e.g., commitment derivation).
+   *
    * @param caller - The public key to use as the caller for all future calls, or null to clear
    */
   public setPersistentCaller(caller: CoinPublicKey | null): void {
@@ -60,6 +72,12 @@ export abstract class AbstractSimulator<P, L>
 
   /**
    * Clears persistent caller overrides.
+   *
+   * @notice ownPublicKey() is a witness value and MUST NOT be used
+   * as an authentication mechanism. Any contract using ownPublicKey()
+   * directly for access control is insecure. This method exists to
+   * support circuits that use ownPublicKey() as an input to other
+   * computations (e.g., commitment derivation).
    *
    * @returns This simulator instance for method chaining
    */

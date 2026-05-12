@@ -26,6 +26,12 @@ export abstract class ContractSimulator<P, L> extends AbstractSimulator<P, L> {
   /**
    * Constructs a circuit context with appropriate caller information.
    *
+   * @notice ownPublicKey() is a witness value and MUST NOT be used
+   * as an authentication mechanism. Any contract using ownPublicKey()
+   * directly for access control is insecure. This method exists to
+   * support circuits that use ownPublicKey() as an input to other
+   * computations (e.g., commitment derivation).
+   *
    * Checks for caller overrides in priority order:
    * 1. Single-use override (set via `as(caller)`)
    * 2. Persistent override (set via `setPersistentCaller(caller)`)
