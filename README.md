@@ -1,4 +1,4 @@
-[![Generic badge](https://img.shields.io/badge/Compact%20Compiler-0.26.0-1abc9c.svg)](https://docs.midnight.network/relnotes/compact/minokawa-0-18-26-0)
+[![Generic badge](https://img.shields.io/badge/Compact%20Compiler-0.29.0-1abc9c.svg)](https://docs.midnight.network/relnotes/compact/)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools/badge)](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools)
 
@@ -11,29 +11,41 @@ Tools for compiling, building, and testing Compact smart contracts. This is a mo
 - `packages/cli`: CLI utilities to run the Compact compiler and builder
 - `packages/simulator`: TypeScript simulator to run and test Compact contracts locally
 
-## External usage (via git submodule until npm publish)
+## Installation
 
-Until packages are published to the npm registry, you can consume this repo from another project using a git submodule:
+Install whichever package you need from npm:
 
 ```bash
-# In your project
-git submodule add https://github.com/OpenZeppelin/compact-tools
-git submodule update --init --recursive
+# Simulator only (test/runtime side)
+yarn add --dev @openzeppelin/compact-tools-simulator
 
-# Install and build the tools
+# CLI utilities (compile + build)
+yarn add --dev @openzeppelin/compact-tools-cli
+```
+
+With the CLI installed, the `compact-compiler` and `compact-builder` binaries
+are on the package's `bin` PATH:
+
+```bash
+yarn compact-compiler --help
+yarn compact-builder --help
+```
+
+### Developing against unreleased changes
+
+If you need a not-yet-published change, you can consume this repo locally via a
+git submodule + `file:` dependency:
+
+```bash
+git submodule add https://github.com/OpenZeppelin/compact-tools tools/compact-tools
 yarn --cwd tools/compact-tools install
 yarn --cwd tools/compact-tools build
 
-# Use the simulator as a local dependency
-# package.json
+# In your package.json
 "devDependencies": {
-  "@openzeppelin/compact-tools-simulator": "file:./compact-tools/packages/simulator"
+  "@openzeppelin/compact-tools-simulator": "file:./tools/compact-tools/packages/simulator",
+  "@openzeppelin/compact-tools-cli": "file:./tools/compact-tools/packages/cli"
 }
-yarn install
-
-# Call the CLIs directly or via scripts
-node compact-tools/packages/cli/dist/runCompiler.js --help
-node compact-tools/packages/cli/dist/runBuilder.js --help
 ```
 
 ## Requirements
@@ -48,8 +60,8 @@ Confirm your Compact toolchain:
 ```bash
 $ compact compile --version
 
-Compactc version: 0.28.0
-0.28.0
+Compactc version: 0.29.0
+0.29.0
 ```
 
 ## Getting started
@@ -101,11 +113,20 @@ compact-compiler
 # Skip ZK proofs for faster development builds
 compact-compiler --skip-zk
 
-# Compile specific directory
+# Compile a specific subdirectory
 compact-compiler --dir security
 
-# Full build (compile + TypeScript + copy artifacts)
+# Skip mock files at discovery time
+compact-compiler --exclude 'Mock*' --exclude '*.mock.compact'
+
+# Full build (compile + TypeScript + copy .compact files into dist/)
 compact-builder
+
+# Library-publish build: clean dist, preserve src tree, copy package metadata
+compact-builder \
+  --clean-dist \
+  --hierarchical \
+  --copy package.json --copy ../README.md
 ```
 
 See [packages/cli/README.md](./packages/cli/README.md) for full documentation including all options, programmatic API, and examples.
