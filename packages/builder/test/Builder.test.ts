@@ -20,7 +20,9 @@ describe('CompactBuilder.parseArgs', () => {
   it('forwards --hierarchical to the compiler parser', () => {
     // `hierarchical` is parsed by CompactCompiler.parseArgs and drives both
     // compiler artifacts layout and builder .compact copy layout.
-    expect(CompactBuilder.parseArgs(['--hierarchical']).hierarchical).toBe(true);
+    expect(CompactBuilder.parseArgs(['--hierarchical']).hierarchical).toBe(
+      true,
+    );
   });
 
   it('accumulates repeated --exclude patterns', () => {
@@ -115,7 +117,9 @@ describe('CompactBuilder step pipeline', () => {
 
   it('excludes Mock* and *.mock.compact by default in the flat copy step', () => {
     const builder = new CompactBuilder();
-    const copyStep = builder.getSteps().find((s) => s.msg === 'Copying .compact files');
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files');
 
     expect(copyStep?.cmd).toContain("! -name 'Mock*'");
     expect(copyStep?.cmd).toContain("! -name '*.mock.compact'");

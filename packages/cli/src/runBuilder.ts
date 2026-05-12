@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
+import { CompactBuilder } from '@openzeppelin/compact-tools-builder';
 import chalk from 'chalk';
 import ora from 'ora';
-import { CompactBuilder } from '@openzeppelin/compact-tools-builder';
 
 /**
  * Executes the Compact builder CLI.

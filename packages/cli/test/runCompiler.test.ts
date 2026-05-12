@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CompactCliNotFoundError,
   CompactCompiler,
@@ -7,6 +6,7 @@ import {
   isPromisifiedChildProcessError,
   type PromisifiedChildProcessError,
 } from '@openzeppelin/compact-tools-builder';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the library so we can drive the CLI in isolation.
 vi.mock('@openzeppelin/compact-tools-builder', async () => {

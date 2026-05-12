@@ -103,7 +103,8 @@ export class CompactBuilder {
         if (value === undefined || value.startsWith('--')) {
           throw new Error('--copy flag requires a path');
         }
-        (builderOnly.copyToDist ??= []).push(value);
+        builderOnly.copyToDist ??= [];
+        builderOnly.copyToDist.push(value);
         i++;
       } else {
         compilerArgs.push(arg);

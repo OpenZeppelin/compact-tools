@@ -239,11 +239,22 @@ describe('FileDiscovery', () => {
     });
 
     it('should skip files matching name-only exclude patterns', async () => {
-      const excludingDiscovery = new FileDiscovery('src', ['Mock*', '*.mock.compact']);
+      const excludingDiscovery = new FileDiscovery('src', [
+        'Mock*',
+        '*.mock.compact',
+      ]);
       const mockDirents = [
         { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
-        { name: 'MockToken.compact', isFile: () => true, isDirectory: () => false },
-        { name: 'Token.mock.compact', isFile: () => true, isDirectory: () => false },
+        {
+          name: 'MockToken.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'Token.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
       ];
 
       mockReaddir.mockResolvedValue(mockDirents as any);
@@ -263,7 +274,11 @@ describe('FileDiscovery', () => {
         { name: 'archive', isFile: () => false, isDirectory: () => true },
       ];
       const mockArchiveDirents = [
-        { name: 'Legacy.compact', isFile: () => true, isDirectory: () => false },
+        {
+          name: 'Legacy.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
       ];
 
       mockReaddir

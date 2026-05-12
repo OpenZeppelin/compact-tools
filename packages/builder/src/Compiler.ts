@@ -23,6 +23,7 @@ import {
 
 // Re-export public types and services so consumers keep importing them
 // from './Compiler.js' regardless of the internal file layout.
+// biome-ignore lint/performance/noBarrelFile: package entrypoint
 export { CompilerService } from './services/CompilerService.ts';
 export { EnvironmentValidator } from './services/EnvironmentValidator.ts';
 export { FileDiscovery } from './services/FileDiscovery.ts';
@@ -31,7 +32,10 @@ export type { CompilerOptions, CompilerServiceOptions, ExecFunction };
 
 /** Resolved compiler options with defaults applied */
 type ResolvedCompilerOptions = Required<
-  Pick<CompilerOptions, 'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'exclude'>
+  Pick<
+    CompilerOptions,
+    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'exclude'
+  >
 > &
   Pick<CompilerOptions, 'targetDir' | 'version'>;
 
@@ -175,7 +179,8 @@ export class CompactCompiler {
         const valueExists =
           i + 1 < args.length && !args[i + 1].startsWith('--');
         if (valueExists) {
-          (options.exclude ??= []).push(args[i + 1]);
+          options.exclude ??= [];
+          options.exclude.push(args[i + 1]);
           i++;
         } else {
           throw new Error('--exclude flag requires a pattern');

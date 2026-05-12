@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import chalk from 'chalk';
-import ora, { type Ora } from 'ora';
 import {
-  type CompilationError,
   CompactCompiler,
+  type CompilationError,
   isPromisifiedChildProcessError,
 } from '@openzeppelin/compact-tools-builder';
+import chalk from 'chalk';
+import ora, { type Ora } from 'ora';
 
 /**
  * Executes the Compact compiler CLI with improved error handling and user feedback.
