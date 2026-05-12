@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial public release of the `@openzeppelin/compact-tools` umbrella.
-- Subpath exports re-exporting the constituent packages:
-  - `@openzeppelin/compact-tools/cli` → `@openzeppelin/compact-tools-cli`
-  - `@openzeppelin/compact-tools/simulator` → `@openzeppelin/compact-tools-simulator`
+- Single root export re-exporting everything from
+  `@openzeppelin/compact-tools-builder` and
+  `@openzeppelin/compact-tools-simulator`, so consumers can pull anything off
+  the umbrella with a single import:
+  ```ts
+  import { createSimulator, CompactCompiler, CompactBuilder } from '@openzeppelin/compact-tools';
+  ```
 - `compact-compiler` and `compact-builder` bin entries that delegate to
   `@openzeppelin/compact-tools-cli`, so a single install of the umbrella gives
   consumers both the binaries and the programmatic API surface.

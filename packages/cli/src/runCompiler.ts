@@ -2,11 +2,11 @@
 
 import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
-import { CompactCompiler } from './Compiler.ts';
 import {
   type CompilationError,
+  CompactCompiler,
   isPromisifiedChildProcessError,
-} from './types/errors.ts';
+} from '@openzeppelin/compact-tools-builder';
 
 /**
  * Executes the Compact compiler CLI with improved error handling and user feedback.

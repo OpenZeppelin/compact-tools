@@ -29,17 +29,31 @@ step is currently manual — see the TODO below for the planned migration to
 
 ## First-release order
 
-The `@openzeppelin/compact-tools` umbrella package depends on
-`@openzeppelin/compact-tools-cli` and `@openzeppelin/compact-tools-simulator`
-via `workspace:^`, which yarn rewrites to the resolved version at pack time.
-For the very first release, publish in this order so the umbrella's deps
-already exist on npm by the time it's published:
+There's a dependency chain across the four published packages:
 
-1. `compact-tools-cli`
-2. `compact-tools-simulator`
-3. `compact-tools` (umbrella)
+```
+compact-tools (umbrella)
+  ├─ depends on compact-tools-builder
+  ├─ depends on compact-tools-cli
+  └─ depends on compact-tools-simulator
+compact-tools-cli (bin wrapper)
+  └─ depends on compact-tools-builder
+compact-tools-builder (library)
+compact-tools-simulator (library)
+```
 
-After the first release, the three packages version independently — bump any
+Each `workspace:^` dep is rewritten by yarn into the resolved version at
+`yarn pack` time. For the very first release, publish in dependency order so
+each dependent finds its deps already on npm:
+
+1. `compact-tools-builder` (no internal deps)
+2. `compact-tools-simulator` (no internal deps)
+3. `compact-tools-cli` (depends on `-builder`; pull `main` first so the bump
+   commit is present locally)
+4. `compact-tools` (umbrella; pull `main` first so the bumps for `-builder`,
+   `-cli`, and `-simulator` are present)
+
+After the first release, the four packages version independently — bump any
 one of them in isolation without re-publishing the others.
 
 ## TODO: migrate to changesets

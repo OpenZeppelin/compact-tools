@@ -8,22 +8,26 @@ This project extends the Midnight Network with additional developer tooling.
 
 Tools for compiling, building, and testing Compact smart contracts. This is a monorepo containing:
 
-- `packages/cli`: CLI utilities to run the Compact compiler and builder
+- `packages/builder`: Programmatic library that drives the Compact compiler + builder
+- `packages/cli`: Thin bin wrapper around the builder library (`compact-compiler`, `compact-builder`)
 - `packages/simulator`: TypeScript simulator to run and test Compact contracts locally
-- `packages/tools`: Umbrella package re-exporting both under subpath exports
+- `packages/tools`: Umbrella package re-exporting builder + simulator from a single root import, plus the CLI bins
 
 ## Installation
 
 The fastest path is the umbrella package, which gives you the CLI binaries and
-the simulator under subpath exports in a single install:
+the libraries from a single import path:
 
 ```bash
 yarn add --dev @openzeppelin/compact-tools
 ```
 
 ```ts
-import { createSimulator } from '@openzeppelin/compact-tools/simulator';
-import { CompactCompiler, CompactBuilder } from '@openzeppelin/compact-tools/cli';
+import {
+  createSimulator,
+  CompactCompiler,
+  CompactBuilder,
+} from '@openzeppelin/compact-tools';
 ```
 
 ```bash
@@ -34,10 +38,13 @@ yarn compact-builder --help
 If you want only one piece, install the corresponding constituent directly:
 
 ```bash
+# Programmatic library only (no bins)
+yarn add --dev @openzeppelin/compact-tools-builder
+
 # Simulator only (test/runtime side)
 yarn add --dev @openzeppelin/compact-tools-simulator
 
-# CLI utilities only (compile + build)
+# CLI bins only (depends transitively on -builder)
 yarn add --dev @openzeppelin/compact-tools-cli
 ```
 

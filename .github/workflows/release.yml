@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - compact-tools
+          - compact-tools-builder
           - compact-tools-cli
           - compact-tools-simulator
       version_bump:
@@ -49,6 +50,9 @@ jobs:
           case "${{ inputs.package }}" in
             "compact-tools")
               echo "dir=tools" >> $GITHUB_OUTPUT
+              ;;
+            "compact-tools-builder")
+              echo "dir=builder" >> $GITHUB_OUTPUT
               ;;
             "compact-tools-cli")
               echo "dir=cli" >> $GITHUB_OUTPUT

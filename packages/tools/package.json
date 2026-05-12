@@ -1,6 +1,6 @@
 {
   "name": "@openzeppelin/compact-tools",
-  "description": "Umbrella package re-exporting @openzeppelin/compact-tools-cli and @openzeppelin/compact-tools-simulator under subpath exports",
+  "description": "Umbrella package re-exporting @openzeppelin/compact-tools-builder and @openzeppelin/compact-tools-simulator from a single root entry, plus the @openzeppelin/compact-tools-cli bins",
   "version": "0.0.1",
   "keywords": [
     "compact",
@@ -13,19 +13,18 @@
   "author": "",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    "./cli": {
-      "types": "./dist/cli.d.ts",
-      "import": "./dist/cli.js"
-    },
-    "./simulator": {
-      "types": "./dist/simulator.d.ts",
-      "import": "./dist/simulator.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -42,6 +41,7 @@
     "clean": "git clean -fXd"
   },
   "dependencies": {
+    "@openzeppelin/compact-tools-builder": "workspace:^",
     "@openzeppelin/compact-tools-cli": "workspace:^",
     "@openzeppelin/compact-tools-simulator": "workspace:^"
   },

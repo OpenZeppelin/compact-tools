@@ -381,14 +381,28 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openzeppelin/compact-tools-cli@workspace:^, @openzeppelin/compact-tools-cli@workspace:packages/cli":
+"@openzeppelin/compact-tools-builder@workspace:^, @openzeppelin/compact-tools-builder@workspace:packages/builder":
   version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-tools-cli@workspace:packages/cli"
+  resolution: "@openzeppelin/compact-tools-builder@workspace:packages/builder"
   dependencies:
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:24.10.1"
     chalk: "npm:^5.6.2"
     log-symbols: "npm:^7.0.0"
+    ora: "npm:^9.0.0"
+    typescript: "npm:^5.9.3"
+    vitest: "npm:^4.0.15"
+  languageName: unknown
+  linkType: soft
+
+"@openzeppelin/compact-tools-cli@workspace:^, @openzeppelin/compact-tools-cli@workspace:packages/cli":
+  version: 0.0.0-use.local
+  resolution: "@openzeppelin/compact-tools-cli@workspace:packages/cli"
+  dependencies:
+    "@openzeppelin/compact-tools-builder": "workspace:^"
+    "@tsconfig/node24": "npm:^24.0.3"
+    "@types/node": "npm:24.10.1"
+    chalk: "npm:^5.6.2"
     ora: "npm:^9.0.0"
     typescript: "npm:^5.9.3"
     vitest: "npm:^4.0.15"
@@ -416,6 +430,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-tools@workspace:packages/tools"
   dependencies:
+    "@openzeppelin/compact-tools-builder": "workspace:^"
     "@openzeppelin/compact-tools-cli": "workspace:^"
     "@openzeppelin/compact-tools-simulator": "workspace:^"
     "@tsconfig/node24": "npm:^24.0.3"

@@ -1,25 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CompactCompiler } from '../src/Compiler.js';
 import {
   CompactCliNotFoundError,
+  CompactCompiler,
   CompilationError,
   DirectoryNotFoundError,
   isPromisifiedChildProcessError,
   type PromisifiedChildProcessError,
-} from '../src/types/errors.js';
+} from '@openzeppelin/compact-tools-builder';
 
-// Mock CompactCompiler
-vi.mock('../src/Compiler.js', () => ({
-  CompactCompiler: {
-    fromArgs: vi.fn(),
-  },
-}));
-
-// Mock error utilities
-vi.mock('../src/types/errors.js', async () => {
-  const actual = await vi.importActual('../src/types/errors.js');
+// Mock the library so we can drive the CLI in isolation.
+vi.mock('@openzeppelin/compact-tools-builder', async () => {
+  const actual = await vi.importActual<
+    typeof import('@openzeppelin/compact-tools-builder')
+  >('@openzeppelin/compact-tools-builder');
   return {
     ...actual,
+    CompactCompiler: {
+      fromArgs: vi.fn(),
+    },
     isPromisifiedChildProcessError: vi.fn(),
   };
 });

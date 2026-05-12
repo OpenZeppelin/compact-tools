@@ -2,7 +2,7 @@
 
 import chalk from 'chalk';
 import ora from 'ora';
-import { CompactBuilder } from './Builder.ts';
+import { CompactBuilder } from '@openzeppelin/compact-tools-builder';
 
 /**
  * Executes the Compact builder CLI.

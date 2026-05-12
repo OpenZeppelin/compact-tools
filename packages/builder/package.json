@@ -1,20 +1,24 @@
 {
-  "name": "@openzeppelin/compact-tools-cli",
-  "description": "CLI for compiling and building Compact smart contracts",
+  "name": "@openzeppelin/compact-tools-builder",
+  "description": "Programmatic library for compiling and building Compact smart contracts",
   "version": "0.0.1",
   "keywords": [
     "compact",
-    "cli",
+    "midnight",
     "compiler",
     "builder",
-    "testing"
+    "library"
   ],
   "author": "",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    "./run-builder": "./dist/runBuilder.js",
-    "./run-compiler": "./dist/runCompiler.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "files": [
     "dist",
@@ -24,10 +28,6 @@
   ],
   "engines": {
     "node": ">=20"
-  },
-  "bin": {
-    "compact-builder": "dist/runBuilder.js",
-    "compact-compiler": "dist/runCompiler.js"
   },
   "scripts": {
     "build": "tsc -p .",
@@ -42,8 +42,8 @@
     "vitest": "^4.0.15"
   },
   "dependencies": {
-    "@openzeppelin/compact-tools-builder": "workspace:^",
     "chalk": "^5.6.2",
+    "log-symbols": "^7.0.0",
     "ora": "^9.0.0"
   }
 }

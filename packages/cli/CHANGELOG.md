@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial public release of `@openzeppelin/compact-tools-cli`.
+- Initial public release of `@openzeppelin/compact-tools-cli` as a thin bin
+  wrapper around [`@openzeppelin/compact-tools-builder`](../builder).
 - `compact-compiler` bin — orchestrates `compact compile` over a project's
   `.compact` files with progress reporting and structured error handling.
-- `compact-builder` bin — runs the compiler then assembles a publishable `dist/`
-  for npm.
+- `compact-builder` bin — runs the compiler then assembles a publishable
+  `dist/` for npm.
 - CLI options:
   - `--dir <directory>` — scope to a subdirectory
   - `--src <directory>` / `--out <directory>` — customize source / artifact dirs
@@ -25,8 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `package.json`, `../README.md`)
   - `+<version>` — pin the Compact toolchain version per invocation
   - `SKIP_ZK=true` env var — equivalent to `--skip-zk`
-- Programmatic API exports under the package root (`CompactCompiler`,
-  `CompactBuilder`, `EnvironmentValidator`, `FileDiscovery`, `CompilerService`,
-  `UIService`, and the `CompilerOptions` / `BuilderOptions` / `ExecFunction`
-  types). Bin entry points are reachable via the `./run-compiler` and
-  `./run-builder` subpath exports for downstream shimming.
+
+### Notes
+
+- The programmatic API (CompactCompiler, CompactBuilder, services, types)
+  previously shipped from this package has moved to
+  `@openzeppelin/compact-tools-builder`. This package now ships only the bin
+  entries.
