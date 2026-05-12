@@ -12,7 +12,21 @@
   "author": "",
   "license": "MIT",
   "type": "module",
-  "exports": "./index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./run-builder": "./dist/runBuilder.js",
+    "./run-compiler": "./dist/runCompiler.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },

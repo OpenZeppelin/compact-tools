@@ -1,0 +1,53 @@
+{
+  "name": "@openzeppelin/compact-tools",
+  "description": "Umbrella package re-exporting @openzeppelin/compact-tools-cli and @openzeppelin/compact-tools-simulator under subpath exports",
+  "version": "0.0.1",
+  "keywords": [
+    "compact",
+    "midnight",
+    "compiler",
+    "builder",
+    "simulator",
+    "testing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./simulator": {
+      "types": "./dist/simulator.d.ts",
+      "import": "./dist/simulator.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "compact-builder": "dist/runBuilder.js",
+    "compact-compiler": "dist/runCompiler.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "types": "tsc -p tsconfig.json --noEmit",
+    "test": "echo 'barrel package — see @openzeppelin/compact-tools-cli and @openzeppelin/compact-tools-simulator for tests'",
+    "clean": "git clean -fXd"
+  },
+  "dependencies": {
+    "@openzeppelin/compact-tools-cli": "workspace:^",
+    "@openzeppelin/compact-tools-simulator": "workspace:^"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.3",
+    "@types/node": "24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

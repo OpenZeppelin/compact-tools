@@ -1,5 +1,5 @@
 {
-  "name": "@openzeppelin/compact-tools",
+  "name": "compact-tools-monorepo",
   "description": "Tools for compiling, building and testing Compact smart contracts",
   "private": true,
   "packageManager": "yarn@4.10.3",

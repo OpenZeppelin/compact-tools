@@ -10,25 +10,35 @@ Tools for compiling, building, and testing Compact smart contracts. This is a mo
 
 - `packages/cli`: CLI utilities to run the Compact compiler and builder
 - `packages/simulator`: TypeScript simulator to run and test Compact contracts locally
+- `packages/tools`: Umbrella package re-exporting both under subpath exports
 
 ## Installation
 
-Install whichever package you need from npm:
+The fastest path is the umbrella package, which gives you the CLI binaries and
+the simulator under subpath exports in a single install:
+
+```bash
+yarn add --dev @openzeppelin/compact-tools
+```
+
+```ts
+import { createSimulator } from '@openzeppelin/compact-tools/simulator';
+import { CompactCompiler, CompactBuilder } from '@openzeppelin/compact-tools/cli';
+```
+
+```bash
+yarn compact-compiler --help
+yarn compact-builder --help
+```
+
+If you want only one piece, install the corresponding constituent directly:
 
 ```bash
 # Simulator only (test/runtime side)
 yarn add --dev @openzeppelin/compact-tools-simulator
 
-# CLI utilities (compile + build)
+# CLI utilities only (compile + build)
 yarn add --dev @openzeppelin/compact-tools-cli
-```
-
-With the CLI installed, the `compact-compiler` and `compact-builder` binaries
-are on the package's `bin` PATH:
-
-```bash
-yarn compact-compiler --help
-yarn compact-builder --help
 ```
 
 ### Developing against unreleased changes

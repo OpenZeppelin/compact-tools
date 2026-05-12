@@ -381,7 +381,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openzeppelin/compact-tools-cli@workspace:packages/cli":
+"@openzeppelin/compact-tools-cli@workspace:^, @openzeppelin/compact-tools-cli@workspace:packages/cli":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-tools-cli@workspace:packages/cli"
   dependencies:
@@ -398,7 +398,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@openzeppelin/compact-tools-simulator@workspace:packages/simulator":
+"@openzeppelin/compact-tools-simulator@workspace:^, @openzeppelin/compact-tools-simulator@workspace:packages/simulator":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-tools-simulator@workspace:packages/simulator"
   dependencies:
@@ -412,16 +412,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@openzeppelin/compact-tools@workspace:.":
+"@openzeppelin/compact-tools@workspace:packages/tools":
   version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-tools@workspace:."
+  resolution: "@openzeppelin/compact-tools@workspace:packages/tools"
   dependencies:
-    "@biomejs/biome": "npm:2.3.8"
+    "@openzeppelin/compact-tools-cli": "workspace:^"
+    "@openzeppelin/compact-tools-simulator": "workspace:^"
+    "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:24.10.1"
-    ts-node: "npm:^10.9.2"
-    turbo: "npm:^2.6.1"
     typescript: "npm:^5.9.3"
-    vitest: "npm:^4.0.15"
+  bin:
+    compact-builder: dist/runBuilder.js
+    compact-compiler: dist/runCompiler.js
   languageName: unknown
   linkType: soft
 
@@ -912,6 +914,19 @@ __metadata:
   checksum: 10/b0445859521eb4021cd0fb0cc1a75cecf67fceecae89b63f62b201cca8d345baf8b952c966862a9d9a2632987d4f6581f0ec8d957dfacece86f0a7919316f610
   languageName: node
   linkType: hard
+
+"compact-tools-monorepo@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "compact-tools-monorepo@workspace:."
+  dependencies:
+    "@biomejs/biome": "npm:2.3.8"
+    "@types/node": "npm:24.10.1"
+    ts-node: "npm:^10.9.2"
+    turbo: "npm:^2.6.1"
+    typescript: "npm:^5.9.3"
+    vitest: "npm:^4.0.15"
+  languageName: unknown
+  linkType: soft
 
 "create-require@npm:^1.1.0":
   version: 1.1.1
