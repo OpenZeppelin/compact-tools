@@ -51,6 +51,7 @@ compact-compiler [options]
 | `--src <directory>` | Source directory containing `.compact` files | `src` |
 | `--out <directory>` | Output directory for compiled artifacts | `artifacts` |
 | `--hierarchical` | Preserve source directory structure in output | `false` |
+| `--exclude <pattern>` | Skip `.compact` files matching the glob (repeatable). Patterns with `/` match the path relative to `--src`; others match the filename only. | (none) |
 | `--skip-zk` | Skip zero-knowledge proof generation | `false` |
 | `+<version>` | Use specific toolchain version (e.g., `+0.28.0`) | (default) |
 
@@ -116,12 +117,15 @@ SKIP_ZK=true compact-compiler
 
 ## Builder CLI
 
-The builder runs the compiler as a prerequisite, then executes additional build steps:
+The builder runs the compiler as a prerequisite, then executes a configurable
+pipeline of distribution steps:
 
 1. Compile `.compact` files (via `compact-compiler`)
-2. Compile TypeScript (`tsc --project tsconfig.build.json`)
-3. Copy artifacts to `dist/artifacts/`
-4. Copy and clean `.compact` files to `dist/`
+2. *(optional)* `rm -rf dist && mkdir -p dist` — when `--clean-dist` is set
+3. Compile TypeScript (`tsc --project tsconfig.build.json`)
+4. Copy artifacts to `dist/artifacts/`
+5. Copy `.compact` files to `dist/` (flat by default; tree-preserving with `--hierarchical`)
+6. *(optional)* Copy extra files into `dist/` — one per `--copy <path>`
 
 ### Usage
 
@@ -129,19 +133,44 @@ The builder runs the compiler as a prerequisite, then executes additional build 
 compact-builder [options]
 ```
 
-Accepts all compiler options except `--skip-zk` (builds always include ZK proofs).
+Accepts all compiler options plus the following **builder-only** options:
+
+| Option | Description |
+| --- | --- |
+| `--clean-dist` | Run `rm -rf dist && mkdir -p dist` before building. |
+| `--copy <path>` | Copy an extra file into `dist/` for distribution (e.g. `package.json`, `../README.md`). Repeatable. |
+
+The compiler's `--hierarchical` and `--exclude` flags also affect the builder:
+
+- **`--hierarchical`** — when set, source files keep their directory structure
+  under `dist/` (e.g. `src/token/Foo.compact` → `dist/token/Foo.compact`) and
+  compiled artifacts likewise preserve their subdir. When unset (default), both
+  are flat.
+- **`--exclude <pattern>`** — applies to both the compiler's file discovery
+  AND the builder's `.compact` copy step. When unset, the builder falls back
+  to `['Mock*', '*.mock.compact']` so mocks are stripped from the dist by
+  default (even though the compiler with no `--exclude` still compiles them).
+
+Builds should normally include ZK proofs; avoid passing `--skip-zk` here.
 
 ### Examples
 
 ```bash
-# Full build
+# Default build (flat .compact copy, excludes Mock*)
 compact-builder
 
-# Build specific directory
+# Build specific subdirectory
 compact-builder --dir token
 
-# Build with custom directories
+# Custom source/output directories
 compact-builder --src contracts --out build
+
+# Library-publish build: clean dist, hierarchical layout, exclude mocks + archive, ship metadata
+compact-builder \
+  --clean-dist \
+  --hierarchical \
+  --exclude 'Mock*' --exclude '*/archive/*' \
+  --copy package.json --copy ../README.md
 ```
 
 ## Programmatic API
@@ -187,12 +216,14 @@ class CompactCompiler {
 
 // Builder class
 class CompactBuilder {
-  constructor(options?: CompilerOptions);
+  constructor(options?: BuilderOptions);
   static fromArgs(args: string[], env?: NodeJS.ProcessEnv): CompactBuilder;
+  static parseArgs(args: string[], env?: NodeJS.ProcessEnv): BuilderOptions;
   build(): Promise<void>;
+  getSteps(): readonly { cmd: string; msg: string; shell?: string }[];
 }
 
-// Options interface
+// Compiler options
 interface CompilerOptions {
   flags?: string;           // Compiler flags (e.g., '--skip-zk --verbose')
   targetDir?: string;       // Subdirectory within srcDir to compile
@@ -200,7 +231,18 @@ interface CompilerOptions {
   hierarchical?: boolean;   // Preserve directory structure in output
   srcDir?: string;          // Source directory (default: 'src')
   outDir?: string;          // Output directory (default: 'artifacts')
+  exclude?: string[];       // .compact glob patterns to skip in discovery
+                            //   (and in the builder's copy step)
 }
+
+// Builder options (extends CompilerOptions with dist-layout controls)
+// Note: `hierarchical` and `exclude` (from CompilerOptions) drive BOTH the
+// compiler and the builder. When `exclude` is undefined, the builder
+// substitutes ['Mock*', '*.mock.compact'] for its copy step.
+type BuilderOptions = CompilerOptions & {
+  cleanDist?: boolean;     // rm -rf dist before building
+  copyToDist?: string[];   // extra files to copy into dist/ (e.g. package.json)
+};
 ```
 
 ### Error Types

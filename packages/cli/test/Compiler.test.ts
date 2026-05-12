@@ -237,6 +237,43 @@ describe('FileDiscovery', () => {
 
       expect(files).toEqual(['Ownable.compact']);
     });
+
+    it('should skip files matching name-only exclude patterns', async () => {
+      const excludingDiscovery = new FileDiscovery('src', ['Mock*', '*.mock.compact']);
+      const mockDirents = [
+        { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
+        { name: 'MockToken.compact', isFile: () => true, isDirectory: () => false },
+        { name: 'Token.mock.compact', isFile: () => true, isDirectory: () => false },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await excludingDiscovery.getCompactFiles('src');
+
+      expect(files).toEqual(['Token.compact']);
+    });
+
+    it('should skip files matching path globs', async () => {
+      // Path-style patterns (containing `/`) are matched against the full
+      // path as `find srcDir` would emit it, so `*/archive/*` works the same
+      // way as `find -path '*/archive/*'`.
+      const excludingDiscovery = new FileDiscovery('src', ['*/archive/*']);
+      const mockDirents = [
+        { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
+        { name: 'archive', isFile: () => false, isDirectory: () => true },
+      ];
+      const mockArchiveDirents = [
+        { name: 'Legacy.compact', isFile: () => true, isDirectory: () => false },
+      ];
+
+      mockReaddir
+        .mockResolvedValueOnce(mockDirents as any)
+        .mockResolvedValueOnce(mockArchiveDirents as any);
+
+      const files = await excludingDiscovery.getCompactFiles('src');
+
+      expect(files).toEqual(['Token.compact']);
+    });
   });
 });
 
@@ -797,6 +834,31 @@ describe('CompactCompiler', () => {
       expect(() => CompactCompiler.fromArgs(['--out', '--skip-zk'])).toThrow(
         '--out flag requires a directory path',
       );
+    });
+
+    it('should accumulate repeated --exclude patterns', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--exclude',
+        'Mock*',
+        '--exclude',
+        '*.mock.compact',
+      ]);
+
+      expect(compiler.testOptions.exclude).toEqual(['Mock*', '*.mock.compact']);
+    });
+
+    it('should default exclude to empty array when not specified', () => {
+      compiler = CompactCompiler.fromArgs([]);
+      expect(compiler.testOptions.exclude).toEqual([]);
+    });
+
+    it('should throw for --exclude without a pattern', () => {
+      expect(() => CompactCompiler.fromArgs(['--exclude'])).toThrow(
+        '--exclude flag requires a pattern',
+      );
+      expect(() =>
+        CompactCompiler.fromArgs(['--exclude', '--skip-zk']),
+      ).toThrow('--exclude flag requires a pattern');
     });
   });
 

@@ -8,27 +8,38 @@ import { CompactBuilder } from './Builder.ts';
  * Executes the Compact builder CLI.
  * Builds projects using the `CompactBuilder` class with provided options, including compilation and additional steps.
  *
- * Supports compiler options:
- * - `--dir <directory>` - Compile specific subdirectory
- * - `--src <directory>` - Source directory (default: src)
- * - `--out <directory>` - Output directory (default: artifacts)
- * - `--hierarchical` - Preserve directory structure in output
- * - `+<version>` - Use specific toolchain version
+ * Compiler options (forwarded to `compact-compiler`):
+ * - `--dir <directory>`  - Compile specific subdirectory within srcDir
+ * - `--src <directory>`  - Source directory (default: src)
+ * - `--out <directory>`  - Output directory for artifacts (default: artifacts)
+ * - `--hierarchical`     - Preserve source directory structure in BOTH the
+ *                          compiler artifacts output AND the builder's
+ *                          .compact copy into dist/ (default off: flat in both)
+ * - `--exclude <glob>`   - Skip .compact files matching pattern, in BOTH the
+ *                          compiler's file discovery AND the builder's
+ *                          .compact copy (repeatable). When unset, the builder
+ *                          falls back to ['Mock*', '*.mock.compact']; the
+ *                          compiler defaults to no excludes.
+ * - `+<version>`         - Use specific toolchain version
+ *
+ * Builder-only options (control dist/ layout):
+ * - `--clean-dist`       - rm -rf dist before building (default off)
+ * - `--copy <path>`      - copy an extra file into dist/ for distribution (repeatable; e.g. package.json)
  *
  * @example
  * ```bash
+ * # Minimal build
  * npx compact-builder
+ *
+ * # Custom source/output dirs
  * npx compact-builder --src contracts --out build
- * ```
- * Expected output:
- * ```
- * ℹ [BUILD] Compact builder started
- * ℹ [COMPILE] Found 1 .compact file(s) to compile
- * ✔ [COMPILE] [1/1] Compiled Foo.compact
- *     Compactc version: 0.26.0
- * ✔ [BUILD] [1/3] Compiling TypeScript
- * ✔ [BUILD] [2/3] Copying artifacts
- * ✔ [BUILD] [3/3] Copying and cleaning .compact files
+ *
+ * # Library-publish build: clean dist, hierarchical layout, exclude mocks + archive, ship metadata
+ * npx compact-builder \
+ *   --clean-dist \
+ *   --hierarchical \
+ *   --exclude 'Mock*' --exclude '*\/archive\/*' \
+ *   --copy package.json --copy ../README.md
  * ```
  */
 async function runBuilder(): Promise<void> {
