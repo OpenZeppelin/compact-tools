@@ -13,7 +13,7 @@ allowing you to simulate contract behavior locally without blockchain deployment
 ## Quick Start
 
 ```typescript
-import { createSimulator } from '@openzeppelin-compact/contracts-simulator';
+import { createSimulator } from '@openzeppelin/compact-tools-simulator';
 import { Contract, ledger } from './artifacts/MyContract/contract/index.js';
 
 // 1. Define your contract arguments type
@@ -44,7 +44,7 @@ const sim = new MySimulator([ownerAddress, 100n], { coinPK: deployerPK });
 The base simulator acts as a configuration class that the actual simulator will extend:
 
 ```typescript
-import { createSimulator } from '@openzeppelin-compact/contracts-simulator';
+import { createSimulator } from '@openzeppelin/compact-tools-simulator';
 import { Contract as MyContract, ledger } from './artifacts/MyContract/contract/index.js';
 import { MyContractWitnesses, MyContractPrivateState } from './MyContractWitnesses.js';
 
