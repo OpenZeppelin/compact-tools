@@ -188,10 +188,9 @@ export class CompactCompiler {
       } else if (args[i].startsWith('+')) {
         options.version = args[i].slice(1);
       } else {
-        // Only add flag if it's not already present
-        if (!flags.includes(args[i])) {
-          flags.push(args[i]);
-        }
+        // Forward flags in original order, no dedup — repeatable flags
+        // (e.g. `--define x=1 --define y=2`) must be preserved as given.
+        flags.push(args[i]);
       }
     }
 
@@ -305,11 +304,12 @@ export class CompactCompiler {
     } catch (error) {
       spinner.fail(chalk.red(`[COMPILE] ${step} Failed ${file}`));
 
-      if (
-        error instanceof CompilationError &&
-        isPromisifiedChildProcessError(error)
-      ) {
-        const execError = error;
+      // CompilationError wraps the underlying child-process error in `.cause`.
+      // The previous guard `isPromisifiedChildProcessError(error)` on a
+      // CompilationError instance was unreachable — unwrap via `.cause` to
+      // surface compactc's stdout/stderr to the user.
+      const execError = error instanceof CompilationError ? error.cause : error;
+      if (isPromisifiedChildProcessError(execError)) {
         // Filter out compactc version output from compact compile
         const filteredOutput = execError.stdout.split('\n').slice(1).join('\n');
 

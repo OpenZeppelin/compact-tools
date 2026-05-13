@@ -31,7 +31,7 @@ step is currently manual — see the TODO below for the planned migration to
 
 There's a one-step dependency chain across the three published packages:
 
-```
+```text
 compact-cli (bin wrapper)
   └─ depends on compact-builder
 compact-builder (library)
@@ -44,7 +44,7 @@ each dependent finds its deps already on npm:
 
 1. `compact-builder` (no internal deps)
 2. `compact-simulator` (no internal deps)
-3. `compact-cli` (depends on `-builder`; pull `main` first so the bump
+3. `compact-cli` (depends on `compact-builder`; pull `main` first so the bump
    commit is present locally before triggering)
 
 After the first release, the three packages version independently — bump any

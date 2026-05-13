@@ -138,7 +138,8 @@ compact-builder \
   --copy package.json --copy ../README.md
 ```
 
-See [packages/cli/README.md](./packages/cli/README.md) for full documentation including all options, programmatic API, and examples.
+See [packages/cli/README.md](./packages/cli/README.md) for full CLI documentation, all flags, and examples.
+For the programmatic API (`CompactCompiler`, `CompactBuilder`, services and types), see [packages/builder/README.md](./packages/builder/README.md).
 
 ### `@openzeppelin/compact-simulator` ([packages/simulator](./packages/simulator))
 

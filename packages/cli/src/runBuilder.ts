@@ -34,11 +34,12 @@ import ora from 'ora';
  * # Custom source/output dirs
  * npx compact-builder --src contracts --out build
  *
- * # Library-publish build: clean dist, hierarchical layout, exclude mocks + archive, ship metadata
+ * # Library-publish build (the split-quoted '*'/'archive'/'*' is just JSDoc
+ * # — in your own scripts write '<star>/archive/<star>' literally):
  * npx compact-builder \
  *   --clean-dist \
  *   --hierarchical \
- *   --exclude 'Mock*' --exclude '*\/archive\/*' \
+ *   --exclude 'Mock*' --exclude '*.mock.compact' --exclude '*'/'archive'/'*' \
  *   --copy package.json --copy ../README.md
  * ```
  */

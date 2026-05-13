@@ -37,7 +37,7 @@ const execAsync = promisify(exec);
  * // Default: flatten .compact files, exclude Mock*
  * const builder = new CompactBuilder({ flags: '--skip-zk' });
  *
- * // Library publish: clean dist, hierarchical tree, exclude mocks + archive, copy metadata
+ * // Library publish: clean dist, hierarchical tree, exclude mocks + archive, copy metadata.
  * const builder = new CompactBuilder({
  *   cleanDist: true,
  *   hierarchical: true,
@@ -246,7 +246,13 @@ export class CompactBuilder {
         console.error(chalk.red('[BUILD] ❌ Build failed:', error.message));
       }
 
-      process.exit(1);
+      // Library code must not call process.exit — let the caller (CLI wrapper
+      // or programmatic consumer) decide how to react. We've already surfaced
+      // the failure to the user via the spinner + printOutput above.
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('[BUILD] Build failed with a non-Error exception');
     }
   }
 

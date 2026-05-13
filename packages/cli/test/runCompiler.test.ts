@@ -333,10 +333,13 @@ describe('runCompiler CLI', () => {
         '  --hierarchical    Preserve source directory structure in artifacts output',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
+        '  --exclude <glob>  Skip .compact files matching the glob (repeatable)',
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
         '  --skip-zk         Skip zero-knowledge proof generation',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
-        '  +<version>        Use specific toolchain version (e.g., +0.26.0)',
+        '  +<version>        Use specific toolchain version (e.g., +0.29.0)',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         '\nArtifact Output Structure:',

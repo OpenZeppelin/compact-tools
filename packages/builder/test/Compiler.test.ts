@@ -781,12 +781,27 @@ describe('CompactCompiler', () => {
       expect(compiler.testOptions.flags).toBe('--skip-zk --verbose');
     });
 
-    it('should deduplicate flags when both env var and CLI flag are present', () => {
+    it('should preserve repeatable flags without deduplication', () => {
+      // Forwarding args in original order is important: repeatable flags
+      // (e.g. `--define x=1 --define y=2`) must reach the compiler unchanged.
+      // SKIP_ZK=true env + --skip-zk on the CLI consequently produces two
+      // `--skip-zk` entries, which is harmless for boolean flags.
       compiler = CompactCompiler.fromArgs(['--skip-zk', '--verbose'], {
         SKIP_ZK: 'true',
       });
 
-      expect(compiler.testOptions.flags).toBe('--skip-zk --verbose');
+      expect(compiler.testOptions.flags).toBe('--skip-zk --skip-zk --verbose');
+    });
+
+    it('should forward repeated flags in order', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--define',
+        'x=1',
+        '--define',
+        'y=2',
+      ]);
+
+      expect(compiler.testOptions.flags).toBe('--define x=1 --define y=2');
     });
 
     it('should throw error for --dir without argument', () => {
@@ -1195,6 +1210,7 @@ describe('CompactCompiler', () => {
           '+0.26.0',
         ],
         env: { SKIP_ZK: 'true' },
+        flags: '--skip-zk --no-communications-commitment',
       },
       {
         name: 'with skip-zk flag only',
@@ -1206,8 +1222,12 @@ describe('CompactCompiler', () => {
           '+0.26.0',
         ],
         env: { SKIP_ZK: 'false' },
+        flags: '--skip-zk --no-communications-commitment',
       },
       {
+        // CLI `--skip-zk` plus `SKIP_ZK=true` produces two `--skip-zk` entries
+        // because we no longer dedup forwarded flags — repeatable flags like
+        // `--define x=1 --define y=2` must be preserved as given.
         name: 'with both skip-zk flag and env var',
         args: [
           '--dir',
@@ -1217,13 +1237,12 @@ describe('CompactCompiler', () => {
           '+0.26.0',
         ],
         env: { SKIP_ZK: 'true' },
+        flags: '--skip-zk --skip-zk --no-communications-commitment',
       },
-    ])('should handle complex command $name', ({ args, env }) => {
+    ])('should handle complex command $name', ({ args, env, flags }) => {
       compiler = CompactCompiler.fromArgs(args, env);
 
-      expect(compiler.testOptions.flags).toBe(
-        '--skip-zk --no-communications-commitment',
-      );
+      expect(compiler.testOptions.flags).toBe(flags);
       expect(compiler.testOptions.targetDir).toBe('security');
       expect(compiler.testOptions.version).toBe('0.26.0');
     });
