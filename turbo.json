@@ -26,8 +26,9 @@
       "outputs": ["dist/**"]
     },
     "types": {
-      "dependsOn": [],
-      "outputs": ["dist/**"]
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*.ts", "tsconfig.json"],
+      "outputs": []
     },
     "lint": {},
     "lint:ci": {},
