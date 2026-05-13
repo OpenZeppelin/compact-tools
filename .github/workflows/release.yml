@@ -8,10 +8,9 @@ on:
         required: true
         type: choice
         options:
-          - compact-tools
-          - compact-tools-builder
-          - compact-tools-cli
-          - compact-tools-simulator
+          - compact-builder
+          - compact-cli
+          - compact-simulator
       version_bump:
         description: "Version bump type"
         required: true
@@ -48,16 +47,13 @@ jobs:
         id: pkg
         run: |
           case "${{ inputs.package }}" in
-            "compact-tools")
-              echo "dir=tools" >> $GITHUB_OUTPUT
-              ;;
-            "compact-tools-builder")
+            "compact-builder")
               echo "dir=builder" >> $GITHUB_OUTPUT
               ;;
-            "compact-tools-cli")
+            "compact-cli")
               echo "dir=cli" >> $GITHUB_OUTPUT
               ;;
-            "compact-tools-simulator")
+            "compact-simulator")
               echo "dir=simulator" >> $GITHUB_OUTPUT
               ;;
           esac

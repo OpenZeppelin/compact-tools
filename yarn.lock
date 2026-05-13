@@ -381,9 +381,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openzeppelin/compact-tools-builder@workspace:^, @openzeppelin/compact-tools-builder@workspace:packages/builder":
+"@openzeppelin/compact-builder@workspace:^, @openzeppelin/compact-builder@workspace:packages/builder":
   version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-tools-builder@workspace:packages/builder"
+  resolution: "@openzeppelin/compact-builder@workspace:packages/builder"
   dependencies:
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:24.10.1"
@@ -395,11 +395,11 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@openzeppelin/compact-tools-cli@workspace:^, @openzeppelin/compact-tools-cli@workspace:packages/cli":
+"@openzeppelin/compact-cli@workspace:packages/cli":
   version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-tools-cli@workspace:packages/cli"
+  resolution: "@openzeppelin/compact-cli@workspace:packages/cli"
   dependencies:
-    "@openzeppelin/compact-tools-builder": "workspace:^"
+    "@openzeppelin/compact-builder": "workspace:^"
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:24.10.1"
     chalk: "npm:^5.6.2"
@@ -412,9 +412,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@openzeppelin/compact-tools-simulator@workspace:^, @openzeppelin/compact-tools-simulator@workspace:packages/simulator":
+"@openzeppelin/compact-simulator@workspace:packages/simulator":
   version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-tools-simulator@workspace:packages/simulator"
+  resolution: "@openzeppelin/compact-simulator@workspace:packages/simulator"
   dependencies:
     "@midnight-ntwrk/compact-runtime": "npm:0.14.0"
     "@midnight-ntwrk/ledger-v7": "npm:^7.0.0"
@@ -423,22 +423,6 @@ __metadata:
     fast-check: "npm:^4.5.2"
     typescript: "npm:^5.8.2"
     vitest: "npm:^4.0.15"
-  languageName: unknown
-  linkType: soft
-
-"@openzeppelin/compact-tools@workspace:packages/tools":
-  version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-tools@workspace:packages/tools"
-  dependencies:
-    "@openzeppelin/compact-tools-builder": "workspace:^"
-    "@openzeppelin/compact-tools-cli": "workspace:^"
-    "@openzeppelin/compact-tools-simulator": "workspace:^"
-    "@tsconfig/node24": "npm:^24.0.3"
-    "@types/node": "npm:24.10.1"
-    typescript: "npm:^5.9.3"
-  bin:
-    compact-builder: dist/runBuilder.js
-    compact-compiler: dist/runCompiler.js
   languageName: unknown
   linkType: soft
 

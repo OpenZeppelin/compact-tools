@@ -29,31 +29,25 @@ step is currently manual — see the TODO below for the planned migration to
 
 ## First-release order
 
-There's a dependency chain across the four published packages:
+There's a one-step dependency chain across the three published packages:
 
 ```
-compact-tools (umbrella)
-  ├─ depends on compact-tools-builder
-  ├─ depends on compact-tools-cli
-  └─ depends on compact-tools-simulator
-compact-tools-cli (bin wrapper)
-  └─ depends on compact-tools-builder
-compact-tools-builder (library)
-compact-tools-simulator (library)
+compact-cli (bin wrapper)
+  └─ depends on compact-builder
+compact-builder (library)
+compact-simulator (library)
 ```
 
-Each `workspace:^` dep is rewritten by yarn into the resolved version at
+The `workspace:^` dep is rewritten by yarn into the resolved version at
 `yarn pack` time. For the very first release, publish in dependency order so
 each dependent finds its deps already on npm:
 
-1. `compact-tools-builder` (no internal deps)
-2. `compact-tools-simulator` (no internal deps)
-3. `compact-tools-cli` (depends on `-builder`; pull `main` first so the bump
-   commit is present locally)
-4. `compact-tools` (umbrella; pull `main` first so the bumps for `-builder`,
-   `-cli`, and `-simulator` are present)
+1. `compact-builder` (no internal deps)
+2. `compact-simulator` (no internal deps)
+3. `compact-cli` (depends on `-builder`; pull `main` first so the bump
+   commit is present locally before triggering)
 
-After the first release, the four packages version independently — bump any
+After the first release, the three packages version independently — bump any
 one of them in isolation without re-publishing the others.
 
 ## TODO: migrate to changesets

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@openzeppelin/compact-tools-cli` will be documented in this file.
+All notable changes to `@openzeppelin/compact-cli` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial public release of `@openzeppelin/compact-tools-cli` as a thin bin
-  wrapper around [`@openzeppelin/compact-tools-builder`](../builder).
+- Initial public release of `@openzeppelin/compact-cli` as a thin bin
+  wrapper around [`@openzeppelin/compact-builder`](../builder).
 - `compact-compiler` bin — orchestrates `compact compile` over a project's
   `.compact` files with progress reporting and structured error handling.
 - `compact-builder` bin — runs the compiler then assembles a publishable
@@ -31,5 +31,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The programmatic API (CompactCompiler, CompactBuilder, services, types)
   previously shipped from this package has moved to
-  `@openzeppelin/compact-tools-builder`. This package now ships only the bin
+  `@openzeppelin/compact-builder`. This package now ships only the bin
   entries.

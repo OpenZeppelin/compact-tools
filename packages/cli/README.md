@@ -1,6 +1,6 @@
-# @openzeppelin/compact-tools-cli
+# @openzeppelin/compact-cli
 
-CLI wrapper around [`@openzeppelin/compact-tools-builder`](../builder).
+CLI wrapper around [`@openzeppelin/compact-builder`](../builder).
 Provides the `compact-compiler` and `compact-builder` binaries for use in
 `package.json` scripts. Contains no programmatic API of its own — if you want
 to call the compiler/builder from TypeScript, use the library package directly.
@@ -8,7 +8,7 @@ to call the compiler/builder from TypeScript, use the library package directly.
 ## Install
 
 ```bash
-yarn add --dev @openzeppelin/compact-tools-cli
+yarn add --dev @openzeppelin/compact-cli
 ```
 
 ## Use
@@ -49,7 +49,7 @@ options:
 | `--clean-dist` | builder | `rm -rf dist` before building. |
 | `--copy <path>` | builder | Copy an extra file into `dist/` (repeatable; e.g. `package.json`, `../README.md`). |
 
-See [`@openzeppelin/compact-tools-builder`](../builder) for the full
+See [`@openzeppelin/compact-builder`](../builder) for the full
 documentation, programmatic API, and behavioural details.
 
 ## Requirements
@@ -64,9 +64,8 @@ Compactc version: 0.29.0
 
 ## See also
 
-- [`@openzeppelin/compact-tools-builder`](https://www.npmjs.com/package/@openzeppelin/compact-tools-builder) — programmatic library backing this CLI
-- [`@openzeppelin/compact-tools-simulator`](https://www.npmjs.com/package/@openzeppelin/compact-tools-simulator) — simulator for testing Compact contracts
-- [`@openzeppelin/compact-tools`](https://www.npmjs.com/package/@openzeppelin/compact-tools) — umbrella package giving you all three under subpath exports
+- [`@openzeppelin/compact-builder`](https://www.npmjs.com/package/@openzeppelin/compact-builder) — programmatic library backing this CLI
+- [`@openzeppelin/compact-simulator`](https://www.npmjs.com/package/@openzeppelin/compact-simulator) — simulator for testing Compact contracts
 
 ## License
 

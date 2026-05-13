@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@openzeppelin/compact-tools-builder` will be documented in this file.
+All notable changes to `@openzeppelin/compact-builder` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial public release of `@openzeppelin/compact-tools-builder`.
+- Initial public release of `@openzeppelin/compact-builder`.
 - Programmatic API for orchestrating the Compact toolchain:
   - `CompactCompiler` — compiles `.compact` files to artifacts.
   - `CompactBuilder` — runs `CompactCompiler` then assembles a publishable
@@ -34,5 +34,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Notes
 
 - This package contains the library code that previously lived under
-  `@openzeppelin/compact-tools-cli`. The CLI package now ships only the bin
+  `@openzeppelin/compact-cli`. The CLI package now ships only the bin
   entries (`compact-compiler`, `compact-builder`) and depends on this library.

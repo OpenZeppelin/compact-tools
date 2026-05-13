@@ -1,4 +1,4 @@
-# @openzeppelin/compact-tools-builder
+# @openzeppelin/compact-builder
 
 Programmatic library for compiling and building Compact smart contracts on the
 Midnight network. Drives the `compactc` toolchain with progress reporting,
@@ -6,19 +6,19 @@ structured error handling, and configurable output layouts.
 
 This is the **library** — it ships no CLI binaries. If you want the bins
 (`compact-compiler`, `compact-builder`) for use in `package.json` scripts,
-install [`@openzeppelin/compact-tools-cli`](../cli) instead, which is a thin
+install [`@openzeppelin/compact-cli`](../cli) instead, which is a thin
 wrapper around this library.
 
 ## Install
 
 ```bash
-yarn add --dev @openzeppelin/compact-tools-builder
+yarn add --dev @openzeppelin/compact-builder
 ```
 
 ## Quick Start
 
 ```ts
-import { CompactCompiler, CompactBuilder } from '@openzeppelin/compact-tools-builder';
+import { CompactCompiler, CompactBuilder } from '@openzeppelin/compact-builder';
 
 // Compile all .compact files in src/ to artifacts/
 await new CompactCompiler({ flags: '--skip-zk' }).compile();
@@ -61,9 +61,8 @@ export class DirectoryNotFoundError  extends Error { /* … */ }
 
 ## See also
 
-- [`@openzeppelin/compact-tools-cli`](https://www.npmjs.com/package/@openzeppelin/compact-tools-cli) — bin wrapper around this library
-- [`@openzeppelin/compact-tools-simulator`](https://www.npmjs.com/package/@openzeppelin/compact-tools-simulator) — TypeScript simulator for testing Compact contracts locally
-- [`@openzeppelin/compact-tools`](https://www.npmjs.com/package/@openzeppelin/compact-tools) — umbrella package giving you everything under subpath exports
+- [`@openzeppelin/compact-cli`](https://www.npmjs.com/package/@openzeppelin/compact-cli) — bin wrapper around this library
+- [`@openzeppelin/compact-simulator`](https://www.npmjs.com/package/@openzeppelin/compact-simulator) — TypeScript simulator for testing Compact contracts locally
 
 See the [monorepo README](https://github.com/OpenZeppelin/compact-tools#readme) for the full developer guide.
 

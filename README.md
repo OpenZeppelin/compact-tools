@@ -11,41 +11,32 @@ Tools for compiling, building, and testing Compact smart contracts. This is a mo
 - `packages/builder`: Programmatic library that drives the Compact compiler + builder
 - `packages/cli`: Thin bin wrapper around the builder library (`compact-compiler`, `compact-builder`)
 - `packages/simulator`: TypeScript simulator to run and test Compact contracts locally
-- `packages/tools`: Umbrella package re-exporting builder + simulator from a single root import, plus the CLI bins
-
 ## Installation
 
-The fastest path is the umbrella package, which gives you the CLI binaries and
-the libraries from a single import path:
+Pick the package that matches what you need:
 
 ```bash
-yarn add --dev @openzeppelin/compact-tools
+# Programmatic library — call the compiler/builder from TypeScript
+yarn add --dev @openzeppelin/compact-builder
+
+# CLI bins (compact-compiler, compact-builder) for use in package.json scripts
+yarn add --dev @openzeppelin/compact-cli
+
+# Simulator — test Compact contracts locally
+yarn add --dev @openzeppelin/compact-simulator
 ```
 
-```ts
-import {
-  createSimulator,
-  CompactCompiler,
-  CompactBuilder,
-} from '@openzeppelin/compact-tools';
-```
+`compact-cli` depends transitively on `compact-builder`, so installing the CLI
+gives you both the binaries and the underlying library.
 
 ```bash
 yarn compact-compiler --help
 yarn compact-builder --help
 ```
 
-If you want only one piece, install the corresponding constituent directly:
-
-```bash
-# Programmatic library only (no bins)
-yarn add --dev @openzeppelin/compact-tools-builder
-
-# Simulator only (test/runtime side)
-yarn add --dev @openzeppelin/compact-tools-simulator
-
-# CLI bins only (depends transitively on -builder)
-yarn add --dev @openzeppelin/compact-tools-cli
+```ts
+import { CompactCompiler, CompactBuilder } from '@openzeppelin/compact-builder';
+import { createSimulator } from '@openzeppelin/compact-simulator';
 ```
 
 ### Developing against unreleased changes
@@ -60,8 +51,9 @@ yarn --cwd tools/compact-tools build
 
 # In your package.json
 "devDependencies": {
-  "@openzeppelin/compact-tools-simulator": "file:./tools/compact-tools/packages/simulator",
-  "@openzeppelin/compact-tools-cli": "file:./tools/compact-tools/packages/cli"
+  "@openzeppelin/compact-builder":   "file:./tools/compact-tools/packages/builder",
+  "@openzeppelin/compact-cli":       "file:./tools/compact-tools/packages/cli",
+  "@openzeppelin/compact-simulator": "file:./tools/compact-tools/packages/simulator"
 }
 ```
 
@@ -117,7 +109,7 @@ yarn clean
 
 ## Packages
 
-### `@openzeppelin/compact-tools-cli` ([packages/cli](./packages/cli))
+### `@openzeppelin/compact-cli` ([packages/cli](./packages/cli))
 
 CLI utilities for compiling and building Compact smart contracts.
 
@@ -148,14 +140,14 @@ compact-builder \
 
 See [packages/cli/README.md](./packages/cli/README.md) for full documentation including all options, programmatic API, and examples.
 
-### `@openzeppelin/compact-tools-simulator` ([packages/simulator](./packages/simulator))
+### `@openzeppelin/compact-simulator` ([packages/simulator](./packages/simulator))
 
 TypeScript simulator for testing Compact contracts locally.
 
 **Quickstart:**
 
 ```ts
-import { createSimulator } from '@openzeppelin/compact-tools-simulator';
+import { createSimulator } from '@openzeppelin/compact-simulator';
 
 const simulator = createSimulator({});
 // Deploy and execute contract circuits, inspect state, etc.

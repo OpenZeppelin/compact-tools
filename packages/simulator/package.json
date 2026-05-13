@@ -1,5 +1,5 @@
 {
-  "name": "@openzeppelin/compact-tools-simulator",
+  "name": "@openzeppelin/compact-simulator",
   "description": "Simulator for testing Compact smart contracts",
   "version": "0.0.1",
   "keywords": [
