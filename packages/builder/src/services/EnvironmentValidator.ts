@@ -1,7 +1,10 @@
-import { exec as execCallback } from 'node:child_process';
+import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { CompactCliNotFoundError } from '../types/errors.ts';
 import type { ExecFunction } from '../types/options.ts';
+
+const defaultExecFn: ExecFunction = (file, args) =>
+  promisify(execFileCallback)(file, [...args]);
 
 /**
  * Service responsible for validating the Compact CLI environment.
@@ -21,9 +24,10 @@ export class EnvironmentValidator {
   /**
    * Creates a new EnvironmentValidator instance.
    *
-   * @param execFn - Function to execute shell commands (defaults to promisified child_process.exec)
+   * @param execFn - Function to execute the Compact CLI binary (defaults to
+   *                 a promisified `child_process.execFile` — argv array, no shell).
    */
-  constructor(execFn: ExecFunction = promisify(execCallback)) {
+  constructor(execFn: ExecFunction = defaultExecFn) {
     this.execFn = execFn;
   }
 
@@ -34,7 +38,7 @@ export class EnvironmentValidator {
    */
   async checkCompactAvailable(): Promise<boolean> {
     try {
-      await this.execFn('compact --version');
+      await this.execFn('compact', ['--version']);
       return true;
     } catch {
       return false;
@@ -48,7 +52,7 @@ export class EnvironmentValidator {
    * @throws {Error} If the CLI is not available or command fails
    */
   async getDevToolsVersion(): Promise<string> {
-    const { stdout } = await this.execFn('compact --version');
+    const { stdout } = await this.execFn('compact', ['--version']);
     return stdout.trim();
   }
 
@@ -60,10 +64,8 @@ export class EnvironmentValidator {
    * @throws {Error} If the CLI is not available or command fails
    */
   async getToolchainVersion(version?: string): Promise<string> {
-    const versionFlag = version ? `+${version}` : '';
-    const { stdout } = await this.execFn(
-      `compact compile ${versionFlag} --version`,
-    );
+    const args = ['compile', ...(version ? [`+${version}`] : []), '--version'];
+    const { stdout } = await this.execFn('compact', args);
     return stdout.trim();
   }
 

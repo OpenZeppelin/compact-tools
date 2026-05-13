@@ -387,9 +387,11 @@ __metadata:
   dependencies:
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:24.10.1"
+    "@types/shell-quote": "npm:^1.7.5"
     chalk: "npm:^5.6.2"
     log-symbols: "npm:^7.0.0"
     ora: "npm:^9.0.0"
+    shell-quote: "npm:^1.8.3"
     typescript: "npm:^5.9.3"
     vitest: "npm:^4.0.15"
   languageName: unknown
@@ -666,6 +668,13 @@ __metadata:
   version: 1.13.0
   resolution: "@types/object-inspect@npm:1.13.0"
   checksum: 10/8caf52c815947540b5246e0b5b2d455a2183791fe9427537eab8a40b465392400cee6ce50beaeb35465e167e9cb405ccfde90eb5317ee2c9df85af7508f0a320
+  languageName: node
+  linkType: hard
+
+"@types/shell-quote@npm:^1.7.5":
+  version: 1.7.5
+  resolution: "@types/shell-quote@npm:1.7.5"
+  checksum: 10/32b4d697c7d23dbadf40713692c47f1595f083a3b3deea76cb18e30a05d197aa9205d2b87f6d92edb60cda120b51e35d32bda96ed9b0a7e32921eed2deb4559e
   languageName: node
   linkType: hard
 
@@ -1766,6 +1775,13 @@ __metadata:
   version: 3.0.0
   resolution: "shebang-regex@npm:3.0.0"
   checksum: 10/1a2bcae50de99034fcd92ad4212d8e01eedf52c7ec7830eedcf886622804fe36884278f2be8be0ea5fde3fd1c23911643a4e0f726c8685b61871c8908af01222
+  languageName: node
+  linkType: hard
+
+"shell-quote@npm:^1.8.3":
+  version: 1.8.3
+  resolution: "shell-quote@npm:1.8.3"
+  checksum: 10/5473e354637c2bd698911224129c9a8961697486cff1fb221f234d71c153fc377674029b0223d1d3c953a68d451d79366abfe53d1a0b46ee1f28eb9ade928f4c
   languageName: node
   linkType: hard
 

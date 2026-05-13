@@ -1,6 +1,7 @@
-import { exec as execCallback } from 'node:child_process';
+import { execFile as execFileCallback } from 'node:child_process';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { parse as parseShellArgs } from 'shell-quote';
 import { CompilationError } from '../types/errors.ts';
 import {
   type CompilerServiceOptions,
@@ -12,9 +13,29 @@ import {
 /** Resolved options for CompilerService with defaults applied */
 type ResolvedCompilerServiceOptions = Required<CompilerServiceOptions>;
 
+const defaultExecFn: ExecFunction = (file, args) =>
+  promisify(execFileCallback)(file, [...args]);
+
+/**
+ * Tokenizes a user-supplied `flags` string into discrete argv entries using
+ * `shell-quote` (the same rules a shell would apply for splitting). Any
+ * non-string tokens (e.g. operators like `;`, `&&`) are filtered out so they
+ * cannot leak into argv as data — defense in depth against command injection
+ * via the `flags` option.
+ */
+function tokenizeFlags(flags: string): string[] {
+  if (!flags) {
+    return [];
+  }
+  return parseShellArgs(flags).filter(
+    (token): token is string => typeof token === 'string',
+  );
+}
+
 /**
  * Service responsible for compiling individual .compact files.
- * Handles command construction, execution, and error processing.
+ * Builds argv arrays and invokes the Compact CLI via `child_process.execFile`
+ * (no shell), so user-supplied values cannot inject extra commands.
  *
  * @example
  * ```typescript
@@ -33,11 +54,12 @@ export class CompilerService {
   /**
    * Creates a new CompilerService instance.
    *
-   * @param execFn  - Function to execute shell commands (defaults to promisified child_process.exec)
+   * @param execFn  - Function to invoke the Compact CLI binary (defaults to
+   *                  a promisified `child_process.execFile` — argv array, no shell).
    * @param options - Compiler service options
    */
   constructor(
-    execFn: ExecFunction = promisify(execCallback),
+    execFn: ExecFunction = defaultExecFn,
     options: CompilerServiceOptions = {},
   ) {
     this.execFn = execFn;
@@ -50,13 +72,15 @@ export class CompilerService {
 
   /**
    * Compiles a single .compact file using the Compact CLI.
-   * Constructs the appropriate command with flags and version, then executes it.
+   * Builds the argv array (no shell interpolation) and invokes the binary.
    *
    * By default, uses flattened output structure where all artifacts go to `<outDir>/<ContractName>/`.
    * When `hierarchical` is true, preserves source directory structure: `<outDir>/<subdir>/<ContractName>/`.
    *
    * @param file    - Relative path to the .compact file from srcDir
-   * @param flags   - Space-separated compiler flags (e.g., '--skip-zk --verbose')
+   * @param flags   - Space-separated compiler flags (e.g., '--skip-zk --verbose').
+   *                  Tokenized via `shell-quote` so quoted whitespace is preserved
+   *                  and shell operators (`;`, `&&`, …) cannot inject commands.
    * @param version - Optional specific toolchain version to use
    * @returns Promise resolving to compilation output (stdout/stderr)
    * @throws {CompilationError} If compilation fails for any reason
@@ -77,12 +101,16 @@ export class CompilerService {
         ? join(this.options.outDir, fileDir, fileName)
         : join(this.options.outDir, fileName);
 
-    const versionFlag = version ? `+${version}` : '';
-    const flagsStr = flags ? ` ${flags}` : '';
-    const command = `compact compile${versionFlag ? ` ${versionFlag}` : ''}${flagsStr} "${inputPath}" "${outputDir}"`;
+    const args: string[] = [
+      'compile',
+      ...(version ? [`+${version}`] : []),
+      ...tokenizeFlags(flags),
+      inputPath,
+      outputDir,
+    ];
 
     try {
-      return await this.execFn(command);
+      return await this.execFn('compact', args);
     } catch (error: unknown) {
       let message: string;
 

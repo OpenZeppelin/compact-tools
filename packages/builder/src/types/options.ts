@@ -24,14 +24,20 @@ export const DEFAULT_EXCLUDE_PATTERNS: readonly string[] = [
 ];
 
 /**
- * Function type for executing shell commands.
- * Allows dependency injection for testing and customization.
+ * Function type for executing a child process.
  *
- * @param command - The shell command to execute
- * @returns Promise resolving to command output
+ * Matches the shape of `promisify(child_process.execFile)`: the binary name
+ * (no shell), followed by positional arguments. This signature is injection-
+ * safe by construction — values flow as separate argv entries rather than
+ * being interpolated into a shell command string.
+ *
+ * @param file - The binary to invoke (e.g. `'compact'`)
+ * @param args - Positional arguments passed verbatim to the binary
+ * @returns Promise resolving to the captured stdout/stderr
  */
 export type ExecFunction = (
-  command: string,
+  file: string,
+  args: readonly string[],
 ) => Promise<{ stdout: string; stderr: string }>;
 
 /**
