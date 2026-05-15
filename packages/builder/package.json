@@ -9,7 +9,7 @@
     "builder",
     "library"
   ],
-  "author": "",
+  "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,7 +23,6 @@
   "files": [
     "dist",
     "README.md",
-    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {

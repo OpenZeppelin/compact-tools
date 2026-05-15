@@ -8,9 +8,12 @@ This project extends the Midnight Network with additional developer tooling.
 
 Tools for compiling, building, and testing Compact smart contracts. This is a monorepo containing:
 
-- `packages/builder`: Programmatic library that drives the Compact compiler + builder
-- `packages/cli`: Thin bin wrapper around the builder library (`compact-compiler`, `compact-builder`)
-- `packages/simulator`: TypeScript simulator to run and test Compact contracts locally
+- [`packages/builder`](./packages/builder) — programmatic library that drives the Compact compiler + builder
+- [`packages/cli`](./packages/cli) — thin bin wrapper around the builder library (`compact-compiler`, `compact-builder`)
+- [`packages/simulator`](./packages/simulator) — TypeScript simulator to run and test Compact contracts locally
+
+See each package's README for usage, options, and examples.
+
 ## Installation
 
 Pick the package that matches what you need:
@@ -39,24 +42,6 @@ import { CompactCompiler, CompactBuilder } from '@openzeppelin/compact-builder';
 import { createSimulator } from '@openzeppelin/compact-simulator';
 ```
 
-### Developing against unreleased changes
-
-If you need a not-yet-published change, you can consume this repo locally via a
-git submodule + `file:` dependency:
-
-```bash
-git submodule add https://github.com/OpenZeppelin/compact-tools tools/compact-tools
-yarn --cwd tools/compact-tools install
-yarn --cwd tools/compact-tools build
-
-# In your package.json
-"devDependencies": {
-  "@openzeppelin/compact-builder":   "file:./tools/compact-tools/packages/builder",
-  "@openzeppelin/compact-cli":       "file:./tools/compact-tools/packages/cli",
-  "@openzeppelin/compact-simulator": "file:./tools/compact-tools/packages/simulator"
-}
-```
-
 ## Requirements
 
 - Node.js >= 20 (root and `packages/cli`), >= 22 for `packages/simulator`
@@ -73,9 +58,9 @@ Compactc version: 0.29.0
 0.29.0
 ```
 
-## Getting started
+## Development
 
-Install dependencies at the repo root:
+Clone the repo and install dependencies at the root:
 
 ```bash
 nvm install
@@ -106,55 +91,6 @@ Clean generated artifacts:
 ```bash
 yarn clean
 ```
-
-## Packages
-
-### `@openzeppelin/compact-cli` ([packages/cli](./packages/cli))
-
-CLI utilities for compiling and building Compact smart contracts.
-
-**Quickstart:**
-
-```bash
-# Compile all .compact files
-compact-compiler
-
-# Skip ZK proofs for faster development builds
-compact-compiler --skip-zk
-
-# Compile a specific subdirectory
-compact-compiler --dir security
-
-# Skip mock files at discovery time
-compact-compiler --exclude 'Mock*' --exclude '*.mock.compact'
-
-# Full build (compile + TypeScript + copy .compact files into dist/)
-compact-builder
-
-# Library-publish build: clean dist, preserve src tree, copy package metadata
-compact-builder \
-  --clean-dist \
-  --hierarchical \
-  --copy package.json --copy ../README.md
-```
-
-See [packages/cli/README.md](./packages/cli/README.md) for full CLI documentation, all flags, and examples.
-For the programmatic API (`CompactCompiler`, `CompactBuilder`, services and types), see [packages/builder/README.md](./packages/builder/README.md).
-
-### `@openzeppelin/compact-simulator` ([packages/simulator](./packages/simulator))
-
-TypeScript simulator for testing Compact contracts locally.
-
-**Quickstart:**
-
-```ts
-import { createSimulator } from '@openzeppelin/compact-simulator';
-
-const simulator = createSimulator({});
-// Deploy and execute contract circuits, inspect state, etc.
-```
-
-See package tests in `packages/simulator/src/integration` and `src/unit` for full examples.
 
 ## Contributing
 

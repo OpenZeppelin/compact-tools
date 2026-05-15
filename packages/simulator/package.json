@@ -8,7 +8,7 @@
     "simulator",
     "testing"
   ],
-  "author": "",
+  "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

@@ -40,7 +40,7 @@ import ora, { type Ora } from 'ora';
  *
  * @example Version specification
  * ```bash
- * npx compact-compiler --dir security --skip-zk +0.26.0
+ * npx compact-compiler --dir security --skip-zk +<version>
  * ```
  */
 async function runCompiler(): Promise<void> {
@@ -200,7 +200,7 @@ function showUsageHelp(): void {
   );
   console.log(
     chalk.yellow(
-      '  +<version>        Use specific toolchain version (e.g., +0.29.0)',
+      '  +<version>        Pin the Compact toolchain version',
     ),
   );
   console.log(chalk.yellow('\nArtifact Output Structure:'));
@@ -241,7 +241,7 @@ function showUsageHelp(): void {
   );
   console.log(
     chalk.yellow(
-      '  compact-compiler --skip-zk +0.26.0          # Use specific version',
+      '  compact-compiler --skip-zk +<version>       # Pin toolchain version',
     ),
   );
   console.log(chalk.yellow('\nTurbo integration:'));

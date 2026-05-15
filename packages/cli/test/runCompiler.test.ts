@@ -339,7 +339,7 @@ describe('runCompiler CLI', () => {
         '  --skip-zk         Skip zero-knowledge proof generation',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
-        '  +<version>        Use specific toolchain version (e.g., +0.29.0)',
+        '  +<version>        Pin the Compact toolchain version',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         '\nArtifact Output Structure:',
@@ -370,7 +370,7 @@ describe('runCompiler CLI', () => {
         '  SKIP_ZK=true compact-compiler --dir token   # Use environment variable',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
-        '  compact-compiler --skip-zk +0.26.0          # Use specific version',
+        '  compact-compiler --skip-zk +<version>       # Pin toolchain version',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith('\nTurbo integration:');
       expect(mockConsoleLog).toHaveBeenCalledWith(

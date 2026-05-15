@@ -26,22 +26,7 @@ import ora from 'ora';
  * - `--clean-dist`       - rm -rf dist before building (default off)
  * - `--copy <path>`      - copy an extra file into dist/ for distribution (repeatable; e.g. package.json)
  *
- * @example
- * ```bash
- * # Minimal build
- * npx compact-builder
- *
- * # Custom source/output dirs
- * npx compact-builder --src contracts --out build
- *
- * # Library-publish build (the split-quoted '*'/'archive'/'*' is just JSDoc
- * # — in your own scripts write '<star>/archive/<star>' literally):
- * npx compact-builder \
- *   --clean-dist \
- *   --hierarchical \
- *   --exclude 'Mock*' --exclude '*.mock.compact' --exclude '*'/'archive'/'*' \
- *   --copy package.json --copy ../README.md
- * ```
+ * See `packages/cli/README.md` for usage examples.
  */
 async function runBuilder(): Promise<void> {
   const spinner = ora(chalk.blue('[BUILD] Compact Builder started')).info();

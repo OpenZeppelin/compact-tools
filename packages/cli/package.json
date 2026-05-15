@@ -9,7 +9,7 @@
     "builder",
     "testing"
   ],
-  "author": "",
+  "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -19,7 +19,6 @@
   "files": [
     "dist",
     "README.md",
-    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
