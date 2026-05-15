@@ -3,7 +3,7 @@
  * Runs once before all tests via Vitest's globalSetup.
  */
 
-import { exec } from 'node:child_process';
+import { exec, type SpawnSyncReturns } from 'node:child_process';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,11 +23,32 @@ const CONTRACT_FILES = [
   'SampleZOwnable.compact',
 ];
 
+function isSpawnSyncRet(
+  err: unknown,
+): err is SpawnSyncReturns<string | Buffer> {
+  if (typeof err !== 'object' || err === null) {
+    return false;
+  }
+
+  const typedErr = err as Partial<SpawnSyncReturns<string | Buffer>> &
+    Record<string, unknown>;
+
+  const okErr = typedErr.error instanceof Error;
+  const okStdout =
+    typeof typedErr.stdout === 'string' || Buffer.isBuffer(typedErr.stdout);
+  const okStderr =
+    typeof typedErr.stderr === 'string' || Buffer.isBuffer(typedErr.stderr);
+  const okStatus =
+    typeof typedErr.status === 'number' || typedErr.status === null;
+
+  return okErr && okStdout && okStderr && okStatus;
+}
+
 async function compileContract(contractFile: string): Promise<void> {
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
   const contractName = contractFile.replace('.compact', '');
   const outputDir = join(ARTIFACTS_DIR, contractName);
-  const contractArtifact = join(outputDir, 'contract', 'index.cjs');
+  const contractArtifact = join(outputDir, 'contract', 'index.js');
 
   // Skip if artifact already exists and is newer than source
   if (existsSync(contractArtifact) && existsSync(inputPath)) {
@@ -48,7 +69,22 @@ async function compileContract(contractFile: string): Promise<void> {
   mkdirSync(join(outputDir, 'keys'), { recursive: true });
 
   const command = `compact compile --skip-zk "${inputPath}" "${outputDir}"`;
-  await execAsync(command);
+  try {
+    await execAsync(command);
+  } catch (err: unknown) {
+    if (!isSpawnSyncRet(err)) {
+      throw err;
+    }
+
+    if (err.status === 127) {
+      throw new Error(
+        '`compact` not found (exit code 127). Is it installed and on PATH?',
+      );
+    }
+
+    throw err;
+  }
+
   console.log(`✓ Compiled ${contractFile}`);
 }
 

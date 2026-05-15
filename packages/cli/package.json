@@ -1,6 +1,5 @@
 {
   "name": "@openzeppelin/compact-tools-cli",
-  "private": true,
   "description": "CLI for compiling and building Compact smart contracts",
   "version": "0.0.1",
   "keywords": [
@@ -31,7 +30,7 @@
     "@tsconfig/node24": "^24.0.3",
     "@types/node": "24.10.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.12"
+    "vitest": "^4.0.15"
   },
   "dependencies": {
     "chalk": "^5.6.2",

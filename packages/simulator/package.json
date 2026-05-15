@@ -1,6 +1,5 @@
 {
   "name": "@openzeppelin/compact-tools-simulator",
-  "private": true,
   "description": "Simulator for testing Compact smart contracts",
   "version": "0.0.1",
   "keywords": [
@@ -31,15 +30,14 @@
     "clean": "git clean -fXd"
   },
   "devDependencies": {
-    "@midnight-ntwrk/ledger": "^4.0.0",
-    "@midnight-ntwrk/zswap": "^4.0.0",
     "@tsconfig/node24": "^24.0.3",
     "@types/node": "24.10.1",
-    "fast-check": "^3.15.0",
+    "fast-check": "^4.5.2",
     "typescript": "^5.8.2",
-    "vitest": "^4.0.12"
+    "vitest": "^4.0.15"
   },
   "dependencies": {
-    "@midnight-ntwrk/compact-runtime": "^0.9.0"
+    "@midnight-ntwrk/compact-runtime": "0.14.0",
+    "@midnight-ntwrk/ledger-v7": "^7.0.0"
   }
 }

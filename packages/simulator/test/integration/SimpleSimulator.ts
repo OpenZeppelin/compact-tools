@@ -2,7 +2,7 @@ import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
 import {
   ledger,
   Contract as SimpleContract,
-} from '../fixtures/artifacts/Simple/contract/index.cjs';
+} from '../fixtures/artifacts/Simple/contract/index.js';
 import {
   SimplePrivateState,
   SimpleWitnesses,
@@ -11,7 +11,12 @@ import {
 /**
  * Base simulator
  */
-const SimpleSimulatorBase = createSimulator({
+const SimpleSimulatorBase = createSimulator<
+  SimplePrivateState,
+  ReturnType<typeof ledger>,
+  ReturnType<typeof SimpleWitnesses>,
+  SimpleContract<SimplePrivateState>
+>({
   contractFactory: (witnesses) =>
     new SimpleContract<SimplePrivateState>(witnesses),
   defaultPrivateState: () => SimplePrivateState,

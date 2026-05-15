@@ -5,19 +5,20 @@ import {
   ledger,
   Contract as SampleZOwnable,
   type ZswapCoinPublicKey,
-} from '../fixtures/artifacts/SampleZOwnable/contract/index.cjs';
+} from '../fixtures/artifacts/SampleZOwnable/contract/index.js';
 import {
   SampleZOwnablePrivateState,
   SampleZOwnableWitnesses,
 } from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses';
 
-/**
- * Type constructor args
- */
+/** Type constructor args */
 type SampleZOwnableArgs = readonly [
   owner: Uint8Array,
   instanceSalt: Uint8Array,
 ];
+
+/** Concrete ledger type extracted from the generated artifact */
+type SampleZOwnableLedger = ReturnType<typeof ledger>;
 
 /**
  * Base simulator
@@ -26,6 +27,7 @@ const SampleZOwnableSimulatorBase = createSimulator<
   SampleZOwnablePrivateState,
   ReturnType<typeof ledger>,
   ReturnType<typeof SampleZOwnableWitnesses>,
+  SampleZOwnable<SampleZOwnablePrivateState>,
   SampleZOwnableArgs
 >({
   contractFactory: (witnesses) =>
@@ -35,7 +37,7 @@ const SampleZOwnableSimulatorBase = createSimulator<
     return [owner, instanceSalt];
   },
   ledgerExtractor: (state) => ledger(state),
-  witnessesFactory: () => SampleZOwnableWitnesses(),
+  witnessesFactory: () => SampleZOwnableWitnesses<SampleZOwnableLedger>(),
 });
 
 /**
@@ -111,15 +113,6 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
     nonce: Uint8Array,
   ): Uint8Array {
     return this.circuits.pure._computeOwnerId(pk, nonce);
-  }
-
-  /**
-   * @description Transfers ownership to owner id `newOwnerId` without
-   * enforcing permission checks on the caller.
-   * @param newOwnerId - The unique identifier of the new owner calculated by `SHA256(pk, nonce)`.
-   */
-  public _transferOwnership(newOwnerId: Uint8Array) {
-    this.circuits.impure._transferOwnership(newOwnerId);
   }
 
   public readonly privateState = {

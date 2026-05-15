@@ -6,7 +6,6 @@ allowing you to simulate contract behavior locally without blockchain deployment
 ## Features
 
 - 🧪 **Local Testing** - Test contracts without deployment.
-- 🎭 **Caller Context Simulation** - Test multi-user interactions.
 - 🔧 **Witness Overrides** - Mock and spy on witness functions.
 - 📊 **State Inspection** - Access private and contract state.
 - 🚀 **Type-Safe** - Full TypeScript support with generics.
@@ -15,7 +14,7 @@ allowing you to simulate contract behavior locally without blockchain deployment
 
 ```typescript
 import { createSimulator } from '@openzeppelin-compact/contracts-simulator';
-import { Contract, ledger } from './artifacts/MyContract/contract/index.cjs';
+import { Contract, ledger } from './artifacts/MyContract/contract/index.js';
 
 // 1. Define your contract arguments type
 type MyContractArgs = readonly [owner: Uint8Array, value: bigint];
@@ -46,7 +45,7 @@ The base simulator acts as a configuration class that the actual simulator will 
 
 ```typescript
 import { createSimulator } from '@openzeppelin-compact/contracts-simulator';
-import { Contract as MyContract, ledger } from './artifacts/MyContract/contract/index.cjs';
+import { Contract as MyContract, ledger } from './artifacts/MyContract/contract/index.js';
 import { MyContractWitnesses, MyContractPrivateState } from './MyContractWitnesses.js';
 
 // Define contract constructor arguments as a tuple type
@@ -147,50 +146,6 @@ public getBalance(): bigint {
 
 ## Advanced Features
 
-### 🎭 Caller Context Management
-
-Simulate different users interacting with the contract:
-
-```typescript
-// One-off caller context
-simulator.as(alice).transfer(zBob, 100n);
-simulator.as(bob).withdraw(50n);
-
-// Persistent caller context
-simulator.setPersistentCaller(alice);
-simulator.deposit(100n);        // Called by alice
-simulator.transfer(zBob, 50n);  // Called by alice
-
-// Reset caller context
-simulator.resetCaller();
-```
-
-### ⚠️ Important: Key Encoding for Contracts
-
-**Same key, different formats:**
-
-- `alice` = CoinPublicKey (hex string) - for simulator context.
-- `zAlice` = ZswapCoinPublicKey (encoded) - for contract parameters.
-
-```typescript
-// For testing, create mock 64-character hex keys
-const alice = '0'.repeat(63) + '1';  // CoinPublicKey format
-const bob = '0'.repeat(63) + '2';
-
-// Encode for contract use
-const zAlice = { bytes: encodeCoinPublicKey(alice) };  // ZswapCoinPublicKey format
-const zBob = { bytes: encodeCoinPublicKey(bob) };
-
-// Incorrect - using wrong format for `bob`
-simulator.as(alice).transfer(bob, 100n);    // ❌ Contracts need encoded format
-
-// Correct - encoded as ZswapCoinPublicKey
-simulator.as(alice).transfer(zBob, 100n);  // ✅
-simulator.as(alice).transferFrom(zAlice, zBob, 100n);  // ✅
-```
-
-**Remember**: `as()` takes hex strings, contract circuits take encoded keys.
-
 ### 🔧 Witness Overrides
 
 Perfect for testing edge cases and tracking witness usage:
@@ -248,25 +203,18 @@ import { encodeCoinPublicKey } from '@midnight-ntwrk/compact-runtime';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MyContractSimulator } from './MyContractSimulator';
 
-describe('MyContract', () => {
-  let simulator: MyContractSimulator;
-  let owner = '0'.repeat(63) + '1';
-  let zOwner = { bytes: encodeCoinPublicKey(owner) };
+let simulator: MyContractSimulator;
+let val = 123n;
+let newVal = 456n;
 
+describe('MyContract', () => {
   beforeEach(() => {
-    simulator = new MyContractSimulator(
-      zOwner,
-      { privateState: MyPrivateState.generate() }
-    );
+    simulator = new MyContractSimulator(val);
   });
 
-  it('should transfer ownership', () => {
-    let newOwner = '0'.repeat(63) + '2';
-    let zNewOwner = { bytes: encodeCoinPublicKey(newOwner) };
-
-    simulator.as(owner).transferOwnership(zNewOwner);
-
-    expect(simulator.getPublicState()._owner).toEqual(zNewOwner);
+  it('should set new value', () => {
+    simulator.setVal(newVal);
+    expect(simulator.getPublicState()._val).toEqual(newVal);
   });
 });
 ```
@@ -286,36 +234,6 @@ it('should handle custom witness behavior', () => {
   simulator.performOperation();
 
   expect(wasCalled).toBe(true);
-});
-```
-
-### Multi-User Interactions
-
-```typescript
-it('should handle multi-user token transfers', () => {
-  // PKs
-  const alice = '0'.repeat(63) + '1';
-  const zAlice = { bytes: encodeCoinPublicKey(alice) };
-
-  const bob = '0'.repeat(63) + '2';
-  const zBob = { bytes: encodeCoinPublicKey(bob) };
-
-  const charlie = '0'.repeat(63) + '3';
-  const zCharlie = { bytes: encodeCoinPublicKey(charlie) };
-
-  // Alice deposits
-  simulator.as(alice).deposit(1000n);
-
-  // Alice transfers to Bob
-  simulator.as(alice).transfer(zBob, 300n);
-
-  // Bob transfers to Charlie
-  simulator.as(bob).transfer(zCharlie, 100n);
-
-  const state = simulator.getPublicState();
-  expect(state._balances.lookup(zAlice)).toBe(700n);
-  expect(state._balances.lookup(zBob)).toBe(200n);
-  expect(state._balances.lookup(zCharlie)).toBe(100n);
 });
 ```
 
@@ -363,10 +281,7 @@ interface BaseSimulatorOptions<P, W> {
 ### Core Methods
 
 | Method | Description |
-|--------|-------------|
-| `as(caller)` | Execute next operation as specified caller |
-| `setPersistentCaller(caller)` | Set persistent caller for all operations |
-| `resetCaller()` | Clears the caller context |
+| ------ | ----------- |
 | `overrideWitness(key, fn)` | Override a specific witness function |
 | `getPrivateState()` | Get current private state |
 | `getPublicState()` | Get current public ledger state |
@@ -378,4 +293,3 @@ interface BaseSimulatorOptions<P, W> {
 2. **Witness Testing**: Use witness overrides to test edge cases without modifying contract code.
 3. **Deterministic Tests**: Override witnesses with fixed values for reproducible tests.
 4. **State Validation**: Inspect state after operations to ensure correctness.
-5. **Multi-User Testing**: Use caller context to simulate realistic multi-user scenarios.
