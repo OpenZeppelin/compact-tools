@@ -199,9 +199,7 @@ function showUsageHelp(): void {
     chalk.yellow('  --skip-zk         Skip zero-knowledge proof generation'),
   );
   console.log(
-    chalk.yellow(
-      '  +<version>        Pin the Compact toolchain version',
-    ),
+    chalk.yellow('  +<version>        Pin the Compact toolchain version'),
   );
   console.log(chalk.yellow('\nArtifact Output Structure:'));
   console.log(chalk.yellow('  Default (flattened): <out>/<ContractName>/'));
