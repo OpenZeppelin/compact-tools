@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ConfigError } from '../errors.ts';
-import { loadConfig } from './load.ts';
+import { CompactConfig } from './compact-config.ts';
 
 const MIN_VALID = `
 [profile]
@@ -28,19 +28,28 @@ function tmpRepo(toml: string): string {
   return dir;
 }
 
-describe('loadConfig', () => {
+describe('CompactConfig', () => {
   it('parses a minimal valid config', async () => {
     const dir = tmpRepo(MIN_VALID);
-    const { config, rootDir } = await loadConfig(undefined, dir);
-    expect(rootDir).toBe(dir);
-    expect(config.profile.default_network).toBe('local');
-    expect(config.networks.local.network_id).toBe('undeployed');
-    expect(config.contracts.Token.artifact).toBe('src/artifacts/Token/Token');
+    const config = await CompactConfig.load(undefined, dir);
+    expect(config.rootDir).toBe(dir);
+    expect(config.defaultNetwork).toBe('local');
+    expect(config.network('local').network_id).toBe('undeployed');
+    expect(config.contract('Token').artifact).toBe('src/artifacts/Token/Token');
+  });
+
+  it('lookup methods throw with the available set on miss', async () => {
+    const dir = tmpRepo(MIN_VALID);
+    const config = await CompactConfig.load(undefined, dir);
+    expect(() => config.network('ghost')).toThrow(/Available: local/);
+    expect(() => config.contract('Vault')).toThrow(/Available: Token/);
   });
 
   it('rejects a config whose default_network does not exist', async () => {
     const dir = tmpRepo(`${MIN_VALID}\n[profile]\ndefault_network = "ghost"\n`);
-    await expect(loadConfig(undefined, dir)).rejects.toThrow(ConfigError);
+    await expect(CompactConfig.load(undefined, dir)).rejects.toThrow(
+      ConfigError,
+    );
   });
 
   it('rejects a contract missing signing_key_file', async () => {
@@ -56,7 +65,9 @@ proof_server = "http://x"
 [contracts.Token]
 artifact = "x"
 `);
-    await expect(loadConfig(undefined, dir)).rejects.toThrow(ConfigError);
+    await expect(CompactConfig.load(undefined, dir)).rejects.toThrow(
+      ConfigError,
+    );
   });
 
   it('rejects when init_private_state is set but private_state_id is not', async () => {
@@ -74,6 +85,8 @@ artifact = "x"
 signing_key_file = "x.sk"
 init_private_state = { file = "x.json" }
 `);
-    await expect(loadConfig(undefined, dir)).rejects.toThrow(ConfigError);
+    await expect(CompactConfig.load(undefined, dir)).rejects.toThrow(
+      ConfigError,
+    );
   });
 });

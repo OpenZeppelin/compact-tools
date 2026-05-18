@@ -1,34 +1,34 @@
-import { readFile } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
 import { ConfigError } from '../errors.ts';
+import { LoaderContext } from './context.ts';
 
 /**
- * Read a 32-byte signing key from `[contracts.X].signing_key_file` and
- * return it as lowercase hex (no `0x` prefix).
+ * A contract's maintenance-authority signing key, loaded from
+ * `[contracts.X].signing_key_file` in `compact.toml`.
  *
- * The signing key is the contract's maintenance authority. We refuse fuzzy
- * input formats — exactly 64 hex chars after stripping optional `0x` and
- * trimming whitespace — to avoid the foot-gun where midnight-js silently
+ * Canonical form: 64 lowercase hex chars, no `0x` prefix. We refuse fuzzy
+ * input formats to avoid the foot-gun where midnight-js silently
  * auto-samples a key the user then can't recover.
  */
-export async function loadSigningKey(
-  rootDir: string,
-  path: string,
-): Promise<string> {
-  const abs = isAbsolute(path) ? path : resolve(rootDir, path);
-  let raw: string;
-  try {
-    raw = await readFile(abs, 'utf8');
-  } catch (e) {
-    throw new ConfigError(
-      `signing_key_file: failed to read ${abs}: ${(e as Error).message}`,
-    );
+export class SigningKey {
+  readonly hex: string;
+
+  private constructor(hex: string) {
+    this.hex = hex;
   }
-  const trimmed = raw.trim().replace(/^0x/i, '');
-  if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-    throw new ConfigError(
-      `signing_key_file ${abs}: expected 32 bytes hex-encoded (64 hex chars)`,
-    );
+
+  /**
+   * Read and validate a key file — exactly 64 hex chars after stripping
+   * optional `0x` and trimming whitespace.
+   */
+  static async load(rootDir: string, path: string): Promise<SigningKey> {
+    const ctx = new LoaderContext(rootDir);
+    const { text, path: abs } = await ctx.readText(path, 'signing_key_file');
+    const trimmed = text.trim().replace(/^0x/i, '');
+    if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+      throw new ConfigError(
+        `signing_key_file ${abs}: expected 32 bytes hex-encoded (64 hex chars)`,
+      );
+    }
+    return new SigningKey(trimmed.toLowerCase());
   }
-  return trimmed.toLowerCase();
 }

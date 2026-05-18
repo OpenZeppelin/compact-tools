@@ -8,21 +8,17 @@ import {
 import { UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
-import { loadConstructorArgs } from './loaders/args.ts';
-import { type LoadedArtifact, loadArtifact } from './loaders/artifact.ts';
-import { loadConfig } from './config/load.ts';
-import type {
-  CompactConfig,
-  ContractConfig,
-  NetworkConfig,
-} from './config/schema.ts';
+import { ConstructorArgs } from './loaders/args.ts';
+import { Artifact } from './loaders/artifact.ts';
+import { CompactConfig } from './config/compact-config.ts';
+import type { ContractConfig, NetworkConfig } from './config/schema.ts';
 import { ConfigError, DeployTxFailedError } from './errors.ts';
-import { loadInitialPrivateState } from './loaders/init-state.ts';
+import { InitialPrivateState } from './loaders/init-state.ts';
 import { Deployments, type DeploymentRecord } from './deployments.ts';
 import { buildProviders } from './providers/build.ts';
 import { applyNetwork } from './providers/network.ts';
 import { ProofServer } from './providers/proof-server.ts';
-import { loadSigningKey } from './loaders/signing-key.ts';
+import { SigningKey } from './loaders/signing-key.ts';
 import { buildDeployerWallet } from './wallet/build-deployer.ts';
 import { type SeedResolution, resolveSeed } from './wallet/resolve.ts';
 
@@ -87,13 +83,13 @@ export async function runPipeline(
 ): Promise<PipelineResult> {
   const { logger } = opts;
 
-  const { config, rootDir } = await loadConfig(opts.configPath);
+  const config = await CompactConfig.load(opts.configPath);
+  const { rootDir } = config;
   const { networkName, network, contract } = resolveTargets(opts, config);
 
-  const signingKey = await loadSigningKey(rootDir, contract.signing_key_file);
+  const signingKey = await SigningKey.load(rootDir, contract.signing_key_file);
   const seedResolution = await maybeResolveSeed(opts, {
     config,
-    rootDir,
     networkName,
     network,
   });
@@ -112,9 +108,9 @@ export async function runPipeline(
       `Network ID: ${env.networkId}; proof server: ${env.proofServer}`,
     );
 
-    const artifact = await loadArtifact({
+    const artifact = await Artifact.load({
       rootDir,
-      artifactsDir: config.profile.artifacts_dir,
+      artifactsDir: config.artifactsDir,
       artifact: contract.artifact,
       contractName: opts.contract,
       witnesses: contract.witnesses,
@@ -143,12 +139,12 @@ export async function runPipeline(
         zkConfigPath: artifact.zkConfigPath,
       });
 
-      const args = await loadConstructorArgs(
+      const args = await ConstructorArgs.load(
         contract,
         rootDir,
         opts.argsOverride,
       );
-      const initialPrivateState = await loadInitialPrivateState(
+      const initialPrivateState = await InitialPrivateState.load(
         contract.init_private_state,
         rootDir,
       );
@@ -168,7 +164,7 @@ export async function runPipeline(
         return dryRunResult({
           contractName: opts.contract,
           networkName,
-          signingKey,
+          signingKey: signingKey.hex,
           deployer,
           artifact: contract.artifact,
         });
@@ -179,21 +175,21 @@ export async function runPipeline(
         contractName: opts.contract,
         contract,
         artifact,
-        signingKey,
-        args,
-        initialPrivateState,
+        signingKey: signingKey.hex,
+        args: args.values,
+        initialPrivateState: initialPrivateState?.value,
       });
 
       const record = toDeploymentRecord({
         deployTxData: txResult.deployTxData,
-        signingKey,
+        signingKey: signingKey.hex,
         deployer,
         artifact: contract.artifact,
       });
 
       const deployments = new Deployments({
         rootDir,
-        deploymentsDir: config.profile.deployments_dir,
+        deploymentsDir: config.deploymentsDir,
         network: networkName,
       });
       const persistResult = await deployments.record(opts.contract, record);
@@ -232,25 +228,17 @@ function resolveTargets(
   opts: PipelineOptions,
   config: CompactConfig,
 ): ResolvedTargets {
-  const networkName = opts.network ?? config.profile.default_network;
+  const networkName = opts.network ?? config.defaultNetwork;
   if (!networkName) {
     throw new ConfigError(
       'No network selected. Pass --network <name> or set [profile].default_network.',
     );
   }
-  const network = config.networks[networkName];
-  if (!network) {
-    throw new ConfigError(
-      `Network "${networkName}" not defined. Available: ${Object.keys(config.networks).join(', ')}`,
-    );
-  }
-  const contract = config.contracts[opts.contract];
-  if (!contract) {
-    throw new ConfigError(
-      `Contract "${opts.contract}" not defined. Available: ${Object.keys(config.contracts).join(', ')}`,
-    );
-  }
-  return { networkName, network, contract };
+  return {
+    networkName,
+    network: config.network(networkName),
+    contract: config.contract(opts.contract),
+  };
 }
 
 /**
@@ -263,7 +251,6 @@ async function maybeResolveSeed(
   opts: PipelineOptions,
   ctx: {
     config: CompactConfig;
-    rootDir: string;
     networkName: string;
     network: NetworkConfig;
   },
@@ -271,7 +258,6 @@ async function maybeResolveSeed(
   if (opts.walletProvider) return undefined;
   return resolveSeed({
     config: ctx.config,
-    rootDir: ctx.rootDir,
     networkName: ctx.networkName,
     network: ctx.network,
     seedFile: opts.seedFile,
@@ -337,9 +323,9 @@ interface ExecuteDeployArgs {
   providers: Parameters<typeof deployContract>[0];
   contractName: string;
   contract: ContractConfig;
-  artifact: LoadedArtifact;
+  artifact: Artifact;
   signingKey: string;
-  args: unknown[];
+  args: readonly unknown[];
   initialPrivateState: unknown;
 }
 
@@ -417,7 +403,7 @@ function logDryRun(
   details: {
     contractName: string;
     networkName: string;
-    artifact: LoadedArtifact;
+    artifact: Artifact;
     argCount: number;
     hasPrivateState: boolean;
     faucet: boolean;

@@ -44,11 +44,10 @@ const networkSchema = z.object({
   faucet_url: url.optional(),
 });
 
-const walletSchema = z
-  .object({
-    keystore: z.string().optional(),
-  })
-  .optional();
+const walletObjectSchema = z.object({
+  keystore: z.string().optional(),
+});
+const walletSchema = walletObjectSchema.optional();
 
 const fileRefSchema = z.object({ file: z.string().min(1) });
 const moduleRefSchema = z.object({
@@ -97,9 +96,15 @@ export const configSchema = z
     },
   );
 
-export type CompactConfig = z.infer<typeof configSchema>;
+/**
+ * Zod-inferred shape of a validated `compact.toml`. Used internally by
+ * the {@link CompactConfig} class; not exported from the package barrel.
+ */
+export type CompactConfigData = z.infer<typeof configSchema>;
 export type NetworkConfig = z.infer<typeof networkSchema>;
 export type ContractConfig = z.infer<typeof contractSchema>;
+export type Profile = z.infer<typeof profileSchema>;
+export type WalletConfig = z.infer<typeof walletObjectSchema>;
 export type FileRef = z.infer<typeof fileRefSchema>;
 export type ModuleRef = z.infer<typeof moduleRefSchema>;
 export type FileOrModuleRef = z.infer<typeof fileOrModuleRefSchema>;

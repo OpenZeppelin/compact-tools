@@ -6,11 +6,12 @@
  * in `bin/` re-uses the same exports — it is just an opinionated shell.
  */
 // biome-ignore-all lint/performance/noBarrelFile: this file is the programmatic API surface for consumers of @openzeppelin/compact-deploy
-export { loadConfig } from './config/load.ts';
+export { CompactConfig } from './config/compact-config.ts';
 export type {
-  CompactConfig,
   ContractConfig,
   NetworkConfig,
+  Profile,
+  WalletConfig,
 } from './config/schema.ts';
 export { Deployments } from './deployments.ts';
 export type {
@@ -33,6 +34,12 @@ export {
   UnfundedWalletError,
   WalletError,
 } from './errors.ts';
+export { Artifact } from './loaders/artifact.ts';
+export type { LoadArtifactOptions } from './loaders/artifact.ts';
+export { ConstructorArgs } from './loaders/args.ts';
+export type { ArgsSource } from './loaders/args.ts';
+export { InitialPrivateState } from './loaders/init-state.ts';
+export { SigningKey } from './loaders/signing-key.ts';
 export { Keystore } from './wallet/keystore.ts';
 export type { MidnightKeystore } from './wallet/keystore.ts';
 export { ProofServer } from './providers/proof-server.ts';

@@ -1,73 +1,60 @@
-import { readFile } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import {
-  type FileOrModuleRef,
-  isFileRef,
-  isModuleRef,
-} from '../config/schema.ts';
+import { type FileOrModuleRef } from '../config/schema.ts';
 import { ConfigError } from '../errors.ts';
+import { LoaderContext } from './context.ts';
+import { RefResolver } from './ref-resolver.ts';
 
 /**
- * Load the initial private state passed to a contract's constructor.
+ * The initial private-state value passed to a contract's constructor.
  *
- * Source is either `{ file }` (JSON, with `"123n"` strings revived as
- * bigints) or `{ module, export }` (TS/JS module, value or zero-arg function).
- * Returns `undefined` when the config omits `init_private_state`.
+ * `load` returns `undefined` when `[contracts.X].init_private_state` is
+ * omitted — a contract either has private state or it doesn't, and we
+ * surface that distinction at the type level rather than via a sentinel
+ * `value`.
  */
-export async function loadInitialPrivateState(
-  ref: FileOrModuleRef | undefined,
-  rootDir: string,
-): Promise<unknown> {
-  if (!ref) return undefined;
+export class InitialPrivateState {
+  readonly value: unknown;
 
-  if (isFileRef(ref)) {
-    const path = abs(rootDir, ref.file);
-    let raw: string;
-    try {
-      raw = await readFile(path, 'utf8');
-    } catch (e) {
-      throw new ConfigError(
-        `init_private_state: failed to read ${path}: ${(e as Error).message}`,
-      );
-    }
-    try {
-      return JSON.parse(raw, bigintReviver);
-    } catch (e) {
-      throw new ConfigError(
-        `init_private_state: invalid JSON at ${path}: ${(e as Error).message}`,
-      );
-    }
+  private constructor(value: unknown) {
+    this.value = value;
   }
 
-  if (isModuleRef(ref)) {
-    const path = abs(rootDir, ref.module);
-    let mod: Record<string, unknown>;
-    try {
-      mod = await import(pathToFileURL(path).href);
-    } catch (e) {
-      throw new ConfigError(
-        `init_private_state: failed to import ${path}: ${(e as Error).message}`,
-      );
-    }
-    const exported = mod[ref.export];
-    if (exported === undefined) {
-      throw new ConfigError(
-        `init_private_state: module ${path} has no export "${ref.export}"`,
-      );
-    }
-    return typeof exported === 'function'
-      ? await (exported as () => unknown)()
-      : exported;
+  /**
+   * Source is either `{ file }` (JSON, with `"123n"` strings revived as
+   * bigints) or `{ module, export }` (TS/JS module, value or zero-arg
+   * function).
+   */
+  static async load(
+    ref: FileOrModuleRef | undefined,
+    rootDir: string,
+  ): Promise<InitialPrivateState | undefined> {
+    if (!ref) return undefined;
+
+    const resolver = new RefResolver<unknown>(
+      new LoaderContext(rootDir),
+      'init_private_state',
+    );
+    const value = await resolver.resolve(
+      ref,
+      (text, path) => {
+        try {
+          return JSON.parse(text, bigintReviver);
+        } catch (e) {
+          throw new ConfigError(
+            `init_private_state: invalid JSON at ${path}: ${(e as Error).message}`,
+          );
+        }
+      },
+      (v, path, exp) => {
+        if (v === undefined) {
+          throw new ConfigError(
+            `init_private_state: module ${path} has no export "${exp}"`,
+          );
+        }
+        return v;
+      },
+    );
+    return new InitialPrivateState(value);
   }
-
-  throw new ConfigError(
-    'init_private_state must be { file } or { module, export }',
-  );
-}
-
-function abs(rootDir: string, p: string): string {
-  return isAbsolute(p) ? p : resolve(rootDir, p);
 }
 
 function bigintReviver(_key: string, value: unknown): unknown {

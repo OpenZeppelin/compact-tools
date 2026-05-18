@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
-import type { CompactConfig, NetworkConfig } from '../config/schema.ts';
+import type { CompactConfig } from '../config/compact-config.ts';
+import type { NetworkConfig } from '../config/schema.ts';
 import { WalletError } from '../errors.ts';
 import { Keystore } from './keystore.ts';
 import { localPrefundedSeed } from './local-seeds.ts';
@@ -27,7 +28,6 @@ export interface SeedResolution {
 
 export interface ResolveOptions {
   config: CompactConfig;
-  rootDir: string;
   networkName: string;
   network: NetworkConfig;
   seedFile?: string;
@@ -37,8 +37,9 @@ export interface ResolveOptions {
 export async function resolveSeed(
   opts: ResolveOptions,
 ): Promise<SeedResolution> {
+  const { rootDir } = opts.config;
   if (opts.seedFile) {
-    const path = absoluteUnder(opts.rootDir, opts.seedFile);
+    const path = absoluteUnder(rootDir, opts.seedFile);
     const raw = await safeRead(path, '--seed-file');
     return { seed: classifySeed(raw), origin: 'cli' };
   }
@@ -50,7 +51,7 @@ export async function resolveSeed(
 
   const keystorePath = opts.config.wallet?.keystore;
   if (keystorePath) {
-    const path = absoluteUnder(opts.rootDir, keystorePath);
+    const path = absoluteUnder(rootDir, keystorePath);
     if (!existsSync(path)) {
       throw new WalletError(`Keystore file not found: ${path}`);
     }

@@ -1,10 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import {
-  CompiledContract,
-  type Contract,
-} from '@midnight-ntwrk/compact-js';
+import { CompiledContract, type Contract } from '@midnight-ntwrk/compact-js';
 import type { Types } from 'effect';
 import {
   isFileRef,
@@ -12,9 +8,10 @@ import {
   type FileOrModuleRef,
 } from '../config/schema.ts';
 import { ArtifactNotFoundError, ConfigError } from '../errors.ts';
+import { LoaderContext } from './context.ts';
 
 /**
- * Locate a compactc artifact bundle on disk and wrap it for the deploy
+ * A compactc artifact bundle, located on disk and wrapped for the deploy
  * pipeline.
  *
  * The bundle layout (produced by `compactc` / `compact-builder`) is:
@@ -27,15 +24,11 @@ import { ArtifactNotFoundError, ConfigError } from '../errors.ts';
 
 type AnyContract = Contract.Any;
 type AnyWitnesses = Contract.Witnesses<AnyContract>;
-type AnyCompiledContract = CompiledContract.CompiledContract<AnyContract, unknown, never>;
-
-/** Output of {@link loadArtifact}; consumed by {@link buildProviders} and the pipeline. */
-export interface LoadedArtifact {
-  compiledContract: AnyCompiledContract;
-  zkConfigPath: string;
-  artifactPath: string;
-  circuitNames: string[];
-}
+type AnyCompiledContract = CompiledContract.CompiledContract<
+  AnyContract,
+  unknown,
+  never
+>;
 
 export interface LoadArtifactOptions {
   rootDir: string;
@@ -45,72 +38,97 @@ export interface LoadArtifactOptions {
   witnesses?: FileOrModuleRef;
 }
 
-/**
- * Resolve, validate, and import a compactc artifact bundle.
- *
- * Throws {@link ArtifactNotFoundError} when the directory, `contract/index`
- * entry, or `keys/`/`zkir/` subdirs are missing. The returned `circuitNames`
- * is a sorted list scraped from `.bzkir` files — useful for diagnostics and
- * for the JSON CLI output.
- */
-export async function loadArtifact({
-  rootDir,
-  artifactsDir,
-  artifact,
-  contractName,
-  witnesses,
-}: LoadArtifactOptions): Promise<LoadedArtifact> {
-  const artifactPath = resolveUnderRoot(rootDir, artifact, artifactsDir);
+export class Artifact {
+  readonly compiledContract: AnyCompiledContract;
+  readonly artifactPath: string;
+  readonly zkConfigPath: string;
+  readonly circuitNames: readonly string[];
 
-  if (!existsSync(artifactPath)) {
-    throw new ArtifactNotFoundError(artifactPath);
+  private constructor(input: {
+    compiledContract: AnyCompiledContract;
+    artifactPath: string;
+    zkConfigPath: string;
+    circuitNames: readonly string[];
+  }) {
+    this.compiledContract = input.compiledContract;
+    this.artifactPath = input.artifactPath;
+    this.zkConfigPath = input.zkConfigPath;
+    this.circuitNames = input.circuitNames;
   }
 
-  const contractDir = resolve(artifactPath, 'contract');
-  const entry = findEntry(contractDir, artifactPath);
-  if (!entry) {
-    throw new ArtifactNotFoundError(
-      `${artifactPath} (no contract/index.{cjs,js} or index.{cjs,js} found)`,
-    );
+  /**
+   * Resolve, validate, and import a compactc artifact bundle.
+   *
+   * Throws {@link ArtifactNotFoundError} when the directory, `contract/index`
+   * entry, or `keys/`/`zkir/` subdirs are missing. The returned `circuitNames`
+   * is a sorted list scraped from `.bzkir` files — useful for diagnostics
+   * and for the JSON CLI output.
+   */
+  static async load(opts: LoadArtifactOptions): Promise<Artifact> {
+    const { rootDir, artifactsDir, artifact, contractName, witnesses } = opts;
+    const ctx = new LoaderContext(rootDir);
+    const artifactPath = resolveUnderRoot(rootDir, artifact, artifactsDir);
+
+    if (!existsSync(artifactPath)) {
+      throw new ArtifactNotFoundError(artifactPath);
+    }
+
+    const contractDir = resolve(artifactPath, 'contract');
+    const entry = findEntry(contractDir, artifactPath);
+    if (!entry) {
+      throw new ArtifactNotFoundError(
+        `${artifactPath} (no contract/index.{cjs,js} or index.{cjs,js} found)`,
+      );
+    }
+
+    const keysDir = resolve(artifactPath, 'keys');
+    const zkirDir = resolve(artifactPath, 'zkir');
+    if (!existsSync(keysDir) || !existsSync(zkirDir)) {
+      throw new ArtifactNotFoundError(
+        `${artifactPath} (missing keys/ or zkir/ subdirectory)`,
+      );
+    }
+
+    const circuitNames = collectCircuitNames(zkirDir);
+    const Ctor = await importContractCtor(ctx, entry);
+    const witnessImpls = witnesses
+      ? await importWitnesses(ctx, witnesses)
+      : undefined;
+
+    const compiledContract = buildCompiledContract({
+      contractName,
+      Ctor,
+      witnessImpls,
+      contractDir,
+    });
+
+    return new Artifact({
+      compiledContract,
+      artifactPath,
+      zkConfigPath: artifactPath,
+      circuitNames,
+    });
   }
-
-  const keysDir = resolve(artifactPath, 'keys');
-  const zkirDir = resolve(artifactPath, 'zkir');
-  if (!existsSync(keysDir) || !existsSync(zkirDir)) {
-    throw new ArtifactNotFoundError(
-      `${artifactPath} (missing keys/ or zkir/ subdirectory)`,
-    );
-  }
-
-  const circuitNames = collectCircuitNames(zkirDir);
-
-  const Ctor = await importContractCtor(entry);
-  const witnessImpls = witnesses ? await importWitnesses(witnesses, rootDir) : undefined;
-
-  const compiledContract = buildCompiledContract({
-    contractName,
-    Ctor,
-    witnessImpls,
-    contractDir,
-  });
-
-  return { compiledContract, zkConfigPath: artifactPath, artifactPath, circuitNames };
 }
 
-async function importContractCtor(entry: string): Promise<Types.Ctor<AnyContract>> {
-  const mod = (await import(pathToFileURL(entry).href)) as ArtifactModule;
-  const Ctor = mod.Contract ?? mod.default?.Contract;
+async function importContractCtor(
+  ctx: LoaderContext,
+  entry: string,
+): Promise<Types.Ctor<AnyContract>> {
+  const { mod, path } = await ctx.importModule(entry, 'artifact');
+  const m = mod as ArtifactModule;
+  const Ctor = m.Contract ?? m.default?.Contract;
   if (!Ctor) {
     throw new ConfigError(
-      `Artifact at ${entry} does not export a \`Contract\` class (got keys: ${Object.keys(mod).join(', ')})`,
+      `Artifact at ${path} does not export a \`Contract\` class (got keys: ${Object.keys(m).join(', ')})`,
     );
   }
   return Ctor;
 }
 
 async function importWitnesses(
+  ctx: LoaderContext,
   ref: FileOrModuleRef,
-  rootDir: string,
 ): Promise<AnyWitnesses> {
   if (isFileRef(ref)) {
     throw new ConfigError(
@@ -120,16 +138,12 @@ async function importWitnesses(
   if (!isModuleRef(ref)) {
     throw new ConfigError('witnesses must be { module, export }');
   }
-  const path = isAbsolute(ref.module) ? ref.module : resolve(rootDir, ref.module);
-  let mod: Record<string, unknown>;
-  try {
-    mod = await import(pathToFileURL(path).href);
-  } catch (e) {
-    throw new ConfigError(`witnesses: failed to import ${path}: ${(e as Error).message}`);
-  }
+  const { mod, path } = await ctx.importModule(ref.module, 'witnesses');
   const exported = mod[ref.export];
   const resolved =
-    typeof exported === 'function' ? await (exported as () => unknown)() : exported;
+    typeof exported === 'function'
+      ? await (exported as () => unknown)()
+      : exported;
   if (typeof resolved !== 'object' || resolved === null) {
     throw new ConfigError(
       `witnesses: module ${path} export "${ref.export}" must resolve to an object`,
@@ -156,14 +170,21 @@ interface ArtifactModule {
   default?: { Contract?: Types.Ctor<AnyContract> };
 }
 
-function resolveUnderRoot(rootDir: string, artifact: string, artifactsDir: string): string {
+function resolveUnderRoot(
+  rootDir: string,
+  artifact: string,
+  artifactsDir: string,
+): string {
   if (isAbsolute(artifact)) return artifact;
   const direct = resolve(rootDir, artifact);
   if (existsSync(direct)) return direct;
   return resolve(rootDir, artifactsDir, artifact);
 }
 
-function findEntry(contractDir: string, artifactDir: string): string | undefined {
+function findEntry(
+  contractDir: string,
+  artifactDir: string,
+): string | undefined {
   const candidates = [
     resolve(contractDir, 'index.cjs'),
     resolve(contractDir, 'index.js'),
