@@ -1,0 +1,47 @@
+import { deploy, ConfigError } from '@openzeppelin/compact-deploy';
+import { describe, expect, it } from 'vitest';
+import { testLogger } from '../_harness/logger.ts';
+import { CONFIG_PATH, requireFixtureArtifact } from '../_harness/paths.ts';
+
+/**
+ * Spec: pipeline surfaces typed `ConfigError`s for foreseeable user
+ * mistakes, with messages that name the offending key/value. These run
+ * against the live stack but never get past the config-validation phase,
+ * so they're fast.
+ */
+describe('compact-deploy — config errors are typed and actionable', () => {
+  it('rejects an unknown contract name', async () => {
+    requireFixtureArtifact();
+    await expect(
+      deploy({
+        contract: 'Nonexistent',
+        network: 'local',
+        configPath: CONFIG_PATH,
+        logger: testLogger(),
+      }),
+    ).rejects.toThrow(ConfigError);
+  });
+
+  it('rejects an unknown network name', async () => {
+    requireFixtureArtifact();
+    await expect(
+      deploy({
+        contract: 'Counter',
+        network: 'unknown-network',
+        configPath: CONFIG_PATH,
+        logger: testLogger(),
+      }),
+    ).rejects.toThrow(ConfigError);
+  });
+
+  it('rejects a missing compact.toml path', async () => {
+    await expect(
+      deploy({
+        contract: 'Counter',
+        network: 'local',
+        configPath: '/nonexistent/compact.toml',
+        logger: testLogger(),
+      }),
+    ).rejects.toThrow(ConfigError);
+  });
+});

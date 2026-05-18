@@ -1,0 +1,20 @@
+# Integration-test deployer config. All paths resolve against this file's dir.
+
+[profile]
+default_network = "local"
+artifacts_dir   = "fixtures/artifacts"
+deployments_dir = "deployments/compact"
+
+[networks.local]
+network_id   = "undeployed"
+indexer      = "http://127.0.0.1:8088/api/v4/graphql"
+indexer_ws   = "ws://127.0.0.1:8088/api/v4/graphql/ws"
+node         = "http://127.0.0.1:9944"
+node_ws      = "ws://127.0.0.1:9944"
+proof_server = "http://127.0.0.1:6300"
+wallet       = { source = "local", index = 0 }
+faucet       = false
+
+[contracts.Counter]
+artifact         = "Counter"
+signing_key_file = "fixtures/signingkeys/Counter.signingkey"

@@ -1,12 +1,13 @@
 {
   "name": "@openzeppelin/compact-cli",
-  "description": "CLI for compiling and building Compact smart contracts",
+  "description": "CLI for compiling, building, and deploying Compact smart contracts",
   "version": "0.0.1",
   "keywords": [
     "compact",
     "cli",
     "compiler",
     "builder",
+    "deployer",
     "testing"
   ],
   "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
@@ -14,7 +15,8 @@
   "type": "module",
   "exports": {
     "./run-builder": "./dist/runBuilder.js",
-    "./run-compiler": "./dist/runCompiler.js"
+    "./run-compiler": "./dist/runCompiler.js",
+    "./run-deploy": "./dist/runDeploy.js"
   },
   "files": [
     "dist",
@@ -22,11 +24,12 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "compact-builder": "dist/runBuilder.js",
-    "compact-compiler": "dist/runCompiler.js"
+    "compact-compiler": "dist/runCompiler.js",
+    "compact-deploy": "dist/runDeploy.js"
   },
   "scripts": {
     "build": "tsc -p .",
@@ -37,12 +40,17 @@
   "devDependencies": {
     "@tsconfig/node24": "^24.0.3",
     "@types/node": "24.10.1",
+    "@types/ws": "^8.5.10",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
   },
   "dependencies": {
     "@openzeppelin/compact-builder": "workspace:^",
+    "@openzeppelin/compact-deploy": "workspace:^",
     "chalk": "^5.6.2",
-    "ora": "^9.0.0"
+    "ora": "^9.0.0",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.0.0",
+    "ws": "^8.16.0"
   }
 }
