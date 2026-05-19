@@ -1,11 +1,11 @@
 /**
- * Programmatic API surface for `@openzeppelin/compact-deploy`.
+ * Programmatic API surface for `@openzeppelin/compact-deployer`.
  *
  * Consumers that need to embed the deploy pipeline (CI runners, custom CLIs,
  * test harnesses) should import from this barrel. The `compact-deploy` binary
  * in `bin/` re-uses the same exports — it is just an opinionated shell.
  */
-// biome-ignore-all lint/performance/noBarrelFile: this file is the programmatic API surface for consumers of @openzeppelin/compact-deploy
+// biome-ignore-all lint/performance/noBarrelFile: this file is the programmatic API surface for consumers of @openzeppelin/compact-deployer
 export { CompactConfig } from './config/compact-config.ts';
 export type {
   ContractConfig,

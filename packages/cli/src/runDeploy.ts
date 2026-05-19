@@ -19,7 +19,7 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import { WebSocket } from 'ws';
-import { Deployer, DeployError } from '@openzeppelin/compact-deploy';
+import { Deployer, DeployError } from '@openzeppelin/compact-deployer';
 import { createLogger } from './logger.ts';
 import { promptPassphrase } from './prompt.ts';
 

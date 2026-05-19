@@ -1,6 +1,6 @@
 # compact-tools — integration tests
 
-End-to-end tests for `@openzeppelin/compact-deploy` against a real local Midnight stack (proof-server + indexer + node, Docker).
+End-to-end tests for `@openzeppelin/compact-deployer` against a real local Midnight stack (proof-server + indexer + node, Docker).
 
 ## Layout
 
@@ -18,7 +18,7 @@ tests/integrations/
   deploy.local.spec.ts      # Specs: dry-run, deploy, history rotation
 ```
 
-This is **not** a workspace package. The root `package.json` adds `@openzeppelin/compact-deploy` as a dev dep (resolved via yarn workspaces), and the root `test:integration` script invokes vitest pointed at this folder.
+This is **not** a workspace package. The root `package.json` adds `@openzeppelin/compact-deployer` as a dev dep (resolved via yarn workspaces), and the root `test:integration` script invokes vitest pointed at this folder.
 
 ## Run
 

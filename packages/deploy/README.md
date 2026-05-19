@@ -1,4 +1,4 @@
-# @openzeppelin/compact-deploy
+# @openzeppelin/compact-deployer
 
 Forge-style deployer CLI for Midnight Compact contracts.
 
@@ -118,7 +118,7 @@ signing_key_file = "./deploy/Vault.signingkey"
 ## Programmatic API
 
 ```ts
-import { deploy } from "@openzeppelin/compact-deploy";
+import { deploy } from "@openzeppelin/compact-deployer";
 
 const result = await deploy({
   contract: "Token",

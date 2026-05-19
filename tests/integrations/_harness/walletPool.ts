@@ -3,7 +3,7 @@ import {
   type MidnightWalletProvider,
   TEST_MNEMONIC,
 } from '@midnight-ntwrk/testkit-js';
-import { WalletHandler, classifySeed } from '@openzeppelin/compact-deploy';
+import { WalletHandler, classifySeed } from '@openzeppelin/compact-deployer';
 import { testLogger } from './logger.ts';
 
 /**

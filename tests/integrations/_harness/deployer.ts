@@ -1,4 +1,4 @@
-import { Deployer, type DeployResult } from '@openzeppelin/compact-deploy';
+import { Deployer, type DeployResult } from '@openzeppelin/compact-deployer';
 import { testLogger } from './logger.ts';
 import { localNetworkConfig, setupLocalNetwork } from './network.ts';
 import { CONFIG_PATH } from './paths.ts';
