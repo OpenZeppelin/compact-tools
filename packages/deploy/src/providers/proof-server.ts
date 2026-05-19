@@ -30,10 +30,16 @@ export class ProofServer {
   /** Resolved URL the proof provider POSTs to. */
   readonly url: string;
   readonly #dispose: () => Promise<void>;
+  readonly #logger: Logger;
 
-  private constructor(url: string, dispose: () => Promise<void>) {
+  private constructor(
+    url: string,
+    dispose: () => Promise<void>,
+    logger: Logger,
+  ) {
     this.url = url;
     this.#dispose = dispose;
+    this.#logger = logger;
   }
 
   /**
@@ -53,7 +59,7 @@ export class ProofServer {
 
     if (explicit && explicit !== 'auto') {
       logger.debug(`Using configured proof server: ${explicit}`);
-      return ProofServer.fromStaticUrl(explicit);
+      return ProofServer.fromStaticUrl(explicit, logger);
     }
 
     if (explicit === 'auto') {
@@ -63,7 +69,7 @@ export class ProofServer {
         undefined,
         network.network_id,
       );
-      return new ProofServer(container.getUrl(), () => container.stop());
+      return new ProofServer(container.getUrl(), () => container.stop(), logger);
     }
 
     const port = process.env.PROOF_SERVER_PORT;
@@ -74,21 +80,40 @@ export class ProofServer {
       }
       logger.debug(`Using PROOF_SERVER_PORT=${parsed}`);
       const container = new StaticProofServerContainer(parsed);
-      return new ProofServer(container.getUrl(), () => container.stop());
+      return new ProofServer(container.getUrl(), () => container.stop(), logger);
     }
 
     logger.debug('Falling back to default proof server at http://127.0.0.1:6300');
-    return ProofServer.fromStaticUrl('http://127.0.0.1:6300');
+    return ProofServer.fromStaticUrl('http://127.0.0.1:6300', logger);
   }
 
-  private static fromStaticUrl(url: string): ProofServer {
-    return new ProofServer(url, async () => {
-      /* no container to stop */
-    });
+  private static fromStaticUrl(url: string, logger: Logger): ProofServer {
+    return new ProofServer(
+      url,
+      async () => {
+        /* no container to stop */
+      },
+      logger,
+    );
   }
 
   /** Release any underlying container. Idempotent for static-URL instances. */
   async dispose(): Promise<void> {
     return this.#dispose();
+  }
+
+  /**
+   * AsyncDisposable hook for `await using` — swallows teardown errors with
+   * a `warn` log so dispose failures don't mask the deploy's real error.
+   */
+  async [Symbol.asyncDispose](): Promise<void> {
+    try {
+      await this.#dispose();
+    } catch (e) {
+      this.#logger.warn(
+        { err: (e as Error).message },
+        'Proof server dispose failed',
+      );
+    }
   }
 }
