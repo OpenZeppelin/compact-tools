@@ -9,6 +9,9 @@
   "scripts": {
     "build": "turbo run build --log-prefix=none",
     "test": "turbo run test --log-prefix=none",
+    "test:integration": "yarn vitest run --config tests/integrations/vitest.config.ts",
+    "env:up": "make -C tests/integrations env-up",
+    "env:down": "make -C tests/integrations env-down",
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
     "lint:ci": "biome ci . --no-errors-on-unmatched",
@@ -17,10 +20,18 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
+    "@openzeppelin/compact-deployer": "workspace:^",
     "@types/node": "24.10.1",
+    "pino": "^9.7.0",
     "ts-node": "^10.9.2",
     "turbo": "^2.6.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
+  },
+  "resolutions": {
+    "@midnight-ntwrk/ledger-v8": "8.0.3",
+    "undici": "^6.24.0",
+    "glob": "^11.0.0",
+    "uuid": "^13.0.0"
   }
 }
