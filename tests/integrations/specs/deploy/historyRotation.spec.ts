@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { deployFixture } from '../_harness/deployer.ts';
+import { deployFixture } from '../../_harness/deployer.ts';
 import {
   DEPLOYMENTS_DIR,
   requireFixtureArtifact,
   wipeDeployments,
-} from '../_harness/paths.ts';
+} from '../../_harness/paths.ts';
 
 /**
  * Spec: redeploying the same contract rotates the previous head into

@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { deployFixture } from '../_harness/deployer.ts';
+import { deployFixture } from '../../_harness/deployer.ts';
 import {
   DEPLOYMENTS_DIR,
   requireFixtureArtifact,
   wipeDeployments,
-} from '../_harness/paths.ts';
+} from '../../_harness/paths.ts';
 
 /**
  * Spec: `--dry-run` performs every validation step (config, artifact,

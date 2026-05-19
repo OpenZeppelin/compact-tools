@@ -1,7 +1,7 @@
 import { ConfigError, Deployer } from '@openzeppelin/compact-deployer';
 import { describe, expect, it } from 'vitest';
-import { testLogger } from '../_harness/logger.ts';
-import { CONFIG_PATH, requireFixtureArtifact } from '../_harness/paths.ts';
+import { testLogger } from '../../_harness/logger.ts';
+import { CONFIG_PATH, requireFixtureArtifact } from '../../_harness/paths.ts';
 
 /**
  * Spec: Deployer.prepare surfaces typed `ConfigError`s for foreseeable

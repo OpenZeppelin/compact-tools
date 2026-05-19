@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { localNetworkConfig, setupLocalNetwork } from '../_harness/network.ts';
+import { localNetworkConfig, setupLocalNetwork } from '../../_harness/network.ts';
 import {
   getSharedPool,
   PREFUNDED_SEEDS,
   resetSharedPool,
   type PoolAlias,
-} from '../_harness/walletPool.ts';
+} from '../../_harness/walletPool.ts';
 
 /**
  * Spec: every alias in `PREFUNDED_SEEDS` (DEPLOYER via TEST_MNEMONIC, the
