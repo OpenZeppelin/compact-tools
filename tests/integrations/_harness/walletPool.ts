@@ -3,7 +3,7 @@ import {
   type MidnightWalletProvider,
   TEST_MNEMONIC,
 } from '@midnight-ntwrk/testkit-js';
-import { buildDeployerWallet, classifySeed } from '@openzeppelin/compact-deploy';
+import { WalletHandler, classifySeed } from '@openzeppelin/compact-deploy';
 import { testLogger } from './logger.ts';
 
 /**
@@ -35,11 +35,15 @@ export type PoolAlias = keyof typeof PREFUNDED_SEEDS;
  * Specs that need wallet isolation can construct their own pool instance.
  */
 export class WalletPool {
-  private cache = new Map<PoolAlias, Promise<MidnightWalletProvider>>();
+  private cache = new Map<PoolAlias, Promise<WalletHandler>>();
 
   constructor(private readonly env: EnvironmentConfiguration) {}
 
-  signerFor(alias: PoolAlias): Promise<MidnightWalletProvider> {
+  async signerFor(alias: PoolAlias): Promise<MidnightWalletProvider> {
+    return (await this.ownedFor(alias)).provider;
+  }
+
+  private ownedFor(alias: PoolAlias): Promise<WalletHandler> {
     const seedString = PREFUNDED_SEEDS[alias];
     if (seedString === undefined) {
       throw new Error(
@@ -50,13 +54,13 @@ export class WalletPool {
     if (cached) return cached;
 
     const built = (async () => {
-      const wallet = await buildDeployerWallet(
+      const owned = await WalletHandler.build(
         testLogger(),
         this.env,
         classifySeed(seedString),
       );
-      await wallet.start(true);
-      return wallet;
+      await owned.provider.start(true);
+      return owned;
     })();
     this.cache.set(alias, built);
     return built;
@@ -69,8 +73,7 @@ export class WalletPool {
     await Promise.all(
       entries.map(async (p) => {
         try {
-          const w = await p;
-          await w.stop();
+          await (await p)[Symbol.asyncDispose]();
         } catch {
           /* ignore stop errors during teardown */
         }

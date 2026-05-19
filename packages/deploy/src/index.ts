@@ -13,17 +13,14 @@ export type {
   Profile,
   WalletConfig,
 } from './config/schema.ts';
+export { Deployer } from './deployer.ts';
+export type { DeployerOptions, DeployResult } from './deployer.ts';
 export { Deployments } from './deployments.ts';
 export type {
   DeploymentRecord,
   DeploymentsFile,
   DeploymentsHistory,
 } from './deployments.ts';
-export type {
-  PipelineOptions as DeployOptions,
-  PipelineResult as DeployResult,
-} from './pipeline.ts';
-export { runPipeline as deploy } from './pipeline.ts';
 export {
   ArtifactNotFoundError,
   ConfigError,
@@ -43,10 +40,10 @@ export { SigningKey } from './loaders/signing-key.ts';
 export { Keystore } from './wallet/keystore.ts';
 export type { MidnightKeystore } from './wallet/keystore.ts';
 export { ProofServer } from './providers/proof-server.ts';
+export { WalletHandler } from './wallet/handler.ts';
 export {
   LOCAL_PREFUNDED_SEEDS,
+  classifySeed,
   localPrefundedSeed,
-} from './wallet/local-seeds.ts';
-export { buildDeployerWallet } from './wallet/build-deployer.ts';
-export { classifySeed } from './wallet/normalize.ts';
-export type { WalletSeed } from './wallet/normalize.ts';
+} from './wallet/seeds.ts';
+export type { WalletSeed } from './wallet/seeds.ts';

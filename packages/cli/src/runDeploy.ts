@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * `compact-deploy` — opinionated CLI shell over the deploy pipeline.
+ * `compact-deploy` — opinionated CLI shell over the {@link Deployer} class.
  *
  * Responsibilities limited to:
  *  - argv parsing (handwritten, no external CLI lib — keeps cold-start fast)
  *  - constructing the logger / spinner / passphrase prompt
- *  - delegating to `runPipeline` and rendering its result
+ *  - calling `Deployer.prepare` then `.deploy()` or `.dryRun()`
  *  - mapping exceptions to typed exit codes via {@link DeployError.exitCode}
  *
- * All deploy logic lives in `pipeline.ts` and its dependencies; this file
+ * All deploy logic lives in `deployer.ts` and its dependencies; this file
  * should never grow business logic.
  *
  * The `globalThis.WebSocket = ws` shim is required because midnight-js's
@@ -19,7 +19,7 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import { WebSocket } from 'ws';
-import { deploy, DeployError } from '@openzeppelin/compact-deploy';
+import { Deployer, DeployError } from '@openzeppelin/compact-deploy';
 import { createLogger } from './logger.ts';
 import { promptPassphrase } from './prompt.ts';
 
@@ -141,14 +141,13 @@ async function main(): Promise<void> {
       ).start();
 
   try {
-    const result = await deploy({
+    await using deployer = await Deployer.prepare({
       contract: args.contract,
       network: args.network,
       configPath: args.configPath,
       seedFile: args.seedFile,
       proofServer: args.proofServer,
       skipFaucet: args.skipFaucet,
-      dryRun: args.dryRun,
       logger,
       promptPassphrase: async (path) => {
         if (spinner) spinner.stop();
@@ -157,6 +156,9 @@ async function main(): Promise<void> {
         return pp;
       },
     });
+    const result = args.dryRun
+      ? await deployer.dryRun()
+      : await deployer.deploy();
 
     if (args.json) {
       process.stdout.write(`${JSON.stringify(result)}\n`);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WalletError } from '../errors.ts';
-import { classifySeed } from './normalize.ts';
+import { classifySeed } from './seeds.ts';
 
 describe('classifySeed', () => {
   it('classifies a 64-char hex string as hex (lowercased)', () => {
