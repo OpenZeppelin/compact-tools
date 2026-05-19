@@ -127,7 +127,7 @@ describe('WalletHandler', () => {
     vi.clearAllMocks();
   });
 
-  it('routes a mnemonic seed through .withMnemonic', async () => {
+  it('should route a mnemonic seed through .withMnemonic', async () => {
     const chain = wireTestkitChain(fakeProvider());
     await WalletHandler.build(logger, fakeEnv(), {
       kind: 'mnemonic',
@@ -139,7 +139,7 @@ describe('WalletHandler', () => {
     expect(chain.dustBuilder.withSeed).not.toHaveBeenCalled();
   });
 
-  it('routes a hex seed through .withSeed', async () => {
+  it('should route a hex seed through .withSeed', async () => {
     const chain = wireTestkitChain(fakeProvider());
     await WalletHandler.build(logger, fakeEnv(), {
       kind: 'hex',
@@ -149,7 +149,7 @@ describe('WalletHandler', () => {
     expect(chain.dustBuilder.withMnemonic).not.toHaveBeenCalled();
   });
 
-  it('bumps additionalFeeOverhead for the undeployed network', async () => {
+  it('should bump additionalFeeOverhead for the undeployed network', async () => {
     const chain = wireTestkitChain(fakeProvider());
     await WalletHandler.build(logger, fakeEnv('undeployed'), {
       kind: 'hex',
@@ -162,7 +162,7 @@ describe('WalletHandler', () => {
     );
   });
 
-  it('keeps the testkit default additionalFeeOverhead for other networks', async () => {
+  it('should keep the testkit default additionalFeeOverhead for other networks', async () => {
     const chain = wireTestkitChain(fakeProvider());
     await WalletHandler.build(logger, fakeEnv('testnet'), {
       kind: 'hex',
@@ -175,7 +175,7 @@ describe('WalletHandler', () => {
     );
   });
 
-  it('.provider returns the wallet built by MidnightWalletProvider.withWallet', async () => {
+  it('should expose the wallet built by MidnightWalletProvider.withWallet via .provider', async () => {
     const provider = fakeProvider();
     wireTestkitChain(provider);
     const handler = await WalletHandler.build(logger, fakeEnv(), {
@@ -185,7 +185,7 @@ describe('WalletHandler', () => {
     expect(handler.provider).toBe(provider);
   });
 
-  it('Symbol.asyncDispose stops the underlying wallet', async () => {
+  it('should stop the underlying wallet on Symbol.asyncDispose', async () => {
     const provider = fakeProvider();
     wireTestkitChain(provider);
     const handler = await WalletHandler.build(logger, fakeEnv(), {
@@ -196,7 +196,7 @@ describe('WalletHandler', () => {
     expect(provider.stop).toHaveBeenCalledTimes(1);
   });
 
-  it('Symbol.asyncDispose swallows stop() failures with a warn log', async () => {
+  it('should swallow stop() failures with a warn log on Symbol.asyncDispose', async () => {
     const provider = fakeProvider({ failsOnStop: true });
     wireTestkitChain(provider);
     const handler = await WalletHandler.build(logger, fakeEnv(), {

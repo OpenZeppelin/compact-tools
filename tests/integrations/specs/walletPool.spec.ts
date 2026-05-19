@@ -28,7 +28,7 @@ describe('compact-deploy — prefunded wallet pool', () => {
   const aliases = Object.keys(PREFUNDED_SEEDS) as PoolAlias[];
 
   it.each(aliases)(
-    'builds a synced, funded wallet for %s',
+    'should build a synced, funded wallet for %s',
     async (alias) => {
       const pool = getSharedPool(localNetworkConfig());
       const wallet = await pool.signerFor(alias);
@@ -43,14 +43,14 @@ describe('compact-deploy — prefunded wallet pool', () => {
     180_000,
   );
 
-  it('returns the same wallet instance for repeated `signerFor` calls', async () => {
+  it('should return the same wallet instance for repeated `signerFor` calls', async () => {
     const pool = getSharedPool(localNetworkConfig());
     const a = await pool.signerFor('ALICE');
     const b = await pool.signerFor('ALICE');
     expect(a).toBe(b);
   });
 
-  it('produces distinct addresses for distinct aliases', async () => {
+  it('should produce distinct addresses for distinct aliases', async () => {
     const pool = getSharedPool(localNetworkConfig());
     const alice = await pool.signerFor('ALICE');
     const bob = await pool.signerFor('BOB');

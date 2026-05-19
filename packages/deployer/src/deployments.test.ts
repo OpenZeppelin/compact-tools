@@ -26,14 +26,14 @@ function make(root: string): Deployments {
 }
 
 describe('Deployments', () => {
-  it('writes a fresh deployments/<network>.json', async () => {
+  it('should write a fresh deployments/<network>.json', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const { head } = await make(root).record('Token', rec('0xaddr1'));
     const parsed = JSON.parse(readFileSync(head, 'utf8'));
     expect(parsed.Token.address).toBe('0xaddr1');
   });
 
-  it('rotates the previous head into history on overwrite', async () => {
+  it('should rotate the previous head into history on overwrite', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', rec('0xfirst'));
@@ -47,7 +47,7 @@ describe('Deployments', () => {
     expect(historyJson.Token[0].address).toBe('0xfirst');
   });
 
-  it('preserves other contracts when one is updated', async () => {
+  it('should preserve other contracts when one is updated', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', rec('0xT1'));
@@ -57,7 +57,7 @@ describe('Deployments', () => {
     expect(headJson.Vault.address).toBe('0xV1');
   });
 
-  it('getHead/getHistory/listContracts read what record wrote', async () => {
+  it('should let getHead/getHistory/listContracts read what record wrote', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', rec('0xT1'));

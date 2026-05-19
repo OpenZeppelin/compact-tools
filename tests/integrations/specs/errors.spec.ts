@@ -10,7 +10,7 @@ import { CONFIG_PATH, requireFixtureArtifact } from '../_harness/paths.ts';
  * phase, so they're fast.
  */
 describe('compact-deploy — config errors are typed and actionable', () => {
-  it('rejects an unknown contract name', async () => {
+  it('should reject an unknown contract name', async () => {
     requireFixtureArtifact();
     await expect(
       Deployer.prepare({
@@ -22,7 +22,7 @@ describe('compact-deploy — config errors are typed and actionable', () => {
     ).rejects.toThrow(ConfigError);
   });
 
-  it('rejects an unknown network name', async () => {
+  it('should reject an unknown network name', async () => {
     requireFixtureArtifact();
     await expect(
       Deployer.prepare({
@@ -34,7 +34,7 @@ describe('compact-deploy — config errors are typed and actionable', () => {
     ).rejects.toThrow(ConfigError);
   });
 
-  it('rejects a missing compact.toml path', async () => {
+  it('should reject a missing compact.toml path', async () => {
     await expect(
       Deployer.prepare({
         contract: 'Counter',

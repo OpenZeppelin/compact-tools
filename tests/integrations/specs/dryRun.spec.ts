@@ -23,7 +23,7 @@ describe('compact-deploy — --dry-run validates without submitting', () => {
     wipeDeployments();
   });
 
-  it('returns dryRun=true and an empty address', async () => {
+  it('should return dryRun=true and an empty address', async () => {
     const result = await deployFixture('Counter', 'ALICE', { dryRun: true });
 
     expect(result.dryRun).toBe(true);
@@ -33,7 +33,7 @@ describe('compact-deploy — --dry-run validates without submitting', () => {
     expect(result.signingKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('does not write a deployments file', () => {
+  it('should not write a deployments file', () => {
     expect(existsSync(resolve(DEPLOYMENTS_DIR, 'local.json'))).toBe(false);
     expect(existsSync(resolve(DEPLOYMENTS_DIR, 'local.history.json'))).toBe(
       false,

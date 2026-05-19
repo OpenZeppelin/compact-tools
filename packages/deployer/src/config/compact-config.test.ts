@@ -29,7 +29,7 @@ function tmpRepo(toml: string): string {
 }
 
 describe('CompactConfig', () => {
-  it('parses a minimal valid config', async () => {
+  it('should parse a minimal valid config', async () => {
     const dir = tmpRepo(MIN_VALID);
     const config = await CompactConfig.load(undefined, dir);
     expect(config.rootDir).toBe(dir);
@@ -38,21 +38,21 @@ describe('CompactConfig', () => {
     expect(config.contract('Token').artifact).toBe('src/artifacts/Token/Token');
   });
 
-  it('lookup methods throw with the available set on miss', async () => {
+  it('should throw with the available set when a lookup misses', async () => {
     const dir = tmpRepo(MIN_VALID);
     const config = await CompactConfig.load(undefined, dir);
     expect(() => config.network('ghost')).toThrow(/Available: local/);
     expect(() => config.contract('Vault')).toThrow(/Available: Token/);
   });
 
-  it('rejects a config whose default_network does not exist', async () => {
+  it('should reject a config whose default_network does not exist', async () => {
     const dir = tmpRepo(`${MIN_VALID}\n[profile]\ndefault_network = "ghost"\n`);
     await expect(CompactConfig.load(undefined, dir)).rejects.toThrow(
       ConfigError,
     );
   });
 
-  it('rejects a contract missing signing_key_file', async () => {
+  it('should reject a contract missing signing_key_file', async () => {
     const dir = tmpRepo(`
 [networks.local]
 network_id = "undeployed"
@@ -70,7 +70,7 @@ artifact = "x"
     );
   });
 
-  it('rejects when init_private_state is set but private_state_id is not', async () => {
+  it('should reject when init_private_state is set but private_state_id is not', async () => {
     const dir = tmpRepo(`
 [networks.local]
 network_id = "undeployed"

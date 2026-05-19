@@ -6,7 +6,7 @@ const FAST_OPTS = { scryptN: 1024, scryptR: 8, scryptP: 1, dklen: 32 };
 const SEED = 'deadbeef'.repeat(8);
 
 describe('Keystore', () => {
-  it('round-trips a seed through encrypt → decrypt', () => {
+  it('should round-trip a seed through encrypt → decrypt', () => {
     const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
     const json = ks.toJSON();
     expect(json.version).toBe('midnight-1');
@@ -15,18 +15,18 @@ describe('Keystore', () => {
     expect(ks.decrypt('hunter2')).toBe(SEED);
   });
 
-  it('rejects wrong passphrase with MAC mismatch', () => {
+  it('should reject a wrong passphrase with MAC mismatch', () => {
     const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
     expect(() => ks.decrypt('wrong')).toThrow(/MAC mismatch/);
   });
 
-  it('rejects unsupported version at fromJSON', () => {
+  it('should reject an unsupported version at fromJSON', () => {
     const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
     const tampered = { ...ks.toJSON(), version: 'eth-3' } as unknown as MidnightKeystore;
     expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
   });
 
-  it('produces a different ciphertext on each encryption (random salt/iv)', () => {
+  it('should produce a different ciphertext on each encryption (random salt/iv)', () => {
     const a = Keystore.encrypt(SEED, 'pp', FAST_OPTS).toJSON();
     const b = Keystore.encrypt(SEED, 'pp', FAST_OPTS).toJSON();
     expect(a.crypto.ciphertext).not.toBe(b.crypto.ciphertext);

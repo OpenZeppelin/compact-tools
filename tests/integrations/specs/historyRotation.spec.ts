@@ -28,20 +28,20 @@ describe('compact-deploy — redeploy rotates head into history', () => {
     wipeDeployments();
   });
 
-  it('produces distinct addresses on each deploy', () => {
+  it('should produce distinct addresses on each deploy', () => {
     expect(firstAddress).not.toBe(secondAddress);
     expect(firstAddress).toMatch(/^[0-9a-f]+$/i);
     expect(secondAddress).toMatch(/^[0-9a-f]+$/i);
   });
 
-  it('keeps the latest deployment at the head', async () => {
+  it('should keep the latest deployment at the head', async () => {
     const head = JSON.parse(
       await readFile(resolve(DEPLOYMENTS_DIR, 'local.json'), 'utf8'),
     );
     expect(head.Counter.address).toBe(secondAddress);
   });
 
-  it('moves the previous head into <network>.history.json', async () => {
+  it('should move the previous head into <network>.history.json', async () => {
     const history = JSON.parse(
       await readFile(
         resolve(DEPLOYMENTS_DIR, 'local.history.json'),

@@ -185,7 +185,7 @@ describe('Deployer', () => {
     vi.clearAllMocks();
   });
 
-  it('dryRun returns dryRun:true and never submits a tx', async () => {
+  it('should return dryRun:true and not submit a tx on dryRun', async () => {
     const injected = fakeProvider('0xINJECTED');
     await using d = await Deployer.prepare({
       contract: 'Counter',
@@ -206,7 +206,7 @@ describe('Deployer', () => {
     expect(deployContract).not.toHaveBeenCalled();
   });
 
-  it('deploy submits the tx and returns the populated success result', async () => {
+  it('should submit the tx and return the populated success result on deploy', async () => {
     const injected = fakeProvider('0xDEPLOYER');
     await using d = await Deployer.prepare({
       contract: 'Counter',
@@ -228,7 +228,7 @@ describe('Deployer', () => {
     expect(result.deploymentsFile).toContain('deployments');
   });
 
-  it('adopts an injected walletProvider without calling WalletHandler.build', async () => {
+  it('should adopt an injected walletProvider and not call WalletHandler.build', async () => {
     const injected = fakeProvider();
     await using d = await Deployer.prepare({
       contract: 'Counter',
@@ -242,7 +242,7 @@ describe('Deployer', () => {
     expect(injected.start).not.toHaveBeenCalled();
   });
 
-  it('builds + starts a wallet when none is injected', async () => {
+  it('should build and start a wallet when none is injected', async () => {
     const built = fakeOwnedWallet('0xBUILT');
     vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
     await using d = await Deployer.prepare({
@@ -256,7 +256,7 @@ describe('Deployer', () => {
     expect(built.provider.start).toHaveBeenCalledWith(true);
   });
 
-  it('disposes the owned wallet on asyncDispose but leaves an injected one alone', async () => {
+  it('should dispose the owned wallet on asyncDispose but not the injected one', async () => {
     const built = fakeOwnedWallet('0xOWNED');
     const injected = fakeProvider('0xINJ');
     vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
@@ -284,7 +284,7 @@ describe('Deployer', () => {
     expect(injected.stop).not.toHaveBeenCalled();
   });
 
-  it('wraps midnight-js deploy failures in DeployTxFailedError', async () => {
+  it('should wrap midnight-js deploy failures in DeployTxFailedError', async () => {
     vi.mocked(deployContract).mockRejectedValueOnce(
       new Error('chain rejected'),
     );

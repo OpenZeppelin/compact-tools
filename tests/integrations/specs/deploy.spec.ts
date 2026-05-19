@@ -24,7 +24,7 @@ describe('compact-deploy — Counter deploys to local stack', () => {
     wipeDeployments();
   });
 
-  it('returns an address, txHash, signingKey, and block height', async () => {
+  it('should return an address, txHash, signingKey, and block height', async () => {
     const result = await deployFixture('Counter', 'DEPLOYER');
 
     expect(result.dryRun).toBe(false);
@@ -38,7 +38,7 @@ describe('compact-deploy — Counter deploys to local stack', () => {
     expect(result.deployer).toBeTruthy();
   });
 
-  it('persists the deployment record at deployments/compact/local.json', async () => {
+  it('should persist the deployment record at deployments/compact/local.json', async () => {
     const headPath = resolve(DEPLOYMENTS_DIR, 'local.json');
     expect(existsSync(headPath)).toBe(true);
 
