@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { localNetworkConfig, setupLocalNetwork } from '../../_harness/network.ts';
+import {
+  localNetworkConfig,
+  setupLocalNetwork,
+} from '../../_harness/network.ts';
 import {
   getSharedPool,
+  type PoolAlias,
   PREFUNDED_SEEDS,
   resetSharedPool,
-  type PoolAlias,
 } from '../../_harness/walletPool.ts';
 
 /**
@@ -27,21 +30,19 @@ describe('compact-deploy — prefunded wallet pool', () => {
 
   const aliases = Object.keys(PREFUNDED_SEEDS) as PoolAlias[];
 
-  it.each(aliases)(
-    'should build a synced, funded wallet for %s',
-    async (alias) => {
-      const pool = getSharedPool(localNetworkConfig());
-      const wallet = await pool.signerFor(alias);
+  it.each(
+    aliases,
+  )('should build a synced, funded wallet for %s', async (alias) => {
+    const pool = getSharedPool(localNetworkConfig());
+    const wallet = await pool.signerFor(alias);
 
-      const coinPublicKey = wallet.getCoinPublicKey();
-      expect(typeof coinPublicKey).toBe('string');
-      expect((coinPublicKey as unknown as string).length).toBeGreaterThan(0);
+    const coinPublicKey = wallet.getCoinPublicKey();
+    expect(typeof coinPublicKey).toBe('string');
+    expect((coinPublicKey as unknown as string).length).toBeGreaterThan(0);
 
-      const encryptionPublicKey = wallet.getEncryptionPublicKey();
-      expect(typeof encryptionPublicKey).toBe('string');
-    },
-    180_000,
-  );
+    const encryptionPublicKey = wallet.getEncryptionPublicKey();
+    expect(typeof encryptionPublicKey).toBe('string');
+  }, 180_000);
 
   it('should return the same wallet instance for repeated `signerFor` calls', async () => {
     const pool = getSharedPool(localNetworkConfig());

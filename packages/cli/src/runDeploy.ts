@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// biome-ignore-all lint/suspicious/noConsole: CLI writes user-facing diagnostics to stdout/stderr
+
 /**
  * `compact-deploy` — opinionated CLI shell over the {@link Deployer} class.
  *
@@ -15,11 +17,10 @@
  * indexer client uses the browser WebSocket interface and Node only
  * provides it natively from v22.
  */
-// biome-ignore-all lint/suspicious/noConsole: CLI writes user-facing diagnostics to stdout/stderr
+import { DeployError, Deployer } from '@openzeppelin/compact-deployer';
 import chalk from 'chalk';
 import ora from 'ora';
 import { WebSocket } from 'ws';
-import { Deployer, DeployError } from '@openzeppelin/compact-deployer';
 import { createLogger } from './logger.ts';
 import { promptPassphrase } from './prompt.ts';
 

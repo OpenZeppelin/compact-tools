@@ -10,7 +10,7 @@ import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
 import { CompactConfig } from './config/compact-config.ts';
 import type { ContractConfig, NetworkConfig } from './config/schema.ts';
-import { Deployments, type DeploymentRecord } from './deployments.ts';
+import { type DeploymentRecord, Deployments } from './deployments.ts';
 import { ConfigError, DeployTxFailedError } from './errors.ts';
 import { ConstructorArgs } from './loaders/args.ts';
 import { Artifact } from './loaders/artifact.ts';
@@ -20,7 +20,7 @@ import { buildProviders } from './providers/build.ts';
 import { applyNetwork } from './providers/network.ts';
 import { ProofServer } from './providers/proof-server.ts';
 import { WalletHandler } from './wallet/handler.ts';
-import { type SeedResolution, resolveSeed } from './wallet/seeds.ts';
+import { resolveSeed } from './wallet/seeds.ts';
 
 /**
  * Inputs to {@link Deployer.prepare}. The CLI in `bin/compact-deploy.ts`
@@ -161,7 +161,10 @@ export class Deployer implements AsyncDisposable {
     const config = await CompactConfig.load(opts.configPath);
     const { rootDir } = config;
     const { networkName, network, contract } = resolveTargets(opts, config);
-    const signingKey = await SigningKey.load(rootDir, contract.signing_key_file);
+    const signingKey = await SigningKey.load(
+      rootDir,
+      contract.signing_key_file,
+    );
 
     const seedResolution = opts.walletProvider
       ? undefined

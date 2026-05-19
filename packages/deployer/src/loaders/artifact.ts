@@ -3,9 +3,9 @@ import { isAbsolute, resolve } from 'node:path';
 import { CompiledContract, type Contract } from '@midnight-ntwrk/compact-js';
 import type { Types } from 'effect';
 import {
+  type FileOrModuleRef,
   isFileRef,
   isModuleRef,
-  type FileOrModuleRef,
 } from '../config/schema.ts';
 import { ArtifactNotFoundError, ConfigError } from '../errors.ts';
 import { LoaderContext } from './context.ts';

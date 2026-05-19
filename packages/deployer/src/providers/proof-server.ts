@@ -69,7 +69,11 @@ export class ProofServer {
         undefined,
         network.network_id,
       );
-      return new ProofServer(container.getUrl(), () => container.stop(), logger);
+      return new ProofServer(
+        container.getUrl(),
+        () => container.stop(),
+        logger,
+      );
     }
 
     const port = process.env.PROOF_SERVER_PORT;
@@ -80,10 +84,16 @@ export class ProofServer {
       }
       logger.debug(`Using PROOF_SERVER_PORT=${parsed}`);
       const container = new StaticProofServerContainer(parsed);
-      return new ProofServer(container.getUrl(), () => container.stop(), logger);
+      return new ProofServer(
+        container.getUrl(),
+        () => container.stop(),
+        logger,
+      );
     }
 
-    logger.debug('Falling back to default proof server at http://127.0.0.1:6300');
+    logger.debug(
+      'Falling back to default proof server at http://127.0.0.1:6300',
+    );
     return ProofServer.fromStaticUrl('http://127.0.0.1:6300', logger);
   }
 

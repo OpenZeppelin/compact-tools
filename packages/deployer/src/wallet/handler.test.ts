@@ -26,7 +26,15 @@ import {
   MidnightWalletProvider as MidnightWalletProviderClass,
 } from '@midnight-ntwrk/testkit-js';
 import type { Logger } from 'pino';
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  vi,
+} from 'vitest';
 import { WalletHandler } from './handler.ts';
 
 vi.mock('@midnight-ntwrk/testkit-js', () => ({
@@ -87,7 +95,9 @@ function wireTestkitChain(provider: FakeProvider): BuilderChain {
     withDustOptions: vi.fn(() => dustBuilder),
   };
   vi.mocked(FluentWalletBuilder.forEnvironment).mockReturnValue(
-    envBuilder as unknown as ReturnType<typeof FluentWalletBuilder.forEnvironment>,
+    envBuilder as unknown as ReturnType<
+      typeof FluentWalletBuilder.forEnvironment
+    >,
   );
   vi.mocked(MidnightWalletProviderClass.withWallet).mockResolvedValue(
     provider as unknown as MidnightWalletProvider,

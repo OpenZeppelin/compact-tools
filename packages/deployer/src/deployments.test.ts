@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { Deployments, type DeploymentRecord } from './deployments.ts';
+import { type DeploymentRecord, Deployments } from './deployments.ts';
 
 function rec(address: string): DeploymentRecord {
   return {
@@ -66,7 +66,9 @@ describe('Deployments', () => {
 
     expect((await d.getHead('Token'))?.address).toBe('0xT2');
     expect(await d.getHead('Missing')).toBeUndefined();
-    expect((await d.getHistory('Token')).map((r) => r.address)).toEqual(['0xT1']);
+    expect((await d.getHistory('Token')).map((r) => r.address)).toEqual([
+      '0xT1',
+    ]);
     expect(await d.getHistory('Vault')).toEqual([]);
     expect(await d.listContracts()).toEqual(['Token', 'Vault']);
   });

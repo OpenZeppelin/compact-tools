@@ -10,10 +10,7 @@ export const ARTIFACT_DIR = resolve(
   INTEGRATION_DIR,
   'fixtures/artifacts/Counter',
 );
-export const DEPLOYMENTS_DIR = resolve(
-  INTEGRATION_DIR,
-  'deployments/compact',
-);
+export const DEPLOYMENTS_DIR = resolve(INTEGRATION_DIR, 'deployments/compact');
 
 /** Throw with a helpful hint if the fixture hasn't been compiled yet. */
 export function requireFixtureArtifact(): void {

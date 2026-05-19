@@ -201,7 +201,10 @@ export class Keystore {
       encKey,
       Buffer.from(cipherparams.iv, 'hex'),
     );
-    const plain = Buffer.concat([decipher.update(cipherBytes), decipher.final()]);
+    const plain = Buffer.concat([
+      decipher.update(cipherBytes),
+      decipher.final(),
+    ]);
     return plain.toString('hex');
   }
 

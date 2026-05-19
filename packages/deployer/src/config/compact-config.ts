@@ -6,9 +6,9 @@ import { ConfigError } from '../errors.ts';
 import {
   type CompactConfigData,
   type ContractConfig,
+  configSchema,
   type NetworkConfig,
   type WalletConfig,
-  configSchema,
 } from './schema.ts';
 
 /**

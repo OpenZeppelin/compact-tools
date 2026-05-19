@@ -13,14 +13,14 @@ export type {
   Profile,
   WalletConfig,
 } from './config/schema.ts';
-export { Deployer } from './deployer.ts';
 export type { DeployerOptions, DeployResult } from './deployer.ts';
-export { Deployments } from './deployments.ts';
+export { Deployer } from './deployer.ts';
 export type {
   DeploymentRecord,
   DeploymentsFile,
   DeploymentsHistory,
 } from './deployments.ts';
+export { Deployments } from './deployments.ts';
 export {
   ArtifactNotFoundError,
   ConfigError,
@@ -31,19 +31,19 @@ export {
   UnfundedWalletError,
   WalletError,
 } from './errors.ts';
-export { Artifact } from './loaders/artifact.ts';
-export type { LoadArtifactOptions } from './loaders/artifact.ts';
-export { ConstructorArgs } from './loaders/args.ts';
 export type { ArgsSource } from './loaders/args.ts';
+export { ConstructorArgs } from './loaders/args.ts';
+export type { LoadArtifactOptions } from './loaders/artifact.ts';
+export { Artifact } from './loaders/artifact.ts';
 export { InitialPrivateState } from './loaders/init-state.ts';
 export { SigningKey } from './loaders/signing-key.ts';
-export { Keystore } from './wallet/keystore.ts';
-export type { MidnightKeystore } from './wallet/keystore.ts';
 export { ProofServer } from './providers/proof-server.ts';
 export { WalletHandler } from './wallet/handler.ts';
+export type { MidnightKeystore } from './wallet/keystore.ts';
+export { Keystore } from './wallet/keystore.ts';
+export type { WalletSeed } from './wallet/seeds.ts';
 export {
-  LOCAL_PREFUNDED_SEEDS,
   classifySeed,
+  LOCAL_PREFUNDED_SEEDS,
   localPrefundedSeed,
 } from './wallet/seeds.ts';
-export type { WalletSeed } from './wallet/seeds.ts';

@@ -22,7 +22,10 @@ describe('Keystore', () => {
 
   it('should reject an unsupported version at fromJSON', () => {
     const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
-    const tampered = { ...ks.toJSON(), version: 'eth-3' } as unknown as MidnightKeystore;
+    const tampered = {
+      ...ks.toJSON(),
+      version: 'eth-3',
+    } as unknown as MidnightKeystore;
     expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
   });
 

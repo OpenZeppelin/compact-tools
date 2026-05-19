@@ -70,9 +70,8 @@ export class WalletHandler implements AsyncDisposable {
           : DEFAULT_DUST_OPTIONS.additionalFeeOverhead,
     };
 
-    const builder = FluentWalletBuilder.forEnvironment(env).withDustOptions(
-      dustOptions,
-    );
+    const builder =
+      FluentWalletBuilder.forEnvironment(env).withDustOptions(dustOptions);
     const seeded =
       seed.kind === 'mnemonic'
         ? builder.withMnemonic(seed.value)
@@ -105,10 +104,7 @@ export class WalletHandler implements AsyncDisposable {
     try {
       await this.provider.stop();
     } catch (e) {
-      this.#logger.warn(
-        { err: (e as Error).message },
-        'Wallet stop failed',
-      );
+      this.#logger.warn({ err: (e as Error).message }, 'Wallet stop failed');
     }
   }
 }

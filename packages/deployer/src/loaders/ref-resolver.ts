@@ -1,4 +1,8 @@
-import { type FileOrModuleRef, isFileRef, isModuleRef } from '../config/schema.ts';
+import {
+  type FileOrModuleRef,
+  isFileRef,
+  isModuleRef,
+} from '../config/schema.ts';
 import { ConfigError } from '../errors.ts';
 import type { LoaderContext } from './context.ts';
 

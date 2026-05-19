@@ -16,7 +16,10 @@ describe('classifySeed', () => {
   it('should classify a valid BIP39 mnemonic as mnemonic (no conversion)', () => {
     const mnemonic =
       'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-    expect(classifySeed(mnemonic)).toEqual({ kind: 'mnemonic', value: mnemonic });
+    expect(classifySeed(mnemonic)).toEqual({
+      kind: 'mnemonic',
+      value: mnemonic,
+    });
   });
 
   it('should reject empty input', () => {

@@ -43,10 +43,7 @@ describe('compact-deploy — redeploy rotates head into history', () => {
 
   it('should move the previous head into <network>.history.json', async () => {
     const history = JSON.parse(
-      await readFile(
-        resolve(DEPLOYMENTS_DIR, 'local.history.json'),
-        'utf8',
-      ),
+      await readFile(resolve(DEPLOYMENTS_DIR, 'local.history.json'), 'utf8'),
     );
     expect(Array.isArray(history.Counter)).toBe(true);
     expect(history.Counter.length).toBeGreaterThanOrEqual(1);

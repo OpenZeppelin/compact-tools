@@ -17,7 +17,9 @@ import { createHash } from 'node:crypto';
  * input always produces the same output, so the local leveldb stays
  * decryptable across runs.
  */
-export function derivePrivateStatePassword(encryptionPublicKey: string): string {
+export function derivePrivateStatePassword(
+  encryptionPublicKey: string,
+): string {
   for (let counter = 0; counter < 1024; counter++) {
     const body = createHash('sha256')
       .update(`${encryptionPublicKey}:${counter}`)
