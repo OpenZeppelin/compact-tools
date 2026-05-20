@@ -40,12 +40,15 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
       # For pull_request runs: checkout the merge commit (deterministic view of
-      # what was just merged). For manual dispatch: checkout main HEAD.
+      # what was just merged). For manual dispatch: checkout the dispatched ref
+      # (defaults to main but can be any branch — hotfix, release-prep, etc.).
+      # The compact-npm-prod environment approval is the security gate, not the
+      # branch ref.
       - name: Check out target ref
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || 'refs/heads/main' }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
           token: ${{ steps.gh-app-token.outputs.token }}
 
       - name: Detect released package
