@@ -95,10 +95,14 @@ jobs:
           GH_TOKEN: ${{ steps.gh-app-token.outputs.token }}
           BRANCH: ${{ steps.version.outputs.branch }}
         run: |
-          SHA=$(gh api "/repos/${{ github.repository }}/git/refs/heads/${{ github.ref_name }}" -q .object.sha)
-          gh api --method POST "/repos/${{ github.repository }}/git/refs" \
-            -f ref="refs/heads/$BRANCH" \
-            -f sha="$SHA"
+          if gh api "/repos/${{ github.repository }}/git/refs/heads/$BRANCH" >/dev/null 2>&1; then
+            echo "branch $BRANCH already exists, reusing it"
+          else
+            SHA=$(gh api "/repos/${{ github.repository }}/git/refs/heads/${{ github.ref_name }}" -q .object.sha)
+            gh api --method POST "/repos/${{ github.repository }}/git/refs" \
+              -f ref="refs/heads/$BRANCH" \
+              -f sha="$SHA"
+          fi
 
       - name: Commit version bump
         uses: iarekylew00t/verified-bot-commit@934fa64df2191ab067d0c0d73f422239b6933392 # v2.2.1
