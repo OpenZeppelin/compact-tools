@@ -1,7 +1,7 @@
 {
   "name": "@openzeppelin/compact-builder",
   "description": "Programmatic library for compiling and building Compact smart contracts",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "keywords": [
     "compact",
     "midnight",
