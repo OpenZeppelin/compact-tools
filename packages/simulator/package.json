@@ -10,6 +10,11 @@
   ],
   "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenZeppelin/compact-tools.git",
+    "directory": "packages/simulator"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

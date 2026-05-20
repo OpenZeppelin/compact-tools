@@ -22,12 +22,13 @@ on:
 
 jobs:
   release:
-    name: Release ${{ inputs.package }}
+    name: Open release PR for ${{ inputs.package }}
     runs-on: ubuntu-24.04
-    environment: compact-npm-prod # Includes npm token and requires approval
+    environment: compact-npm-prod # Requires approval before opening the release PR
 
     permissions:
-      contents: write # Required to push commits and tags
+      contents: write       # create the release branch
+      pull-requests: write  # open the PR + enable auto-merge
 
     steps:
       - name: Get github app token
@@ -74,35 +75,72 @@ jobs:
           yarn version ${{ inputs.version_bump }}
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "### Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Package: ${{ inputs.package }}" >> $GITHUB_STEP_SUMMARY
-          echo "- New version: $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
-          echo "- Bump type: ${{ inputs.version_bump }}" >> $GITHUB_STEP_SUMMARY
+          echo "branch=release/${{ inputs.package }}-v$NEW_VERSION" >> $GITHUB_OUTPUT
+          {
+            echo "### Release Summary"
+            echo "- Package: ${{ inputs.package }}"
+            echo "- New version: $NEW_VERSION"
+            echo "- Bump type: ${{ inputs.version_bump }}"
+          } >> $GITHUB_STEP_SUMMARY
 
       - name: Verify package contents
         run: |
           cd packages/${{ steps.pkg.outputs.dir }}
           yarn pack --dry-run
 
-      # Uses GitHub API to create signed commits for verification on protected branches
+      # Branch protection blocks direct pushes to main, so route the version bump
+      # through a PR: create branch → signed bot commit → open PR → auto-merge.
+      - name: Create release branch
+        env:
+          GH_TOKEN: ${{ steps.gh-app-token.outputs.token }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          SHA=$(gh api "/repos/${{ github.repository }}/git/refs/heads/${{ github.ref_name }}" -q .object.sha)
+          gh api --method POST "/repos/${{ github.repository }}/git/refs" \
+            -f ref="refs/heads/$BRANCH" \
+            -f sha="$SHA"
+
       - name: Commit version bump
         uses: iarekylew00t/verified-bot-commit@934fa64df2191ab067d0c0d73f422239b6933392 # v2.2.1
         with:
-          message: "Release ${{ inputs.package }} v${{ steps.version.outputs.new }}"
+          message: "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}"
           token: ${{ steps.gh-app-token.outputs.token }}
-          ref: ${{ github.ref_name }}
+          ref: ${{ steps.version.outputs.branch }}
           files: |
             packages/${{ steps.pkg.outputs.dir }}/package.json
 
-      - name: Create and push tag
-        run: |
-          git tag "${{ inputs.package }}/v${{ steps.version.outputs.new }}"
-          git push origin "${{ inputs.package }}/v${{ steps.version.outputs.new }}"
-
-      - name: Publish to npm
-        run: |
-          yarn config set npmAuthToken "$NPM_TOKEN"
-          cd packages/${{ steps.pkg.outputs.dir }}
-          yarn npm publish --access public --provenance
+      - name: Ensure release label exists
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ steps.gh-app-token.outputs.token }}
+        run: |
+          gh label create release \
+            --description "Automated release PR" \
+            --color ededed \
+            --force
+
+      - name: Open release PR
+        id: open-pr
+        env:
+          GH_TOKEN: ${{ steps.gh-app-token.outputs.token }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          cat > /tmp/pr-body.md <<EOF
+          Automated release PR for **${{ inputs.package }}** v${{ steps.version.outputs.new }} (${{ inputs.version_bump }} bump).
+
+          This PR was opened by the release workflow. Once required checks pass (semgrep, CodeQL, code-owner review), it will auto-merge. Merging will trigger the publish workflow, which tags the release and publishes to npm.
+          EOF
+          PR_URL=$(gh pr create \
+            --base "${{ github.ref_name }}" \
+            --head "$BRANCH" \
+            --title "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}" \
+            --label release \
+            --body-file /tmp/pr-body.md)
+          echo "url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "- PR: $PR_URL" >> $GITHUB_STEP_SUMMARY
+
+      # If this step fails with "auto-merge is not allowed", enable it under
+      # Settings → General → "Allow auto-merge", then re-run the workflow.
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ steps.gh-app-token.outputs.token }}
+        run: gh pr merge "${{ steps.open-pr.outputs.url }}" --auto --squash

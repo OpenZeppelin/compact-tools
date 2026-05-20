@@ -1,0 +1,122 @@
+name: Publish Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  # Escape hatch: re-run a publish that failed mid-flow (e.g. after a fix to
+  # this workflow). Reads the version from the package.json currently on main.
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package to (re)publish"
+        required: true
+        type: choice
+        options:
+          - compact-builder
+          - compact-cli
+          - compact-simulator
+
+jobs:
+  publish:
+    name: Publish merged release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'release'))
+    runs-on: ubuntu-24.04
+    environment: compact-npm-prod # Final approval gate before npm publish
+
+    permissions:
+      contents: write   # push the version tag
+      id-token: write   # npm provenance
+
+    steps:
+      - name: Get github app token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        id: gh-app-token
+        with:
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      # For pull_request runs: checkout the merge commit (deterministic view of
+      # what was just merged). For manual dispatch: checkout main HEAD.
+      - name: Check out target ref
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+          token: ${{ steps.gh-app-token.outputs.token }}
+
+      - name: Detect released package
+        id: pkg
+        env:
+          EVENT: ${{ github.event_name }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT_PACKAGE: ${{ inputs.package }}
+        run: |
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            PKG="$INPUT_PACKAGE"
+            case "$PKG" in
+              compact-builder)   DIR="builder" ;;
+              compact-cli)       DIR="cli" ;;
+              compact-simulator) DIR="simulator" ;;
+              *)
+                echo "::error::unknown package: $PKG"
+                exit 1
+                ;;
+            esac
+          else
+            mapfile -t CHANGED < <(git diff --name-only "$MERGE_SHA^" "$MERGE_SHA" -- 'packages/*/package.json')
+            COUNT=${#CHANGED[@]}
+            if [[ "$COUNT" -ne 1 ]]; then
+              echo "::error::expected exactly one packages/*/package.json change, found $COUNT"
+              printf '%s\n' "${CHANGED[@]}" >&2
+              exit 1
+            fi
+            DIR=$(echo "${CHANGED[0]}" | awk -F/ '{print $2}')
+            case "$DIR" in
+              builder)   PKG="compact-builder" ;;
+              cli)       PKG="compact-cli" ;;
+              simulator) PKG="compact-simulator" ;;
+              *)
+                echo "::error::unknown package directory: $DIR"
+                exit 1
+                ;;
+            esac
+          fi
+          VERSION=$(node -p "require('./packages/$DIR/package.json').version")
+          echo "dir=$DIR" >> $GITHUB_OUTPUT
+          echo "name=$PKG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          {
+            echo "### Publishing"
+            echo "- Package: $PKG"
+            echo "- Version: $VERSION"
+            echo "- Trigger: $EVENT"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+
+      - name: Build package
+        run: yarn build --filter=@openzeppelin/${{ steps.pkg.outputs.name }}
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ steps.pkg.outputs.name }}/v${{ steps.pkg.outputs.version }}
+        run: |
+          if git ls-remote --tags --exit-code origin "refs/tags/$TAG" >/dev/null; then
+            echo "tag $TAG already on origin, leaving it in place"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          yarn config set npmAuthToken "$NPM_TOKEN"
+          cd packages/${{ steps.pkg.outputs.dir }}
+          yarn npm publish --access public --provenance

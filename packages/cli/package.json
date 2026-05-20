@@ -11,6 +11,11 @@
   ],
   "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenZeppelin/compact-tools.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "exports": {
     "./run-builder": "./dist/runBuilder.js",
