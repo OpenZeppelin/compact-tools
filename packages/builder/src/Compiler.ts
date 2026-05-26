@@ -20,6 +20,7 @@ import {
   DEFAULT_SRC_DIR,
   type ExecFunction,
 } from './types/options.ts';
+import { cleanForDisplay } from './utils.ts';
 
 // Re-export public types and services so consumers keep importing them
 // from './Compiler.js' regardless of the internal file layout.
@@ -295,11 +296,12 @@ export class CompactCompiler {
 
       spinner.succeed(chalk.green(`[COMPILE] ${step} Compiled ${file}`));
       // Filter out compactc version output from compact compile
-      const filteredOutput = result.stdout.split('\n').slice(1).join('\n');
+      const filteredOutput = cleanForDisplay(result.stdout);
 
       if (filteredOutput) {
         UIService.printOutput(filteredOutput, chalk.cyan);
       }
+      UIService.printOutput(cleanForDisplay(result.stderr), chalk.yellow);
       UIService.printOutput(result.stderr, chalk.yellow);
     } catch (error) {
       spinner.fail(chalk.red(`[COMPILE] ${step} Failed ${file}`));
@@ -311,11 +313,12 @@ export class CompactCompiler {
       const execError = error instanceof CompilationError ? error.cause : error;
       if (isPromisifiedChildProcessError(execError)) {
         // Filter out compactc version output from compact compile
-        const filteredOutput = execError.stdout.split('\n').slice(1).join('\n');
+        const filteredOutput = cleanForDisplay(execError.stdout);
 
         if (filteredOutput) {
           UIService.printOutput(filteredOutput, chalk.cyan);
         }
+        UIService.printOutput(cleanForDisplay(execError.stderr), chalk.red);
         UIService.printOutput(execError.stderr, chalk.red);
       }
 
