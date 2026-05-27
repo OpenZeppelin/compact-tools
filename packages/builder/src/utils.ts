@@ -6,11 +6,16 @@
  * - **Shell quoting** ({@link shellQuote}, {@link buildFindExcludes}) — used by
  *   `CompactBuilder` to interpolate user-supplied values into bash commands
  *   safely.
- * - **Output cleaning** ({@link cleanCompileOutput}, {@link cleanForDisplay}) —
- *   strips ANSI codes, spinner artifacts, and control characters from
- *   `compact compile` output so it displays cleanly under turbo.
+ * - **Output cleaning** ({@link cleanCompileOutput}, {@link cleanForDisplay},
+ *   {@link parseCircuitConstraints}) — strips ANSI codes, spinner artifacts,
+ *   and cursor-movement sequences from `compact compile` PTY output and
+ *   extracts circuit constraint data.
+ * - **Circuit info persistence** ({@link writeCircuitInfoJson}) — writes
+ *   `.circuit-info.json` files with parsed circuit constraints.
  */
 
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 /**
  * Converts a simple glob pattern to a regular expression.
  * Supports `*` (any sequence) and `?` (single char). All other glob features
@@ -72,6 +77,8 @@ export function buildFindExcludes(patterns: readonly string[]): string {
     .join(' ');
 }
 
+// ─── Compile output cleaning ────────────────────────────────────────────
+
 // Precompiled patterns — built via `new RegExp` so biome's
 // noControlCharactersInRegex rule doesn't fire on the literal escapes.
 // biome-ignore lint/complexity/useRegexLiterals: control characters require RegExp constructor to avoid noControlCharactersInRegex
@@ -82,22 +89,23 @@ const OSC_RE = new RegExp(String.raw`\x1B\][^\x07]*\x07`, 'g');
 const CHARSET_RE = new RegExp(String.raw`\x1B[()][A-Z0-9]`, 'g');
 
 /**
- * Strip ANSI escape sequences, spinner artifacts, and carriage returns from
- * `compact compile` output, leaving only clean visible text.
+ * Strip ANSI escape sequences, spinner artifacts, cursor-movement sequences,
+ * and carriage returns from `compact compile` output.
  *
- * The `compact compile` command uses ora-style spinners that write braille
- * characters and overwrite lines with `\r`. When `execFile` captures this to
- * a string, the control characters persist. When turbo buffers and replays
- * output from parallel tasks, the carriage returns cause lines to overwrite
- * each other, producing garbled/duplicated output.
+ * `compactc` writes its progress UI (per-circuit spinner lines with constraint
+ * info) directly to the TTY using cursor-up/erase-line sequences to redraw
+ * the display on every spinner frame. When captured via a PTY (e.g. `node-pty`
+ * or `script`), the raw output contains hundreds of redraw frames. This
+ * function strips all the control sequences, then the `\r`-based line
+ * overwrites, leaving clean text that can be parsed or displayed.
  *
- * @param raw - Raw stdout/stderr from `compact compile`
+ * @param raw - Raw output from `compact compile` (captured via PTY)
  * @returns Cleaned output with only visible text
  */
 export function cleanCompileOutput(raw: string): string {
   return (
     raw
-      // CSI sequences (colors, cursor movement, erase)
+      // CSI sequences (colors, cursor movement, erase line, etc.)
       .replace(CSI_RE, '')
       // OSC sequences (terminal title, etc.)
       .replace(OSC_RE, '')
@@ -116,21 +124,144 @@ export function cleanCompileOutput(raw: string): string {
 
 /**
  * Clean `compact compile` output for display: strips the `compactc` version
- * line, ANSI codes, spinner artifacts, and empty lines.
+ * line, ANSI codes, spinner artifacts, cursor redraws, and duplicate/empty
+ * lines.
  *
- * Drop-in replacement for `result.stdout.split('\n').slice(1).join('\n')`.
+ * Since `compactc` redraws all circuit lines on every spinner frame, the
+ * cleaned output will contain many duplicates. This function deduplicates
+ * by keeping the last occurrence of each `circuit "name" (...)` line and
+ * the final progress bar state.
  *
- * @param raw - Raw stdout/stderr from `compact compile`
+ * @param raw - Raw output from `compact compile` (captured via PTY or pipe)
  * @returns Clean multi-line string suitable for terminal display
  */
 export function cleanForDisplay(raw: string): string {
-  return cleanCompileOutput(raw)
-    .split('\n')
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return false;
-      if (trimmed.startsWith('compactc ')) return false;
-      return true;
-    })
-    .join('\n');
+  const cleaned = cleanCompileOutput(raw);
+  const lines = cleaned.split('\n');
+
+  // Deduplicate: for circuit lines, keep last occurrence; for others, keep unique
+  const circuitLines = new Map<string, string>();
+  const otherLines: string[] = [];
+  let compilingLine = '';
+  let progressLine = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('compactc ')) continue;
+
+    const circuitMatch = trimmed.match(
+      /circuit\s+"([^"]+)"\s*\(k\s*=\s*\d+\s*,\s*rows\s*=\s*\d+\s*\)/,
+    );
+    if (circuitMatch) {
+      circuitLines.set(circuitMatch[1], trimmed);
+    } else if (trimmed.startsWith('Compiling ')) {
+      compilingLine = trimmed;
+    } else if (trimmed.startsWith('Overall progress')) {
+      progressLine = trimmed;
+    } else if (
+      // Skip partial circuit lines (no k/rows yet, just spinner)
+      !trimmed.match(/^circuit\s+"[^"]+"/)
+    ) {
+      otherLines.push(trimmed);
+    }
+  }
+
+  const result: string[] = [];
+  if (compilingLine) result.push(compilingLine);
+  for (const line of circuitLines.values()) {
+    result.push(`  ${line}`);
+  }
+  if (progressLine) result.push(progressLine);
+  result.push(...otherLines);
+
+  return result.join('\n');
+}
+
+/**
+ * Parsed circuit constraint from compile output.
+ */
+export interface CircuitConstraint {
+  name: string;
+  k: number;
+  rows: number;
+}
+
+/**
+ * Parse circuit constraint info from `compact compile` output.
+ *
+ * Extracts all `circuit "name" (k=N, rows=N)` occurrences, deduplicates
+ * by circuit name (last occurrence wins — which is the final spinner state
+ * with complete k + rows values).
+ *
+ * @param rawOutput - Raw output from `compact compile` (PTY or pipe)
+ * @returns Array of unique circuit constraints
+ */
+export function parseCircuitConstraints(
+  rawOutput: string,
+): CircuitConstraint[] {
+  const cleaned = cleanCompileOutput(rawOutput);
+  const circuitPattern =
+    /circuit\s+"([^"]+)"\s*\(k\s*=\s*(\d+)\s*,\s*rows\s*=\s*(\d+)\s*\)/g;
+
+  // Deduplicate by name — last match wins (final spinner state)
+  const circuits = new Map<string, CircuitConstraint>();
+  for (const match of cleaned.matchAll(circuitPattern)) {
+    circuits.set(match[1], {
+      name: match[1],
+      k: Number.parseInt(match[2], 10),
+      rows: Number.parseInt(match[3], 10),
+    });
+  }
+
+  return [...circuits.values()];
+}
+
+// ─── Circuit info file ──────────────────────────────────────────────────
+
+/**
+ * Shape of the `.circuit-info.json` file written per source directory.
+ */
+export interface CircuitInfoFile {
+  /** ISO timestamp of when this file was last generated */
+  generatedAt: string;
+  /** Map of compiled filename → circuit constraints */
+  files: Record<string, CircuitConstraint[]>;
+}
+
+/**
+ * Write or merge circuit constraint data into a `.circuit-info.json` file
+ * in the source directory of the compiled file.
+ *
+ * If the file already exists, the entry for the given file is updated and
+ * other entries are preserved. The `generatedAt` timestamp is always updated.
+ *
+ * @param file     - Relative path to the compiled .compact file (from srcDir)
+ * @param srcDir   - Base source directory
+ * @param circuits - Parsed circuit constraints to write
+ * @returns The absolute path to the written `.circuit-info.json` file
+ */
+export function writeCircuitInfoJson(
+  file: string,
+  srcDir: string,
+  circuits: CircuitConstraint[],
+): string {
+  const srcFilePath = resolve(srcDir, file);
+  const dir = dirname(srcFilePath);
+  const jsonPath = resolve(dir, '.circuit-info.json');
+
+  let existing: CircuitInfoFile = { generatedAt: '', files: {} };
+  try {
+    existing = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+  } catch {
+    // File doesn't exist or is invalid, start fresh
+  }
+
+  const fileName = file.split('/').pop() ?? file;
+  existing.generatedAt = new Date().toISOString();
+  existing.files[fileName] = circuits;
+
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(jsonPath, `${JSON.stringify(existing, null, 2)}\n`, 'utf-8');
+  return jsonPath;
 }
