@@ -156,7 +156,9 @@ export class CompilerService {
    * In testing (injected execFn): calls the provided function directly.
    *
    * @param file    - Relative path to the .compact file from srcDir
-   * @param flags   - Space-separated compiler flags
+   * @param flags   - Space-separated compiler flags (e.g., '--skip-zk --verbose').
+   *                  Tokenized via `shell-quote` so quoted whitespace is preserved
+   *                  and shell operators (`;`, `&&`, …) cannot inject commands.
    * @param version - Optional specific toolchain version to use
    * @returns Promise resolving to compilation output (stdout/stderr)
    * @throws {CompilationError} If compilation fails for any reason
@@ -170,6 +172,8 @@ export class CompilerService {
     const fileDir = dirname(file);
     const fileName = basename(file, '.compact');
 
+    // Flattened (default): <outDir>/<ContractName>/
+    // Hierarchical: <outDir>/<subdir>/<ContractName>/
     const outputDir =
       this.options.hierarchical && fileDir !== '.'
         ? join(this.options.outDir, fileDir, fileName)
@@ -194,7 +198,7 @@ export class CompilerService {
       if (error instanceof Error) {
         message = error.message;
       } else {
-        message = String(error);
+        message = String(error); // fallback for strings, objects, numbers, etc.
       }
 
       throw new CompilationError(
