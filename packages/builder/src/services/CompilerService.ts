@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { openSync, readFileSync, unlinkSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, unlinkSync } from 'node:fs';
 import { platform, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { parse as parseShellArgs } from 'shell-quote';
@@ -71,6 +71,7 @@ async function spawnWithPty(
     const proc = spawn('script', scriptArgs, {
       stdio: ['ignore', devNull, devNull],
     });
+    closeSync(devNull);
 
     proc.on('error', (err) => {
       try {
