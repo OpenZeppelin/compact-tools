@@ -20,6 +20,11 @@ import {
   DEFAULT_SRC_DIR,
   type ExecFunction,
 } from './types/options.ts';
+import {
+  cleanForDisplay,
+  parseCircuitConstraints,
+  writeCircuitInfoJson,
+} from './utils.ts';
 
 // Re-export public types and services so consumers keep importing them
 // from './Compiler.js' regardless of the internal file layout.
@@ -271,6 +276,10 @@ export class CompactCompiler {
   /**
    * Compiles a single file with progress reporting and error handling.
    *
+   * When circuit constraint data is available in the compile output (i.e.,
+   * compiling without `--skip-zk`), prints a clean summary and writes a
+   * `.circuit-info.json` file in the source directory.
+   *
    * @param file  - Relative path to the .compact file
    * @param index - Current file index (0-based) for progress tracking
    * @param total - Total number of files being compiled
@@ -294,29 +303,42 @@ export class CompactCompiler {
       );
 
       spinner.succeed(chalk.green(`[COMPILE] ${step} Compiled ${file}`));
-      // Filter out compactc version output from compact compile
-      const filteredOutput = result.stdout.split('\n').slice(1).join('\n');
 
-      if (filteredOutput) {
-        UIService.printOutput(filteredOutput, chalk.cyan);
+      // Parse circuit constraints from the captured PTY output and print
+      // a clean summary. When --skip-zk is used, no constraints are
+      // available and this is a no-op.
+      const circuits = parseCircuitConstraints(result.stdout);
+      if (circuits.length > 0) {
+        const summary = circuits
+          .map((c) => `  "${c.name}" (k=${c.k}, rows=${c.rows})`)
+          .join('\n');
+        UIService.printOutput(summary, chalk.cyan);
+
+        // Write .circuit-info.json in the source directory
+        writeCircuitInfoJson(file, this.options.srcDir, circuits);
       }
-      UIService.printOutput(result.stderr, chalk.yellow);
+
+      const cleanStderr = cleanForDisplay(result.stderr);
+      if (cleanStderr) {
+        UIService.printOutput(cleanStderr, chalk.yellow);
+      }
     } catch (error) {
       spinner.fail(chalk.red(`[COMPILE] ${step} Failed ${file}`));
 
-      // CompilationError wraps the underlying child-process error in `.cause`.
-      // The previous guard `isPromisifiedChildProcessError(error)` on a
-      // CompilationError instance was unreachable — unwrap via `.cause` to
-      // surface compactc's stdout/stderr to the user.
       const execError = error instanceof CompilationError ? error.cause : error;
       if (isPromisifiedChildProcessError(execError)) {
-        // Filter out compactc version output from compact compile
-        const filteredOutput = execError.stdout.split('\n').slice(1).join('\n');
-
-        if (filteredOutput) {
-          UIService.printOutput(filteredOutput, chalk.cyan);
+        const circuits = parseCircuitConstraints(execError.stdout);
+        if (circuits.length > 0) {
+          const summary = circuits
+            .map((c) => `  "${c.name}" (k=${c.k}, rows=${c.rows})`)
+            .join('\n');
+          UIService.printOutput(summary, chalk.cyan);
         }
-        UIService.printOutput(execError.stderr, chalk.red);
+
+        const cleanStderr = cleanForDisplay(execError.stderr);
+        if (cleanStderr) {
+          UIService.printOutput(cleanStderr, chalk.red);
+        }
       }
 
       throw error;
