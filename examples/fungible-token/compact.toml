@@ -1,0 +1,42 @@
+# compact-deploy config for the TokenExample example.
+# All paths resolve against this file's directory.
+
+[profile]
+default_network = "local"
+artifacts_dir   = "artifacts"
+deployments_dir = "deployments"
+
+[networks.local]
+network_id   = "undeployed"
+indexer      = "http://127.0.0.1:8088/api/v4/graphql"
+indexer_ws   = "ws://127.0.0.1:8088/api/v4/graphql/ws"
+node         = "http://127.0.0.1:9944"
+node_ws      = "ws://127.0.0.1:9944"
+proof_server = "http://127.0.0.1:6300"
+wallet       = { source = "local", index = 0 }
+
+[networks.preview]
+network_id   = "preview"
+indexer      = "https://indexer.preview.midnight.network/api/v4/graphql"
+indexer_ws   = "wss://indexer.preview.midnight.network/api/v4/graphql/ws"
+node         = "https://rpc.preview.midnight.network"
+node_ws      = "wss://rpc.preview.midnight.network"
+proof_server = "auto"
+explorer     = "https://preview.midnightexplorer.com"
+
+[networks.preprod]
+network_id   = "preprod"
+indexer      = "https://indexer.preprod.midnight.network/api/v4/graphql"
+indexer_ws   = "wss://indexer.preprod.midnight.network/api/v4/graphql/ws"
+node         = "https://rpc.preprod.midnight.network"
+node_ws      = "wss://rpc.preprod.midnight.network"
+proof_server = "auto"
+explorer     = "https://preprod.midnightexplorer.com"
+
+[contracts.TokenExample]
+artifact         = "TokenExample"
+signing_key_file = "deploy/TokenExample.signingkey"
+# Args come from this module ref. The CLI flow (`yarn cli:*`) reads
+# them from here. The programmatic flow (`yarn deploy:*`) overrides
+# them inline via the `args:` field on `runDeploy()`.
+args             = { module = "./deploy/TokenExample.args.mjs", export = "args" }

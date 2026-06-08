@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// Integration-test fixture for @openzeppelin/compact-deployer.
+//
+// Demonstrates two compact features the deployer must support end-to-end
+// that the minimal Counter fixture does not exercise:
+//
+//  1. **Witnesses.** The `.compact` declares only the signature; the
+//     implementation lives in a TS module, resolved at deploy time via
+//     `[contracts.PrivateCounter].witnesses = { module, export }` in
+//     `compact.toml`.
+//
+//  2. **Private state.** The witness's TS impl reads from
+//     `context.privateState`, seeded at deploy time by the deployer's
+//     `init_private_state = { file = "..." }` path.
+//
+// Single circuit `applyDelta()`: reads the secret delta from private
+// state and adds it to the on-chain `publicSum` counter. `disclose()`
+// is required to write a witness value to the public ledger.
+
+pragma language_version >= 0.21.0;
+
+import CompactStandardLibrary;
+
+export ledger publicSum: Counter;
+
+// `Counter.increment` from the standard library expects `Uint<16>`, so
+// the witness must match. The JSON seed value (7n) fits trivially.
+witness secret_delta(): Uint<16>;
+
+export circuit applyDelta(): [] {
+  const delta = secret_delta();
+  publicSum.increment(disclose(delta));
+}
