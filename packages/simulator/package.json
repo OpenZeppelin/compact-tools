@@ -43,7 +43,7 @@
     "@tsconfig/node24": "^24.0.3",
     "@types/node": "25.9.1",
     "fast-check": "^4.5.2",
-    "typescript": "^5.8.2",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.6"
   },
   "dependencies": {
