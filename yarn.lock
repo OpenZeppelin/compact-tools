@@ -166,28 +166,28 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/compact-runtime@npm:0.14.0":
-  version: 0.14.0
-  resolution: "@midnight-ntwrk/compact-runtime@npm:0.14.0"
+"@midnight-ntwrk/compact-runtime@npm:0.16.0":
+  version: 0.16.0
+  resolution: "@midnight-ntwrk/compact-runtime@npm:0.16.0"
   dependencies:
-    "@midnight-ntwrk/onchain-runtime-v2": "npm:^2.0.0"
+    "@midnight-ntwrk/onchain-runtime-v3": "npm:^3.0.0"
     "@types/object-inspect": "npm:^1.8.1"
     object-inspect: "npm:^1.12.3"
-  checksum: 10/bba44d09770b172b7a5ba193f59d2ec57ca0dff2e3fd538326942e102e8cbe0b0cc1cb736e1f469afc74258517e7d25fc4dfa7f89a299aed900efc89f1eed3a7
+  checksum: 10/ef0c68d53bba6a04f336094c82c26b781082d7ce4ee09f0539009fb108776b36ea24b9a774292d9bbf9722b8a78d47254b5f80a613d4010a7f7d108514243023
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/ledger-v7@npm:^7.0.0":
-  version: 7.0.3
-  resolution: "@midnight-ntwrk/ledger-v7@npm:7.0.3"
-  checksum: 10/49f59fa611996a1514f3143828e240cff7d34db7cdaf76b2131b346687139b81dc9ecd7870b29103962cf3c296cd0d11aebf1cc7b2bf0f6a3bf9263d3af19815
+"@midnight-ntwrk/ledger-v8@npm:8.1.0":
+  version: 8.1.0
+  resolution: "@midnight-ntwrk/ledger-v8@npm:8.1.0"
+  checksum: 10/10d56076b0333a502f157c816f8cfebefc8d50221cb20c6db15abcbf2d0092bdaf7e9bc1bd19a6d9f51455547c713c916cb16d4a7d18e83cba0e172ad6e2a507
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/onchain-runtime-v2@npm:^2.0.0":
-  version: 2.0.1
-  resolution: "@midnight-ntwrk/onchain-runtime-v2@npm:2.0.1"
-  checksum: 10/40ffba7809ecbf9e7e4fd98e7e025922ba72ff667d15f7737b9a2b913558688f19552ef40a63a1379b348a4e5c85e4257f6f485d6b09d15c2b5e4ca0149613b0
+"@midnight-ntwrk/onchain-runtime-v3@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "@midnight-ntwrk/onchain-runtime-v3@npm:3.0.0"
+  checksum: 10/873aeb9e631c3678373c62b5aef847de454de94427028fb3d3f28bfdc8b2c02a3c770bd79d9bfef183eb9db6fb8c23e6826636f2e512ffd6eacbcf7cc0651c5d
   languageName: node
   linkType: hard
 
@@ -240,8 +240,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-simulator@workspace:packages/simulator"
   dependencies:
-    "@midnight-ntwrk/compact-runtime": "npm:0.14.0"
-    "@midnight-ntwrk/ledger-v7": "npm:^7.0.0"
+    "@midnight-ntwrk/compact-runtime": "npm:0.16.0"
+    "@midnight-ntwrk/ledger-v8": "npm:8.1.0"
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:25.9.1"
     fast-check: "npm:^4.5.2"
