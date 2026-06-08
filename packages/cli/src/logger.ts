@@ -3,10 +3,11 @@ import { join } from 'node:path';
 import pino, { type Logger } from 'pino';
 
 /**
- * Pino factory for the three CLI modes: `--json` (raw JSON, no transports),
- * default (pretty `info+`), `--verbose` (pretty `info+` to stdout AND
- * `debug+` mirrored to `.compact/logs/<ts>.log` so the transcript survives
- * spinner overwrites).
+ * Pino factory for the three CLI modes: `--json` (raw JSON to STDERR, no
+ * transports — STDOUT is reserved for the single result object), default
+ * (pretty `info+`), `--verbose` (pretty `info+` to stdout AND `debug+`
+ * mirrored to `.compact/logs/<ts>.log` so the transcript survives spinner
+ * overwrites).
  */
 export interface CreateLoggerOptions {
   verbose: boolean;
@@ -16,7 +17,11 @@ export interface CreateLoggerOptions {
 
 export function createLogger(opts: CreateLoggerOptions): Logger {
   if (opts.json) {
-    return pino({ level: opts.verbose ? 'debug' : 'info' });
+    // fd 2 = STDERR; keeps STDOUT carrying only the final JSON result.
+    return pino(
+      { level: opts.verbose ? 'debug' : 'info' },
+      pino.destination(2),
+    );
   }
 
   if (opts.verbose) {

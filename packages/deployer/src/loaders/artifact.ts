@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import { CompiledContract, type Contract } from '@midnight-ntwrk/compact-js';
 import type { Types } from 'effect';
 import {
@@ -62,13 +62,16 @@ export class Artifact {
       throw new ArtifactNotFoundError(artifactPath);
     }
 
-    const contractDir = resolve(artifactPath, 'contract');
-    const entry = findEntry(contractDir, artifactPath);
+    const entry = findEntry(resolve(artifactPath, 'contract'), artifactPath);
     if (!entry) {
       throw new ArtifactNotFoundError(
         `${artifactPath} (no contract/index.{cjs,js} or index.{cjs,js} found)`,
       );
     }
+    // Bind compiled assets to the directory the entry actually lives in:
+    // `findEntry` may resolve a top-level `index.{cjs,js}` rather than the
+    // `contract/` subdir, in which case the hardcoded path would be wrong.
+    const contractDir = dirname(entry);
 
     const keysDir = resolve(artifactPath, 'keys');
     const zkirDir = resolve(artifactPath, 'zkir');

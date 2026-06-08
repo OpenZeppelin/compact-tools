@@ -72,4 +72,14 @@ describe('reorderNamedArgs', () => {
       /unknown constructor parameter\(s\): x/,
     );
   });
+
+  it('accepts an empty named object for a no-arg constructor', () => {
+    expect(reorderNamedArgs({}, [])).toEqual([]);
+  });
+
+  it('rejects a non-empty named object for a no-arg constructor', () => {
+    expect(() => reorderNamedArgs({ a: 1 }, [])).toThrow(
+      /unknown constructor parameter\(s\): a/,
+    );
+  });
 });

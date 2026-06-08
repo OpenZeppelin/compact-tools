@@ -63,8 +63,11 @@ export class ProofServer {
 
     const port = process.env.PROOF_SERVER_PORT;
     if (port !== undefined) {
-      const parsed = Number.parseInt(port, 10);
-      if (Number.isNaN(parsed)) {
+      if (!/^\d+$/.test(port)) {
+        throw new ConfigError(`Invalid PROOF_SERVER_PORT: ${port}`);
+      }
+      const parsed = Number(port);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
         throw new ConfigError(`Invalid PROOF_SERVER_PORT: ${port}`);
       }
       logger.debug(`Using PROOF_SERVER_PORT=${parsed}`);

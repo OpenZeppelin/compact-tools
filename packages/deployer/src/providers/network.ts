@@ -16,7 +16,6 @@ const KNOWN_NETWORK_IDS: ReadonlySet<string> = new Set([
   'testnet',
   'preview',
   'preprod',
-  'mainnet',
 ]);
 
 export interface ResolvedEnvironment {

@@ -17,13 +17,10 @@ export function loadConstructorParamNames(artifactPath: string): string[] {
     );
   }
   const source = readFileSync(dtsPath, 'utf8');
-  const names = parseConstructorParamNames(source);
-  if (names.length === 0) {
-    throw new ConfigError(
-      `Contract ${artifactPath} has a no-arg constructor; named args object should be empty`,
-    );
-  }
-  return names;
+  // A no-arg constructor yields `[]`. `reorderNamedArgs` then accepts an
+  // empty named-args object and rejects any unexpected keys, so we don't
+  // need to special-case the empty result here.
+  return parseConstructorParamNames(source);
 }
 
 /** Reorders a named-object args record into a positional tuple. */
