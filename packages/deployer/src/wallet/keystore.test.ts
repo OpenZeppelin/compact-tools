@@ -147,5 +147,16 @@ describe('Keystore', () => {
       } as unknown as MidnightKeystore;
       expect(() => Keystore.fromJSON(tampered)).toThrow(/Unsupported cipher/);
     });
+
+    it('should reject a non-object with WalletError (not a raw TypeError)', () => {
+      expect(() => Keystore.fromJSON(null)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON('nope')).toThrow(/expected an object/);
+    });
+
+    it('should reject JSON missing the crypto section with WalletError', () => {
+      expect(() => Keystore.fromJSON({ version: 'midnight-1' })).toThrow(
+        /missing crypto section/,
+      );
+    });
   });
 });

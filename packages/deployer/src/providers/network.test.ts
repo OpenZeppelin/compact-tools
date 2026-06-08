@@ -41,12 +41,18 @@ describe('applyNetwork', () => {
     'testnet',
     'preview',
     'preprod',
-    'mainnet',
   ])('should accept known network id %s', (id) => {
     expect(() =>
       applyNetwork({ ...baseNetwork, network_id: id }, 'http://ps'),
     ).not.toThrow();
     expect(setNetworkId).toHaveBeenLastCalledWith(id);
+  });
+
+  it('should reject mainnet while the deployer is testnet/preview-only', () => {
+    expect(() =>
+      applyNetwork({ ...baseNetwork, network_id: 'mainnet' }, 'http://ps'),
+    ).toThrow(ConfigError);
+    expect(setNetworkId).not.toHaveBeenCalled();
   });
 
   it('should reject an unknown network id with ConfigError', () => {

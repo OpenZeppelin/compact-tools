@@ -1,8 +1,12 @@
-import { stdin, stdout } from 'node:process';
+import { stderr, stdin } from 'node:process';
 
-/** Prompt for a keystore passphrase with terminal echo suppressed; falls back to plain line-read off a TTY. */
+/**
+ * Prompt for a keystore passphrase with terminal echo suppressed; falls back
+ * to plain line-read off a TTY. Prompt text and the trailing newline go to
+ * STDERR so `--json` (and any piped) callers keep a clean single-object STDOUT.
+ */
 export async function promptPassphrase(label: string): Promise<string> {
-  stdout.write(`Passphrase for ${label}: `);
+  stderr.write(`Passphrase for ${label}: `);
   return readMaskedLine();
 }
 
@@ -15,7 +19,23 @@ function readMaskedLine(): Promise<string> {
       if (isTTY) stdin.setRawMode(false);
       stdin.pause();
       stdin.removeListener('data', onData);
-      stdout.write('\n');
+      stdin.removeListener('end', onEnd);
+      stdin.removeListener('error', onError);
+      stderr.write('\n');
+    };
+
+    // Without these, a non-interactive stdin that closes without a trailing
+    // newline (e.g. piped input, or a closed pipe) would never settle the
+    // promise and the CLI would hang.
+    const onEnd = () => {
+      cleanup();
+      if (buffer.length > 0) resolveFn(buffer);
+      else rejectFn(new Error('Aborted'));
+    };
+
+    const onError = (err: Error) => {
+      cleanup();
+      rejectFn(err);
     };
 
     const onData = (chunk: Buffer) => {
@@ -44,5 +64,7 @@ function readMaskedLine(): Promise<string> {
     stdin.resume();
     stdin.setEncoding('utf8');
     stdin.on('data', onData);
+    stdin.on('end', onEnd);
+    stdin.on('error', onError);
   });
 }

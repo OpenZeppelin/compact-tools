@@ -40,11 +40,13 @@ const walletObjectSchema = z.object({
 });
 const walletSchema = walletObjectSchema.optional();
 
-const fileRefSchema = z.object({ file: z.string().min(1) });
-const moduleRefSchema = z.object({
-  module: z.string().min(1),
-  export: z.string().default('default'),
-});
+const fileRefSchema = z.object({ file: z.string().min(1) }).strict();
+const moduleRefSchema = z
+  .object({
+    module: z.string().min(1),
+    export: z.string().default('default'),
+  })
+  .strict();
 const fileOrModuleRefSchema = z.union([fileRefSchema, moduleRefSchema]);
 
 const argsSchema = z.union([z.array(z.unknown()), fileOrModuleRefSchema]);

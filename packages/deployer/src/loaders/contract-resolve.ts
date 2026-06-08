@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import type { CompactConfig } from '../config/compact-config.ts';
 import { ConfigError } from '../errors.ts';
 import { LoaderContext } from './context.ts';
@@ -85,7 +85,7 @@ function resolveUnderRoot(
   artifact: string,
   artifactsDir: string,
 ): string {
-  if (artifact.startsWith('/')) return artifact;
+  if (isAbsolute(artifact)) return artifact;
   const direct = resolve(rootDir, artifact);
   if (existsSync(direct)) return direct;
   return resolve(rootDir, artifactsDir, artifact);

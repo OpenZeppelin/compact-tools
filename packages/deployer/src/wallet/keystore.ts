@@ -118,27 +118,35 @@ export class Keystore {
         `Invalid JSON in keystore ${path}: ${(e as Error).message}`,
       );
     }
-    return Keystore.fromJSON(parsed as MidnightKeystore);
+    return Keystore.fromJSON(parsed);
   }
 
-  /** Wrap parsed keystore JSON; validates version/cipher/KDF eagerly. */
-  static fromJSON(data: MidnightKeystore): Keystore {
-    if (data.version !== VERSION) {
+  /** Wrap parsed keystore JSON; validates shape + version/cipher/KDF eagerly. */
+  static fromJSON(data: unknown): Keystore {
+    if (!data || typeof data !== 'object') {
+      throw new WalletError('Invalid keystore: expected an object');
+    }
+    const d = data as Partial<MidnightKeystore>;
+    if (!d.crypto || typeof d.crypto !== 'object') {
+      throw new WalletError('Invalid keystore: missing crypto section');
+    }
+    const crypto = d.crypto as MidnightKeystore['crypto'];
+    if (d.version !== VERSION) {
       throw new WalletError(
-        `Unsupported keystore version: ${data.version} (expected ${VERSION})`,
+        `Unsupported keystore version: ${String(d.version)} (expected ${VERSION})`,
       );
     }
-    if (data.crypto.kdf !== 'scrypt') {
+    if (crypto.kdf !== 'scrypt') {
       throw new WalletError(
-        `Unsupported KDF: ${data.crypto.kdf} (expected scrypt)`,
+        `Unsupported KDF: ${String(crypto.kdf)} (expected scrypt)`,
       );
     }
-    if (data.crypto.cipher !== 'aes-128-ctr') {
+    if (crypto.cipher !== 'aes-128-ctr') {
       throw new WalletError(
-        `Unsupported cipher: ${data.crypto.cipher} (expected aes-128-ctr)`,
+        `Unsupported cipher: ${String(crypto.cipher)} (expected aes-128-ctr)`,
       );
     }
-    return new Keystore(data);
+    return new Keystore(d as MidnightKeystore);
   }
 
   /** Recover the hex-encoded seed. Throws {@link WalletError} on MAC mismatch. */

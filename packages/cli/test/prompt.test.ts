@@ -1,7 +1,7 @@
 import type { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockStdin, mockStdout } = await vi.hoisted(async () => {
+const { mockStdin, mockStderr } = await vi.hoisted(async () => {
   const { EventEmitter } = await import('node:events');
   type FakeStdin = InstanceType<typeof EventEmitter> & {
     isTTY: boolean;
@@ -21,13 +21,13 @@ const { mockStdin, mockStdout } = await vi.hoisted(async () => {
     stdin,
   ) as FakeStdin['removeListener'];
 
-  const stdout = { write: vi.fn() };
-  return { mockStdin: stdin, mockStdout: stdout };
+  const stderr = { write: vi.fn() };
+  return { mockStdin: stdin, mockStderr: stderr };
 });
 
 vi.mock('node:process', () => ({
   stdin: mockStdin,
-  stdout: mockStdout,
+  stderr: mockStderr,
 }));
 
 import { promptPassphrase } from '../src/prompt.ts';
@@ -39,7 +39,7 @@ function resetStdin(opts: { tty: boolean } = { tty: true }): void {
   (mockStdin.pause as ReturnType<typeof vi.fn>).mockClear();
   (mockStdin.resume as ReturnType<typeof vi.fn>).mockClear();
   (mockStdin.setEncoding as ReturnType<typeof vi.fn>).mockClear();
-  mockStdout.write.mockClear();
+  mockStderr.write.mockClear();
 }
 
 describe('promptPassphrase', () => {
@@ -57,7 +57,7 @@ describe('promptPassphrase', () => {
       mockStdin.emit('data', Buffer.from('x\n'));
       await promise;
 
-      expect(mockStdout.write).toHaveBeenCalledWith(
+      expect(mockStderr.write).toHaveBeenCalledWith(
         'Passphrase for Alice keystore: ',
       );
       expect(mockStdin.setRawMode).toHaveBeenCalledWith(true);
@@ -86,7 +86,7 @@ describe('promptPassphrase', () => {
       expect(pp).toBe('hunter2');
       expect(mockStdin.setRawMode).toHaveBeenLastCalledWith(false);
       expect(mockStdin.pause).toHaveBeenCalled();
-      expect(mockStdout.write).toHaveBeenLastCalledWith('\n');
+      expect(mockStderr.write).toHaveBeenLastCalledWith('\n');
     });
 
     it('should resolve on LF (0x0a)', async () => {
@@ -145,6 +145,27 @@ describe('promptPassphrase', () => {
       // 0x03 short-circuits the loop; "abc\n" after it must not resolve.
       mockStdin.emit('data', Buffer.from([0x03, 0x61, 0x62, 0x63, 0x0a]));
       await expect(promise).rejects.toThrow('Aborted');
+    });
+  });
+
+  describe('stream close path', () => {
+    it('should reject with "Aborted" when stdin ends with an empty buffer', async () => {
+      const promise = promptPassphrase('label');
+      mockStdin.emit('end');
+      await expect(promise).rejects.toThrow('Aborted');
+    });
+
+    it('should resolve with the buffer when stdin ends without a trailing newline', async () => {
+      const promise = promptPassphrase('label');
+      mockStdin.emit('data', Buffer.from('piped-secret'));
+      mockStdin.emit('end');
+      await expect(promise).resolves.toBe('piped-secret');
+    });
+
+    it('should reject when stdin emits an error', async () => {
+      const promise = promptPassphrase('label');
+      mockStdin.emit('error', new Error('stream boom'));
+      await expect(promise).rejects.toThrow('stream boom');
     });
   });
 });

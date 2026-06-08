@@ -208,6 +208,20 @@ describe('configSchema — contract args', () => {
       export: 'default',
     });
   });
+
+  it('should reject an ambiguous ref carrying both file and module', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        contracts: {
+          Counter: {
+            ...validContract,
+            args: { file: 'args.json', module: 'args.ts' },
+          },
+        },
+      }),
+    ).toThrow();
+  });
 });
 
 describe('configSchema — required fields', () => {

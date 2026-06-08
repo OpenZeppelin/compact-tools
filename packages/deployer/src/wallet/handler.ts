@@ -7,7 +7,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import {
@@ -446,11 +446,9 @@ function buildDustConfig(
 }
 
 function pathDir(p: string): string {
-  const i = p.lastIndexOf('/');
-  return i === -1 ? '.' : p.slice(0, i);
+  return dirname(p);
 }
 
 function pathBase(p: string): string {
-  const i = p.lastIndexOf('/');
-  return i === -1 ? p : p.slice(i + 1);
+  return basename(p);
 }

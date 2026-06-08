@@ -112,6 +112,22 @@ describe('ProofServer.start — precedence chain', () => {
     ).rejects.toThrow(ConfigError);
   });
 
+  it('(4) should reject a partially-numeric PROOF_SERVER_PORT (e.g. "6300abc")', async () => {
+    process.env.PROOF_SERVER_PORT = '6300abc';
+    await expect(
+      ProofServer.start({ network: baseNetwork, logger: makeLogger() }),
+    ).rejects.toThrow(ConfigError);
+    expect(StaticProofServerContainer).not.toHaveBeenCalled();
+  });
+
+  it('(4) should reject an out-of-range PROOF_SERVER_PORT', async () => {
+    process.env.PROOF_SERVER_PORT = '70000';
+    await expect(
+      ProofServer.start({ network: baseNetwork, logger: makeLogger() }),
+    ).rejects.toThrow(ConfigError);
+    expect(StaticProofServerContainer).not.toHaveBeenCalled();
+  });
+
   it('(5) should fall back to http://127.0.0.1:6300 when nothing is configured', async () => {
     const ps = await ProofServer.start({
       network: baseNetwork,

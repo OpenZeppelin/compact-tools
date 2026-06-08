@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockMkdirSync, mockPino, mockTransport, fakeLogger } = vi.hoisted(
-  () => {
+const { mockMkdirSync, mockPino, mockTransport, mockDestination, fakeLogger } =
+  vi.hoisted(() => {
     const fakeLogger = {
       trace: vi.fn(),
       debug: vi.fn(),
@@ -15,10 +15,10 @@ const { mockMkdirSync, mockPino, mockTransport, fakeLogger } = vi.hoisted(
       mockMkdirSync: vi.fn(),
       mockPino: vi.fn(() => fakeLogger),
       mockTransport: vi.fn((cfg: unknown) => ({ __transport: cfg })),
+      mockDestination: vi.fn((fd: number) => ({ __destination: fd })),
       fakeLogger,
     };
-  },
-);
+  });
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -29,6 +29,8 @@ vi.mock('pino', () => {
   const pinoFn = (...args: unknown[]) => mockPino(...(args as [])) as unknown;
   (pinoFn as unknown as { transport: typeof mockTransport }).transport =
     mockTransport;
+  (pinoFn as unknown as { destination: typeof mockDestination }).destination =
+    mockDestination;
   return { default: pinoFn };
 });
 
@@ -44,20 +46,29 @@ describe('createLogger', () => {
   });
 
   describe('json mode', () => {
-    it('should return logger at info level when verbose false', () => {
+    it('should return logger at info level routed to STDERR when verbose false', () => {
       const logger = createLogger({ verbose: false, json: true });
 
       expect(mockPino).toHaveBeenCalledTimes(1);
-      expect(mockPino).toHaveBeenCalledWith({ level: 'info' });
+      // fd 2 = STDERR; STDOUT stays reserved for the single JSON result.
+      expect(mockDestination).toHaveBeenCalledWith(2);
+      expect(mockPino).toHaveBeenCalledWith(
+        { level: 'info' },
+        { __destination: 2 },
+      );
       expect(mockTransport).not.toHaveBeenCalled();
       expect(mockMkdirSync).not.toHaveBeenCalled();
       expect(logger).toBe(fakeLogger);
     });
 
-    it('should return logger at debug level when verbose true', () => {
+    it('should return logger at debug level routed to STDERR when verbose true', () => {
       const logger = createLogger({ verbose: true, json: true });
 
-      expect(mockPino).toHaveBeenCalledWith({ level: 'debug' });
+      expect(mockDestination).toHaveBeenCalledWith(2);
+      expect(mockPino).toHaveBeenCalledWith(
+        { level: 'debug' },
+        { __destination: 2 },
+      );
       expect(mockTransport).not.toHaveBeenCalled();
       expect(mockMkdirSync).not.toHaveBeenCalled();
       expect(logger).toBe(fakeLogger);

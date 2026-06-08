@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 /**
@@ -108,6 +109,13 @@ async function readJson<T>(path: string, fallback: T): Promise<T> {
   return JSON.parse(raw) as T;
 }
 
+// Write atomically: a crash mid-write would otherwise leave a truncated
+// `*.json`, breaking subsequent reads and losing durable deploy state.
+// Write to a sibling temp file, then rename it into place (atomic on the
+// same filesystem).
 async function writeJson(path: string, value: unknown): Promise<void> {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.${randomUUID()}.tmp`;
+  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(tmp, path);
 }
