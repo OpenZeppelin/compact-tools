@@ -62,8 +62,15 @@ export class WalletPool {
       await owned.provider.start(true);
       return owned;
     })();
-    this.cache.set(alias, built);
-    return built;
+    // Evict on failure so a rejected build isn't cached forever: otherwise
+    // every later signerFor(alias) would replay the same rejection with no
+    // chance to retry.
+    const guarded = built.catch((err) => {
+      this.cache.delete(alias);
+      throw err;
+    });
+    this.cache.set(alias, guarded);
+    return guarded;
   }
 
   /** Stop every cached wallet and clear the cache. Call from `afterAll()`. */
