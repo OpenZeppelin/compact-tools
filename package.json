@@ -4,12 +4,17 @@
   "private": true,
   "packageManager": "yarn@4.10.3",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "examples/*"
   ],
   "scripts": {
     "build": "turbo run build --log-prefix=none",
     "test": "turbo run test --log-prefix=none",
     "coverage": "turbo run coverage --log-prefix=none",
+    "test:integration": "make test-integration",
+    "compile:fixtures": "make compile",
+    "env:up": "make env-up",
+    "env:down": "make env-down",
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
     "lint:ci": "biome ci . --no-errors-on-unmatched",

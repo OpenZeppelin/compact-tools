@@ -1,0 +1,34 @@
+# Root deployer config — used by `compact-deploy` for real-network deploys.
+# Local-stack deploys still go through tests/integrations/compact.toml.
+
+[profile]
+artifacts_dir   = "tests/integrations/fixtures/artifacts"
+deployments_dir = "deployments/compact"
+
+# URLs taken verbatim from @midnight-ntwrk/testkit-js PreprodTestEnvironment
+# (node_modules/.../testkit-js/dist/index.mjs). Indexer is v4 — the README
+# example showed v3, which is stale.
+[networks.preprod]
+network_id   = "preprod"
+indexer      = "https://indexer.preprod.midnight.network/api/v4/graphql"
+indexer_ws   = "wss://indexer.preprod.midnight.network/api/v4/graphql/ws"
+node         = "https://rpc.preprod.midnight.network"
+node_ws      = "wss://rpc.preprod.midnight.network"
+proof_server = "http://127.0.0.1:6300"   # reuse the local-stack proof-server from `make env-up`
+explorer     = "https://preprod.midnightexplorer.com"
+
+# URLs taken verbatim from @midnight-ntwrk/testkit-js PreviewTestEnvironment.
+# Recommended by Midnight team while preprod is blocked on the
+# `midnight:event[v9]` DustSpendProcessed deserialization bug.
+[networks.preview]
+network_id   = "preview"
+indexer      = "https://indexer.preview.midnight.network/api/v4/graphql"
+indexer_ws   = "wss://indexer.preview.midnight.network/api/v4/graphql/ws"
+node         = "https://rpc.preview.midnight.network"
+node_ws      = "wss://rpc.preview.midnight.network"
+proof_server = "http://127.0.0.1:6300"   # reuse the local-stack proof-server from `make env-up`
+explorer     = "https://preview.midnightexplorer.com"
+
+[contracts.Counter]
+artifact         = "Counter"
+signing_key_file = "deploy/Counter.preprod.signingkey"

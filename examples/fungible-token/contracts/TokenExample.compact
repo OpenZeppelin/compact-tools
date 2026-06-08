@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: MIT
+// Educational example for @openzeppelin/compact-deployer.
+//
+// TokenExample wraps the OpenZeppelin Compact `FungibleToken` module
+// and exposes a deliberately rich constructor so the deploy walkthrough
+// shows how `compact-deploy` passes every common Compact primitive type
+// to a contract:
+//
+//   Opaque<"string">   strings (name, symbol)
+//   Uint<8>            small unsigned ints (decimals)
+//   Uint<32>           medium uints (feeBps)
+//   Uint<64>           medium-large uints (quorum)
+//   Uint<128>          large uints (maxSupply)
+//   Boolean            booleans (isMintable)
+//   Bytes<32>          fixed-size byte arrays (treasury address-like)
+//   Bytes<8>           smaller fixed-size byte arrays (tag)
+//
+// Extra constructor args beyond what FungibleToken_initialize needs are
+// saved into ledger fields so each value is observable on-chain after
+// deploy.
+//
+// NOT for production use — minimal wrapper, no access control, no
+// supply cap enforcement.
+
+pragma language_version >= 0.21.0;
+
+import CompactStandardLibrary;
+
+import "./token/FungibleToken" prefix FungibleToken_;
+
+export { ContractAddress, Either, Maybe };
+
+// ── Per-deploy configuration captured from the constructor ──
+
+export ledger treasury: Bytes<32>;
+export ledger maxSupply: Uint<128>;
+export ledger feeBps: Uint<32>;
+export ledger quorum: Uint<64>;
+export ledger isMintable: Boolean;
+export ledger tag: Bytes<8>;
+
+constructor(
+  _name: Opaque<"string">,
+  _symbol: Opaque<"string">,
+  _decimals: Uint<8>,
+  _treasury: Bytes<32>,
+  _maxSupply: Uint<128>,
+  _feeBps: Uint<32>,
+  _quorum: Uint<64>,
+  _isMintable: Boolean,
+  _tag: Bytes<8>,
+) {
+  FungibleToken_initialize(_name, _symbol, _decimals);
+  treasury = disclose(_treasury);
+  maxSupply = disclose(_maxSupply);
+  feeBps = disclose(_feeBps);
+  quorum = disclose(_quorum);
+  isMintable = disclose(_isMintable);
+  tag = disclose(_tag);
+}
+
+// ── Pass-throughs to FungibleToken so the deployed contract is usable ──
+
+export circuit name(): Opaque<"string"> {
+  return FungibleToken_name();
+}
+
+export circuit symbol(): Opaque<"string"> {
+  return FungibleToken_symbol();
+}
+
+export circuit decimals(): Uint<8> {
+  return FungibleToken_decimals();
+}
+
+export circuit totalSupply(): Uint<128> {
+  return FungibleToken_totalSupply();
+}
+
+export circuit balanceOf(account: Either<Bytes<32>, ContractAddress>): Uint<128> {
+  return FungibleToken_balanceOf(account);
+}
