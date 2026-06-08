@@ -8,41 +8,7 @@ import {
 import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
 
-/**
- * Executes the Compact compiler CLI with improved error handling and user feedback.
- *
- * Error Handling Architecture:
- *
- * This CLI follows a layered error handling approach:
- *
- * - Business logic (Compiler.ts) throws structured errors with context.
- * - CLI layer (runCompiler.ts) handles all user-facing error presentation.
- * - Custom error types (types/errors.ts) provide semantic meaning and context.
- *
- * Benefits: Better testability, consistent UI, separation of concerns.
- *
- * Note: This compiler uses fail-fast error handling.
- * Compilation stops on the first error encountered.
- * This provides immediate feedback but doesn't attempt to compile remaining files after a failure.
- *
- * @example Individual module compilation
- * ```bash
- * npx compact-compiler --dir security --skip-zk
- * turbo compact:access -- --skip-zk
- * turbo compact:security -- --skip-zk --other-flag
- * ```
- *
- * @example Full compilation with environment variables
- * ```bash
- * SKIP_ZK=true turbo compact
- * turbo compact
- * ```
- *
- * @example Version specification
- * ```bash
- * npx compact-compiler --dir security --skip-zk +<version>
- * ```
- */
+/** `compact-compiler` CLI shell — fail-fast, maps error types to user-facing messages via {@link handleError}. */
 async function runCompiler(): Promise<void> {
   const spinner = ora(chalk.blue('[COMPILE] Compact compiler started')).info();
 
@@ -56,21 +22,7 @@ async function runCompiler(): Promise<void> {
   }
 }
 
-/**
- * Centralized error handling with specific error types and user-friendly messages.
- *
- * Handles different error types with appropriate user feedback:
- *
- * - `CompactCliNotFoundError`: Shows installation instructions.
- * - `DirectoryNotFoundError`: Shows available directories.
- * - `CompilationError`: Shows file-specific error details with context.
- * - Environment validation errors: Shows troubleshooting tips.
- * - Argument parsing errors: Shows usage help.
- * - Generic errors: Shows general troubleshooting guidance.
- *
- * @param error - The error that occurred during compilation
- * @param spinner - Ora spinner instance for consistent UI messaging
- */
+/** Dispatch by error name → spinner output + actionable hint. */
 function handleError(error: unknown, spinner: Ora): void {
   // CompactCliNotFoundError
   if (error instanceof Error && error.name === 'CompactCliNotFoundError') {
@@ -154,9 +106,6 @@ function handleError(error: unknown, spinner: Ora): void {
   console.log(chalk.gray('  • File system permissions are correct'));
 }
 
-/**
- * Shows available directories when `DirectoryNotFoundError` occurs.
- */
 function showAvailableDirectories(): void {
   console.log(chalk.yellow('\nAvailable directories:'));
   console.log(
@@ -168,9 +117,6 @@ function showAvailableDirectories(): void {
   console.log(chalk.yellow('  --dir utils     # Compile utility contracts'));
 }
 
-/**
- * Shows usage help with examples for different scenarios.
- */
 function showUsageHelp(): void {
   console.log(chalk.yellow('\nUsage: compact-compiler [options]'));
   console.log(chalk.yellow('\nOptions:'));
