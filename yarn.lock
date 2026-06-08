@@ -910,7 +910,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@openzeppelin/compact-cli@workspace:packages/cli":
+"@openzeppelin/compact-cli@workspace:^, @openzeppelin/compact-cli@workspace:packages/cli":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-cli@workspace:packages/cli"
   dependencies:
@@ -2715,6 +2715,15 @@ __metadata:
   checksum: 10/2e969e637d05d09fa50b02d74c83a1186f6914aae89e6653b62595cc75a221464f884f55f231b8f4df7a49537fba60bdc0427acd2bf324c09a1dbb84837e36e4
   languageName: node
   linkType: hard
+
+"compact-deployer-example-fungible-token@workspace:examples/fungible-token":
+  version: 0.0.0-use.local
+  resolution: "compact-deployer-example-fungible-token@workspace:examples/fungible-token"
+  dependencies:
+    "@openzeppelin/compact-cli": "workspace:^"
+    "@openzeppelin/compact-deployer": "workspace:^"
+  languageName: unknown
+  linkType: soft
 
 "compact-tools-monorepo@workspace:.":
   version: 0.0.0-use.local

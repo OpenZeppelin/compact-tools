@@ -1,0 +1,47 @@
+# Integration-test deployer config. All paths resolve against this file's dir.
+
+[profile]
+default_network = "local"
+artifacts_dir   = "fixtures/artifacts"
+deployments_dir = "deployments/compact"
+
+[networks.local]
+network_id   = "undeployed"
+indexer      = "http://127.0.0.1:8088/api/v4/graphql"
+indexer_ws   = "ws://127.0.0.1:8088/api/v4/graphql/ws"
+node         = "http://127.0.0.1:9944"
+node_ws      = "ws://127.0.0.1:9944"
+proof_server = "http://127.0.0.1:6300"
+wallet       = { source = "local", index = 0 }
+faucet       = false
+
+[contracts.Counter]
+artifact         = "Counter"
+signing_key_file = "fixtures/signingkeys/Counter.signingkey"
+
+# Alias used by the history-isolation spec: reuses the Counter artifact
+# but registers under a distinct name so deployments/<network>.json can
+# show the two contracts maintain independent head/history slots.
+[contracts.SecondaryCounter]
+artifact         = "Counter"
+signing_key_file = "fixtures/signingkeys/SecondaryCounter.signingkey"
+
+# Intentionally broken artifact reference used by the async-dispose
+# spec: prepare passes config + signing-key validation and boots the
+# proof server, then fails at `Artifact.load` so the test can prove the
+# `AsyncDisposableStack` cleans up everything acquired so far.
+[contracts.MissingArtifact]
+artifact         = "DoesNotExist"
+signing_key_file = "fixtures/signingkeys/Counter.signingkey"
+
+# Exercises the deployer's `init_private_state` + `witnesses = { module, export }`
+# resolution paths end-to-end. The JSON file seeds the initial private
+# state; the TS module supplies the witness implementations resolved via
+# Node's dynamic `import()`. Requires `make compile` to produce
+# `fixtures/artifacts/PrivateCounter/`.
+[contracts.PrivateCounter]
+artifact            = "PrivateCounter"
+signing_key_file    = "fixtures/signingkeys/PrivateCounter.signingkey"
+private_state_id    = "private-counter-state"
+init_private_state  = { file = "fixtures/initstates/PrivateCounter.json" }
+witnesses           = { module = "fixtures/witnesses/PrivateCounter.witness.ts", export = "PrivateCounterWitnesses" }

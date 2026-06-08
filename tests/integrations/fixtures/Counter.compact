@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+// Integration-test fixture for @openzeppelin/compact-deploy.
+// Minimal single-circuit counter.
+
+pragma language_version >= 0.21.0;
+
+import CompactStandardLibrary;
+
+export ledger round: Counter;
+
+export circuit increment(): [] {
+  round.increment(1);
+}
