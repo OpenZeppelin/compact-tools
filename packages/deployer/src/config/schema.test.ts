@@ -104,6 +104,43 @@ describe('configSchema — networks', () => {
   });
 });
 
+describe('configSchema — network sync tuning', () => {
+  it('should accept sync_timeout and sync_batch_size as positive integers', () => {
+    const parsed = configSchema.parse({
+      ...baseConfig,
+      networks: {
+        testnet: { ...validNetwork, sync_timeout: 3600, sync_batch_size: 5000 },
+      },
+    });
+    expect(parsed.networks.testnet.sync_timeout).toBe(3600);
+    expect(parsed.networks.testnet.sync_batch_size).toBe(5000);
+  });
+
+  it('should leave sync_timeout and sync_batch_size undefined when omitted', () => {
+    const parsed = configSchema.parse(baseConfig);
+    expect(parsed.networks.testnet.sync_timeout).toBeUndefined();
+    expect(parsed.networks.testnet.sync_batch_size).toBeUndefined();
+  });
+
+  it('should reject a non-positive sync_batch_size', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        networks: { testnet: { ...validNetwork, sync_batch_size: 0 } },
+      }),
+    ).toThrow();
+  });
+
+  it('should reject a fractional sync_timeout', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        networks: { testnet: { ...validNetwork, sync_timeout: 1.5 } },
+      }),
+    ).toThrow();
+  });
+});
+
 describe('configSchema — profile.default_network refine', () => {
   it('should accept default_network pointing at a defined network', () => {
     expect(() =>

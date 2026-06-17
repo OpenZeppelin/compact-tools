@@ -84,7 +84,11 @@ export interface DeployerOptions {
    * LevelDB directory.
    */
   privateStateProvider?: PrivateStateProvider;
-  /** Sync ceiling (ms). Defaults to {@link DEFAULT_SYNC_TIMEOUT_MS}. Ignored when {@link walletProvider} is injected. */
+  /**
+   * Sync ceiling (ms). Precedence: this value > `[networks.X].sync_timeout`
+   * (seconds, from TOML) > {@link DEFAULT_SYNC_TIMEOUT_MS}. Ignored when
+   * {@link walletProvider} is injected.
+   */
   syncTimeoutMs?: number;
   /** Force a fresh sync from genesis. Default `false` (cache reuse saves the 30–60 min first-preprod sync). */
   skipWalletCache?: boolean;
@@ -98,10 +102,11 @@ export interface DeployerOptions {
   /** Like {@link seedCacheDust} but for the shielded sub-wallet. Argv: `--seed-cache-from-shielded`. */
   seedCacheShielded?: string;
   /**
-   * Sync batch size for the shielded + dust sub-wallets. Defaults to 5000.
-   * Raise it to replay a long dust history faster (more memory per batch);
-   * lower it on a memory-constrained host. Ignored when {@link walletProvider}
-   * is injected. Argv: `--sync-batch-size`.
+   * Sync batch size for the shielded + dust sub-wallets. Precedence: this
+   * value > `[networks.X].sync_batch_size` (TOML) > 5000. Raise it to replay
+   * a long dust history faster (more memory per batch); lower it on a
+   * memory-constrained host. Ignored when {@link walletProvider} is injected.
+   * Argv: `--sync-batch-size`.
    */
   syncBatchSize?: number;
 }
@@ -233,6 +238,15 @@ export class Deployer implements AsyncDisposable {
       if (!seedResolution) {
         throw new Error('internal: seedResolution missing for owned wallet');
       }
+      // Sync tuning precedence: CLI/programmatic option > [networks.X] TOML
+      // value > built-in default. `sync_batch_size` falls through to
+      // WalletHandler's 5000 default when neither is set.
+      const syncBatchSize = opts.syncBatchSize ?? network.sync_batch_size;
+      const syncTimeoutMs =
+        opts.syncTimeoutMs ??
+        (network.sync_timeout !== undefined
+          ? network.sync_timeout * 1000
+          : DEFAULT_SYNC_TIMEOUT_MS);
       const owned = await WalletHandler.build(
         logger,
         env,
@@ -241,7 +255,7 @@ export class Deployer implements AsyncDisposable {
           skipWalletCache: opts.skipWalletCache,
           seedCacheDust: opts.seedCacheDust,
           seedCacheShielded: opts.seedCacheShielded,
-          syncBatchSize: opts.syncBatchSize,
+          syncBatchSize,
         },
       );
       stack.use(owned);
@@ -258,7 +272,7 @@ export class Deployer implements AsyncDisposable {
       await logWalletAddresses(wallet, logger);
       await syncAndVerifyFunds({
         wallet,
-        timeoutMs: opts.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS,
+        timeoutMs: syncTimeoutMs,
         logger,
         // Periodic checkpoint: every 5 min during sync, snapshot both
         // sub-wallet caches. If the user interrupts a long first-run,

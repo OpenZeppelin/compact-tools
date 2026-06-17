@@ -272,9 +272,23 @@ interface Fixture {
   cleanup: () => void;
 }
 
-function writeFixture(opts: { explorer?: string } = {}): Fixture {
+function writeFixture(
+  opts: {
+    explorer?: string;
+    syncTimeout?: number;
+    syncBatchSize?: number;
+  } = {},
+): Fixture {
   const rootDir = mkdtempSync(join(tmpdir(), 'deployer-test-'));
   const explorerLine = opts.explorer ? `explorer = "${opts.explorer}"\n` : '';
+  const syncTimeoutLine =
+    opts.syncTimeout !== undefined
+      ? `sync_timeout = ${opts.syncTimeout}\n`
+      : '';
+  const syncBatchLine =
+    opts.syncBatchSize !== undefined
+      ? `sync_batch_size = ${opts.syncBatchSize}\n`
+      : '';
   const toml = `
 [profile]
 artifacts_dir = "artifacts"
@@ -288,7 +302,7 @@ node = "http://localhost:9944"
 node_ws = "ws://localhost:9944"
 proof_server = "http://localhost:6300"
 wallet = { source = "local", index = 0 }
-${explorerLine}
+${explorerLine}${syncTimeoutLine}${syncBatchLine}
 [contracts.Counter]
 artifact = "Counter"
 signing_key_file = "signing-key.hex"
@@ -641,6 +655,76 @@ describe('Deployer', () => {
         expect.anything(),
         expect.objectContaining({ syncBatchSize: 2500 }),
       );
+    });
+
+    it('should use the TOML [networks.X].sync_batch_size when no option is passed', async () => {
+      const customFx = writeFixture({ syncBatchSize: 1234 });
+      try {
+        const built = fakeOwnedWallet('0xTOML-BATCH');
+        vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
+        await using d = await Deployer.prepare({
+          contract: 'Counter',
+          network: 'local',
+          configPath: customFx.configPath,
+          logger: silentLogger,
+          syncTimeoutMs: 1000,
+        });
+        expect(d.deployer).toBe('0xTOML-BATCH');
+        expect(WalletHandler.build).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.objectContaining({ syncBatchSize: 1234 }),
+        );
+      } finally {
+        customFx.cleanup();
+      }
+    });
+
+    it('should let the syncBatchSize option override the TOML value', async () => {
+      const customFx = writeFixture({ syncBatchSize: 1234 });
+      try {
+        const built = fakeOwnedWallet('0xOVERRIDE');
+        vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
+        await using d = await Deployer.prepare({
+          contract: 'Counter',
+          network: 'local',
+          configPath: customFx.configPath,
+          logger: silentLogger,
+          syncTimeoutMs: 1000,
+          syncBatchSize: 9999,
+        });
+        expect(d.deployer).toBe('0xOVERRIDE');
+        expect(WalletHandler.build).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.objectContaining({ syncBatchSize: 9999 }),
+        );
+      } finally {
+        customFx.cleanup();
+      }
+    });
+
+    it('should apply the TOML [networks.X].sync_timeout (seconds) as the sync ceiling', async () => {
+      // 1s TOML timeout against a never-syncing wallet must trip at 1000ms.
+      const customFx = writeFixture({ syncTimeout: 1 });
+      try {
+        const built = fakeOwnedFromProvider(
+          fakeProviderWithState(Rx.NEVER, '0xTOML-TIMEOUT'),
+        );
+        vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
+        await expect(
+          Deployer.prepare({
+            contract: 'Counter',
+            network: 'local',
+            configPath: customFx.configPath,
+            logger: silentLogger,
+          }),
+        ).rejects.toThrow(/Wallet sync timeout after 1000ms/);
+      } finally {
+        customFx.cleanup();
+      }
     });
   });
 

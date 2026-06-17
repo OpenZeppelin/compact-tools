@@ -47,6 +47,7 @@ Exit codes: `0` ok · `2` config error · `3` wallet error · `4` provider unrea
 - **Bump sync timeout**: `--sync-timeout 3600` (default 10 min).
 - **Bump Node heap** for long-history chains: `NODE_OPTIONS="--max-old-space-size=8192"`.
 - **Tune the sync batch size**: `--sync-batch-size <n>` (default 5000). Larger replays a long dust history faster but uses more memory per batch; lower it on a memory-constrained host.
+- **Persist the sync knobs in TOML**: set `sync_timeout` (seconds) and/or `sync_batch_size` under `[networks.X]` so you don't pass the flags every run. The matching CLI flag overrides the TOML value when both are present (CLI > TOML > default).
 - **Tip gate is tolerant**: sync completes once every sub-wallet is within 50 events of the tip, not at an exact gap of 0. On a live network the global dust stream advances continuously, so an exact-match gate would never fire.
 - **Seed source**: `--seed-file`, `MN_DEPLOYER_SEED`, or `[wallet].keystore`. The `wallet = { source = "local" }` shorthand is dev-preset only.
 
@@ -121,6 +122,8 @@ node         = "https://rpc.preprod.midnight.network"
 node_ws      = "wss://rpc.preprod.midnight.network"
 proof_server = "auto"
 explorer     = "https://preprod.midnightexplorer.com"
+sync_timeout    = 5400   # seconds; overridden by --sync-timeout
+sync_batch_size = 5000   # dust/shielded batch; overridden by --sync-batch-size
 
 # ---------- Wallet (non-local) ----------
 [wallet]

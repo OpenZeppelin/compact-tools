@@ -33,6 +33,13 @@ const networkSchema = z.object({
   // When set, the CLI prints `<explorer>/contracts/0x<address>` on a successful
   // deploy. Trailing slash is stripped at print time.
   explorer: url.optional(),
+  // Optional sync tuning, per network. `sync_timeout` is the max seconds to
+  // wait for the wallet to reach chain tip; `sync_batch_size` is the
+  // dust/shielded sync batch size (raise for long-history networks like
+  // preprod, default 5000). The matching CLI flags (`--sync-timeout`,
+  // `--sync-batch-size`) override these when set.
+  sync_timeout: z.number().int().positive().optional(),
+  sync_batch_size: z.number().int().positive().optional(),
 });
 
 const walletObjectSchema = z.object({
