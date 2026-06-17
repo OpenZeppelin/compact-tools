@@ -18,6 +18,19 @@ compact-deploy Token --network local
 
 The deploy result lands in `deployments/compact/<network>.json`.
 
+## Install & run
+
+The `compact-deploy` bin ships in `@openzeppelin/compact-cli`. Install it as a dev dependency of the project that holds your compiled artifacts, then run it with `npx`:
+
+```bash
+npm i -D @openzeppelin/compact-cli         # or pnpm/yarn
+npx compact-deploy Token --network local   # resolves the local install
+```
+
+`npx` prefers the local `node_modules/.bin`, so the deployer and your compiled contracts share **one** `@midnight-ntwrk/compact-runtime` copy. A real deploy requires this: the deploy-tx builder creates a `ContractMaintenanceAuthority` from the runtime and hands it to your contract, and the WASM check rejects it unless both sides are the same physical copy.
+
+> **Ephemeral `npx @openzeppelin/compact-cli compact-deploy …` (no local install)** is fine for `--help`, `--version`, and `--dry-run` / validation, but **not reliable for a real deploy**: npx fetches the CLI into its own cache tree, so its `compact-runtime` differs from your project's and the submit fails with `expected instance of ContractMaintenanceAuthority`. Install it locally for real deploys.
+
 ## CLI
 
 ```
