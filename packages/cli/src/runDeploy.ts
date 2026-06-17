@@ -22,6 +22,7 @@ interface ParsedArgs {
   seedFile?: string;
   proofServer?: string;
   syncTimeoutSec?: number;
+  syncBatchSize?: number;
   seedCacheFromDust?: string;
   seedCacheFromShielded?: string;
   noCache: boolean;
@@ -103,6 +104,17 @@ function parseArgs(argv: string[]): ParsedArgs {
         out.syncTimeoutSec = seconds;
         break;
       }
+      case '--sync-batch-size': {
+        const raw = expectValue(argv, ++i, '--sync-batch-size');
+        const size = Number.parseInt(raw, 10);
+        if (!Number.isFinite(size) || size <= 0) {
+          throw new Error(
+            `--sync-batch-size requires a positive integer; got "${raw}"`,
+          );
+        }
+        out.syncBatchSize = size;
+        break;
+      }
       default:
         if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`);
         out.positional.push(arg);
@@ -177,6 +189,7 @@ async function main(): Promise<void> {
       skipWalletCache: args.noCache,
       seedCacheDust: args.seedCacheFromDust,
       seedCacheShielded: args.seedCacheFromShielded,
+      syncBatchSize: args.syncBatchSize,
       logger,
       promptPassphrase: async (path) => {
         if (spinner) spinner.stop();
@@ -261,6 +274,11 @@ function showUsage(): void {
   console.log(
     chalk.yellow(
       '  --sync-timeout <s>    Max wallet-sync seconds before failing (default 600)',
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      '  --sync-batch-size <n> Dust/shielded sync batch size (default 5000)',
     ),
   );
   console.log(

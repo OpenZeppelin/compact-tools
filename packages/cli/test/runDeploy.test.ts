@@ -229,6 +229,8 @@ describe('runDeploy CLI', () => {
         'http://proof:6300',
         '--sync-timeout',
         '30',
+        '--sync-batch-size',
+        '5000',
         '--no-cache',
         '--seed-cache-from-dust',
         '/dust.json',
@@ -244,6 +246,7 @@ describe('runDeploy CLI', () => {
       expect(opts.seedFile).toBe('/seed.hex');
       expect(opts.proofServer).toBe('http://proof:6300');
       expect(opts.syncTimeoutMs).toBe(30_000);
+      expect(opts.syncBatchSize).toBe(5000);
       expect(opts.skipWalletCache).toBe(true);
       expect(opts.seedCacheDust).toBe('/dust.json');
       expect(opts.seedCacheShielded).toBe('/shielded.gz');
@@ -300,6 +303,32 @@ describe('runDeploy CLI', () => {
       await runMain(['Token', '--sync-timeout', '0']);
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining('--sync-timeout requires a positive integer'),
+      );
+      expect(mockExit).toHaveBeenCalledWith(2);
+    });
+
+    it('should leave syncBatchSize undefined when --sync-batch-size is omitted', async () => {
+      await runMain(['Token']);
+      const opts = mockPrepare.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(opts.syncBatchSize).toBeUndefined();
+    });
+
+    it('should reject non-numeric --sync-batch-size', async () => {
+      await runMain(['Token', '--sync-batch-size', 'abc']);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '--sync-batch-size requires a positive integer',
+        ),
+      );
+      expect(mockExit).toHaveBeenCalledWith(2);
+    });
+
+    it('should reject zero/negative --sync-batch-size', async () => {
+      await runMain(['Token', '--sync-batch-size', '0']);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '--sync-batch-size requires a positive integer',
+        ),
       );
       expect(mockExit).toHaveBeenCalledWith(2);
     });

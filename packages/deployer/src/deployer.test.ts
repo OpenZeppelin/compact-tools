@@ -622,6 +622,28 @@ describe('Deployer', () => {
     });
   });
 
+  describe('wallet build options', () => {
+    it('should forward syncBatchSize to WalletHandler.build', async () => {
+      const built = fakeOwnedWallet('0xBATCH');
+      vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
+      await using d = await Deployer.prepare({
+        contract: 'Counter',
+        network: 'local',
+        configPath: fx.configPath,
+        logger: silentLogger,
+        syncTimeoutMs: 1000,
+        syncBatchSize: 2500,
+      });
+      expect(d.deployer).toBe('0xBATCH');
+      expect(WalletHandler.build).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ syncBatchSize: 2500 }),
+      );
+    });
+  });
+
   describe('explorer URL', () => {
     it('should return an empty explorerUrl when no explorer is configured', async () => {
       const injected = fakeProvider('0xDEP');

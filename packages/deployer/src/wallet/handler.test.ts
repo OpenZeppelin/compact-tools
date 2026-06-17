@@ -211,7 +211,7 @@ describe('WalletHandler', () => {
   });
 
   describe('sync batching', () => {
-    it('should set a large batchUpdates size on the shared config for both sub-wallets', async () => {
+    it('should default the batchUpdates size to 5000 on the shared config for both sub-wallets', async () => {
       wireTestkitChain(fakeProvider());
       await WalletHandler.build(logger, fakeEnv('preprod'), {
         kind: 'hex',
@@ -223,6 +223,29 @@ describe('WalletHandler', () => {
       // is 10, which OOMs replaying preprod's ~1M-event dust stream.
       const withBatch = expect.objectContaining({
         batchUpdates: { size: 5000, timeout: 1, spacing: 4 },
+      });
+      expect(WalletFactory.createDustWallet).toHaveBeenCalledWith(
+        withBatch,
+        expect.any(Uint8Array),
+        expect.anything(),
+      );
+      expect(WalletFactory.createShieldedWallet).toHaveBeenCalledWith(
+        withBatch,
+        expect.any(Uint8Array),
+      );
+    });
+
+    it('should honour a caller-supplied syncBatchSize override', async () => {
+      wireTestkitChain(fakeProvider());
+      await WalletHandler.build(
+        logger,
+        fakeEnv('preprod'),
+        { kind: 'hex', value: '00' },
+        { syncBatchSize: 1000 },
+      );
+      // timeout/spacing stay at the validated values; only size changes.
+      const withBatch = expect.objectContaining({
+        batchUpdates: { size: 1000, timeout: 1, spacing: 4 },
       });
       expect(WalletFactory.createDustWallet).toHaveBeenCalledWith(
         withBatch,

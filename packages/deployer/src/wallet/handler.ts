@@ -47,7 +47,8 @@ interface BatchUpdatesConfig {
 }
 
 /**
- * Sync batch sizing applied to the shielded + dust sub-wallets. The SDK
+ * Default sync batch size for the shielded + dust sub-wallets, overridable
+ * per build via {@link WalletHandlerBuildOptions.syncBatchSize}. The SDK
  * default (size 10) exhausts the V8 heap replaying preprod's ~1M-event
  * global dust stream on `wallet-sdk-dust-wallet@4.0.0`
  * (midnightntwrk/midnight-wallet#425, "Ineffective mark-compacts near heap
@@ -55,11 +56,10 @@ interface BatchUpdatesConfig {
  * was validated at ~146 MB peak, ~1000 events/sec. Harmless on the
  * upstream-fixed 4.1.0, which no longer needs the workaround.
  */
-const SYNC_BATCH_UPDATES: BatchUpdatesConfig = {
-  size: 5000,
-  timeout: 1,
-  spacing: 4,
-};
+const DEFAULT_SYNC_BATCH_SIZE = 5000;
+
+/** `timeout`/`spacing` companions to the batch size; left at the validated values. */
+const SYNC_BATCH_TIMING = { timeout: 1, spacing: 4 } as const;
 
 export interface WalletHandlerBuildOptions {
   /** Force a fresh sync from genesis (skip the on-disk cache). Default `false`. */
@@ -74,6 +74,13 @@ export interface WalletHandlerBuildOptions {
   seedCacheDust?: string;
   /** Like {@link seedCacheDust} but for the shielded sub-wallet. */
   seedCacheShielded?: string;
+  /**
+   * Sync batch size for the shielded + dust sub-wallets. Defaults to
+   * {@link DEFAULT_SYNC_BATCH_SIZE} (5000). Raise it to replay a long dust
+   * history faster (more memory per batch); lower it on a memory-constrained
+   * host. The SDK default of 10 OOMs on preprod's ~1M-event dust stream.
+   */
+  syncBatchSize?: number;
 }
 
 /**
@@ -143,14 +150,16 @@ export class WalletHandler implements AsyncDisposable {
       .config;
 
     // Raise the sync batch size on the *shared* config so it applies to
-    // every sub-wallet built off it — shielded and dust, fresh-sync and
+    // every sub-wallet built off it: shielded and dust, fresh-sync and
     // cache-restore alike. `buildDustConfig` spreads this config, so the
     // restore path inherits it too. Setting it only on the fresh-build
     // path would be bypassed the moment an on-disk snapshot exists, which
-    // is exactly when preprod's dust replay OOMs. See {@link
-    // SYNC_BATCH_UPDATES} and OpenZeppelin/compact-tools#115.
-    (config as { batchUpdates?: BatchUpdatesConfig }).batchUpdates =
-      SYNC_BATCH_UPDATES;
+    // is exactly when preprod's dust replay OOMs. See
+    // {@link DEFAULT_SYNC_BATCH_SIZE} and OpenZeppelin/compact-tools#115.
+    (config as { batchUpdates?: BatchUpdatesConfig }).batchUpdates = {
+      size: opts.syncBatchSize ?? DEFAULT_SYNC_BATCH_SIZE,
+      ...SYNC_BATCH_TIMING,
+    };
 
     const unshieldedKeystore: UnshieldedKeystore = createKeystore(
       walletSeeds.unshielded,

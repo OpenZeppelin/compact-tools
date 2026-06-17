@@ -97,6 +97,13 @@ export interface DeployerOptions {
   seedCacheDust?: string;
   /** Like {@link seedCacheDust} but for the shielded sub-wallet. Argv: `--seed-cache-from-shielded`. */
   seedCacheShielded?: string;
+  /**
+   * Sync batch size for the shielded + dust sub-wallets. Defaults to 5000.
+   * Raise it to replay a long dust history faster (more memory per batch);
+   * lower it on a memory-constrained host. Ignored when {@link walletProvider}
+   * is injected. Argv: `--sync-batch-size`.
+   */
+  syncBatchSize?: number;
 }
 
 /** Result of {@link Deployer.deploy} / {@link Deployer.dryRun}. On-chain fields are empty when `dryRun: true`. */
@@ -234,6 +241,7 @@ export class Deployer implements AsyncDisposable {
           skipWalletCache: opts.skipWalletCache,
           seedCacheDust: opts.seedCacheDust,
           seedCacheShielded: opts.seedCacheShielded,
+          syncBatchSize: opts.syncBatchSize,
         },
       );
       stack.use(owned);
