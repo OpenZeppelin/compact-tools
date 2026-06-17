@@ -35,6 +35,32 @@ import type { Logger } from 'pino';
 import { WalletError } from '../errors.ts';
 import type { WalletSeed } from './seeds.ts';
 
+/**
+ * Subset of the wallet-SDK sync `batchUpdates` knob we set. The SDK only
+ * exports it from an unstable deep path (`wallet-sdk-<pkg>/dist/v1/Sync`),
+ * so we declare the shape we use locally.
+ */
+interface BatchUpdatesConfig {
+  size?: number;
+  timeout?: number;
+  spacing?: number;
+}
+
+/**
+ * Sync batch sizing applied to the shielded + dust sub-wallets. The SDK
+ * default (size 10) exhausts the V8 heap replaying preprod's ~1M-event
+ * global dust stream on `wallet-sdk-dust-wallet@4.0.0`
+ * (midnightntwrk/midnight-wallet#425, "Ineffective mark-compacts near heap
+ * limit"). A larger batch streams the replay in bigger chunks; size 5000
+ * was validated at ~146 MB peak, ~1000 events/sec. Harmless on the
+ * upstream-fixed 4.1.0, which no longer needs the workaround.
+ */
+const SYNC_BATCH_UPDATES: BatchUpdatesConfig = {
+  size: 5000,
+  timeout: 1,
+  spacing: 4,
+};
+
 export interface WalletHandlerBuildOptions {
   /** Force a fresh sync from genesis (skip the on-disk cache). Default `false`. */
   skipWalletCache?: boolean;
@@ -115,6 +141,16 @@ export class WalletHandler implements AsyncDisposable {
     const builderForConfig = FluentWalletBuilder.forEnvironment(env);
     const config = (builderForConfig as unknown as { config: ConfigShape })
       .config;
+
+    // Raise the sync batch size on the *shared* config so it applies to
+    // every sub-wallet built off it — shielded and dust, fresh-sync and
+    // cache-restore alike. `buildDustConfig` spreads this config, so the
+    // restore path inherits it too. Setting it only on the fresh-build
+    // path would be bypassed the moment an on-disk snapshot exists, which
+    // is exactly when preprod's dust replay OOMs. See {@link
+    // SYNC_BATCH_UPDATES} and OpenZeppelin/compact-tools#115.
+    (config as { batchUpdates?: BatchUpdatesConfig }).batchUpdates =
+      SYNC_BATCH_UPDATES;
 
     const unshieldedKeystore: UnshieldedKeystore = createKeystore(
       walletSeeds.unshielded,

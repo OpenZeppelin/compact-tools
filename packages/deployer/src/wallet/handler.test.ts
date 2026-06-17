@@ -210,6 +210,32 @@ describe('WalletHandler', () => {
     });
   });
 
+  describe('sync batching', () => {
+    it('should set a large batchUpdates size on the shared config for both sub-wallets', async () => {
+      wireTestkitChain(fakeProvider());
+      await WalletHandler.build(logger, fakeEnv('preprod'), {
+        kind: 'hex',
+        value: '00',
+      });
+      // The shared config is mutated in place and threaded into every
+      // sub-wallet factory, so asserting on the dust + shielded calls proves
+      // the OOM workaround (issue #115) covers both. Default SDK batch size
+      // is 10, which OOMs replaying preprod's ~1M-event dust stream.
+      const withBatch = expect.objectContaining({
+        batchUpdates: { size: 5000, timeout: 1, spacing: 4 },
+      });
+      expect(WalletFactory.createDustWallet).toHaveBeenCalledWith(
+        withBatch,
+        expect.any(Uint8Array),
+        expect.anything(),
+      );
+      expect(WalletFactory.createShieldedWallet).toHaveBeenCalledWith(
+        withBatch,
+        expect.any(Uint8Array),
+      );
+    });
+  });
+
   describe('provider wiring', () => {
     it('should expose the wallet built by MidnightWalletProvider.withWallet via .provider', async () => {
       const provider = fakeProvider();

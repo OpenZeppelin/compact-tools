@@ -129,14 +129,27 @@ function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
     isSynced: true,
     shielded: {
       balances: anyKeyHasBalance,
-      state: { progress: { isStrictlyComplete: () => true } },
+      state: {
+        progress: {
+          isStrictlyComplete: () => true,
+          isCompleteWithin: () => true,
+        },
+      },
     },
     unshielded: {
       balances: anyKeyHasBalance,
-      progress: { isStrictlyComplete: () => true },
+      progress: {
+        isStrictlyComplete: () => true,
+        isCompleteWithin: () => true,
+      },
     },
     dust: {
-      state: { progress: { isStrictlyComplete: () => true } },
+      state: {
+        progress: {
+          isStrictlyComplete: () => true,
+          isCompleteWithin: () => true,
+        },
+      },
       balance: () => 1n,
     },
   };
@@ -213,14 +226,27 @@ function syncedState(
     isSynced: true,
     shielded: {
       balances: shielded,
-      state: { progress: { isStrictlyComplete: () => true } },
+      state: {
+        progress: {
+          isStrictlyComplete: () => true,
+          isCompleteWithin: () => true,
+        },
+      },
     },
     unshielded: {
       balances: unshielded,
-      progress: { isStrictlyComplete: () => true },
+      progress: {
+        isStrictlyComplete: () => true,
+        isCompleteWithin: () => true,
+      },
     },
     dust: {
-      state: { progress: { isStrictlyComplete: () => true } },
+      state: {
+        progress: {
+          isStrictlyComplete: () => true,
+          isCompleteWithin: () => true,
+        },
+      },
       balance: () => 0n,
     },
   };
@@ -414,9 +440,113 @@ describe('Deployer', () => {
   });
 
   describe('syncAndVerifyFunds (owned-wallet branch)', () => {
-    it('should reject with a timeout error when the wallet never reports isSynced', async () => {
+    it('should reject with a timeout error when the wallet never reaches chain tip', async () => {
       const built = fakeOwnedFromProvider(
         fakeProviderWithState(Rx.NEVER, '0xSTUCK'),
+      );
+      vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
+      await expect(
+        Deployer.prepare({
+          contract: 'Counter',
+          network: 'local',
+          configPath: fx.configPath,
+          logger: silentLogger,
+          syncTimeoutMs: 50,
+        }),
+      ).rejects.toThrow(/Wallet sync timeout after 50ms/);
+    });
+
+    it('should complete sync when sub-wallets are within the gap but not strictly complete', async () => {
+      // Live-chain shape (issue #115): the global dust stream keeps
+      // advancing, so dust is never strictly complete (gap 0) but settles
+      // within the tolerated gap. The old strict `isSynced` gate would hang
+      // here forever; the tolerant `isCompleteWithin` gate must proceed.
+      const anyBal = new Proxy({} as Record<string, bigint>, {
+        get: () => 1n,
+      });
+      const liveTipState = {
+        isSynced: false,
+        shielded: {
+          balances: anyBal,
+          state: {
+            progress: {
+              isStrictlyComplete: () => true,
+              isCompleteWithin: () => true,
+            },
+          },
+        },
+        unshielded: {
+          balances: anyBal,
+          progress: {
+            isStrictlyComplete: () => true,
+            isCompleteWithin: () => true,
+          },
+        },
+        dust: {
+          state: {
+            progress: {
+              isStrictlyComplete: () => false,
+              isCompleteWithin: () => true,
+            },
+          },
+          balance: () => 1n,
+        },
+      };
+      const built = fakeOwnedFromProvider(
+        fakeProviderWithState(Rx.of(liveTipState as unknown), '0xLIVE-TIP'),
+      );
+      vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
+      await using d = await Deployer.prepare({
+        contract: 'Counter',
+        network: 'local',
+        configPath: fx.configPath,
+        logger: silentLogger,
+        syncTimeoutMs: 1000,
+      });
+      expect(d.deployer).toBe('0xLIVE-TIP');
+    });
+
+    it('should NOT complete sync while any sub-wallet is outside the gap', async () => {
+      // Dust still outside the tolerated gap: the gate must keep waiting and
+      // ultimately time out rather than deploy against a half-synced wallet.
+      const anyBal = new Proxy({} as Record<string, bigint>, {
+        get: () => 1n,
+      });
+      const laggingState = {
+        isSynced: false,
+        shielded: {
+          balances: anyBal,
+          state: {
+            progress: {
+              isStrictlyComplete: () => true,
+              isCompleteWithin: () => true,
+            },
+          },
+        },
+        unshielded: {
+          balances: anyBal,
+          progress: {
+            isStrictlyComplete: () => true,
+            isCompleteWithin: () => true,
+          },
+        },
+        dust: {
+          state: {
+            progress: {
+              isStrictlyComplete: () => false,
+              isCompleteWithin: () => false,
+            },
+          },
+          balance: () => 1n,
+        },
+      };
+      // Emit the lagging state, then hang: the gate filters it out and must
+      // keep waiting (not complete the sequence) so the timeout can fire.
+      const built = fakeOwnedFromProvider(
+        fakeProviderWithState(
+          Rx.concat(Rx.of(laggingState as unknown), Rx.NEVER),
+          '0xLAGGING',
+        ),
       );
       vi.mocked(WalletHandler.build).mockResolvedValueOnce(built.owned);
       await expect(
@@ -684,10 +814,10 @@ describe('Deployer', () => {
 
   describe('describeProgress branches', () => {
     it('should render the progress percentage when highest > 0', async () => {
-      // Mid-sync state (NOT yet `isSynced`) that drives the progress
+      // Mid-sync state (still short of the tip) that drives the progress
       // subscription's "else" branch (highest > 0). Then a follow-up
-      // synced state lets `firstValueFrom(filter(isSynced))` resolve so
-      // the prepare call terminates.
+      // tip-reached state lets the `isCompleteWithin` gate resolve so the
+      // prepare call terminates.
       const midState = {
         isSynced: false,
         shielded: {
@@ -695,6 +825,7 @@ describe('Deployer', () => {
           state: {
             progress: {
               isStrictlyComplete: () => false,
+              isCompleteWithin: () => false,
               appliedIndex: 10n,
               highestIndex: 100n,
               isConnected: true,
@@ -705,6 +836,7 @@ describe('Deployer', () => {
           balances: {} as Record<string, bigint>,
           progress: {
             isStrictlyComplete: () => false,
+            isCompleteWithin: () => false,
             appliedId: 5n,
             highestTransactionId: 50n,
             isConnected: true,
@@ -714,6 +846,7 @@ describe('Deployer', () => {
           state: {
             progress: {
               isStrictlyComplete: () => false,
+              isCompleteWithin: () => false,
               appliedIndex: 1n,
               highestIndex: 10n,
               isConnected: true,
@@ -729,14 +862,27 @@ describe('Deployer', () => {
         isSynced: true,
         shielded: {
           balances: anyKeyHasBalance,
-          state: { progress: { isStrictlyComplete: () => true } },
+          state: {
+            progress: {
+              isStrictlyComplete: () => true,
+              isCompleteWithin: () => true,
+            },
+          },
         },
         unshielded: {
           balances: anyKeyHasBalance,
-          progress: { isStrictlyComplete: () => true },
+          progress: {
+            isStrictlyComplete: () => true,
+            isCompleteWithin: () => true,
+          },
         },
         dust: {
-          state: { progress: { isStrictlyComplete: () => true } },
+          state: {
+            progress: {
+              isStrictlyComplete: () => true,
+              isCompleteWithin: () => true,
+            },
+          },
           balance: () => 1n,
         },
       };

@@ -299,6 +299,21 @@ function showUsage(): void {
   console.log(
     chalk.yellow('  compact-deploy Token --network preprod --dry-run --json'),
   );
+  console.log(
+    chalk.yellow(
+      '\nNote: a first sync on a long-history network (e.g. preprod) can exceed',
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      "      Node's default heap. On 'JavaScript heap out of memory', raise it:",
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      '      NODE_OPTIONS=--max-old-space-size=8192 compact-deploy <Contract> …',
+    ),
+  );
 }
 
 function packageVersion(): string {

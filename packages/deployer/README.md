@@ -45,6 +45,7 @@ Exit codes: `0` ok · `2` config error · `3` wallet error · `4` provider unrea
 - **First sync is slow** (~3 min on preview, 30–60 min on preprod from genesis). Cache makes reruns near-instant.
 - **Bump sync timeout**: `--sync-timeout 3600` (default 10 min).
 - **Bump Node heap** for long-history chains: `NODE_OPTIONS="--max-old-space-size=8192"`.
+- **Tip gate is tolerant**: sync completes once every sub-wallet is within 50 events of the tip, not at an exact gap of 0. On a live network the global dust stream advances continuously, so an exact-match gate would never fire.
 - **Seed source**: `--seed-file`, `MN_DEPLOYER_SEED`, or `[wallet].keystore`. The `wallet = { source = "local" }` shorthand is dev-preset only.
 
 ## Wallet cache
@@ -153,7 +154,7 @@ signing_key_file = "./deploy/Vault.signingkey"
 
 4. **Dust fee overhead default breaks faucet wallets.** testkit-js default `additionalFeeOverhead` is `5e20` vs a faucet wallet's `~3e15` dust → `Insufficient Funds: could not balance dust`. Deployer overrides to `5e14` for non-mainnet. Library users constructing their own provider must mirror this.
 
-5. **Long-history dust sync exhausts default Node heap.** Use `NODE_OPTIONS="--max-old-space-size=16384"` for the first sync. Cache fixes subsequent runs.
+5. **Long-history dust sync exhausts default Node heap.** The deployer now raises the dust/shielded sync batch size (`batchUpdates = { size: 5000, … }`) so the replay no longer OOMs mid-stream on `wallet-sdk-dust-wallet@4.0.0` ([midnightntwrk/midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)). The restored dust tree plus shielded trial-decryption can still spike past V8's ~2 GB default old-space on a first preprod sync, so set `NODE_OPTIONS="--max-old-space-size=8192"` for that run. Cache fixes subsequent runs.
 
 ## Programmatic API
 

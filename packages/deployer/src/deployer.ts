@@ -29,6 +29,19 @@ import {
  */
 const DEFAULT_SYNC_TIMEOUT_MS = 10 * 60 * 1000;
 
+/**
+ * Tolerated sync gap, in events, for the chain-tip gate.
+ * `FacadeState.isSynced` requires every sub-wallet to be *strictly*
+ * complete (gap 0). On a live network the global dust stream advances
+ * continuously, so the dust wallet sits a few events behind the tip
+ * indefinitely and strict `isSynced` never flips. The gate would then time
+ * out on a wallet that is in fact fully usable. `isCompleteWithin(50)` is the
+ * SDK default (and what the unshielded wallet uses internally): it treats
+ * "within 50 events of tip" as synced, which a live wallet reaches and
+ * holds. See OpenZeppelin/compact-tools#115.
+ */
+const SYNC_MAX_GAP = 50n;
+
 import { ConstructorArgs } from './loaders/args.ts';
 import { Artifact } from './loaders/artifact.ts';
 import { InitialPrivateState } from './loaders/init-state.ts';
@@ -469,11 +482,15 @@ function describeProgress(p: { isStrictlyComplete: () => boolean }): string {
 }
 
 /**
- * Drive the wallet to chain tip and assert spendable funds. Uses
- * `state.isSynced` (strict-complete on all three sub-wallets) as the
- * gate. Looser gates regressed on local with `Invalid Transaction
- * (custom error 170)`. Throttles progress logs to once per 30 s.
- * Throws {@link UnfundedWalletError} on empty wallet.
+ * Drive the wallet to chain tip and assert spendable funds. Gates on each
+ * sub-wallet being within {@link SYNC_MAX_GAP} events of the tip rather
+ * than strictly complete: on a live network the global dust stream never
+ * settles to gap 0, so strict `FacadeState.isSynced` never fires and the
+ * gate times out on a perfectly usable wallet (#115). The gate still waits
+ * on all three sub-wallets; dropping the dust/shielded wait entirely
+ * regressed on local with `Invalid Transaction (custom error 170)`.
+ * Throttles progress logs to once per 30 s. Throws
+ * {@link UnfundedWalletError} on empty wallet.
  */
 async function syncAndVerifyFunds(args: {
   wallet: MidnightWalletProvider;
@@ -577,7 +594,15 @@ async function syncAndVerifyFunds(args: {
   try {
     synced = await Rx.firstValueFrom(
       state$.pipe(
-        Rx.filter((s: FacadeState) => s.isSynced),
+        // Tolerant tip gate: all three sub-wallets within SYNC_MAX_GAP
+        // events of the tip. Strict `s.isSynced` never fires on a live
+        // chain because the global dust stream keeps advancing (#115).
+        Rx.filter(
+          (s: FacadeState) =>
+            s.shielded.state.progress.isCompleteWithin(SYNC_MAX_GAP) &&
+            s.dust.state.progress.isCompleteWithin(SYNC_MAX_GAP) &&
+            s.unshielded.progress.isCompleteWithin(SYNC_MAX_GAP),
+        ),
         Rx.timeout({
           each: timeoutMs,
           with: () =>
