@@ -1,0 +1,121 @@
+import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, resolve } from 'node:path';
+
+/**
+ * Two-file per-network deployment ledger:
+ *   `<network>.json`         — head map (contract → latest deploy)
+ *   `<network>.history.json` — superseded records (contract → list)
+ * Each deploy rotates the prior head into history.
+ */
+
+/** A single confirmed deploy. Persisted under the contract name in the head map. */
+export interface DeploymentRecord {
+  address: string;
+  txHash: string;
+  txId: string;
+  blockHeight: number;
+  signingKey: string;
+  deployer: string;
+  artifact: string;
+  timestamp: string;
+}
+
+/** Head map: contract name → latest deploy. */
+export type DeploymentsFile = Record<string, DeploymentRecord>;
+
+/** History map: contract name → past deploys (newest first). */
+export type DeploymentsHistory = Record<string, DeploymentRecord[]>;
+
+export interface DeploymentsOptions {
+  rootDir: string;
+  deploymentsDir: string;
+  network: string;
+}
+
+/**
+ * Per-network deployment ledger. Head file is written last so a crash
+ * mid-rotate leaves the prior head intact.
+ */
+export class Deployments {
+  readonly #headPath: string;
+  readonly #historyPath: string;
+
+  constructor(opts: DeploymentsOptions) {
+    const dir = isAbsolute(opts.deploymentsDir)
+      ? opts.deploymentsDir
+      : resolve(opts.rootDir, opts.deploymentsDir);
+    this.#headPath = resolve(dir, `${opts.network}.json`);
+    this.#historyPath = resolve(dir, `${opts.network}.history.json`);
+  }
+
+  /** Absolute on-disk paths for the two ledger files. */
+  get paths(): { head: string; history: string } {
+    return { head: this.#headPath, history: this.#historyPath };
+  }
+
+  /** Rotate the prior head for `contractName` into history; write `record` as new head. */
+  async record(
+    contractName: string,
+    record: DeploymentRecord,
+  ): Promise<{ head: string; history: string }> {
+    await mkdir(dirname(this.#headPath), { recursive: true });
+
+    const head = await this.#readHead();
+    const previous = head[contractName];
+    if (previous) {
+      const history = await this.#readHistory();
+      const bucket = history[contractName] ?? [];
+      bucket.unshift(previous);
+      history[contractName] = bucket;
+      await writeJson(this.#historyPath, history);
+    }
+
+    head[contractName] = record;
+    await writeJson(this.#headPath, head);
+
+    return { head: this.#headPath, history: this.#historyPath };
+  }
+
+  /** Latest deploy for `contractName`, or `undefined` if none. */
+  async getHead(contractName: string): Promise<DeploymentRecord | undefined> {
+    return (await this.#readHead())[contractName];
+  }
+
+  /** Per-contract history (newest first); empty array if none. */
+  async getHistory(contractName: string): Promise<DeploymentRecord[]> {
+    return (await this.#readHistory())[contractName] ?? [];
+  }
+
+  /** Names of every contract with a current head record on this network. */
+  async listContracts(): Promise<string[]> {
+    return Object.keys(await this.#readHead()).sort();
+  }
+
+  #readHead(): Promise<DeploymentsFile> {
+    return readJson<DeploymentsFile>(this.#headPath, {});
+  }
+
+  #readHistory(): Promise<DeploymentsHistory> {
+    return readJson<DeploymentsHistory>(this.#historyPath, {});
+  }
+}
+
+async function readJson<T>(path: string, fallback: T): Promise<T> {
+  if (!existsSync(path)) return fallback;
+  const raw = await readFile(path, 'utf8');
+  if (!raw.trim()) return fallback;
+  return JSON.parse(raw) as T;
+}
+
+// Write atomically: a crash mid-write would otherwise leave a truncated
+// `*.json`, breaking subsequent reads and losing durable deploy state.
+// Write to a sibling temp file, then rename it into place (atomic on the
+// same filesystem).
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.${randomUUID()}.tmp`;
+  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(tmp, path);
+}
