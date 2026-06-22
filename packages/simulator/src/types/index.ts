@@ -1,6 +1,7 @@
 // Re-export all types from type modules
 
 export type {
+  AsyncCircuits,
   ContextlessCircuits,
   ExtractImpureCircuits,
   ExtractPureCircuits,

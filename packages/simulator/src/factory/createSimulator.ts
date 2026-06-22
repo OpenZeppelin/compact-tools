@@ -1,28 +1,50 @@
-import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
-import { dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { CircuitContextManager } from '../core/CircuitContextManager.js';
-import { ContractSimulator } from '../core/ContractSimulator.js';
+import type { Backend, BackendKind, CircuitKind } from '../backend/Backend.js';
+import { DryBackend, type SyncSimulator } from '../backend/DryBackend.js';
+import type { LiveContext } from '../live/LiveContext.js';
+import { getRegisteredLiveBackend } from '../live/registry.js';
+import { Signers } from '../signers/Signers.js';
 import type { IMinimalContract } from '../types/Contract.js';
 import type {
-  ContextlessCircuits,
+  AsyncCircuits,
   ExtractImpureCircuits,
   ExtractPureCircuits,
 } from '../types/index.js';
-import type { BaseSimulatorOptions } from '../types/Options.js';
+import type { SimulatorOptions } from '../types/Options.js';
+import { createDrySimulator } from './createDrySimulator.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
+/** Prepared backend wiring handed to the simulator constructor. */
+interface BackendDeps<P, L> {
+  backend: Backend<P, L>;
+  signers: Signers;
+  pureNames: string[];
+  impureNames: string[];
+}
+
 /**
- * Factory function to create simulator classes with consistent boilerplate elimination.
+ * Resolves the backend kind once: an explicit override wins, otherwise
+ * `MIDNIGHT_BACKEND=live` selects live and anything else (unset or `dry`)
+ * selects dry (INV-8).
+ */
+const resolveBackendKind = (override?: BackendKind): BackendKind =>
+  override ?? (process.env.MIDNIGHT_BACKEND === 'live' ? 'live' : 'dry');
+
+/**
+ * Creates a backend-aware simulator class for a contract.
  *
- * This factory creates a class that extends ContractSimulator with all the common
- * functionality needed for contract simulation, including:
- * - Witness management
- * - State management
- * - Circuit proxy creation
- * - Options handling
+ * One factory, two backends: the produced class runs against the in-memory path
+ * ({@link DryBackend}) or a live Midnight node (`LiveBackend`), selected by
+ * `MIDNIGHT_BACKEND=dry|live` at construction (INV-8). `create` is async and
+ * circuits return promises ({@link AsyncCircuits}) so a single spec file runs on
+ * both backends with uniform `await` (INV-4).
  *
- * @param config - Configuration object defining how to create and manage the simulator
- * @returns A class constructor that can be extended to create specific simulators
+ * The live adapter is reached only through a runtime dynamic import (INV-1,
+ * INV-2): a static `import { createSimulator }` never pulls midnight-js into the
+ * dependency graph. In live mode the {@link LiveContext} comes from `options.live`
+ * or the globally registered live backend (`registerLiveBackend`).
+ *
+ * @param config - The shared simulator configuration (same shape both backends, INV-5).
+ * @returns A class to extend with per-circuit delegating methods.
  */
 export function createSimulator<
   P,
@@ -31,168 +53,239 @@ export function createSimulator<
   TContract extends IMinimalContract,
   TArgs extends readonly any[] = readonly any[],
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
-  return class GeneratedSimulator extends ContractSimulator<P, L> {
-    contract: TContract;
-    readonly contractAddress: string;
-    public _witnesses: W;
+  // Built once per factory; instances per `create()`. The synchronous primitive
+  // is the whole dry path and the local JS artifact for pure-circuit eval (INV-16).
+  const DrySimClass = createDrySimulator<P, L, W, TContract, TArgs>(config);
 
-    /**
-     * Creates a new simulator instance with explicit contract args and options
-     */
-    constructor(
-      contractArgs: TArgs = [] as any,
-      options: BaseSimulatorOptions<P, W> = {},
-    ) {
-      super();
-
-      const {
-        privateState = config.defaultPrivateState(),
-        witnesses = config.witnessesFactory(),
-        coinPK = '0'.repeat(64),
-        contractAddress = dummyContractAddress(),
-      } = options;
-
-      this._witnesses = witnesses;
-      this.contract = config.contractFactory(this._witnesses);
-
-      const processedArgs = config.contractArgs(...contractArgs);
-
-      this.circuitContextManager = new CircuitContextManager(
-        this.contract,
-        privateState,
-        coinPK,
-        contractAddress,
-        ...processedArgs,
-      );
-
-      this.contractAddress = this.circuitContext.currentQueryContext.address;
+  /**
+   * Builds an async circuit proxy: each name becomes a function that routes to
+   * `backend.call(kind, name, args)`, returning the bare `R` as a promise.
+   */
+  const buildProxy = (
+    backend: Backend<P, L>,
+    kind: CircuitKind,
+    names: string[],
+  ): Record<string, (...args: unknown[]) => Promise<unknown>> => {
+    const proxy: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+    for (const name of names) {
+      proxy[name] = (...args: unknown[]) => backend.call(kind, name, args);
     }
+    return proxy;
+  };
 
-    public _pureCircuitProxy?: ContextlessCircuits<
-      ExtractPureCircuits<TContract>,
-      P
-    >;
-    public _impureCircuitProxy?: ContextlessCircuits<
-      ExtractImpureCircuits<TContract>,
-      P
-    >;
+  /** Resolves backend selection, builds the backend, and derives circuit names. */
+  const prepareBackend = async (
+    contractArgs: TArgs,
+    options: SimulatorOptions<P, W>,
+  ): Promise<BackendDeps<P, L>> => {
+    const kind = resolveBackendKind(options.backend);
 
-    /**
-     * Gets the pure circuit proxy, creating it lazily if it doesn't exist.
-     *
-     * @returns The pure circuit proxy for executing read-only contract methods
-     */
-    public get pureCircuit(): ContextlessCircuits<
-      ExtractPureCircuits<TContract>,
-      P
-    > {
-      if (!this._pureCircuitProxy) {
-        this._pureCircuitProxy = this.createPureCircuitProxy(
-          this.contract.circuits as ExtractPureCircuits<TContract>,
-          () => this.circuitContext,
+    // The local synchronous simulator: the whole dry path, and the pure-circuit
+    // evaluator in live (D2). In live this runs `initialState` in memory only —
+    // it is never deployed on-chain (INV-10).
+    const localSim = new DrySimClass(contractArgs, options);
+    const contract = localSim.contract;
+    const impureNames = Object.keys(contract.impureCircuits);
+    const impureSet = new Set(impureNames);
+    const pureNames = Object.keys(contract.circuits).filter(
+      (name) => !impureSet.has(name),
+    );
+
+    if (kind === 'live') {
+      const signers = new Signers({
+        mode: 'live',
+        liveAliases: options.liveAliases,
+        resolveLiveKey: options.resolveLiveKey,
+      });
+
+      // Prefer an explicit ctx; otherwise the globally registered live backend.
+      let liveCtx = options.live;
+      if (!liveCtx) {
+        const factory = getRegisteredLiveBackend();
+        if (factory) {
+          liveCtx = (await factory({
+            config,
+            contractArgs,
+            options,
+          })) as LiveContext<P>;
+        }
+      }
+      if (!liveCtx) {
+        throw new Error(
+          'live backend selected (MIDNIGHT_BACKEND=live) but no LiveContext available. ' +
+            'Pass `{ live }` to create(), or call registerLiveBackend(...) in your ' +
+            'test:live setup. The harness owns deploy/providers/wallets (INV-22).',
         );
       }
-      return this._pureCircuitProxy;
+
+      // INV-1/INV-2: the live adapter value is reached only via dynamic import,
+      // so a dry import never statically links it (and any future heavy deps).
+      const { LiveBackend } = await import('../live/LiveBackend.js');
+      const backend = new LiveBackend<P, L>({
+        ctx: liveCtx,
+        pureSim: localSim as unknown as SyncSimulator<P, L>,
+        signers,
+        ledgerExtractor: config.ledgerExtractor,
+      });
+      return { backend, signers, pureNames, impureNames };
     }
 
-    /**
-     * Gets the impure circuit proxy, creating it lazily if it doesn't exist.
-     *
-     * @returns The impure circuit proxy for executing state-modifying contract methods
-     */
-    public get impureCircuit(): ContextlessCircuits<
-      ExtractImpureCircuits<TContract>,
-      P
-    > {
-      if (!this._impureCircuitProxy) {
-        this._impureCircuitProxy = this.createImpureCircuitProxy(
-          this.contract.impureCircuits as ExtractImpureCircuits<TContract>,
-          () => this.getCallerContext(),
-          (ctx) => {
-            this.circuitContext = ctx;
-          },
-        );
-      }
-      return this._impureCircuitProxy;
-    }
+    const signers = new Signers({ mode: 'dry', dryKeys: options.signerKeys });
+    const backend = new DryBackend<P, L>(
+      localSim as unknown as SyncSimulator<P, L>,
+      signers,
+    );
+    return { backend, signers, pureNames, impureNames };
+  };
+
+  return class Simulator {
+    /** The backend this instance resolved to at construction (INV-8). */
+    readonly backendKind: BackendKind;
+
+    // Public (underscore-prefixed) to satisfy declaration emit for the returned
+    // anonymous class; treat as internal.
+    readonly _backend: Backend<P, L>;
+    readonly _signers: Signers;
+
+    /** Async circuit proxies; every call returns a promise (INV-4). */
+    readonly circuits: {
+      pure: AsyncCircuits<ExtractPureCircuits<TContract>, P>;
+      impure: AsyncCircuits<ExtractImpureCircuits<TContract>, P>;
+    };
 
     /**
-     * Gets both pure and impure circuit proxies.
+     * Internal constructor. Use the async static {@link create} instead — it
+     * resolves the backend (including the live dynamic import) before construction.
      *
-     * @returns Object containing both pure and impure circuit proxies
+     * @param deps - Prepared backend wiring from {@link prepareBackend}.
      */
-    public get circuits() {
-      return {
-        pure: this.pureCircuit,
-        impure: this.impureCircuit,
+    constructor(deps: BackendDeps<P, L>) {
+      this._backend = deps.backend;
+      this.backendKind = deps.backend.kind;
+      this._signers = deps.signers;
+      this.circuits = {
+        pure: buildProxy(
+          this._backend,
+          'pure',
+          deps.pureNames,
+        ) as unknown as AsyncCircuits<ExtractPureCircuits<TContract>, P>,
+        impure: buildProxy(
+          this._backend,
+          'impure',
+          deps.impureNames,
+        ) as unknown as AsyncCircuits<ExtractImpureCircuits<TContract>, P>,
       };
     }
 
     /**
-     * Resets cached circuit proxies, forcing re-initialization on next access.
+     * Constructs a simulator. In dry, deploys from `contractArgs` to fresh
+     * in-memory state. In live, the caller already deployed; the args seed only
+     * the local pure-eval context, never an on-chain deploy (INV-10).
+     *
+     * @param contractArgs - Constructor args for the contract.
+     * @param options - Backend selection, witnesses, private state, live world.
+     * @returns The constructed simulator (subclass-aware via `this`).
      */
-    public resetCircuitProxies(): void {
-      this._pureCircuitProxy = undefined;
-      this._impureCircuitProxy = undefined;
+    static async create<T extends Simulator>(
+      this: new (
+        deps: BackendDeps<P, L>,
+      ) => T,
+      contractArgs: TArgs = [] as unknown as TArgs,
+      options: SimulatorOptions<P, W> = {},
+    ): Promise<T> {
+      const deps = await prepareBackend(contractArgs, options);
+      return new this(deps);
+    }
+
+    /** The alias resolver for circuit-arg keys (`signers.eitherFor('OWNER')`). */
+    get signers(): Signers {
+      return this._signers;
     }
 
     /**
-     * Extracts the public ledger state from the current contract state.
+     * Sets the caller for the next call only, then reverts (INV-17).
      *
-     * @returns The current public state of the contract
+     * @param alias - The caller alias, or `null` for the default signer.
+     * @returns This instance, for chaining (`sim.as('OWNER').transfer(...)`).
      */
-    getPublicState(): L {
-      return config.ledgerExtractor(
-        this.circuitContext.currentQueryContext.state.state,
-      );
-    }
-
-    // Common witness management methods
-    /**
-     * Gets the current witness functions.
-     *
-     * @returns The current witness function implementations
-     */
-    public get witnesses(): W {
-      return this._witnesses;
+    as(alias: string | null): this {
+      this._backend.setCaller(alias, 'single');
+      return this;
     }
 
     /**
-     * Sets new witness functions and recreates the contract with them.
+     * Sets a persistent caller for all subsequent calls until changed (INV-17).
      *
-     * @param newWitnesses - The new witness function implementations to use
+     * @param alias - The caller alias, or `null` to clear.
+     * @returns This instance, for chaining.
      */
-    public set witnesses(newWitnesses: W) {
-      this._witnesses = newWitnesses;
-      this.contract = config.contractFactory(this._witnesses);
-      this.resetCircuitProxies();
+    setPersistentCaller(alias: string | null): this {
+      this._backend.setCaller(alias, 'persistent');
+      return this;
+    }
+
+    /** Clears the persistent caller (the single-shot caller self-resets per call). */
+    resetCaller(): this {
+      this._backend.setCaller(null, 'persistent');
+      return this;
+    }
+
+    /** The public ledger state, via the shared extractor (INV-15). */
+    getPublicState(): Promise<L> {
+      return this._backend.getPublicState();
+    }
+
+    /** The private state (read parity across backends, INV-18). */
+    getPrivateState(): Promise<P> {
+      return this._backend.getPrivateState();
     }
 
     /**
-     * Overrides a specific witness function while keeping others unchanged.
+     * Replaces the private state (for per-module secret/nonce injection helpers).
+     * Dry mutates the in-memory context; live throws (INV-18 mutation asymmetry) —
+     * guard such specs with `isLiveBackend()`.
      *
-     * @param key - The key of the witness function to override
-     * @param fn - The new implementation for the witness function
+     * @param privateState - The new private state.
      */
-    public overrideWitness<K extends keyof W>(key: K, fn: W[K]) {
-      this.witnesses = {
-        ...this._witnesses,
-        [key]: fn,
-      } as W;
+    setPrivateState(privateState: P): void {
+      this._backend.setPrivateState(privateState);
+    }
+
+    /** The raw contract state value. */
+    getContractState() {
+      return this._backend.getContractState();
+    }
+
+    /** The current witness set. */
+    get witnesses(): W {
+      return this._backend.getWitnesses() as W;
     }
 
     /**
-     * Gets the current witness context with the proper structure for witness function calls.
-     *
-     * @returns The current witness context that can be passed to witness functions
+     * Replaces the whole witness set. Dry recreates the contract; live throws
+     * (INV-7). Equivalent to {@link setWitnesses}; kept for API compatibility.
      */
-    public getWitnessContext(): WitnessContext<L, P> {
-      const circuitCtx = this.circuitContext;
-      return {
-        ledger: this.getPublicState(),
-        privateState: circuitCtx.currentPrivateState,
-        contractAddress: circuitCtx.currentQueryContext.address,
-      };
+    set witnesses(newWitnesses: W) {
+      this._backend.setWitnesses(newWitnesses);
+    }
+
+    /**
+     * Overrides a single witness. Dry recreates the contract; live throws (INV-7).
+     *
+     * @param key - The witness key.
+     * @param fn - The replacement implementation.
+     */
+    overrideWitness<K extends keyof W>(key: K, fn: W[K]): void {
+      this._backend.overrideWitness(key as PropertyKey, fn);
+    }
+
+    /**
+     * Replaces the whole witness set. Dry recreates the contract; live throws (INV-7).
+     *
+     * @param witnesses - The new witness set.
+     */
+    setWitnesses(witnesses: W): void {
+      this._backend.setWitnesses(witnesses);
     }
   };
 }
