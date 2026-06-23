@@ -5,8 +5,8 @@ import type { LiveContext } from './LiveContext.js';
 
 /**
  * What the registered live backend receives in order to deploy/attach the right
- * contract and return a {@link LiveContext} for it. The harness owns all infra
- * (INV-22); this just hands it the same config + args the test used.
+ * contract and return a {@link LiveContext} for it. The harness owns all infra;
+ * this just hands it the same config + args the test used.
  */
 export interface LiveBackendRequest<
   P = unknown,

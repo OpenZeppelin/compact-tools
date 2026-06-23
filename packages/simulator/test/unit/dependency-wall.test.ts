@@ -24,17 +24,17 @@ function tsFiles(dir: string): string[] {
 const MIDNIGHT_JS = '@midnight-ntwrk/midnight-js';
 
 /**
- * INV-2 / INV-1 enforcement (the CI guard from OQ6).
+ * Dependency-wall enforcement (the CI guard from OQ6).
  *
  * The dry dependency graph must pull zero midnight-js. We enforce the structural
  * precondition: every midnight-js import is physically confined to `src/live/`.
  * Any reference elsewhere — even a `type` import — is flagged, since a stray
- * value re-export is exactly how the wall silently falls (INV-1).
+ * value re-export is exactly how the wall silently falls.
  *
  * A stronger bundle/dependency-graph analysis (the other OQ6 option) can layer
  * on top; this source-level guard is the fast, deterministic floor.
  */
-describe('dependency wall (INV-1, INV-2)', () => {
+describe('dependency wall', () => {
   it('confines every midnight-js import to src/live/', () => {
     const offenders = tsFiles(SRC_DIR)
       .filter((file) => !file.startsWith(LIVE_DIR))
@@ -44,7 +44,7 @@ describe('dependency wall (INV-1, INV-2)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps midnight-js out of the main barrel (INV-1)', () => {
+  it('keeps midnight-js out of the main barrel', () => {
     const barrel = readFileSync(join(SRC_DIR, 'index.ts'), 'utf8');
     expect(barrel.includes(MIDNIGHT_JS)).toBe(false);
     // The live adapter must be a type-only re-export, never a value re-export.

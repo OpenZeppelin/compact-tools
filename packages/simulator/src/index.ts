@@ -8,9 +8,9 @@ export { AbstractSimulator } from './core/AbstractSimulator.js';
 export { CircuitContextManager } from './core/CircuitContextManager.js';
 export { ContractSimulator } from './core/ContractSimulator.js';
 // --- Core simulator (one factory, two backends) ----------------------------
-// A dry import pulls zero midnight-js (INV-2): the live adapter `LiveBackend`
+// A dry import pulls zero midnight-js: the live adapter `LiveBackend`
 // is type-only here and reached at runtime only via the dynamic import inside
-// `createSimulator` (INV-1). `createLiveContext`/`registerLiveBackend` are
+// `createSimulator`. `createLiveContext`/`registerLiveBackend` are
 // values, but their static graph is midnight-js-free (type-only + dynamic
 // import), so exporting them from the main barrel keeps the wall up.
 export { createSimulator } from './factory/createSimulator.js';

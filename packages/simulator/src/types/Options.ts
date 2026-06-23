@@ -36,15 +36,15 @@ export interface SimulatorOptions<P, W> extends BaseSimulatorOptions<P, W> {
    */
   backend?: BackendKind;
   /**
-   * The live world, supplied by the caller's harness (INV-22). In live mode this
+   * The live world, supplied by the caller's harness. In live mode this
    * is used if provided; otherwise the globally registered live backend (see
    * `registerLiveBackend`) is used. Ignored in dry mode.
    */
   live?: LiveContext<P>;
   /** Dry only: override the deterministic alias→key derivation (OQ4). */
   signerKeys?: Readonly<Record<string, CoinPublicKey>>;
-  /** Live only: the prefunded alias pool (max `MAX_LIVE_SIGNERS`, INV-21). */
+  /** Live only: the prefunded alias pool (max `MAX_LIVE_SIGNERS`). */
   liveAliases?: readonly string[];
-  /** Live only: resolve an alias to its wallet's coin public key (INV-22). */
+  /** Live only: resolve an alias to its wallet's coin public key. */
   resolveLiveKey?: (alias: string) => CoinPublicKey | Promise<CoinPublicKey>;
 }

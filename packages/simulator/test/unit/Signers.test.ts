@@ -5,7 +5,7 @@ import { MAX_LIVE_SIGNERS, Signers } from '../../src/signers/Signers.js';
 const expectedDryKey = (alias: string): string =>
   Buffer.from(alias, 'ascii').toString('hex').padStart(64, '0');
 
-describe('Signers — dry derivation (INV-17)', () => {
+describe('Signers — dry derivation', () => {
   const signers = new Signers({ mode: 'dry' });
 
   it('derives the same key the existing test harness uses', async () => {
@@ -30,7 +30,7 @@ describe('Signers — dry derivation (INV-17)', () => {
   });
 });
 
-describe('Signers — live cap (INV-21)', () => {
+describe('Signers — live cap', () => {
   it(`allows up to ${MAX_LIVE_SIGNERS} prefunded aliases`, () => {
     expect(
       () =>

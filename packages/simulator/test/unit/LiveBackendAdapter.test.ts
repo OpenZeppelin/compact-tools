@@ -59,7 +59,7 @@ const makeBackend = (
 };
 
 describe('LiveBackend adapter', () => {
-  it('runs pure circuits locally without touching the node (INV-16)', async () => {
+  it('runs pure circuits locally without touching the node', async () => {
     const { backend, world } = makeBackend(
       {},
       { double: (n) => (n as bigint) * 2n },
@@ -69,7 +69,7 @@ describe('LiveBackend adapter', () => {
     expect(world.lastAlias).toBeUndefined();
   });
 
-  it('normalizes impure results from .private.result to bare R (INV-13)', async () => {
+  it('normalizes impure results from .private.result to bare R', async () => {
     const { backend } = makeBackend({
       owner: async () => ({ private: { result: 'OWNER_COMMITMENT' } }),
     });
@@ -78,7 +78,7 @@ describe('LiveBackend adapter', () => {
     );
   });
 
-  it('propagates the contract assert message as a substring (INV-14)', async () => {
+  it('propagates the contract assert message as a substring', async () => {
     const { backend } = makeBackend({
       guarded: async () => {
         throw new Error(
@@ -91,7 +91,7 @@ describe('LiveBackend adapter', () => {
     );
   });
 
-  it('applies single-shot caller for one call, then reverts (INV-17)', async () => {
+  it('applies single-shot caller for one call, then reverts', async () => {
     const { backend, world } = makeBackend({
       noop: async () => ({ private: { result: undefined } }),
     });
@@ -103,7 +103,7 @@ describe('LiveBackend adapter', () => {
     expect(world.lastAlias).toBeNull();
   });
 
-  it('keeps a persistent caller across calls (INV-17)', async () => {
+  it('keeps a persistent caller across calls', async () => {
     const { backend, world } = makeBackend({
       noop: async () => ({ private: { result: undefined } }),
     });
@@ -113,14 +113,14 @@ describe('LiveBackend adapter', () => {
     expect(world.lastAlias).toBe('ALICE');
   });
 
-  it('rejects callers outside the prefunded pool (INV-21)', () => {
+  it('rejects callers outside the prefunded pool', () => {
     const { backend } = makeBackend({});
     expect(() => backend.setCaller('STRANGER', 'single')).toThrow(
       'not in the prefunded pool',
     );
   });
 
-  it('hard-errors on witness override / setWitnesses (INV-7)', () => {
+  it('hard-errors on witness override / setWitnesses', () => {
     const { backend } = makeBackend({});
     expect(() => backend.overrideWitness('w', () => {})).toThrow(
       'witness override unsupported on live backend',
@@ -130,7 +130,7 @@ describe('LiveBackend adapter', () => {
     );
   });
 
-  it('reads private state through the provider (INV-18)', async () => {
+  it('reads private state through the provider', async () => {
     const { backend } = makeBackend({});
     expect(await backend.getPrivateState()).toEqual({ secret: 7 });
   });

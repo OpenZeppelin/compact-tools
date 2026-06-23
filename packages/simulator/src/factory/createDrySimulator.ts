@@ -16,7 +16,7 @@ import type { SimulatorConfig } from './SimulatorConfig.js';
  *
  * This is the in-memory engine the public async {@link createSimulator} builds on:
  * the dry backend wraps an instance of this class, and the live backend uses one
- * locally to evaluate pure circuits (INV-16). It is not the public testing API —
+ * locally to evaluate pure circuits. It is not the public testing API —
  * use {@link createSimulator} instead.
  *
  * Creates a class extending ContractSimulator with witness management, state

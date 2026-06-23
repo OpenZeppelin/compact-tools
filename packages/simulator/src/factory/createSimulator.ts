@@ -24,7 +24,7 @@ interface BackendDeps<P, L> {
 /**
  * Resolves the backend kind once: an explicit override wins, otherwise
  * `MIDNIGHT_BACKEND=live` selects live and anything else (unset or `dry`)
- * selects dry (INV-8).
+ * selects dry.
  */
 const resolveBackendKind = (override?: BackendKind): BackendKind =>
   override ?? (process.env.MIDNIGHT_BACKEND === 'live' ? 'live' : 'dry');
@@ -34,16 +34,16 @@ const resolveBackendKind = (override?: BackendKind): BackendKind =>
  *
  * One factory, two backends: the produced class runs against the in-memory path
  * ({@link DryBackend}) or a live Midnight node (`LiveBackend`), selected by
- * `MIDNIGHT_BACKEND=dry|live` at construction (INV-8). `create` is async and
+ * `MIDNIGHT_BACKEND=dry|live` at construction. `create` is async and
  * circuits return promises ({@link AsyncCircuits}) so a single spec file runs on
- * both backends with uniform `await` (INV-4).
+ * both backends with uniform `await`.
  *
- * The live adapter is reached only through a runtime dynamic import (INV-1,
- * INV-2): a static `import { createSimulator }` never pulls midnight-js into the
+ * The live adapter is reached only through a runtime dynamic import: a static
+ * `import { createSimulator }` never pulls midnight-js into the
  * dependency graph. In live mode the {@link LiveContext} comes from `options.live`
  * or the globally registered live backend (`registerLiveBackend`).
  *
- * @param config - The shared simulator configuration (same shape both backends, INV-5).
+ * @param config - The shared simulator configuration (same shape both backends).
  * @returns A class to extend with per-circuit delegating methods.
  */
 export function createSimulator<
@@ -54,7 +54,7 @@ export function createSimulator<
   TArgs extends readonly any[] = readonly any[],
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
   // Built once per factory; instances per `create()`. The synchronous primitive
-  // is the whole dry path and the local JS artifact for pure-circuit eval (INV-16).
+  // is the whole dry path and the local JS artifact for pure-circuit eval.
   const DrySimClass = createDrySimulator<P, L, W, TContract, TArgs>(config);
 
   /**
@@ -82,7 +82,7 @@ export function createSimulator<
 
     // The local synchronous simulator: the whole dry path, and the pure-circuit
     // evaluator in live (D2). In live this runs `initialState` in memory only —
-    // it is never deployed on-chain (INV-10).
+    // it is never deployed on-chain.
     const localSim = new DrySimClass(contractArgs, options);
     const contract = localSim.contract;
     const impureNames = Object.keys(contract.impureCircuits);
@@ -114,11 +114,11 @@ export function createSimulator<
         throw new Error(
           'live backend selected (MIDNIGHT_BACKEND=live) but no LiveContext available. ' +
             'Pass `{ live }` to create(), or call registerLiveBackend(...) in your ' +
-            'test:live setup. The harness owns deploy/providers/wallets (INV-22).',
+            'test:live setup. The harness owns deploy/providers/wallets.',
         );
       }
 
-      // INV-1/INV-2: the live adapter value is reached only via dynamic import,
+      // The live adapter value is reached only via dynamic import,
       // so a dry import never statically links it (and any future heavy deps).
       const { LiveBackend } = await import('../live/LiveBackend.js');
       const backend = new LiveBackend<P, L>({
@@ -139,7 +139,7 @@ export function createSimulator<
   };
 
   return class Simulator {
-    /** The backend this instance resolved to at construction (INV-8). */
+    /** The backend this instance resolved to at construction. */
     readonly backendKind: BackendKind;
 
     // Public (underscore-prefixed) to satisfy declaration emit for the returned
@@ -147,7 +147,7 @@ export function createSimulator<
     readonly _backend: Backend<P, L>;
     readonly _signers: Signers;
 
-    /** Async circuit proxies; every call returns a promise (INV-4). */
+    /** Async circuit proxies; every call returns a promise. */
     readonly circuits: {
       pure: AsyncCircuits<ExtractPureCircuits<TContract>, P>;
       impure: AsyncCircuits<ExtractImpureCircuits<TContract>, P>;
@@ -180,7 +180,7 @@ export function createSimulator<
     /**
      * Constructs a simulator. In dry, deploys from `contractArgs` to fresh
      * in-memory state. In live, the caller already deployed; the args seed only
-     * the local pure-eval context, never an on-chain deploy (INV-10).
+     * the local pure-eval context, never an on-chain deploy.
      *
      * @param contractArgs - Constructor args for the contract.
      * @param options - Backend selection, witnesses, private state, live world.
@@ -203,7 +203,7 @@ export function createSimulator<
     }
 
     /**
-     * Sets the caller for the next call only, then reverts (INV-17).
+     * Sets the caller for the next call only, then reverts.
      *
      * @param alias - The caller alias, or `null` for the default signer.
      * @returns This instance, for chaining (`sim.as('OWNER').transfer(...)`).
@@ -214,7 +214,7 @@ export function createSimulator<
     }
 
     /**
-     * Sets a persistent caller for all subsequent calls until changed (INV-17).
+     * Sets a persistent caller for all subsequent calls until changed.
      *
      * @param alias - The caller alias, or `null` to clear.
      * @returns This instance, for chaining.
@@ -230,19 +230,19 @@ export function createSimulator<
       return this;
     }
 
-    /** The public ledger state, via the shared extractor (INV-15). */
+    /** The public ledger state, via the shared extractor. */
     getPublicState(): Promise<L> {
       return this._backend.getPublicState();
     }
 
-    /** The private state (read parity across backends, INV-18). */
+    /** The private state (read parity across backends). */
     getPrivateState(): Promise<P> {
       return this._backend.getPrivateState();
     }
 
     /**
      * Replaces the private state (for per-module secret/nonce injection helpers).
-     * Dry mutates the in-memory context; live throws (INV-18 mutation asymmetry) —
+     * Dry mutates the in-memory context; live throws (mutation asymmetry) —
      * guard such specs with `isLiveBackend()`.
      *
      * @param privateState - The new private state.
@@ -262,15 +262,15 @@ export function createSimulator<
     }
 
     /**
-     * Replaces the whole witness set. Dry recreates the contract; live throws
-     * (INV-7). Equivalent to {@link setWitnesses}; kept for API compatibility.
+     * Replaces the whole witness set. Dry recreates the contract; live throws.
+     * Equivalent to {@link setWitnesses}; kept for API compatibility.
      */
     set witnesses(newWitnesses: W) {
       this._backend.setWitnesses(newWitnesses);
     }
 
     /**
-     * Overrides a single witness. Dry recreates the contract; live throws (INV-7).
+     * Overrides a single witness. Dry recreates the contract; live throws.
      *
      * @param key - The witness key.
      * @param fn - The replacement implementation.
@@ -280,7 +280,7 @@ export function createSimulator<
     }
 
     /**
-     * Replaces the whole witness set. Dry recreates the contract; live throws (INV-7).
+     * Replaces the whole witness set. Dry recreates the contract; live throws.
      *
      * @param witnesses - The new witness set.
      */

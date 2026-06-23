@@ -34,10 +34,10 @@ export interface SyncSimulator<P, L> {
  * `createSimulator` instance.
  *
  * Every operation delegates to the wrapped simulator and wraps the synchronous
- * result in a resolved promise (INV-4), so a circuit never returns a bare value
+ * result in a resolved promise, so a circuit never returns a bare value
  * on dry but a `Promise` on live. Because all real work routes through the
- * unchanged synchronous path, dry behavior is preserved byte-for-byte (INV-19)
- * and is the parity reference the live backend is measured against (INV-12).
+ * unchanged synchronous path, dry behavior is preserved byte-for-byte
+ * and is the parity reference the live backend is measured against.
  *
  * @template P - Private state type.
  * @template L - Public ledger state type.
@@ -92,7 +92,7 @@ export class DryBackend<P, L> implements Backend<P, L> {
     return this.sim.getContractState();
   }
 
-  /** Mutates the in-memory private state (INV-18: dry supports mid-test mutation). */
+  /** Mutates the in-memory private state (dry supports mid-test mutation). */
   setPrivateState(privateState: P): void {
     this.sim.circuitContextManager.updatePrivateState(privateState);
   }
@@ -101,7 +101,7 @@ export class DryBackend<P, L> implements Backend<P, L> {
    * Resolves the alias to a deterministic key and applies it to the wrapped
    * simulator's override fields. `'single'` uses `callerOverride` (the existing
    * proxy auto-resets it after one call); `'persistent'` uses
-   * `persistentCallerOverride` (INV-17).
+   * `persistentCallerOverride`.
    */
   setCaller(alias: string | null, mode: 'single' | 'persistent'): void {
     const key = alias === null ? null : this.signers.resolveDryKey(alias);

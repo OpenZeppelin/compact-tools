@@ -7,7 +7,7 @@ import type { BackendKind } from '../backend/Backend.js';
 
 /**
  * The number of prefunded wallets available on the dev-preset live node:
- * the deployer plus three named aliases (D1, INV-21). Requesting more requires
+ * the deployer plus three named aliases (D1). Requesting more requires
  * the deferred derive-and-fund flow.
  */
 export const MAX_LIVE_SIGNERS = 4;
@@ -31,7 +31,7 @@ export type Either<L, R> = {
  * This is the exact derivation the existing test harness uses
  * (`generatePubKeyPair` / `encodeToPK`), so a backend-aware simulator resolves
  * an alias to the same key the current synchronous specs do — preserving dry
- * parity for migrated modules (INV-17).
+ * parity for migrated modules.
  *
  * @param alias - The caller alias.
  * @returns A 64-char hex `CoinPublicKey`.
@@ -55,13 +55,13 @@ export interface SignersOptions {
   dryKeys?: Readonly<Record<string, CoinPublicKey>>;
   /**
    * Live only: the aliases backed by a prefunded wallet on the node. Capped at
-   * {@link MAX_LIVE_SIGNERS} (INV-21). Requesting an alias outside this set
+   * {@link MAX_LIVE_SIGNERS}. Requesting an alias outside this set
    * fails with a clear error rather than silently reusing a wallet.
    */
   liveAliases?: readonly string[];
   /**
    * Live only: resolve an alias to its wallet's coin public key. Supplied by the
-   * caller's harness, which owns wallet provisioning (INV-22).
+   * caller's harness, which owns wallet provisioning.
    */
   resolveLiveKey?: (alias: string) => CoinPublicKey | Promise<CoinPublicKey>;
 }
@@ -70,9 +70,9 @@ export interface SignersOptions {
  * Resolves caller-identity aliases to keys, uniformly across backends.
  *
  * Alias strings are the common currency for caller identity (D1): `as('OWNER')`
- * denotes the same logical actor in both modes (INV-17). Dry derives a
+ * denotes the same logical actor in both modes. Dry derives a
  * deterministic key from the alias label; live resolves the alias to a pooled,
- * prefunded wallet, enforcing the {@link MAX_LIVE_SIGNERS} cap (INV-21).
+ * prefunded wallet, enforcing the {@link MAX_LIVE_SIGNERS} cap.
  *
  * The public resolvers ({@link keyFor}, {@link eitherFor}) are async so spec
  * code is uniform `await` across backends, even though dry resolves
@@ -117,7 +117,7 @@ export class Signers {
    * Asserts an alias is backed by a prefunded wallet on the live node.
    *
    * Throws the cap error rather than silently reusing a wallet or proceeding
-   * with an unfunded one (INV-21). A no-op in dry mode.
+   * with an unfunded one. A no-op in dry mode.
    *
    * @param alias - The caller alias to validate.
    */
@@ -144,7 +144,7 @@ export class Signers {
       if (!this.resolveLiveKey) {
         throw new Error(
           `cannot resolve live key for "${alias}": no resolveLiveKey supplied. ` +
-            'The caller harness must provide one (INV-22).',
+            'The caller harness must provide one.',
         );
       }
       return this.resolveLiveKey(alias);
