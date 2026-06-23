@@ -41,9 +41,18 @@ let registeredFactory: LiveBackendFactory | undefined;
  * Call this once from your `test:live` setup. It keeps the per-module test files
  * backend-agnostic: `await Sim.create()` works on both backends.
  *
+ * Throws if a different factory is already registered: in a shared test process
+ * a silent replacement would switch harness context and cause non-deterministic
+ * live behavior. Call {@link clearLiveBackend} before re-registering.
+ *
  * @param factory - Builds a {@link LiveContext} per `create` call.
  */
 export function registerLiveBackend(factory: LiveBackendFactory): void {
+  if (registeredFactory && registeredFactory !== factory) {
+    throw new Error(
+      'live backend is already registered. Call clearLiveBackend() before replacing it.',
+    );
+  }
   registeredFactory = factory;
 }
 

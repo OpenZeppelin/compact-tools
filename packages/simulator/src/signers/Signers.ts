@@ -92,7 +92,7 @@ export class Signers {
     this.liveAliases = new Set(options.liveAliases ?? []);
     this.resolveLiveKey = options.resolveLiveKey;
 
-    if (this.liveAliases.size > MAX_LIVE_SIGNERS) {
+    if (this.mode === 'live' && this.liveAliases.size > MAX_LIVE_SIGNERS) {
       throw new Error(
         `live backend supports at most ${MAX_LIVE_SIGNERS} prefunded signers; ` +
           `got ${this.liveAliases.size}. The derive-and-fund flow for more is deferred.`,

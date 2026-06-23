@@ -1,11 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = join(here, '..', '..', 'src');
 const LIVE_DIR = join(SRC_DIR, 'live');
+// Trailing separator so the prefix match can't leak to a sibling like `live2/`.
+const LIVE_PREFIX = `${LIVE_DIR}${sep}`;
 
 /** All `.ts` files under a directory, recursively. */
 function tsFiles(dir: string): string[] {
@@ -37,7 +39,7 @@ const MIDNIGHT_JS = '@midnight-ntwrk/midnight-js';
 describe('dependency wall', () => {
   it('confines every midnight-js import to src/live/', () => {
     const offenders = tsFiles(SRC_DIR)
-      .filter((file) => !file.startsWith(LIVE_DIR))
+      .filter((file) => !file.startsWith(LIVE_PREFIX))
       .filter((file) => readFileSync(file, 'utf8').includes(MIDNIGHT_JS))
       .map((file) => relative(SRC_DIR, file));
 
