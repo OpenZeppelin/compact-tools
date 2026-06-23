@@ -36,4 +36,11 @@ export interface SimulatorConfig<
   ledgerExtractor: (state: StateValue) => L;
   /** Factory function to create default witnesses */
   witnessesFactory: () => W;
+  /**
+   * Optional artifact name (the `artifacts/<name>/` directory) for the compiled
+   * contract. Dry ignores it; the live backend's registered harness uses it to
+   * locate the compiled assets + ZK keys and to build the deployable contract.
+   * Only needed for modules that run on the live backend.
+   */
+  artifactName?: string;
 }

@@ -1,4 +1,4 @@
-import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
+import { createSimulator, type SimulatorOptions } from '../../src/index';
 import {
   type ContractAddress,
   type Either,
@@ -44,15 +44,19 @@ const SampleZOwnableSimulatorBase = createSimulator<
  * SampleZOwnable Simulator
  */
 export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
-  constructor(
+  static async create(
     ownerId: Uint8Array,
     instanceSalt: Uint8Array,
-    options: BaseSimulatorOptions<
+    options: SimulatorOptions<
       SampleZOwnablePrivateState,
       ReturnType<typeof SampleZOwnableWitnesses>
     > = {},
-  ) {
-    super([ownerId, instanceSalt], options);
+  ): Promise<SampleZOwnableSimulator> {
+    // biome-ignore lint/complexity/noThisInStatic: super.create must keep the subclass `this`
+    return super.create(
+      [ownerId, instanceSalt],
+      options,
+    ) as Promise<SampleZOwnableSimulator>;
   }
 
   /**
@@ -60,7 +64,7 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
    * The full commitment is: `SHA256(SHA256(pk, nonce), instanceSalt, counter, domain)`.
    * @returns The current owner's commitment.
    */
-  public owner(): Uint8Array {
+  public owner(): Promise<Uint8Array> {
     return this.circuits.impure.owner();
   }
 
@@ -69,8 +73,8 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
    * `newOwnerId` must be precalculated and given to the current owner off chain.
    * @param newOwnerId The new owner's unique identifier (`SHA256(pk, nonce)`).
    */
-  public transferOwnership(newOwnerId: Uint8Array) {
-    this.circuits.impure.transferOwnership(newOwnerId);
+  public transferOwnership(newOwnerId: Uint8Array): Promise<[]> {
+    return this.circuits.impure.transferOwnership(newOwnerId);
   }
 
   /**
@@ -78,26 +82,28 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
    * It will not be possible to call `assertOnlyOnwer` circuits anymore.
    * Can only be called by the current owner.
    */
-  public renounceOwnership() {
-    this.circuits.impure.renounceOwnership();
+  public renounceOwnership(): Promise<[]> {
+    return this.circuits.impure.renounceOwnership();
   }
 
   /**
    * @description Throws if called by any account whose id hash `SHA256(pk, nonce)` does not match
    * the stored owner commitment. Use this to only allow the owner to call specific circuits.
    */
-  public assertOnlyOwner() {
-    this.circuits.impure.assertOnlyOwner();
+  public assertOnlyOwner(): Promise<[]> {
+    return this.circuits.impure.assertOnlyOwner();
   }
 
   /**
    * @description Computes the owner commitment from the given `id` and `counter`.
    * @param id - The unique identifier of the owner calculated by `SHA256(pk, nonce)`.
-   * @param counter - The current counter or round. This increments by `1`
-   * after every transfer to prevent duplicate commitments given the same `id`.
+   * @param counter - The current counter or round.
    * @returns The commitment derived from `id` and `counter`.
    */
-  public _computeOwnerCommitment(id: Uint8Array, counter: bigint): Uint8Array {
+  public _computeOwnerCommitment(
+    id: Uint8Array,
+    counter: bigint,
+  ): Promise<Uint8Array> {
     return this.circuits.impure._computeOwnerCommitment(id, counter);
   }
 
@@ -111,7 +117,7 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
   public _computeOwnerId(
     pk: Either<ZswapCoinPublicKey, ContractAddress>,
     nonce: Uint8Array,
-  ): Uint8Array {
+  ): Promise<Uint8Array> {
     return this.circuits.pure._computeOwnerId(pk, nonce);
   }
 
@@ -121,13 +127,12 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
      * @param newNonce The secret nonce.
      * @returns The SampleZOwnable private state after setting the new nonce.
      */
-    injectSecretNonce: (
+    injectSecretNonce: async (
       newNonce: Buffer<ArrayBufferLike>,
-    ): SampleZOwnablePrivateState => {
-      const currentState =
-        this.circuitContextManager.getContext().currentPrivateState;
+    ): Promise<SampleZOwnablePrivateState> => {
+      const currentState = await this.getPrivateState();
       const updatedState = { ...currentState, secretNonce: newNonce };
-      this.circuitContextManager.updatePrivateState(updatedState);
+      this.setPrivateState(updatedState);
       return updatedState;
     },
 
@@ -135,9 +140,8 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
      * @description Returns the secret nonce given the context.
      * @returns The secret nonce.
      */
-    getCurrentSecretNonce: (): Uint8Array => {
-      return this.circuitContextManager.getContext().currentPrivateState
-        .secretNonce;
+    getCurrentSecretNonce: async (): Promise<Uint8Array> => {
+      return (await this.getPrivateState()).secretNonce;
     },
   };
 }

@@ -4,17 +4,17 @@ import { SimpleSimulator } from './SimpleSimulator';
 let simple: SimpleSimulator;
 
 describe('Simple test', () => {
-  beforeEach(() => {
-    simple = new SimpleSimulator();
+  beforeEach(async () => {
+    simple = await SimpleSimulator.create();
   });
 
   it('sanity check', () => {
     expect(1).toEqual(1);
   });
 
-  it('should set val', () => {
+  it('should set val', async () => {
     const VAL = 123n;
-    simple.setVal(VAL);
-    expect(simple.getVal()).toEqual(VAL);
+    await simple.setVal(VAL);
+    expect(await simple.getVal()).toEqual(VAL);
   });
 });
