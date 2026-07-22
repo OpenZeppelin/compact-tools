@@ -71,14 +71,18 @@ export interface Backend<P, L> {
   getContractState(): Promise<StateValue>;
 
   /**
-   * Replaces the private state. Dry mutates the in-memory context (used by
-   * per-module helpers like secret/nonce injection); live throws, because
-   * mid-test private-state mutation is the documented dry↔live asymmetry.
-   * Guard such specs with `isLiveBackend()`.
+   * Replaces the whole private state `P`. Dry mutates the in-memory context;
+   * live writes to the harness's private-state provider so the next impure
+   * `callTx` proves against it — but only if the injected {@link LiveContext}
+   * implements `setPrivateState`; otherwise it throws
+   * {@link ../live/LiveBackend.PRIVATE_STATE_MUTATION_UNSUPPORTED}.
+   *
+   * Async across backends for uniform `await`: dry resolves synchronously,
+   * live awaits the provider write.
    *
    * @param privateState - The new private state `P`.
    */
-  setPrivateState(privateState: P): void;
+  setPrivateState(privateState: P): Promise<void>;
 
   /**
    * Sets the caller identity for subsequent circuit calls.

@@ -25,7 +25,10 @@ export {
   DEFAULT_INDEXER_LAG,
 } from './live/createLiveContext.js';
 export type { LiveBackend } from './live/LiveBackend.js';
-export { WITNESS_OVERRIDE_UNSUPPORTED } from './live/LiveBackend.js';
+export {
+  PRIVATE_STATE_MUTATION_UNSUPPORTED,
+  WITNESS_OVERRIDE_UNSUPPORTED,
+} from './live/LiveBackend.js';
 export type {
   DeployedTxHandle,
   FinalizedCallResult,

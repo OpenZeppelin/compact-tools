@@ -8,9 +8,9 @@ import type { LiveContext } from './LiveContext.js';
 export const WITNESS_OVERRIDE_UNSUPPORTED =
   'witness override unsupported on live backend';
 
-/** The error thrown when private state is mutated on the live backend. */
+/** The error thrown when the live `LiveContext` cannot mutate private state. */
 export const PRIVATE_STATE_MUTATION_UNSUPPORTED =
-  'private-state mutation unsupported on live backend';
+  'private-state mutation unsupported: this LiveContext does not implement setPrivateState';
 
 /**
  * Dependencies the live adapter is constructed with by `createBackendSimulator`.
@@ -119,12 +119,16 @@ export class LiveBackend<P, L> implements Backend<P, L> {
   }
 
   /**
-   * Mid-test private-state mutation does not faithfully reproduce on live.
-   * Throws so such specs are explicitly guarded with `isLiveBackend()`
-   * rather than silently passing against unchanged state.
+   * Writes private state through the injected {@link LiveContext} so the next
+   * impure `callTx` proves against it. If the context opted out of mutation
+   * (no `setPrivateState`), throws {@link PRIVATE_STATE_MUTATION_UNSUPPORTED}
+   * so the spec fails loudly rather than proving against stale state.
    */
-  setPrivateState(_privateState: P): void {
-    throw new Error(PRIVATE_STATE_MUTATION_UNSUPPORTED);
+  async setPrivateState(privateState: P): Promise<void> {
+    if (!this.ctx.setPrivateState) {
+      throw new Error(PRIVATE_STATE_MUTATION_UNSUPPORTED);
+    }
+    await this.ctx.setPrivateState(privateState);
   }
 
   /**

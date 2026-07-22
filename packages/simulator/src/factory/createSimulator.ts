@@ -241,14 +241,40 @@ export function createSimulator<
     }
 
     /**
-     * Replaces the private state (for per-module secret/nonce injection helpers).
-     * Dry mutates the in-memory context; live throws (mutation asymmetry) —
-     * guard such specs with `isLiveBackend()`.
+     * Replaces the whole private state. Dry mutates the in-memory context; live
+     * writes to the harness's private-state provider so the next impure call
+     * proves against it (throws if the `LiveContext` opted out of mutation).
      *
      * @param privateState - The new private state.
      */
-    setPrivateState(privateState: P): void {
-      this._backend.setPrivateState(privateState);
+    setPrivateState(privateState: P): Promise<void> {
+      return this._backend.setPrivateState(privateState);
+    }
+
+    /**
+     * Ergonomic granular private-state mutation. Replaces the per-module
+     * `injectSecretKey`/`injectSecretNonce` helpers: a plain object shallow-
+     * merges onto the current state, a function receives the current state and
+     * returns the next.
+     *
+     * Read-modify-write goes through the backend, so it works on both dry
+     * (in-memory) and live (provider read then write). On live the current
+     * state must already exist (it is seeded at deploy).
+     *
+     * @example sim.updatePrivateState({ secretKey });
+     * @example sim.updatePrivateState((prev) => ({ ...prev, counter: prev.counter + 1n }));
+     *
+     * @param updater - A partial patch to merge, or an updater function.
+     */
+    async updatePrivateState(
+      updater: Partial<P> | ((prev: P) => P),
+    ): Promise<void> {
+      const prev = await this._backend.getPrivateState();
+      const next =
+        typeof updater === 'function'
+          ? (updater as (p: P) => P)(prev)
+          : { ...prev, ...updater };
+      await this._backend.setPrivateState(next);
     }
 
     /** The raw contract state value. */
