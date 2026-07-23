@@ -1,5 +1,6 @@
 import type { Backend, BackendKind, CircuitKind } from '../backend/Backend.js';
 import { DryBackend, type SyncSimulator } from '../backend/DryBackend.js';
+import { PrivateStateMutator } from '../core/PrivateStateMutator.js';
 import type { LiveContext } from '../live/LiveContext.js';
 import { getRegisteredLiveBackend } from '../live/registry.js';
 import { Signers } from '../signers/Signers.js';
@@ -148,18 +149,10 @@ export function createSimulator<
     readonly _signers: Signers;
 
     /**
-     * Tail of the private-state mutation queue. Serializes read-modify-write so
-     * concurrent mutations can't interleave and lose an update. Internal.
-     *
-     * The guarantee is scoped to this simulator instance. On live, two
-     * simulators (or two processes) sharing the same `privateStateProvider` and
-     * `privateStateId` still race a read-modify-write — both read the provider,
-     * last write wins — since this queue is local. Cross-instance atomicity
-     * would need provider-side compare-and-set/versioning and is out of scope;
-     * tests drive one simulator per private state, so the per-instance queue is
-     * sufficient in practice.
+     * Serializes private-state read-modify-write for this instance. Internal;
+     * see {@link PrivateStateMutator} for the scope of the guarantee.
      */
-    _psMutationChain: Promise<unknown> = Promise.resolve();
+    readonly _mutator: PrivateStateMutator<P>;
 
     /** Async circuit proxies; every call returns a promise. */
     readonly circuits: {
@@ -177,6 +170,12 @@ export function createSimulator<
       this._backend = deps.backend;
       this.backendKind = deps.backend.kind;
       this._signers = deps.signers;
+      // Constructed here (not as a field initializer) so the closures capture
+      // the assigned `_backend` rather than an undefined one.
+      this._mutator = new PrivateStateMutator<P>(
+        () => this._backend.getPrivateState(),
+        (next) => this._backend.setPrivateState(next),
+      );
       this.circuits = {
         pure: buildProxy(
           this._backend,
@@ -255,34 +254,15 @@ export function createSimulator<
     }
 
     /**
-     * Serializes a private-state mutation against this simulator's queue so a
-     * read-modify-write can't interleave with another mutation and drop an
-     * update. A rejection propagates to its caller but does not poison the
-     * queue for subsequent mutations. Internal.
-     *
-     * @param op - The mutation to run once the queue drains.
-     * @returns `op`'s result.
-     */
-    _enqueuePsMutation<T>(op: () => Promise<T>): Promise<T> {
-      const run = this._psMutationChain.then(op);
-      this._psMutationChain = run.then(
-        () => undefined,
-        () => undefined,
-      );
-      return run;
-    }
-
-    /**
      * Replaces the whole private state. Dry mutates the in-memory context; live
      * writes to the harness's private-state provider so the next impure call
      * proves against it (throws if the `LiveContext` opted out of mutation).
+     * Serialized against other mutations via {@link _mutator}.
      *
      * @param privateState - The new private state.
      */
     setPrivateState(privateState: P): Promise<void> {
-      return this._enqueuePsMutation(() =>
-        this._backend.setPrivateState(privateState),
-      );
+      return this._mutator.set(privateState);
     }
 
     /**
@@ -291,13 +271,11 @@ export function createSimulator<
      * merges onto the current state, a function receives the current state and
      * returns the next.
      *
-     * Read-modify-write goes through the backend, so it works on both dry
-     * (in-memory) and live (provider read then write). On live the current
-     * state must already exist (it is seeded at deploy).
-     *
-     * Resolves to the state that was written, so callers can
-     * `return sim.updatePrivateState(...)` without a follow-up `getPrivateState()`
-     * (which would otherwise race the queued write).
+     * The read-modify-write is serialized (see {@link _mutator}) and resolves to
+     * the state that was written, so callers can `return sim.updatePrivateState(...)`
+     * without a follow-up `getPrivateState()`. Works on both dry (in-memory) and
+     * live (provider read then write); on live the current state must already
+     * exist (it is seeded at deploy).
      *
      * @example sim.updatePrivateState({ secretKey });
      * @example sim.updatePrivateState((prev) => ({ ...prev, counter: prev.counter + 1n }));
@@ -306,15 +284,7 @@ export function createSimulator<
      * @returns The private state that was written.
      */
     updatePrivateState(updater: Partial<P> | ((prev: P) => P)): Promise<P> {
-      return this._enqueuePsMutation(async () => {
-        const prev = await this._backend.getPrivateState();
-        const next =
-          typeof updater === 'function'
-            ? (updater as (p: P) => P)(prev)
-            : { ...prev, ...updater };
-        await this._backend.setPrivateState(next);
-        return next;
-      });
+      return this._mutator.update(updater);
     }
 
     /** The raw contract state value. */

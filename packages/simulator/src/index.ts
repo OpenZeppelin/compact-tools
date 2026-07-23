@@ -7,6 +7,7 @@ export { DryBackend } from './backend/DryBackend.js';
 export { AbstractSimulator } from './core/AbstractSimulator.js';
 export { CircuitContextManager } from './core/CircuitContextManager.js';
 export { ContractSimulator } from './core/ContractSimulator.js';
+export { PrivateStateMutator } from './core/PrivateStateMutator.js';
 // --- Core simulator (one factory, two backends) ----------------------------
 // A dry import pulls zero midnight-js: the live adapter `LiveBackend`
 // is type-only here and reached at runtime only via the dynamic import inside
