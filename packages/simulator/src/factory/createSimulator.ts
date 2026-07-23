@@ -247,13 +247,6 @@ export function createSimulator<
     }
 
     /**
-     * Replaces the whole private state. Dry mutates the in-memory context; live
-     * writes to the harness's private-state provider so the next impure call
-     * proves against it (throws if the `LiveContext` opted out of mutation).
-     *
-     * @param privateState - The new private state.
-     */
-    /**
      * Serializes a private-state mutation against this simulator's queue so a
      * read-modify-write can't interleave with another mutation and drop an
      * update. A rejection propagates to its caller but does not poison the
@@ -271,6 +264,13 @@ export function createSimulator<
       return run;
     }
 
+    /**
+     * Replaces the whole private state. Dry mutates the in-memory context; live
+     * writes to the harness's private-state provider so the next impure call
+     * proves against it (throws if the `LiveContext` opted out of mutation).
+     *
+     * @param privateState - The new private state.
+     */
     setPrivateState(privateState: P): Promise<void> {
       return this._enqueuePsMutation(() =>
         this._backend.setPrivateState(privateState),
