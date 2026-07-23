@@ -203,7 +203,7 @@ describe('witness/private state overrides', () => {
   describe('private state mutation', () => {
     it('replaces the whole private state via setPrivateState', async () => {
       const next: WitnessPrivateState = {
-        secretBytes: new Uint8Array(32).fill(5),
+        secretBytes: Buffer.alloc(32, 5),
         secretField: 11n,
         secretUint: 22n,
       };
@@ -233,12 +233,29 @@ describe('witness/private state overrides', () => {
       );
     });
 
+    it('serializes concurrent updates so neither patch is lost', async () => {
+      const before = await contract.getPrivateState();
+      // Both read the same prev if unserialized; the last write would then
+      // clobber the other field. Serialization must land both.
+      await Promise.all([
+        contract.updatePrivateState({ secretField: 77n }),
+        contract.updatePrivateState({ secretUint: 88n }),
+      ]);
+
+      const after = await contract.getPrivateState();
+      expect(after.secretField).toEqual(77n);
+      expect(after.secretUint).toEqual(88n);
+      expect(after.secretBytes).toEqual(before.secretBytes);
+    });
+
     it('feeds mutated private state into subsequent circuit calls', async () => {
       // secretBytes is written to public state by setBytes() via the witness.
-      const injected = new Uint8Array(32).fill(9);
+      const injected = Buffer.alloc(32, 9);
       await contract.updatePrivateState({ secretBytes: injected });
       await contract.setBytes();
-      expect((await contract.getPublicState())._valBytes).toEqual(injected);
+      expect((await contract.getPublicState())._valBytes).toEqual(
+        new Uint8Array(injected),
+      );
     });
   });
 });
