@@ -150,6 +150,14 @@ export function createSimulator<
     /**
      * Tail of the private-state mutation queue. Serializes read-modify-write so
      * concurrent mutations can't interleave and lose an update. Internal.
+     *
+     * The guarantee is scoped to this simulator instance. On live, two
+     * simulators (or two processes) sharing the same `privateStateProvider` and
+     * `privateStateId` still race a read-modify-write — both read the provider,
+     * last write wins — since this queue is local. Cross-instance atomicity
+     * would need provider-side compare-and-set/versioning and is out of scope;
+     * tests drive one simulator per private state, so the per-instance queue is
+     * sufficient in practice.
      */
     _psMutationChain: Promise<unknown> = Promise.resolve();
 
