@@ -260,8 +260,9 @@ export function createSimulator<
      * queue for subsequent mutations. Internal.
      *
      * @param op - The mutation to run once the queue drains.
+     * @returns `op`'s result.
      */
-    _enqueuePsMutation(op: () => Promise<void>): Promise<void> {
+    _enqueuePsMutation<T>(op: () => Promise<T>): Promise<T> {
       const run = this._psMutationChain.then(op);
       this._psMutationChain = run.then(
         () => undefined,
@@ -286,12 +287,17 @@ export function createSimulator<
      * (in-memory) and live (provider read then write). On live the current
      * state must already exist (it is seeded at deploy).
      *
+     * Resolves to the state that was written, so callers can
+     * `return sim.updatePrivateState(...)` without a follow-up `getPrivateState()`
+     * (which would otherwise race the queued write).
+     *
      * @example sim.updatePrivateState({ secretKey });
      * @example sim.updatePrivateState((prev) => ({ ...prev, counter: prev.counter + 1n }));
      *
      * @param updater - A partial patch to merge, or an updater function.
+     * @returns The private state that was written.
      */
-    updatePrivateState(updater: Partial<P> | ((prev: P) => P)): Promise<void> {
+    updatePrivateState(updater: Partial<P> | ((prev: P) => P)): Promise<P> {
       return this._enqueuePsMutation(async () => {
         const prev = await this._backend.getPrivateState();
         const next =
@@ -299,6 +305,7 @@ export function createSimulator<
             ? (updater as (p: P) => P)(prev)
             : { ...prev, ...updater };
         await this._backend.setPrivateState(next);
+        return next;
       });
     }
 

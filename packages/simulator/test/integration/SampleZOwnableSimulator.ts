@@ -127,12 +127,10 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
      * @param newNonce The secret nonce.
      * @returns The SampleZOwnable private state after setting the new nonce.
      */
-    injectSecretNonce: async (
+    injectSecretNonce: (
       newNonce: Buffer<ArrayBufferLike>,
-    ): Promise<SampleZOwnablePrivateState> => {
-      await this.updatePrivateState({ secretNonce: newNonce });
-      return this.getPrivateState();
-    },
+    ): Promise<SampleZOwnablePrivateState> =>
+      this.updatePrivateState({ secretNonce: newNonce }),
 
     /**
      * @description Returns the secret nonce given the context.
