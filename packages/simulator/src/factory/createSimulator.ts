@@ -147,6 +147,12 @@ export function createSimulator<
     readonly _backend: Backend<P, L>;
     readonly _signers: Signers;
 
+    /**
+     * Tail of the private-state mutation queue. Serializes read-modify-write so
+     * concurrent mutations can't interleave and lose an update. Internal.
+     */
+    _psMutationChain: Promise<unknown> = Promise.resolve();
+
     /** Async circuit proxies; every call returns a promise. */
     readonly circuits: {
       pure: AsyncCircuits<ExtractPureCircuits<TContract>, P>;
@@ -247,8 +253,27 @@ export function createSimulator<
      *
      * @param privateState - The new private state.
      */
+    /**
+     * Serializes a private-state mutation against this simulator's queue so a
+     * read-modify-write can't interleave with another mutation and drop an
+     * update. A rejection propagates to its caller but does not poison the
+     * queue for subsequent mutations. Internal.
+     *
+     * @param op - The mutation to run once the queue drains.
+     */
+    _enqueuePsMutation(op: () => Promise<void>): Promise<void> {
+      const run = this._psMutationChain.then(op);
+      this._psMutationChain = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    }
+
     setPrivateState(privateState: P): Promise<void> {
-      return this._backend.setPrivateState(privateState);
+      return this._enqueuePsMutation(() =>
+        this._backend.setPrivateState(privateState),
+      );
     }
 
     /**
@@ -266,15 +291,15 @@ export function createSimulator<
      *
      * @param updater - A partial patch to merge, or an updater function.
      */
-    async updatePrivateState(
-      updater: Partial<P> | ((prev: P) => P),
-    ): Promise<void> {
-      const prev = await this._backend.getPrivateState();
-      const next =
-        typeof updater === 'function'
-          ? (updater as (p: P) => P)(prev)
-          : { ...prev, ...updater };
-      await this._backend.setPrivateState(next);
+    updatePrivateState(updater: Partial<P> | ((prev: P) => P)): Promise<void> {
+      return this._enqueuePsMutation(async () => {
+        const prev = await this._backend.getPrivateState();
+        const next =
+          typeof updater === 'function'
+            ? (updater as (p: P) => P)(prev)
+            : { ...prev, ...updater };
+        await this._backend.setPrivateState(next);
+      });
     }
 
     /** The raw contract state value. */
