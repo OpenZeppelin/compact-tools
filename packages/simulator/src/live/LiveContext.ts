@@ -74,8 +74,8 @@ export interface LiveContext<P> {
    * `privateStateProvider.get`), so no handle invalidation is needed.
    *
    * Omit to opt out of mutation — {@link LiveBackend} then throws
-   * {@link LiveBackend.PRIVATE_STATE_MUTATION_UNSUPPORTED}, so a spec that
-   * mutates fails loudly rather than silently proving against stale state.
+   * `PRIVATE_STATE_MUTATION_UNSUPPORTED`, so a spec that mutates fails loudly
+   * rather than silently proving against stale state.
    *
    * Faithful for any client-controlled field of `P` (secret keys, cached
    * plaintexts, seeds, nonces) — injecting a hostile/stale value and asserting

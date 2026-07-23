@@ -73,9 +73,9 @@ export interface Backend<P, L> {
   /**
    * Replaces the whole private state `P`. Dry mutates the in-memory context;
    * live writes to the harness's private-state provider so the next impure
-   * `callTx` proves against it but only if the injected {@link LiveContext}
+   * `callTx` proves against it but only if the injected `LiveContext`
    * implements `setPrivateState`; otherwise it throws
-   * {@link ../live/LiveBackend.PRIVATE_STATE_MUTATION_UNSUPPORTED}.
+   * `PRIVATE_STATE_MUTATION_UNSUPPORTED` (from the live backend).
    *
    * Async across backends for uniform `await`: dry resolves synchronously,
    * live awaits the provider write.
