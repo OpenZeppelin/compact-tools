@@ -1,5 +1,6 @@
 import type { Backend, BackendKind, CircuitKind } from '../backend/Backend.js';
 import { DryBackend, type SyncSimulator } from '../backend/DryBackend.js';
+import { PrivateStateMutator } from '../core/PrivateStateMutator.js';
 import type { LiveContext } from '../live/LiveContext.js';
 import { getRegisteredLiveBackend } from '../live/registry.js';
 import { Signers } from '../signers/Signers.js';
@@ -147,6 +148,12 @@ export function createSimulator<
     readonly _backend: Backend<P, L>;
     readonly _signers: Signers;
 
+    /**
+     * Serializes private-state read-modify-write for this instance. Internal;
+     * see {@link PrivateStateMutator} for the scope of the guarantee.
+     */
+    readonly _mutator: PrivateStateMutator<P>;
+
     /** Async circuit proxies; every call returns a promise. */
     readonly circuits: {
       pure: AsyncCircuits<ExtractPureCircuits<TContract>, P>;
@@ -163,6 +170,12 @@ export function createSimulator<
       this._backend = deps.backend;
       this.backendKind = deps.backend.kind;
       this._signers = deps.signers;
+      // Constructed here (not as a field initializer) so the closures capture
+      // the assigned `_backend` rather than an undefined one.
+      this._mutator = new PrivateStateMutator<P>(
+        () => this._backend.getPrivateState(),
+        (next) => this._backend.setPrivateState(next),
+      );
       this.circuits = {
         pure: buildProxy(
           this._backend,
@@ -241,14 +254,37 @@ export function createSimulator<
     }
 
     /**
-     * Replaces the private state (for per-module secret/nonce injection helpers).
-     * Dry mutates the in-memory context; live throws (mutation asymmetry) —
-     * guard such specs with `isLiveBackend()`.
+     * Replaces the whole private state. Dry mutates the in-memory context; live
+     * writes to the harness's private-state provider so the next impure call
+     * proves against it (throws if the `LiveContext` opted out of mutation).
+     * Serialized against other mutations via {@link _mutator}.
      *
      * @param privateState - The new private state.
      */
-    setPrivateState(privateState: P): void {
-      this._backend.setPrivateState(privateState);
+    setPrivateState(privateState: P): Promise<void> {
+      return this._mutator.set(privateState);
+    }
+
+    /**
+     * Ergonomic granular private-state mutation. Replaces the per-module
+     * `injectSecretKey`/`injectSecretNonce` helpers: a plain object shallow-
+     * merges onto the current state, a function receives the current state and
+     * returns the next.
+     *
+     * The read-modify-write is serialized (see {@link _mutator}) and resolves to
+     * the state that was written, so callers can `return sim.updatePrivateState(...)`
+     * without a follow-up `getPrivateState()`. Works on both dry (in-memory) and
+     * live (provider read then write); on live the current state must already
+     * exist (it is seeded at deploy).
+     *
+     * @example sim.updatePrivateState({ secretKey });
+     * @example sim.updatePrivateState((prev) => ({ ...prev, counter: prev.counter + 1n }));
+     *
+     * @param updater - A partial patch to merge, or an updater function.
+     * @returns The private state that was written.
+     */
+    updatePrivateState(updater: Partial<P> | ((prev: P) => P)): Promise<P> {
+      return this._mutator.update(updater);
     }
 
     /** The raw contract state value. */

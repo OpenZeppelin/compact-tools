@@ -93,7 +93,7 @@ export class DryBackend<P, L> implements Backend<P, L> {
   }
 
   /** Mutates the in-memory private state (dry supports mid-test mutation). */
-  setPrivateState(privateState: P): void {
+  async setPrivateState(privateState: P): Promise<void> {
     this.sim.circuitContextManager.updatePrivateState(privateState);
   }
 

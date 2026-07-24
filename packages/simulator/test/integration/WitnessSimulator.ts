@@ -61,27 +61,13 @@ export class WitnessSimulator extends WitnessSimulatorBase {
   }
 
   public readonly privateState = {
-    injectSecretBytes: async (
+    injectSecretBytes: (
       newBytes: Buffer<ArrayBufferLike>,
-    ): Promise<WitnessPrivateState> => {
-      const currentState = await this.getPrivateState();
-      const updatedState = { ...currentState, secretBytes: newBytes };
-      this.setPrivateState(updatedState);
-      return updatedState;
-    },
-    injectSecretField: async (
-      newField: bigint,
-    ): Promise<WitnessPrivateState> => {
-      const currentState = await this.getPrivateState();
-      const updatedState = { ...currentState, secretField: newField };
-      this.setPrivateState(updatedState);
-      return updatedState;
-    },
-    injectSecretUint: async (newUint: bigint): Promise<WitnessPrivateState> => {
-      const currentState = await this.getPrivateState();
-      const updatedState = { ...currentState, secretUint: newUint };
-      this.setPrivateState(updatedState);
-      return updatedState;
-    },
+    ): Promise<WitnessPrivateState> =>
+      this.updatePrivateState({ secretBytes: newBytes }),
+    injectSecretField: (newField: bigint): Promise<WitnessPrivateState> =>
+      this.updatePrivateState({ secretField: newField }),
+    injectSecretUint: (newUint: bigint): Promise<WitnessPrivateState> =>
+      this.updatePrivateState({ secretUint: newUint }),
   };
 }
