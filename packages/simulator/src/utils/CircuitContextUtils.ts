@@ -3,9 +3,7 @@ import {
   type CircuitContext,
   type CoinPublicKey,
   type ContractAddress,
-  CostModel,
-  emptyZswapLocalState,
-  QueryContext,
+  createCircuitContext,
 } from '@midnight-ntwrk/compact-runtime';
 import type { IContractSimulator } from '../types/index.js';
 
@@ -27,12 +25,16 @@ export function useCircuitContext<P>(
   sender: CoinPublicKey,
   contractAddress: ContractAddress,
 ): CircuitContext<P> {
-  return {
-    currentPrivateState: privateState,
-    currentQueryContext: new QueryContext(chargedState, contractAddress),
-    currentZswapLocalState: emptyZswapLocalState(sender),
-    costModel: CostModel.initialCostModel(),
-  };
+  // compact-runtime 0.18: `createCircuitContext` populates the full call-tree
+  // shape (callContext + queryContexts/gasCosts) and derives an empty Zswap
+  // local state from `sender`.
+  return createCircuitContext<P>(
+    'circuit',
+    contractAddress,
+    sender,
+    chargedState,
+    privateState,
+  );
 }
 
 /**
@@ -50,17 +52,18 @@ export function useCircuitContextSender<
 >(contract: C, sender: CoinPublicKey): CircuitContext<P> {
   const currentCircuitContext = contract.circuitContext;
   const currentPrivateState = contract.getPrivateState();
-  const existingChargedState = currentCircuitContext.currentQueryContext.state;
+  const existingChargedState =
+    currentCircuitContext.callContext.currentQueryContext.state;
   const contractAddress = contract.contractAddress;
 
-  return {
+  return createCircuitContext<P>(
+    'circuit',
+    contractAddress,
+    sender,
+    existingChargedState,
     currentPrivateState,
-    currentQueryContext: new QueryContext(
-      existingChargedState,
-      contractAddress,
-    ),
-    currentZswapLocalState: emptyZswapLocalState(sender),
-    costModel: currentCircuitContext.costModel,
-    gasLimit: currentCircuitContext.gasLimit,
-  };
+    undefined,
+    currentCircuitContext.gasLimit,
+    currentCircuitContext.costModel,
+  );
 }

@@ -4,10 +4,9 @@ import {
   type ConstructorContext,
   type ContractAddress,
   type ContractState,
-  CostModel,
+  createCircuitContext,
   createConstructorContext,
   type EncodedZswapLocalState,
-  QueryContext,
 } from '@midnight-ntwrk/compact-runtime';
 
 /**
@@ -16,11 +15,35 @@ import {
  * Handles initialization and lifecycle management of the `CircuitContext`,
  * which includes private state, public (ledger) state, zswap local state, and transaction context.
  */
+/** Shape of a compiled contract's constructor result (sync or async in 0.18). */
+type InitialStateResult<P> = {
+  currentPrivateState: P;
+  currentContractState: ContractState;
+  currentZswapLocalState: EncodedZswapLocalState;
+};
+
 export class CircuitContextManager<P> {
-  public context: CircuitContext<P>;
+  // Assigned by the async `init()`; the manager is always constructed and then
+  // awaited (`init`) before any circuit call reads the context.
+  public context!: CircuitContext<P>;
+
+  private readonly contract: {
+    initialState: (
+      ctx: ConstructorContext<P>,
+      ...args: any[]
+    ) => InitialStateResult<P> | Promise<InitialStateResult<P>>;
+  };
+  private readonly privateState: P;
+  private readonly coinPK: CoinPublicKey;
+  private readonly contractAddress: ContractAddress;
+  private readonly contractArgs: any[];
 
   /**
    * Creates an instance of `CircuitContextManager`.
+   *
+   * @remarks compact-runtime 0.18 made `initialState` (and every circuit) async,
+   * so the constructor only records inputs; the context is built by the async
+   * {@link init}, which callers must await before using the manager.
    *
    * @param contract - A compiled Compact contract instance exposing `initialState()`
    * @param contract.initialState - Function that initializes contract state given a constructor context
@@ -34,34 +57,44 @@ export class CircuitContextManager<P> {
       initialState: (
         ctx: ConstructorContext<P>,
         ...args: any[]
-      ) => {
-        currentPrivateState: P;
-        currentContractState: ContractState;
-        currentZswapLocalState: EncodedZswapLocalState;
-      };
+      ) => InitialStateResult<P> | Promise<InitialStateResult<P>>;
     },
     privateState: P,
     coinPK: CoinPublicKey,
     contractAddress: ContractAddress,
     ...contractArgs: any[]
   ) {
-    const initCtx = createConstructorContext(privateState, coinPK);
+    this.contract = contract;
+    this.privateState = privateState;
+    this.coinPK = coinPK;
+    this.contractAddress = contractAddress;
+    this.contractArgs = contractArgs;
+  }
+
+  /**
+   * Runs the contract constructor and builds the initial `CircuitContext`.
+   * Must be awaited once, after construction, before any circuit call.
+   */
+  async init(): Promise<void> {
+    const initCtx = createConstructorContext(this.privateState, this.coinPK);
 
     const {
       currentPrivateState,
       currentContractState,
       currentZswapLocalState,
-    } = contract.initialState(initCtx, ...contractArgs);
+    } = await this.contract.initialState(initCtx, ...this.contractArgs);
 
-    // Extract ChargedState from the compiler-generated ContractState
-    const chargedState = currentContractState.data;
-
-    this.context = {
-      currentPrivateState,
+    // compact-runtime 0.18 restructured `CircuitContext` into a call-tree
+    // (`callContext` + per-contract `queryContexts`/`gasCosts`). Build it via
+    // the runtime's `createCircuitContext` factory rather than a hand-rolled
+    // literal so every required field is populated correctly.
+    this.context = createCircuitContext<P>(
+      'circuit',
+      this.contractAddress,
       currentZswapLocalState,
-      currentQueryContext: new QueryContext(chargedState, contractAddress),
-      costModel: CostModel.initialCostModel(),
-    };
+      currentContractState.data,
+      currentPrivateState,
+    );
   }
 
   /**
@@ -88,6 +121,6 @@ export class CircuitContextManager<P> {
    * @param newPrivateState - The new private state to set in the current context
    */
   updatePrivateState(newPrivateState: P) {
-    this.context.currentPrivateState = newPrivateState;
+    this.context.callContext.currentPrivateState = newPrivateState;
   }
 }

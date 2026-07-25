@@ -84,6 +84,9 @@ export function createSimulator<
     // evaluator in live (D2). In live this runs `initialState` in memory only —
     // it is never deployed on-chain.
     const localSim = new DrySimClass(contractArgs, options);
+    // 0.18: `initialState` is async, so the constructor defers the constructor
+    // run to `init()`. Await it before deriving names / wiring any backend.
+    await localSim.init();
     const contract = localSim.contract;
     const impureNames = Object.keys(contract.impureCircuits);
     const impureSet = new Set(impureNames);
@@ -200,6 +203,15 @@ export function createSimulator<
     /** The alias resolver for circuit-arg keys (`signers.eitherFor('OWNER')`). */
     get signers(): Signers {
       return this._signers;
+    }
+
+    /**
+     * The deployed contract's address. Needed by callers that must reconstruct
+     * a circuit's message digest off-chain (e.g. signing an operation bound to
+     * `kernel.self()`).
+     */
+    get contractAddress(): string {
+      return this._backend.contractAddress;
     }
 
     /**
