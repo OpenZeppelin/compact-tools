@@ -204,6 +204,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@midnight-ntwrk/compact-runtime@portal:../../../minokawa-compact/compact/runtime::locator=%40openzeppelin%2Fcompact-simulator%40workspace%3Apackages%2Fsimulator":
+  version: 0.0.0-use.local
+  resolution: "@midnight-ntwrk/compact-runtime@portal:../../../minokawa-compact/compact/runtime::locator=%40openzeppelin%2Fcompact-simulator%40workspace%3Apackages%2Fsimulator"
+  dependencies:
+    "@midnightntwrk/onchain-runtime-v4": "npm:^4.0.0-rc.3"
+    "@noble/curves": "npm:^2.2.0"
+    "@noble/hashes": "npm:^2.0.1"
+    "@types/object-inspect": "npm:^1.8.1"
+    object-inspect: "npm:^1.12.3"
+  languageName: node
+  linkType: soft
+
 "@midnight-ntwrk/ledger-v8@npm:8.1.0, @midnight-ntwrk/ledger-v8@npm:^8.0.3, @midnight-ntwrk/ledger-v8@npm:^8.1.0":
   version: 8.1.0
   resolution: "@midnight-ntwrk/ledger-v8@npm:8.1.0"
@@ -295,6 +307,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@midnightntwrk/onchain-runtime-v4@npm:^4.0.0-rc.3":
+  version: 4.0.0-rc.3
+  resolution: "@midnightntwrk/onchain-runtime-v4@npm:4.0.0-rc.3"
+  checksum: 10/394a4ff27b575b0e30bcb5ca05c2f89dc3bc7915103aa592c1d89bb32ff8589ac732d4d0bdafb4a99a9757e1a41ce21955f68148f783edb83b21988b24154078
+  languageName: node
+  linkType: hard
+
 "@msgpackr-extract/msgpackr-extract-darwin-arm64@npm:3.0.4":
   version: 3.0.4
   resolution: "@msgpackr-extract/msgpackr-extract-darwin-arm64@npm:3.0.4"
@@ -349,6 +368,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@noble/curves@npm:^2.2.0":
+  version: 2.2.0
+  resolution: "@noble/curves@npm:2.2.0"
+  dependencies:
+    "@noble/hashes": "npm:2.2.0"
+  checksum: 10/f9545e55bb8b6cdf2618c936870b9229339c90b25f129fc368b4b534e723f274e5c0daf8abca2f891bcf0a59c3b49c5ac5205899aec07f5251f545ec616e3aa9
+  languageName: node
+  linkType: hard
+
+"@noble/hashes@npm:2.2.0, @noble/hashes@npm:^2.0.1":
+  version: 2.2.0
+  resolution: "@noble/hashes@npm:2.2.0"
+  checksum: 10/b1b78bedc2a01394be047429f3d888905015fe8a09f1b7e43e0b5736b54133df62f73dcc73ede43af38e96e86156afb45b86973fdeaa95d9f0880333c3fc0907
+  languageName: node
+  linkType: hard
+
 "@openzeppelin/compact-builder@workspace:^, @openzeppelin/compact-builder@workspace:packages/builder":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-builder@workspace:packages/builder"
@@ -386,8 +421,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-simulator@workspace:packages/simulator"
   dependencies:
-    "@midnight-ntwrk/compact-runtime": "npm:0.16.0"
-    "@midnight-ntwrk/ledger-v8": "npm:8.1.0"
+    "@midnight-ntwrk/compact-runtime": "portal:../../../minokawa-compact/compact/runtime"
     "@midnight-ntwrk/midnight-js-contracts": "npm:^4.1.0"
     "@midnight-ntwrk/midnight-js-types": "npm:^4.1.0"
     "@tsconfig/node24": "npm:^24.0.3"
