@@ -199,13 +199,18 @@ export function createSimulator<
      * @param options - Backend selection, witnesses, private state, live world.
      * @returns The constructed simulator (subclass-aware via `this`).
      */
-    static async create<T extends Simulator>(
+    static async create(
       this: new (
         deps: BackendDeps<P, L>,
-      ) => T,
-      contractArgs: TArgs = [] as unknown as TArgs,
-      options: SimulatorOptions<P, W> = {},
-    ): Promise<T> {
+      ) => Simulator,
+      // Permissive so subclasses can override `create` with contract-specific
+      // params/returns without tripping TS's static-side `extends` check.
+      ...args: unknown[]
+    ): Promise<Simulator> {
+      const [
+        contractArgs = [] as unknown as TArgs,
+        options = {} as SimulatorOptions<P, W>,
+      ] = args as [TArgs?, SimulatorOptions<P, W>?];
       const deps = await prepareBackend(contractArgs, options);
       return new this(deps);
     }
