@@ -34,7 +34,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p .",
+    "build": "tsc -p tsconfig.build.json",
     "types": "tsc -p tsconfig.json --noEmit",
     "test": "MIDNIGHT_BACKEND=dry vitest run",
     "test:live": "MIDNIGHT_BACKEND=live vitest run",

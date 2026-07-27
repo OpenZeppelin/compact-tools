@@ -11,7 +11,10 @@ const BYTES_OVERRIDE = new Uint8Array(32).fill(1);
 const FIELD_OVERRIDE = 222n;
 const UINT_OVERRIDE = 333n;
 
-const overrideWitnesses = (): IWitnessWitnesses<WitnessPrivateState> => ({
+const overrideWitnesses = (): IWitnessWitnesses<
+  unknown,
+  WitnessPrivateState
+> => ({
   wit_secretBytes(ctx) {
     return [ctx.privateState, BYTES_OVERRIDE];
   },
