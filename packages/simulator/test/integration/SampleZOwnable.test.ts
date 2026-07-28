@@ -352,36 +352,34 @@ describe('SampleZOwnable', () => {
           counter: MAX_U64,
         },
       ];
-      it.each(
-        testCases,
-      )('should match commitment for $label with counter $counter', async ({
-        ownerPK,
-        counter,
-      }) => {
-        const id = createIdHash(ownerPK, secretNonce);
+      it.each(testCases)(
+        'should match commitment for $label with counter $counter',
+        async ({ ownerPK, counter }) => {
+          const id = createIdHash(ownerPK, secretNonce);
 
-        // Check buildCommitmentFromId
-        const hashFromContract = await ownable._computeOwnerCommitment(
-          id,
-          counter,
-        );
-        const hashFromHelper1 = buildCommitmentFromId(
-          id,
-          INSTANCE_SALT,
-          counter,
-        );
-        expect(hashFromContract).toEqual(hashFromHelper1);
+          // Check buildCommitmentFromId
+          const hashFromContract = await ownable._computeOwnerCommitment(
+            id,
+            counter,
+          );
+          const hashFromHelper1 = buildCommitmentFromId(
+            id,
+            INSTANCE_SALT,
+            counter,
+          );
+          expect(hashFromContract).toEqual(hashFromHelper1);
 
-        // Check buildCommitment
-        const hashFromHelper2 = buildCommitment(
-          ownerPK,
-          secretNonce,
-          INSTANCE_SALT,
-          counter,
-          DOMAIN,
-        );
-        expect(hashFromHelper1).toEqual(hashFromHelper2);
-      });
+          // Check buildCommitment
+          const hashFromHelper2 = buildCommitment(
+            ownerPK,
+            secretNonce,
+            INSTANCE_SALT,
+            counter,
+            DOMAIN,
+          );
+          expect(hashFromHelper1).toEqual(hashFromHelper2);
+        },
+      );
     });
 
     describe('_computeOwnerId', () => {
@@ -403,16 +401,14 @@ describe('SampleZOwnable', () => {
         },
       ];
 
-      it.each(
-        testCases,
-      )('should match local and contract owner id for $label', async ({
-        eitherOwner,
-        nonce,
-      }) => {
-        const ownerId = await ownable._computeOwnerId(eitherOwner, nonce);
-        const expId = createIdHash(eitherOwner.left, nonce);
-        expect(ownerId).toEqual(expId);
-      });
+      it.each(testCases)(
+        'should match local and contract owner id for $label',
+        async ({ eitherOwner, nonce }) => {
+          const ownerId = await ownable._computeOwnerId(eitherOwner, nonce);
+          const expId = createIdHash(eitherOwner.left, nonce);
+          expect(ownerId).toEqual(expId);
+        },
+      );
 
       it('should fail to compute ContractAddress id', async () => {
         const eitherContract =
