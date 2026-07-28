@@ -19,6 +19,7 @@
       "inputs": [
         "src/**/*.ts",
         "!src/**/*.test.ts",
+        "!src/**/*.type-test.ts",
         "tsconfig.json",
         "tsconfig.build.json",
         ".env"
@@ -27,7 +28,7 @@
     },
     "types": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*.ts", "tsconfig.json"],
+      "inputs": ["src/**/*.ts", "tsconfig.json", "tsconfig.types.json"],
       "outputs": []
     },
     "lint": {},

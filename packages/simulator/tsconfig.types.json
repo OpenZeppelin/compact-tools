@@ -1,0 +1,14 @@
+{
+  // Typecheck-only project used by `yarn types`.
+  //
+  // Identical to the build config (`tsconfig.json`) except it (a) never emits and
+  // (b) re-includes the `*.type-test.ts` regression guards, which the build config
+  // excludes from emit so they don't ship in `dist`. Keeping them in the type
+  // check is the whole point: they fail CI if the guarded contracts regress.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests"]
+}
