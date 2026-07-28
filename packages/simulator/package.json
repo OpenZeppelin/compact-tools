@@ -44,7 +44,7 @@
     "@midnight-ntwrk/midnight-js-contracts": "^4.1.0",
     "@midnight-ntwrk/midnight-js-types": "^4.1.0",
     "@tsconfig/node24": "^24.0.3",
-    "@types/node": "25.9.3",
+    "@types/node": "26.1.2",
     "fast-check": "^4.5.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
