@@ -1,17 +1,21 @@
 {
-  // Comprehensive typecheck. Uses bundler resolution to match how the
-  // tests actually resolve under vitest. Never emits: `tsconfig.build.json` owns
-  // emit and enforces nodenext/ESM correctness on the published `src`.
   "extends": "@tsconfig/node24/tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
-    "declaration": false,
-    "module": "preserve",
-    "moduleResolution": "bundler",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true,
     "skipLibCheck": true,
+    "sourceMap": true,
+    "rewriteRelativeImportExtensions": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests"
+  ]
 }
