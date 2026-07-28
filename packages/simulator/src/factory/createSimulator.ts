@@ -199,7 +199,8 @@ export function createSimulator<
      * `create` would silently skip that check.
      *
      * @param args - `[contractArgs?, options?]`, validated by `_create`.
-     * @returns The constructed simulator.
+     * @returns The constructed simulator, typed as the base `Simulator`; subclass
+     *   `create` overrides narrow the return to their own type.
      */
     static async create(
       this: new (
@@ -208,8 +209,8 @@ export function createSimulator<
       ...args: unknown[]
     ): Promise<Simulator> {
       const [contractArgs, options] = args as [TArgs?, SimulatorOptions<P, W>?];
-      return (Simulator as unknown as typeof Simulator)._create.call(
-        Simulator,
+      // biome-ignore lint/complexity/noThisInStatic: keep the caller's `this` so a non-overriding subclass constructs its own type, not the base `Simulator` (the autofix rewrites `this`->`Simulator`, breaking that at runtime).
+      return (this as unknown as typeof Simulator)._create(
         contractArgs,
         options,
       );
@@ -225,7 +226,9 @@ export function createSimulator<
      *
      * @param contractArgs - Constructor args for the contract.
      * @param options - Backend selection, witnesses, private state, live world.
-     * @returns The constructed simulator (subclass-aware via `this`).
+     * @returns The constructed simulator, typed as the base `Simulator`; subclass
+     *   `create` overrides narrow the return to their own type. The runtime
+     *   instance is the caller's class (constructed via `this`).
      */
     static async _create(
       this: new (
