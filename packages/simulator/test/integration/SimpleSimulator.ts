@@ -35,8 +35,8 @@ export class SimpleSimulator extends SimpleSimulatorBase {
       ReturnType<typeof SimpleWitnesses>
     > = {},
   ): Promise<SimpleSimulator> {
-    // biome-ignore lint/complexity/noThisInStatic: super.create must keep the subclass `this`
-    return super.create([], options) as Promise<SimpleSimulator>;
+    // biome-ignore lint/complexity/noThisInStatic: super._create must keep the subclass `this`
+    return super._create([], options) as Promise<SimpleSimulator>;
   }
 
   public setVal(n: bigint): Promise<[]> {

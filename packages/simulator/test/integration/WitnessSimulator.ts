@@ -44,8 +44,8 @@ export class WitnessSimulator extends WitnessSimulatorBase {
       ReturnType<typeof WitnessWitnesses>
     > = {},
   ): Promise<WitnessSimulator> {
-    // biome-ignore lint/complexity/noThisInStatic: super.create must keep the subclass `this`
-    return super.create([], options) as Promise<WitnessSimulator>;
+    // biome-ignore lint/complexity/noThisInStatic: super._create must keep the subclass `this`
+    return super._create([], options) as Promise<WitnessSimulator>;
   }
 
   public setBytes(): Promise<[]> {
