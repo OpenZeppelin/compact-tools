@@ -191,21 +191,52 @@ export function createSimulator<
     }
 
     /**
-     * Constructs a simulator. In dry, deploys from `contractArgs` to fresh
-     * in-memory state. In live, the caller already deployed; the args seed only
-     * the local pure-eval context, never an on-chain deploy.
+     * Public entry point. Permissive params so subclasses can override `create`
+     * with contract-specific signatures without tripping TS's static-side
+     * `extends` check. Subclass overrides should assemble the typed args tuple
+     * and call {@link _create} (`super._create([...args], options)`) so the
+     * tuple is checked against `TArgs` — delegating back to this permissive
+     * `create` would silently skip that check.
+     *
+     * @param args - `[contractArgs?, options?]`, validated by `_create`.
+     * @returns The constructed simulator, typed as the base `Simulator`; subclass
+     *   `create` overrides narrow the return to their own type.
+     */
+    static async create(
+      this: new (
+        deps: BackendDeps<P, L>,
+      ) => Simulator,
+      ...args: unknown[]
+    ): Promise<Simulator> {
+      const [contractArgs, options] = args as [TArgs?, SimulatorOptions<P, W>?];
+      // biome-ignore lint/complexity/noThisInStatic: keep the caller's `this` so a non-overriding subclass constructs its own type, not the base `Simulator` (the autofix rewrites `this`->`Simulator`, breaking that at runtime).
+      return (this as unknown as typeof Simulator)._create(
+        contractArgs,
+        options,
+      );
+    }
+
+    /**
+     * Typed construction path. In dry, deploys from `contractArgs` to fresh
+     * in-memory state; in live the caller already deployed and the args seed
+     * only the local pure-eval context. Subclass `create` overrides call this
+     * (`super._create([...typedArgs], options)`) so their args tuple is checked
+     * against `TArgs`. Underscore-public to match the `_backend`/`_signers`
+     * convention for declaration emit.
      *
      * @param contractArgs - Constructor args for the contract.
      * @param options - Backend selection, witnesses, private state, live world.
-     * @returns The constructed simulator (subclass-aware via `this`).
+     * @returns The constructed simulator, typed as the base `Simulator`; subclass
+     *   `create` overrides narrow the return to their own type. The runtime
+     *   instance is the caller's class (constructed via `this`).
      */
-    static async create<T extends Simulator>(
+    static async _create(
       this: new (
         deps: BackendDeps<P, L>,
-      ) => T,
+      ) => Simulator,
       contractArgs: TArgs = [] as unknown as TArgs,
       options: SimulatorOptions<P, W> = {},
-    ): Promise<T> {
+    ): Promise<Simulator> {
       const deps = await prepareBackend(contractArgs, options);
       return new this(deps);
     }

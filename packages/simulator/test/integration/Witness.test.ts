@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type {
-  IWitnessWitnesses,
   WitnessPrivateState,
+  WitnessWitnessSet,
 } from '../fixtures/sample-contracts/witnesses/WitnessWitnesses';
 import { WitnessSimulator } from './WitnessSimulator';
 
@@ -11,7 +11,7 @@ const BYTES_OVERRIDE = new Uint8Array(32).fill(1);
 const FIELD_OVERRIDE = 222n;
 const UINT_OVERRIDE = 333n;
 
-const overrideWitnesses = (): IWitnessWitnesses<WitnessPrivateState> => ({
+const overrideWitnesses = (): WitnessWitnessSet => ({
   wit_secretBytes(ctx) {
     return [ctx.privateState, BYTES_OVERRIDE];
   },

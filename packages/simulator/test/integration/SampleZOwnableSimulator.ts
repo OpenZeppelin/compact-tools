@@ -52,8 +52,8 @@ export class SampleZOwnableSimulator extends SampleZOwnableSimulatorBase {
       ReturnType<typeof SampleZOwnableWitnesses>
     > = {},
   ): Promise<SampleZOwnableSimulator> {
-    // biome-ignore lint/complexity/noThisInStatic: super.create must keep the subclass `this`
-    return super.create(
+    // biome-ignore lint/complexity/noThisInStatic: super._create must keep the subclass `this`
+    return super._create(
       [ownerId, instanceSalt],
       options,
     ) as Promise<SampleZOwnableSimulator>;

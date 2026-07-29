@@ -16,6 +16,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "tests"
+    "tests",
+    "src/**/*.type-test.ts"
   ]
 }
