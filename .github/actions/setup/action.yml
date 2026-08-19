@@ -6,6 +6,10 @@ inputs:
     description: "Skip Compact compiler installation"
     required: false
     default: "false"
+  compact-prerelease:
+    description: "Pre-release Compact compiler to fetch from GitHub releases (bridge until the toolchain ships stable). Keep in sync with setup.ts COMPACTC_VERSION."
+    required: false
+    default: "0.33.0-rc.2"
 
 runs:
   using: "composite"
@@ -44,3 +48,27 @@ runs:
       uses: midnightntwrk/setup-compact-action@4130145456ad3f45934788dd4a65647eb283e658 # loose commit/not released
       with:
         compact-version: "0.31.0"
+
+    # The tests pin a pre-release compiler (secp256k1 / 0.18 runtime) that
+    # `compact update` does not serve, so fetch its release asset directly and
+    # drop it where `compact +<version>` looks. Remove once the toolchain ships
+    # a stable release (then just bump compact-version above).
+    - name: Install pre-release Compact toolchain
+      if: ${{ inputs.skip-compact != 'true' }}
+      shell: bash
+      env:
+        VER: ${{ inputs.compact-prerelease }}
+      run: |
+        set -euo pipefail
+        # Reuse the platform dir the CLI already created for the stable install
+        # (e.g. x86_64-unknown-linux-musl), so the pre-release lands where the
+        # `+<version>` selector resolves it; fall back to the host triple.
+        PLAT="$(basename "$(find "$HOME/.compact/versions" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | head -1)" 2>/dev/null || true)"
+        [ -z "$PLAT" ] && PLAT="$(uname -m)-unknown-linux-musl"
+        DEST="$HOME/.compact/versions/$VER/$PLAT"
+        mkdir -p "$DEST"
+        curl -fsSL -o /tmp/compactc.zip \
+          "https://github.com/LFDT-Minokawa/compact/releases/download/compactc-v$VER/compactc_v${VER}_${PLAT}.zip"
+        unzip -oq /tmp/compactc.zip -d "$DEST"
+        chmod +x "$DEST"/*
+        compact compile +"$VER" --version
