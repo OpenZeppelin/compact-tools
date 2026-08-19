@@ -68,7 +68,12 @@ async function compileContract(contractFile: string): Promise<void> {
   mkdirSync(outputDir, { recursive: true });
   mkdirSync(join(outputDir, 'keys'), { recursive: true });
 
-  const command = `compact compile --skip-zk "${inputPath}" "${outputDir}"`;
+  // Pin the compiler to the ECDSA/0.18-runtime toolchain. The default toolchain
+  // (compactc 0.31.x) emits code expecting compact-runtime 0.16.0, which the
+  // 0.18.0-rc.1 runtime this package now depends on rejects at load time.
+  // Override via COMPACTC_VERSION if a newer pinned toolchain is installed.
+  const compilerVersion = process.env.COMPACTC_VERSION ?? '0.33.0-rc.2';
+  const command = `compact compile +${compilerVersion} --skip-zk "${inputPath}" "${outputDir}"`;
   try {
     await execAsync(command);
   } catch (err: unknown) {

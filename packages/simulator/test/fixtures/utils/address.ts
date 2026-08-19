@@ -1,8 +1,7 @@
 import {
-  convertFieldToBytes,
   encodeCoinPublicKey,
+  encodeContractAddress,
 } from '@midnight-ntwrk/compact-runtime';
-import { encodeContractAddress } from '@midnight-ntwrk/ledger-v8';
 import type * as Compact from '../artifacts/SampleZOwnable/contract/index.js';
 
 const PREFIX_ADDRESS = '0200';
@@ -91,8 +90,10 @@ export const generateEitherPubKeyPair = (str: string) =>
     Compact.Either<Compact.ZswapCoinPublicKey, Compact.ContractAddress>,
   ];
 
-export const zeroUint8Array = (length = 32) =>
-  convertFieldToBytes(length, 0n, '');
+// A zero-filled byte array of `length`. (Previously `convertFieldToBytes(length,
+// 0n, '')` from compact-runtime 0.16, which was removed in 0.18; a `new
+// Uint8Array` is zero-initialized and behaves identically here.)
+export const zeroUint8Array = (length = 32) => new Uint8Array(length);
 
 export const ZERO_KEY = {
   is_left: true,
