@@ -63,21 +63,31 @@ describe('CircuitContextManager', () => {
         inputs: [],
         outputs: [],
       };
-      expect(ctx.callContext.currentZswapLocalState).toEqual(expectedZswapState);
+      expect(ctx.callContext.currentZswapLocalState).toEqual(
+        expectedZswapState,
+      );
     });
 
     it('should set original state', () => {
       expect(ctx.callContext.currentQueryContext).toBeInstanceOf(QueryContext);
       expect(ctx.callContext.currentQueryContext).toHaveProperty('__wbg_ptr');
-      expect((ctx.callContext.currentQueryContext as any).__wbg_ptr).toBeTypeOf('number');
+      expect((ctx.callContext.currentQueryContext as any).__wbg_ptr).toBeTypeOf(
+        'number',
+      );
     });
 
     it('should set tx ctx', () => {
       // Need to go deeper
       expect(ctx.callContext.currentQueryContext).toBeInstanceOf(QueryContext);
-      expect(ctx.callContext.currentQueryContext.address).toEqual(dummyContractAddress());
-      expect(ctx.callContext.currentQueryContext.state).toBeInstanceOf(ChargedState);
-      expect(ctx.callContext.currentQueryContext.state).toHaveProperty('__wbg_ptr');
+      expect(ctx.callContext.currentQueryContext.address).toEqual(
+        dummyContractAddress(),
+      );
+      expect(ctx.callContext.currentQueryContext.state).toBeInstanceOf(
+        ChargedState,
+      );
+      expect(ctx.callContext.currentQueryContext.state).toHaveProperty(
+        '__wbg_ptr',
+      );
     });
   });
 

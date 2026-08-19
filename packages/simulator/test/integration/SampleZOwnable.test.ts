@@ -21,6 +21,7 @@ const convertFieldToBytes = (
   }
   return out;
 };
+
 import type { ZswapCoinPublicKey } from '../fixtures/artifacts/SampleZOwnable/contract/index.js';
 import { SampleZOwnablePrivateState } from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses.js';
 import * as utils from '../fixtures/utils/address.js';

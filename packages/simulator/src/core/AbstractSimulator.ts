@@ -134,9 +134,7 @@ export abstract class AbstractSimulator<P, L>
           const fn = original as (
             ctx: CircuitContext<P>,
             ...args: unknown[]
-          ) =>
-            | { result: unknown }
-            | Promise<{ result: unknown }>;
+          ) => { result: unknown } | Promise<{ result: unknown }>;
           // 0.18 circuits are async; `await` also tolerates the older sync shape.
           const { result } = await fn(context(), ...args);
 
