@@ -83,36 +83,48 @@ This is required because the simulator API expects a factory function for consis
 
 ### 2. Extending the Base Simulator
 
-Create your simulator class with a user-friendly API:
+Create your simulator class with a user-friendly API by overriding the static
+`create`:
 
 ```typescript
 export class MyContractSimulator extends MyContractSimulatorBase {
-  constructor(
+  // Override `create` and return your own type. The base `create` returns the
+  // base `Simulator` (it can't be generic without breaking these overrides), so
+  // without this a `MyContractSimulator.create(...)` call would resolve to
+  // `Simulator` and lose the methods below. Delegate to `super._create`, which is
+  // typed against the contract's constructor args, so a wrong tuple is caught.
+  static async create(
     arg1: bigint,
     arg2: string,
-    options: BaseSimulatorOptions<
+    options: SimulatorOptions<
       MyContractPrivateState,
       ReturnType<typeof MyContractWitnesses>
-    > = {}
-  ) {
-    // Bundle args into tuple for parent class
-    super([arg1, arg2], options);
+    > = {},
+  ): Promise<MyContractSimulator> {
+    return super._create([arg1, arg2], options) as Promise<MyContractSimulator>;
   }
 
-  // Wrap contract's circuits with callable methods
-  public getValue(): bigint {
+  // Wrap the contract's circuits with callable methods. Every circuit call is
+  // async. It returns a promise, so callers `await` it.
+  public getValue(): Promise<bigint> {
     return this.circuits.impure.getValue();
   }
 
-  public setValue(val: bigint): void {
-    this.circuits.impure.setValue(val);
+  public setValue(val: bigint): Promise<[]> {
+    return this.circuits.impure.setValue(val);
   }
 
-  public transfer(to: Uint8Array, amount: bigint): void {
-    this.circuits.impure.transfer(to, amount);
+  public transfer(to: Uint8Array, amount: bigint): Promise<[]> {
+    return this.circuits.impure.transfer(to, amount);
   }
 }
 ```
+
+> **Every subclass must override the static `create`** and return its own type
+> (e.g. `Promise<MyContractSimulator>`), delegating to
+> `super._create([...args], options)`. This applies even to subclasses that only
+> add circuit methods without the override, `MyContractSimulator.create(...)`
+> resolves to the base `Simulator` type and callers lose the subclass's methods.
 
 ### 3. Circuit Types
 

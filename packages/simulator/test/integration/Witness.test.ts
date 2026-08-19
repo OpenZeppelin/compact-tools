@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type {
-  IWitnessWitnesses,
   WitnessPrivateState,
+  WitnessWitnessSet,
 } from '../fixtures/sample-contracts/witnesses/WitnessWitnesses';
 import { WitnessSimulator } from './WitnessSimulator';
 
@@ -11,7 +11,7 @@ const BYTES_OVERRIDE = new Uint8Array(32).fill(1);
 const FIELD_OVERRIDE = 222n;
 const UINT_OVERRIDE = 333n;
 
-const overrideWitnesses = (): IWitnessWitnesses<WitnessPrivateState> => ({
+const overrideWitnesses = (): WitnessWitnessSet => ({
   wit_secretBytes(ctx) {
     return [ctx.privateState, BYTES_OVERRIDE];
   },
@@ -200,15 +200,62 @@ describe('witness/private state overrides', () => {
     });
   });
 
-  describe('private state overrides', () => {
-    it('should match ps ', async () => {
-      // Private state
-      const ps = await contract.getPrivateState();
-      void ps.secretBytes;
-      void ps.secretField;
-      void ps.secretUint;
+  describe('private state mutation', () => {
+    it('replaces the whole private state via setPrivateState', async () => {
+      const next: WitnessPrivateState = {
+        secretBytes: Buffer.alloc(32, 5),
+        secretField: 11n,
+        secretUint: 22n,
+      };
+      await contract.setPrivateState(next);
+      expect(await contract.getPrivateState()).toEqual(next);
     });
 
-    it('should override the entire private state', () => {});
+    it('patch-merges only the given fields, preserving the rest', async () => {
+      const before = await contract.getPrivateState();
+      await contract.updatePrivateState({ secretField: FIELD_OVERRIDE });
+
+      const after = await contract.getPrivateState();
+      expect(after.secretField).toEqual(FIELD_OVERRIDE);
+      // Untouched fields survive the merge.
+      expect(after.secretBytes).toEqual(before.secretBytes);
+      expect(after.secretUint).toEqual(before.secretUint);
+    });
+
+    it('supports the updater-function form (prev → next)', async () => {
+      const before = await contract.getPrivateState();
+      await contract.updatePrivateState((prev) => ({
+        ...prev,
+        secretUint: prev.secretUint + 100n,
+      }));
+      expect((await contract.getPrivateState()).secretUint).toEqual(
+        before.secretUint + 100n,
+      );
+    });
+
+    it('serializes concurrent updates so neither patch is lost', async () => {
+      const before = await contract.getPrivateState();
+      // Both read the same prev if unserialized; the last write would then
+      // clobber the other field. Serialization must land both.
+      await Promise.all([
+        contract.updatePrivateState({ secretField: 77n }),
+        contract.updatePrivateState({ secretUint: 88n }),
+      ]);
+
+      const after = await contract.getPrivateState();
+      expect(after.secretField).toEqual(77n);
+      expect(after.secretUint).toEqual(88n);
+      expect(after.secretBytes).toEqual(before.secretBytes);
+    });
+
+    it('feeds mutated private state into subsequent circuit calls', async () => {
+      // secretBytes is written to public state by setBytes() via the witness.
+      const injected = Buffer.alloc(32, 9);
+      await contract.updatePrivateState({ secretBytes: injected });
+      await contract.setBytes();
+      expect((await contract.getPublicState())._valBytes).toEqual(
+        new Uint8Array(injected),
+      );
+    });
   });
 });

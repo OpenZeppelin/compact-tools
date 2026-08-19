@@ -66,4 +66,25 @@ export interface LiveContext<P> {
    * parity).
    */
   queryPrivateState(): Promise<P>;
+
+  /**
+   * Optional: writes the whole private state to the harness's private-state
+   * provider, so the NEXT impure `callTx` proves against it. Each `callTx`
+   * reads private state fresh from the provider (midnight-js `getStates` →
+   * `privateStateProvider.get`), so no handle invalidation is needed.
+   *
+   * Omit to opt out of mutation — {@link LiveBackend} then throws
+   * `PRIVATE_STATE_MUTATION_UNSUPPORTED`, so a spec that mutates fails loudly
+   * rather than silently proving against stale state.
+   *
+   * Faithful for any client-controlled field of `P` (secret keys, cached
+   * plaintexts, seeds, nonces) — injecting a hostile/stale value and asserting
+   * the resulting rejection or handled behavior mirrors a real client. The one
+   * thing it cannot do is fabricate on-chain state (`L`): a private state that
+   * presupposes an on-chain event that never happened will not make a happy
+   * path succeed on a live node.
+   *
+   * @param state - The new private state `P`.
+   */
+  setPrivateState?(state: P): Promise<void>;
 }

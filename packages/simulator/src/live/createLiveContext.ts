@@ -54,7 +54,16 @@ export interface CreateLiveContextOptions<P> {
   privateStateId: string;
   /** Provider for reading on-chain public state. */
   publicDataProvider: PublicDataProvider;
-  /** Provider for reading private state (read parity). */
+  /**
+   * Provider for reading and (optionally) writing private state.
+   *
+   * Invariant: this MUST be the same provider instance wired into the
+   * `providersFor(alias)` bundle handed to `findDeployedContract`. The
+   * `setPrivateState` write below targets this provider, and the next
+   * `callTx` reads private state from the bundle's provider; if they are
+   * different instances the write is invisible to proving. `setContractAddress`
+   * is the harness's responsibility (already required for `get`).
+   */
   privateStateProvider: PrivateStateProvider<string, P>;
   /** Optional override of the indexer-lag policy. */
   indexerLag?: Partial<IndexerLagPolicy>;
@@ -178,6 +187,15 @@ export function createLiveContext<P>(
         );
       }
       return state;
+    },
+
+    /**
+     * Writes the whole private state to the provider under `privateStateId`.
+     * The next impure `callTx` reads it fresh (no handle-cache invalidation
+     * needed). See the invariant on {@link CreateLiveContextOptions.privateStateProvider}.
+     */
+    async setPrivateState(state: P): Promise<void> {
+      await options.privateStateProvider.set(options.privateStateId, state);
     },
   };
 }

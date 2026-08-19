@@ -70,3 +70,12 @@ export const WitnessWitnesses = <L>(): IWitnessWitnesses<
     ];
   },
 });
+
+/**
+ * The witness set with the ledger type param `L` erased to `unknown` which is exactly
+ * what `ReturnType<typeof WitnessWitnesses>` yields, and what a simulator built
+ * from this factory uses as its witnesses type. Prefer this alias over spelling
+ * out `IWitnessWitnesses<unknown, WitnessPrivateState>`, so the `unknown` reads
+ * as intentional (the erased `L`) rather than arbitrary.
+ */
+export type WitnessWitnessSet = ReturnType<typeof WitnessWitnesses>;

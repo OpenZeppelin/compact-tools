@@ -1,7 +1,10 @@
 import type { StateValue } from '@midnight-ntwrk/compact-runtime';
 import { describe, expect, it } from 'vitest';
 import type { SyncSimulator } from '../../src/backend/DryBackend.js';
-import { LiveBackend } from '../../src/live/LiveBackend.js';
+import {
+  LiveBackend,
+  PRIVATE_STATE_MUTATION_UNSUPPORTED,
+} from '../../src/live/LiveBackend.js';
 import type {
   DeployedTxHandle,
   LiveContext,
@@ -133,5 +136,36 @@ describe('LiveBackend adapter', () => {
   it('reads private state through the provider', async () => {
     const { backend } = makeBackend({});
     expect(await backend.getPrivateState()).toEqual({ secret: 7 });
+  });
+
+  it('throws when the LiveContext opts out of private-state mutation', async () => {
+    // FakeWorld implements no setPrivateState.
+    const { backend } = makeBackend({});
+    await expect(backend.setPrivateState({ secret: 9 })).rejects.toThrow(
+      PRIVATE_STATE_MUTATION_UNSUPPORTED,
+    );
+  });
+
+  it('delegates private-state mutation to the LiveContext (read-after-write)', async () => {
+    /** A world that stores private state, so a write is observable by a read. */
+    class MutableWorld extends FakeWorld {
+      private stored = { secret: 7 };
+      override async queryPrivateState() {
+        return this.stored;
+      }
+      async setPrivateState(state: { secret: number }) {
+        this.stored = state;
+      }
+    }
+    const world = new MutableWorld({});
+    const backend = new LiveBackend<{ secret: number }, Ledger>({
+      ctx: world,
+      pureSim: fakePureSim({}),
+      signers: new Signers({ mode: 'live', liveAliases: ['OWNER'] }),
+      ledgerExtractor: (state) => state as unknown as Ledger,
+    });
+
+    await backend.setPrivateState({ secret: 42 });
+    expect(await backend.getPrivateState()).toEqual({ secret: 42 });
   });
 });
