@@ -65,6 +65,7 @@ export type {
   ExtractPureCircuits,
   IContractSimulator,
   IMinimalContract,
+  InitialStateResult,
 } from './types/index.js';
 export type {
   BaseSimulatorOptions,

@@ -3,11 +3,10 @@ import {
   type CoinPublicKey,
   type ConstructorContext,
   type ContractAddress,
-  type ContractState,
   createCircuitContext,
   createConstructorContext,
-  type EncodedZswapLocalState,
 } from '@midnight-ntwrk/compact-runtime';
+import type { InitialStateResult } from '../types/Contract.js';
 
 /**
  * A composable utility class for managing Compact contract state in simulations.
@@ -15,13 +14,6 @@ import {
  * Handles initialization and lifecycle management of the `CircuitContext`,
  * which includes private state, public (ledger) state, zswap local state, and transaction context.
  */
-/** Shape of a compiled contract's constructor result (sync or async in 0.18). */
-type InitialStateResult<P> = {
-  currentPrivateState: P;
-  currentContractState: ContractState;
-  currentZswapLocalState: EncodedZswapLocalState;
-};
-
 export class CircuitContextManager<P> {
   private _context?: CircuitContext<P>;
 
