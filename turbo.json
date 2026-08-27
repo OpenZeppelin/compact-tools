@@ -3,7 +3,7 @@
   "tasks": {
     "test": {
       "dependsOn": ["^build"],
-      "env": ["COMPACT_HOME"],
+      "env": ["COMPACT_HOME", "COMPACTC_VERSION"],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.compact",
