@@ -20,6 +20,12 @@ export type BaseSimulatorOptions<P, W> = {
   coinPK?: CoinPublicKey;
   /** Contract deployment address */
   contractAddress?: ContractAddress;
+  /**
+   * Block time the kernel's time operations observe, in seconds since the
+   * epoch. Defaults to `0` so simulated runs are reproducible; the runtime
+   * would otherwise stamp wall-clock time.
+   */
+  time?: number;
 };
 
 /**

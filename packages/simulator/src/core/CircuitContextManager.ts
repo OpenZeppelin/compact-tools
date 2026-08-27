@@ -36,6 +36,7 @@ export class CircuitContextManager<P> {
   private readonly privateState: P;
   private readonly coinPK: CoinPublicKey;
   private readonly contractAddress: ContractAddress;
+  private readonly time: number;
   private readonly contractArgs: any[];
 
   /**
@@ -50,6 +51,8 @@ export class CircuitContextManager<P> {
    * @param privateState - The initial private state to inject into the contract
    * @param coinPK - The caller's coin public key
    * @param contractAddress - Optional override for the contract's address
+   * @param time - Block time in seconds since the epoch, as the kernel's time
+   *   operations observe it
    * @param contractArgs - Additional arguments to pass to the contract constructor
    */
   constructor(
@@ -62,12 +65,14 @@ export class CircuitContextManager<P> {
     privateState: P,
     coinPK: CoinPublicKey,
     contractAddress: ContractAddress,
+    time: number,
     ...contractArgs: any[]
   ) {
     this.contract = contract;
     this.privateState = privateState;
     this.coinPK = coinPK;
     this.contractAddress = contractAddress;
+    this.time = time;
     this.contractArgs = contractArgs;
   }
 
@@ -94,6 +99,10 @@ export class CircuitContextManager<P> {
       currentZswapLocalState,
       currentContractState.data,
       currentPrivateState,
+      undefined, // stateProvider: no cross-contract calls in the simulator
+      undefined, // gasLimit: runtime default
+      undefined, // costModel: runtime default
+      this.time,
     );
   }
 

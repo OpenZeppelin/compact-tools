@@ -53,6 +53,9 @@ export function createDrySimulator<
         witnesses = config.witnessesFactory(),
         coinPK = '0'.repeat(64),
         contractAddress = dummyContractAddress(),
+        // Fixed rather than wall-clock, so a run that reads `kernel.blockTime()`
+        // is reproducible. Override via `options.time`.
+        time = 0,
       } = options;
 
       this._witnesses = witnesses;
@@ -65,6 +68,7 @@ export function createDrySimulator<
         privateState,
         coinPK,
         contractAddress,
+        time,
         ...processedArgs,
       );
     }

@@ -42,6 +42,7 @@ describe('CircuitContextManager', () => {
         initialPrivateState,
         deployer,
         dummyContractAddress(),
+        0,
       );
 
       // compact-runtime 0.18: the constructor no longer builds the context;
@@ -76,6 +77,23 @@ describe('CircuitContextManager', () => {
       );
     });
 
+    it('defaults block time to zero', () => {
+      expect(ctx.callContext.time).toStrictEqual(0);
+    });
+
+    it('honours an explicit block time', async () => {
+      const pinned = new CircuitContextManager(
+        mockContract,
+        initialPrivateState,
+        deployer,
+        dummyContractAddress(),
+        1_700_000_000,
+      );
+      await pinned.init();
+
+      expect(pinned.getContext().callContext.time).toStrictEqual(1_700_000_000);
+    });
+
     it('should set tx ctx', () => {
       // Need to go deeper
       expect(ctx.callContext.currentQueryContext).toBeInstanceOf(QueryContext);
@@ -101,6 +119,7 @@ describe('CircuitContextManager', () => {
         initialPrivateState,
         deployer,
         dummyContractAddress(),
+        0,
       );
 
       // compact-runtime 0.18: the constructor no longer builds the context;
