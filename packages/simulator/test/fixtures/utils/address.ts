@@ -90,10 +90,30 @@ export const generateEitherPubKeyPair = (str: string) =>
     Compact.Either<Compact.ZswapCoinPublicKey, Compact.ContractAddress>,
   ];
 
-// A zero-filled byte array of `length`. (Previously `convertFieldToBytes(length,
-// 0n, '')` from compact-runtime 0.16, which was removed in 0.18; a `new
-// Uint8Array` is zero-initialized and behaves identically here.)
-export const zeroUint8Array = (length = 32) => new Uint8Array(length);
+/**
+ * @description Serializes a field value to a fixed-length little-endian byte
+ *              array, matching the contract's Uint→Bytes encoding. Throws
+ *              rather than truncating, as compact-runtime 0.16's
+ *              `convertFieldToBytes` did.
+ * @param value Field value to serialize.
+ * @param length Byte length. Defaults to 32.
+ * @returns The encoded bytes.
+ */
+export const convertFieldToBytes = (value: bigint, length = 32): Uint8Array => {
+  const out = new Uint8Array(length);
+  let rest = value;
+  for (let i = 0; i < length; i++) {
+    out[i] = Number(rest & 0xffn);
+    rest >>= 8n;
+  }
+  if (rest !== 0n) {
+    throw new RangeError(`${value} does not fit into ${length} bytes`);
+  }
+  return out;
+};
+
+/** @description A zero-filled byte array of `length`. */
+export const zeroUint8Array = (length = 32) => convertFieldToBytes(0n, length);
 
 export const ZERO_KEY = {
   is_left: true,
