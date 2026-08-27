@@ -1,17 +1,16 @@
-import type { Secp256k1Point } from '@midnight-ntwrk/compact-runtime';
 import { createSimulator, type SimulatorOptions } from '../../src/index.js';
 import {
   Contract as EcdsaContract,
   ledger,
+  type Secp256k1EcdsaSignature,
+  type Secp256k1Point,
 } from '../fixtures/artifacts/Ecdsa/contract/index.js';
 import {
   EcdsaPrivateState,
   EcdsaWitnesses,
 } from '../fixtures/sample-contracts/witnesses/EcdsaWitnesses.js';
 
-/** Runtime shape the generated circuits accept for an ECDSA signature. */
-export type Secp256k1EcdsaSignature = { r: bigint; s: bigint };
-export type { Secp256k1Point };
+export type { Secp256k1EcdsaSignature, Secp256k1Point };
 
 /**
  * Base simulator
