@@ -35,6 +35,7 @@
   },
   "scripts": {
     "build": "tsc -p .",
+    "compile:fixtures": "node test/setup.ts",
     "types": "tsc -p tsconfig.types.json && tsc -p tsconfig.test.json",
     "test": "MIDNIGHT_BACKEND=dry vitest run",
     "test:live": "MIDNIGHT_BACKEND=live vitest run",

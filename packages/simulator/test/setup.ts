@@ -121,3 +121,9 @@ export default async function globalSetup(): Promise<void> {
     process.exit(1);
   }
 }
+
+// Also runnable directly (`yarn compile:fixtures`), so the type check can
+// depend on the artifacts without going through vitest.
+if (process.argv[1] === __filename) {
+  await globalSetup();
+}

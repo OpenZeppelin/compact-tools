@@ -26,8 +26,13 @@
       ],
       "outputs": ["dist/**"]
     },
+    "compile:fixtures": {
+      "env": ["COMPACT_HOME", "COMPACTC_VERSION"],
+      "inputs": ["test/fixtures/sample-contracts/**", "test/setup.ts"],
+      "outputs": ["test/fixtures/artifacts/**"]
+    },
     "types": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "compile:fixtures"],
       "inputs": [
         "src/**/*.ts",
         "test/**/*.ts",
