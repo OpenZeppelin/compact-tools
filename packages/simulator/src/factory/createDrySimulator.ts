@@ -34,10 +34,19 @@ export function createDrySimulator<
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
   return class GeneratedSimulator extends ContractSimulator<P, L> {
     contract: TContract;
-    // Assigned by the async `init()` (0.18 made `initialState` async, so the
-    // address — read from the built context — is not known at construction).
-    contractAddress!: string;
+    private _contractAddress?: string;
     public _witnesses: W;
+
+    /**
+     * The contract's address, read from the built context. Throws if read
+     * before {@link init} has been awaited.
+     */
+    get contractAddress(): string {
+      if (!this._contractAddress) {
+        throw new Error('Simulator: await init() before use');
+      }
+      return this._contractAddress;
+    }
 
     /**
      * Creates a new simulator instance with explicit contract args and options
@@ -80,7 +89,7 @@ export function createDrySimulator<
      */
     async init(): Promise<this> {
       await this.circuitContextManager.init();
-      this.contractAddress =
+      this._contractAddress =
         this.circuitContext.callContext.currentQueryContext.address;
       return this;
     }

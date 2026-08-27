@@ -109,6 +109,22 @@ describe('CircuitContextManager', () => {
     });
   });
 
+  describe('init guard', () => {
+    it('rejects a context read before init', () => {
+      const uninitialized = new CircuitContextManager(
+        new MockSimple<SimplePrivateState>(SimpleWitnesses()),
+        {},
+        deployer,
+        dummyContractAddress(),
+        0,
+      );
+
+      expect(() => uninitialized.getContext()).toThrowError(
+        'CircuitContextManager: call init() before use',
+      );
+    });
+  });
+
   describe('setContext', () => {
     beforeEach(async () => {
       mockContract = new MockSimple<SimplePrivateState>(SimpleWitnesses());

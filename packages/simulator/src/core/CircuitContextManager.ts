@@ -23,9 +23,19 @@ type InitialStateResult<P> = {
 };
 
 export class CircuitContextManager<P> {
-  // Assigned by the async `init()`; the manager is always constructed and then
-  // awaited (`init`) before any circuit call reads the context.
-  public context!: CircuitContext<P>;
+  private _context?: CircuitContext<P>;
+
+  /** The built context. Throws if read before {@link init} has been awaited. */
+  get context(): CircuitContext<P> {
+    if (!this._context) {
+      throw new Error('CircuitContextManager: call init() before use');
+    }
+    return this._context;
+  }
+
+  set context(newContext: CircuitContext<P>) {
+    this._context = newContext;
+  }
 
   private readonly contract: {
     initialState: (
