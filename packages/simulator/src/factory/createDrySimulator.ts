@@ -34,7 +34,9 @@ export function createDrySimulator<
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
   return class GeneratedSimulator extends ContractSimulator<P, L> {
     contract: TContract;
-    private _contractAddress?: string;
+    // Underscore-public, not private: declaration emit rejects private members
+    // on this exported anonymous class (TS4094). Treat as internal.
+    public _contractAddress?: string;
     public _witnesses: W;
 
     /**

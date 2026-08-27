@@ -1,12 +1,12 @@
 import type { StateValue } from '@midnight-ntwrk/compact-runtime';
 import { describe, expect, it } from 'vitest';
-import { PRIVATE_STATE_MUTATION_UNSUPPORTED } from '../../src/index';
+import { PRIVATE_STATE_MUTATION_UNSUPPORTED } from '../../src/index.js';
 import type {
   DeployedTxHandle,
   LiveContext,
 } from '../../src/live/LiveContext.js';
-import { WitnessPrivateState } from '../fixtures/sample-contracts/witnesses/WitnessWitnesses';
-import { WitnessSimulator } from './WitnessSimulator';
+import { WitnessPrivateState } from '../fixtures/sample-contracts/witnesses/WitnessWitnesses.js';
+import { WitnessSimulator } from './WitnessSimulator.js';
 
 /**
  * A mutable in-memory live world. Only the private-state read/write paths are

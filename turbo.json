@@ -28,7 +28,13 @@
     },
     "types": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*.ts", "tsconfig.json", "tsconfig.types.json"],
+      "inputs": [
+        "src/**/*.ts",
+        "test/**/*.ts",
+        "tsconfig.json",
+        "tsconfig.types.json",
+        "tsconfig.test.json"
+      ],
       "outputs": []
     },
     "lint": {},

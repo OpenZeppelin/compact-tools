@@ -10,13 +10,13 @@ import {
   sampleRawTokenType,
 } from '@midnight-ntwrk/compact-runtime';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CircuitContextManager } from '../../../src/core/CircuitContextManager';
+import { CircuitContextManager } from '../../../src/core/CircuitContextManager.js';
 import { Contract as MockSimple } from '../../fixtures/artifacts/Simple/contract/index.js';
 import {
   type SimplePrivateState,
   SimpleWitnesses,
-} from '../../fixtures/sample-contracts/witnesses/SimpleWitnesses';
-import { encodeToAddress, toHexPadded } from '../../fixtures/utils/address';
+} from '../../fixtures/sample-contracts/witnesses/SimpleWitnesses.js';
+import { encodeToAddress, toHexPadded } from '../../fixtures/utils/address.js';
 
 // Constants
 const DEPLOYER = 'DEPLOYER';

@@ -22,10 +22,16 @@ export type ExtractImpureCircuits<TContract> = TContract extends {
   : never;
 
 /**
+ * The `result` a circuit yields, whether it returns `CircuitResults` directly
+ * (compact-runtime 0.16) or a promise of it (0.18 and later).
+ */
+type CircuitResult<Ret> = Awaited<Ret> extends { result: infer R } ? R : never;
+
+/**
  * Transforms circuit functions by removing the explicit `CircuitContext` parameter.
  *
  * Each original circuit function has signature:
- * `(ctx: CircuitContext<TState>, ...args) => { result: R; context?: CircuitContext<TState> }`
+ * `(ctx: CircuitContext<TState>, ...args) => Promise<{ result: R; context: CircuitContext<TState> }>`
  *
  * The transformed function takes the same parameters except the context,
  * and returns the `result` directly.
@@ -34,8 +40,8 @@ export type ContextlessCircuits<Circuits, TState> = {
   [K in keyof Circuits]: Circuits[K] extends (
     ctx: CircuitContext<TState>,
     ...args: infer P
-  ) => { result: infer R; context?: CircuitContext<TState> }
-    ? (...args: P) => R
+  ) => infer Ret
+    ? (...args: P) => CircuitResult<Ret>
     : never;
 };
 
@@ -53,7 +59,7 @@ export type AsyncCircuits<Circuits, TState> = {
   [K in keyof Circuits]: Circuits[K] extends (
     ctx: CircuitContext<TState>,
     ...args: infer P
-  ) => { result: infer R; context?: CircuitContext<TState> }
-    ? (...args: P) => Promise<R>
+  ) => infer Ret
+    ? (...args: P) => Promise<CircuitResult<Ret>>
     : never;
 };
