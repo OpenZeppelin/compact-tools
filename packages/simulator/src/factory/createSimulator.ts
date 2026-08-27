@@ -14,8 +14,13 @@ import type { SimulatorOptions } from '../types/Options.js';
 import { createDrySimulator } from './createDrySimulator.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
-/** Prepared backend wiring handed to the simulator constructor. */
-interface BackendDeps<P, L> {
+/**
+ * Prepared backend wiring handed to the simulator constructor.
+ *
+ * Exported because it appears in `create` / `_create`, so a consumer that
+ * assigns `createSimulator(...)` to an exported binding must be able to name it.
+ */
+export interface BackendDeps<P, L> {
   backend: Backend<P, L>;
   signers: Signers;
   pureNames: string[];
