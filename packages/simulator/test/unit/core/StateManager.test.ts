@@ -33,7 +33,7 @@ describe('CircuitContextManager', () => {
    * Parametrize me!
    */
   describe('constructor', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       mockContract = new MockSimple<SimplePrivateState>(SimpleWitnesses());
       initialPrivateState = {};
 
@@ -44,11 +44,14 @@ describe('CircuitContextManager', () => {
         dummyContractAddress(),
       );
 
+      // compact-runtime 0.18: the constructor no longer builds the context;
+      // init() runs the contract constructor and populates it.
+      await circuitCtxManager.init();
       ctx = circuitCtxManager.getContext();
     });
 
     it('should set private state', () => {
-      expect(ctx.currentPrivateState).toEqual(initialPrivateState);
+      expect(ctx.callContext.currentPrivateState).toEqual(initialPrivateState);
     });
 
     it('should set zswap local state', () => {
@@ -60,26 +63,36 @@ describe('CircuitContextManager', () => {
         inputs: [],
         outputs: [],
       };
-      expect(ctx.currentZswapLocalState).toEqual(expectedZswapState);
+      expect(ctx.callContext.currentZswapLocalState).toEqual(
+        expectedZswapState,
+      );
     });
 
     it('should set original state', () => {
-      expect(ctx.currentQueryContext).toBeInstanceOf(QueryContext);
-      expect(ctx.currentQueryContext).toHaveProperty('__wbg_ptr');
-      expect((ctx.currentQueryContext as any).__wbg_ptr).toBeTypeOf('number');
+      expect(ctx.callContext.currentQueryContext).toBeInstanceOf(QueryContext);
+      expect(ctx.callContext.currentQueryContext).toHaveProperty('__wbg_ptr');
+      expect((ctx.callContext.currentQueryContext as any).__wbg_ptr).toBeTypeOf(
+        'number',
+      );
     });
 
     it('should set tx ctx', () => {
       // Need to go deeper
-      expect(ctx.currentQueryContext).toBeInstanceOf(QueryContext);
-      expect(ctx.currentQueryContext.address).toEqual(dummyContractAddress());
-      expect(ctx.currentQueryContext.state).toBeInstanceOf(ChargedState);
-      expect(ctx.currentQueryContext.state).toHaveProperty('__wbg_ptr');
+      expect(ctx.callContext.currentQueryContext).toBeInstanceOf(QueryContext);
+      expect(ctx.callContext.currentQueryContext.address).toEqual(
+        dummyContractAddress(),
+      );
+      expect(ctx.callContext.currentQueryContext.state).toBeInstanceOf(
+        ChargedState,
+      );
+      expect(ctx.callContext.currentQueryContext.state).toHaveProperty(
+        '__wbg_ptr',
+      );
     });
   });
 
   describe('setContext', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       mockContract = new MockSimple<SimplePrivateState>(SimpleWitnesses());
       initialPrivateState = {};
 
@@ -90,6 +103,9 @@ describe('CircuitContextManager', () => {
         dummyContractAddress(),
       );
 
+      // compact-runtime 0.18: the constructor no longer builds the context;
+      // init() runs the contract constructor and populates it.
+      await circuitCtxManager.init();
       ctx = circuitCtxManager.getContext();
     });
 
@@ -120,7 +136,7 @@ describe('CircuitContextManager', () => {
 
       // Query ctx
       const modifiedTxCtx: QueryContext = {
-        ...ctx.currentQueryContext,
+        ...ctx.callContext.currentQueryContext,
         address: encodeToAddress('otherAddress'),
       } as unknown as QueryContext;
 

@@ -93,7 +93,7 @@ export abstract class AbstractSimulator<P, L>
    * @returns The current private state of type P
    */
   public getPrivateState(): P {
-    return this.circuitContext.currentPrivateState;
+    return this.circuitContext.callContext.currentPrivateState as P;
   }
 
   /**
@@ -102,7 +102,7 @@ export abstract class AbstractSimulator<P, L>
    * @returns The current state value containing the ledger data
    */
   public getContractState(): StateValue {
-    return this.circuitContext.currentQueryContext.state.state;
+    return this.circuitContext.callContext.currentQueryContext.state.state;
   }
 
   /**
@@ -130,12 +130,13 @@ export abstract class AbstractSimulator<P, L>
         const original = Reflect.get(target, prop, receiver);
         if (typeof original !== 'function') return original;
 
-        return (...args: unknown[]) => {
+        return async (...args: unknown[]) => {
           const fn = original as (
             ctx: CircuitContext<P>,
             ...args: unknown[]
-          ) => { result: unknown };
-          const result = fn(context(), ...args).result;
+          ) => { result: unknown } | Promise<{ result: unknown }>;
+          // 0.18 circuits are async; `await` also tolerates the older sync shape.
+          const { result } = await fn(context(), ...args);
 
           // Auto-reset single-use caller override
           this.callerOverride = null;
@@ -172,13 +173,16 @@ export abstract class AbstractSimulator<P, L>
         const original = Reflect.get(target, prop, receiver);
         if (typeof original !== 'function') return original;
 
-        return (...args: unknown[]) => {
+        return async (...args: unknown[]) => {
           const fn = original as (
             ctx: CircuitContext<P>,
             ...args: unknown[]
-          ) => { result: unknown; context: CircuitContext<P> };
+          ) =>
+            | { result: unknown; context: CircuitContext<P> }
+            | Promise<{ result: unknown; context: CircuitContext<P> }>;
 
-          const { result, context: newCtx } = fn(context(), ...args);
+          // 0.18 circuits are async; `await` also tolerates the older sync shape.
+          const { result, context: newCtx } = await fn(context(), ...args);
           updateContext(newCtx);
 
           // Auto-reset single-use caller override

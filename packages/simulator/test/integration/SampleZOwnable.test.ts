@@ -1,10 +1,27 @@
 import {
   CompactTypeBytes,
   CompactTypeVector,
-  convertFieldToBytes,
   persistentHash,
 } from '@midnight-ntwrk/compact-runtime';
 import { beforeEach, describe, expect, it } from 'vitest';
+
+// Serialize a field/counter value to a fixed-length byte array. Replaces the
+// runtime's `convertFieldToBytes(length, value, '')`, removed in compact-runtime
+// 0.18. Little-endian, matching the contract's Uint→Bytes<32> encoding.
+const convertFieldToBytes = (
+  length: number,
+  value: bigint,
+  _pad: string,
+): Uint8Array => {
+  const out = new Uint8Array(length);
+  let v = value;
+  for (let i = 0; i < length; i++) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return out;
+};
+
 import type { ZswapCoinPublicKey } from '../fixtures/artifacts/SampleZOwnable/contract/index.js';
 import { SampleZOwnablePrivateState } from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses.js';
 import * as utils from '../fixtures/utils/address.js';

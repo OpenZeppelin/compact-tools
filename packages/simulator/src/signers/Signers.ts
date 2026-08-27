@@ -1,6 +1,5 @@
 import {
   type CoinPublicKey,
-  convertFieldToBytes,
   encodeCoinPublicKey,
 } from '@midnight-ntwrk/compact-runtime';
 import type { BackendKind } from '../backend/Backend.js';
@@ -39,7 +38,10 @@ export type Either<L, R> = {
 const aliasToHex = (alias: string): CoinPublicKey =>
   Buffer.from(alias, 'ascii').toString('hex').padStart(64, '0');
 
-const zeroBytes = (): Uint8Array => convertFieldToBytes(32, 0n, '');
+// A 32-byte zero array. Previously derived via the runtime's
+// `convertFieldToBytes(32, 0n, '')`, which was removed in compact-runtime 0.18;
+// the value is identical (the byte encoding of field element 0).
+const zeroBytes = (): Uint8Array => new Uint8Array(32);
 
 /**
  * Configuration for {@link Signers}.

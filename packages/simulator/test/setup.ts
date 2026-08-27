@@ -3,13 +3,13 @@
  * Runs once before all tests via Vitest's globalSetup.
  */
 
-import { exec, type SpawnSyncReturns } from 'node:child_process';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,28 +21,8 @@ const CONTRACT_FILES = [
   'Simple.compact',
   'Witness.compact',
   'SampleZOwnable.compact',
+  'Ecdsa.compact',
 ];
-
-function isSpawnSyncRet(
-  err: unknown,
-): err is SpawnSyncReturns<string | Buffer> {
-  if (typeof err !== 'object' || err === null) {
-    return false;
-  }
-
-  const typedErr = err as Partial<SpawnSyncReturns<string | Buffer>> &
-    Record<string, unknown>;
-
-  const okErr = typedErr.error instanceof Error;
-  const okStdout =
-    typeof typedErr.stdout === 'string' || Buffer.isBuffer(typedErr.stdout);
-  const okStderr =
-    typeof typedErr.stderr === 'string' || Buffer.isBuffer(typedErr.stderr);
-  const okStatus =
-    typeof typedErr.status === 'number' || typedErr.status === null;
-
-  return okErr && okStdout && okStderr && okStatus;
-}
 
 async function compileContract(contractFile: string): Promise<void> {
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
@@ -68,20 +48,33 @@ async function compileContract(contractFile: string): Promise<void> {
   mkdirSync(outputDir, { recursive: true });
   mkdirSync(join(outputDir, 'keys'), { recursive: true });
 
-  const command = `compact compile --skip-zk "${inputPath}" "${outputDir}"`;
+  // Pin the compiler to the ECDSA/0.18-runtime toolchain. The default toolchain
+  // (compactc 0.31.x) emits code expecting compact-runtime 0.16.0, which the
+  // 0.18.0-rc.1 runtime this package now depends on rejects at load time.
+  // Override via COMPACTC_VERSION if a newer pinned toolchain is installed.
+  const compilerVersion = process.env.COMPACTC_VERSION ?? '0.33.0-rc.2';
+  // secp256k1 primitives (e.g. secp256k1EcdsaVerify) exist only in the ZKIR v3
+  // backend, so contracts that use them must opt in; others stay on the default.
+  const usesSecp256k1 = /secp256k1/i.test(readFileSync(inputPath, 'utf8'));
+
+  // execFile (no shell) with an argument array: the compiler version and paths
+  // are passed as discrete args, never interpolated into a command string, so
+  // none of them can inject shell.
+  const args = [
+    'compile',
+    `+${compilerVersion}`,
+    ...(usesSecp256k1 ? ['--feature-zkir-v3'] : []),
+    '--skip-zk',
+    inputPath,
+    outputDir,
+  ];
   try {
-    await execAsync(command);
+    await execFileAsync('compact', args);
   } catch (err: unknown) {
-    if (!isSpawnSyncRet(err)) {
-      throw err;
+    // Without a shell, a missing `compact` binary surfaces as ENOENT.
+    if ((err as { code?: unknown } | null)?.code === 'ENOENT') {
+      throw new Error('`compact` not found. Is it installed and on PATH?');
     }
-
-    if (err.status === 127) {
-      throw new Error(
-        '`compact` not found (exit code 127). Is it installed and on PATH?',
-      );
-    }
-
     throw err;
   }
 

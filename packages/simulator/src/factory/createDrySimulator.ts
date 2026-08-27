@@ -34,7 +34,9 @@ export function createDrySimulator<
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
   return class GeneratedSimulator extends ContractSimulator<P, L> {
     contract: TContract;
-    readonly contractAddress: string;
+    // Assigned by the async `init()` (0.18 made `initialState` async, so the
+    // address — read from the built context — is not known at construction).
+    contractAddress!: string;
     public _witnesses: W;
 
     /**
@@ -65,8 +67,18 @@ export function createDrySimulator<
         contractAddress,
         ...processedArgs,
       );
+    }
 
-      this.contractAddress = this.circuitContext.currentQueryContext.address;
+    /**
+     * Runs the contract constructor and finalizes state. Must be awaited once,
+     * after construction, before any circuit call. Split out from the
+     * constructor because compact-runtime 0.18 made `initialState` async.
+     */
+    async init(): Promise<this> {
+      await this.circuitContextManager.init();
+      this.contractAddress =
+        this.circuitContext.callContext.currentQueryContext.address;
+      return this;
     }
 
     public _pureCircuitProxy?: ContextlessCircuits<
@@ -144,7 +156,7 @@ export function createDrySimulator<
      */
     getPublicState(): L {
       return config.ledgerExtractor(
-        this.circuitContext.currentQueryContext.state.state,
+        this.circuitContext.callContext.currentQueryContext.state.state,
       );
     }
 
@@ -191,8 +203,8 @@ export function createDrySimulator<
       const circuitCtx = this.circuitContext;
       return {
         ledger: this.getPublicState(),
-        privateState: circuitCtx.currentPrivateState,
-        contractAddress: circuitCtx.currentQueryContext.address,
+        privateState: circuitCtx.callContext.currentPrivateState as P,
+        contractAddress: circuitCtx.callContext.currentQueryContext.address,
       };
     }
   };
