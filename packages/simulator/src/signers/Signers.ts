@@ -27,10 +27,8 @@ export type Either<L, R> = {
 /**
  * Converts an ASCII alias to a 64-char zero-padded hex string.
  *
- * This is the exact derivation the existing test harness uses
- * (`generatePubKeyPair` / `encodeToPK`), so a backend-aware simulator resolves
- * an alias to the same key the current synchronous specs do — preserving dry
- * parity for migrated modules.
+ * The same derivation the test harness uses (`generatePubKeyPair` /
+ * `encodeToPK`), so an alias resolves to the key the specs encode directly.
  *
  * @param alias - The caller alias.
  * @returns A 64-char hex `CoinPublicKey`.

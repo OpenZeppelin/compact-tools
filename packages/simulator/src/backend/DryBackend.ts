@@ -6,9 +6,13 @@ import type { Signers } from '../signers/Signers.js';
 import type { Backend, BackendKind, CircuitKind } from './Backend.js';
 
 /**
- * The slice of a synchronous `createSimulator` instance that {@link DryBackend}
+ * The slice of a local `createSimulator` instance that {@link DryBackend}
  * drives. Kept structural so the dry backend reuses the existing simulator
  * machinery without coupling to its concrete (anonymous) class.
+ *
+ * @remarks Named `SyncSimulator` for the pre-0.18 runtime, whose circuits
+ * returned their result directly. They return promises now; renaming the type
+ * is a breaking change left for a later release.
  *
  * @template P - Private state type.
  * @template L - Public ledger state type.
@@ -30,14 +34,13 @@ export interface SyncSimulator<P, L> {
 }
 
 /**
- * The in-memory backend: a thin async facade over the existing synchronous
- * `createSimulator` instance.
+ * The in-memory backend: a thin facade over the local `createSimulator`
+ * instance.
  *
- * Every operation delegates to the wrapped simulator and wraps the synchronous
- * result in a resolved promise, so a circuit never returns a bare value
- * on dry but a `Promise` on live. Because all real work routes through the
- * unchanged synchronous path, dry behavior is preserved byte-for-byte
- * and is the parity reference the live backend is measured against.
+ * Every operation delegates to the wrapped simulator and resolves to a promise,
+ * so a circuit never returns a bare value on dry but a `Promise` on live. All
+ * real work routes through the in-memory path, which is the parity reference the
+ * live backend is measured against.
  *
  * @template P - Private state type.
  * @template L - Public ledger state type.
@@ -49,7 +52,7 @@ export class DryBackend<P, L> implements Backend<P, L> {
   private readonly signers: Signers;
 
   /**
-   * @param sim - The wrapped synchronous simulator instance.
+   * @param sim - The wrapped in-memory simulator instance.
    * @param signers - Resolver used to turn caller aliases into deterministic keys.
    */
   constructor(sim: SyncSimulator<P, L>, signers: Signers) {

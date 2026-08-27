@@ -50,10 +50,9 @@ export type ContextlessCircuits<Circuits, TState> = {
  *
  * Identical to {@link ContextlessCircuits} except every circuit returns
  * `Promise<R>` instead of `R`. This is the type-level half of dry↔live parity:
- * the dry backend wraps its synchronous result in `Promise.resolve`,
- * the live backend awaits the network, and spec code is uniform `await` across
- * both. A circuit can never return a bare value on one backend and a `Promise`
- * on the other.
+ * the dry backend resolves in memory, the live backend awaits the network, and
+ * spec code is uniform `await` across both. A circuit can never return a bare
+ * value on one backend and a `Promise` on the other.
  */
 export type AsyncCircuits<Circuits, TState> = {
   [K in keyof Circuits]: Circuits[K] extends (
