@@ -26,7 +26,7 @@ export type CircuitKind = 'pure' | 'impure';
  * `createBackendSimulator` builds the async circuit proxies, caller helpers, and
  * state getters on top of this interface; the backend itself stays dumb. Every
  * operation is async so spec code is uniform `await` across both backends:
- * {@link DryBackend} wraps its synchronous results in `Promise.resolve`,
+ * {@link DryBackend} resolves in memory,
  * the live adapter awaits the network.
  *
  * @template P - Private state type.
@@ -77,7 +77,7 @@ export interface Backend<P, L> {
    * implements `setPrivateState`; otherwise it throws
    * `PRIVATE_STATE_MUTATION_UNSUPPORTED` (from the live backend).
    *
-   * Async across backends for uniform `await`: dry resolves synchronously,
+   * Async across backends for uniform `await`: dry resolves in memory,
    * live awaits the provider write.
    *
    * @param privateState - The new private state `P`.

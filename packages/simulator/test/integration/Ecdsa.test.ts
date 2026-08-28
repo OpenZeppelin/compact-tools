@@ -1,7 +1,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EcdsaSimulator } from './EcdsaSimulator';
+import { EcdsaSimulator } from './EcdsaSimulator.js';
 
 // Deterministic inputs: a fixed secret key plus RFC 6979 signing yields a stable
 // signature, so the vector below is reproducible without any randomness.

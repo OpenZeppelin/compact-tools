@@ -1,19 +1,12 @@
 /**
  * Type-level regression guard for the static `create` / `_create` contract.
  *
- * `yarn types` compiles `src/**` but NOT `test/**` (the sample simulators import
- * generated, gitignored contract artifacts), and `vitest` strips types without
- * checking them — so a regression in the `create` / `_create` typing would
- * otherwise pass CI. This file reproduces the subclass-override pattern against a
- * synthetic contract type, so `yarn types` fails on a regression.
+ * Reproduces the subclass-override pattern against a synthetic contract type, so
+ * the guard holds without a compiled artifact. Carries the negative assertions
+ * (`@ts-expect-error`) that the real simulators cannot express.
  *
- * It exports nothing and is imported by nothing (inert at runtime). The build
- * config (`tsconfig.json`) excludes `*.type-test.ts` from emit, so it never
- * reaches `dist`; the type check runs it via `tsconfig.types.json`.
- *
- * Typechecking the real test simulators (which need the generated artifacts) is a
- * separate, larger effort; this is the minimal guard for the contract that
- * actually regressed.
+ * Exports nothing and is imported by nothing. The build config excludes
+ * `*.type-test.ts` from emit so it never reaches `dist`; `yarn types` compiles it.
  */
 import { createSimulator } from './factory/createSimulator.js';
 import type { SimulatorConfig } from './factory/SimulatorConfig.js';

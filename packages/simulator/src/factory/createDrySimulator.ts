@@ -12,11 +12,11 @@ import type { BaseSimulatorOptions } from '../types/Options.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
 /**
- * Internal synchronous simulator primitive.
+ * Internal in-memory simulator primitive.
  *
- * This is the in-memory engine the public async {@link createSimulator} builds on:
- * the dry backend wraps an instance of this class, and the live backend uses one
- * locally to evaluate pure circuits. It is not the public testing API —
+ * This is the engine the public {@link createSimulator} builds on: the dry
+ * backend wraps an instance of this class, and the live backend uses one locally
+ * to evaluate pure circuits. It is not the public testing API —
  * use {@link createSimulator} instead.
  *
  * Creates a class extending ContractSimulator with witness management, state
@@ -34,10 +34,21 @@ export function createDrySimulator<
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
   return class GeneratedSimulator extends ContractSimulator<P, L> {
     contract: TContract;
-    // Assigned by the async `init()` (0.18 made `initialState` async, so the
-    // address — read from the built context — is not known at construction).
-    contractAddress!: string;
+    // Underscore-public, not private: declaration emit rejects private members
+    // on this exported anonymous class (TS4094). Treat as internal.
+    public _contractAddress?: string;
     public _witnesses: W;
+
+    /**
+     * The contract's address, read from the built context. Throws if read
+     * before {@link init} has been awaited.
+     */
+    get contractAddress(): string {
+      if (!this._contractAddress) {
+        throw new Error('Simulator: await init() before use');
+      }
+      return this._contractAddress;
+    }
 
     /**
      * Creates a new simulator instance with explicit contract args and options
@@ -53,6 +64,9 @@ export function createDrySimulator<
         witnesses = config.witnessesFactory(),
         coinPK = '0'.repeat(64),
         contractAddress = dummyContractAddress(),
+        // Fixed rather than wall-clock, so a run that reads `kernel.blockTime()`
+        // is reproducible. Override via `options.time`.
+        time = 0,
       } = options;
 
       this._witnesses = witnesses;
@@ -65,6 +79,7 @@ export function createDrySimulator<
         privateState,
         coinPK,
         contractAddress,
+        time,
         ...processedArgs,
       );
     }
@@ -76,7 +91,7 @@ export function createDrySimulator<
      */
     async init(): Promise<this> {
       await this.circuitContextManager.init();
-      this.contractAddress =
+      this._contractAddress =
         this.circuitContext.callContext.currentQueryContext.address;
       return this;
     }

@@ -22,10 +22,16 @@ export type ExtractImpureCircuits<TContract> = TContract extends {
   : never;
 
 /**
+ * The `result` a circuit yields, whether it returns `CircuitResults` directly
+ * (compact-runtime 0.16) or a promise of it (0.18 and later).
+ */
+type CircuitResult<Ret> = Awaited<Ret> extends { result: infer R } ? R : never;
+
+/**
  * Transforms circuit functions by removing the explicit `CircuitContext` parameter.
  *
  * Each original circuit function has signature:
- * `(ctx: CircuitContext<TState>, ...args) => { result: R; context?: CircuitContext<TState> }`
+ * `(ctx: CircuitContext<TState>, ...args) => Promise<{ result: R; context: CircuitContext<TState> }>`
  *
  * The transformed function takes the same parameters except the context,
  * and returns the `result` directly.
@@ -34,8 +40,8 @@ export type ContextlessCircuits<Circuits, TState> = {
   [K in keyof Circuits]: Circuits[K] extends (
     ctx: CircuitContext<TState>,
     ...args: infer P
-  ) => { result: infer R; context?: CircuitContext<TState> }
-    ? (...args: P) => R
+  ) => infer Ret
+    ? (...args: P) => CircuitResult<Ret>
     : never;
 };
 
@@ -44,16 +50,15 @@ export type ContextlessCircuits<Circuits, TState> = {
  *
  * Identical to {@link ContextlessCircuits} except every circuit returns
  * `Promise<R>` instead of `R`. This is the type-level half of dry↔live parity:
- * the dry backend wraps its synchronous result in `Promise.resolve`,
- * the live backend awaits the network, and spec code is uniform `await` across
- * both. A circuit can never return a bare value on one backend and a `Promise`
- * on the other.
+ * the dry backend resolves in memory, the live backend awaits the network, and
+ * spec code is uniform `await` across both. A circuit can never return a bare
+ * value on one backend and a `Promise` on the other.
  */
 export type AsyncCircuits<Circuits, TState> = {
   [K in keyof Circuits]: Circuits[K] extends (
     ctx: CircuitContext<TState>,
     ...args: infer P
-  ) => { result: infer R; context?: CircuitContext<TState> }
-    ? (...args: P) => Promise<R>
+  ) => infer Ret
+    ? (...args: P) => Promise<CircuitResult<Ret>>
     : never;
 };

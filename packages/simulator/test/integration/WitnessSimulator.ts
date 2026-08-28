@@ -1,4 +1,4 @@
-import { createSimulator, type SimulatorOptions } from '../../src/index';
+import { createSimulator, type SimulatorOptions } from '../../src/index.js';
 import {
   ledger,
   Contract as WitnessContract,
@@ -6,7 +6,7 @@ import {
 import {
   WitnessPrivateState,
   WitnessWitnesses,
-} from '../fixtures/sample-contracts/witnesses/WitnessWitnesses';
+} from '../fixtures/sample-contracts/witnesses/WitnessWitnesses.js';
 
 /** Type constructor args */
 type WitnessArgs = readonly [];

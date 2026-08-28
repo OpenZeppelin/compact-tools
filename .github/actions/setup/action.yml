@@ -10,6 +10,10 @@ inputs:
     description: "Pre-release Compact compiler to fetch from GitHub releases (bridge until the toolchain ships stable). Keep in sync with setup.ts COMPACTC_VERSION."
     required: false
     default: "0.33.0-rc.2"
+  compact-prerelease-sha256:
+    description: "SHA-256 of the pre-release compiler archive. Required when overriding compact-prerelease; the default version's digests are built in."
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -58,6 +62,7 @@ runs:
       shell: bash
       env:
         VER: ${{ inputs.compact-prerelease }}
+        SHA_OVERRIDE: ${{ inputs.compact-prerelease-sha256 }}
       run: |
         set -euo pipefail
         # Reuse the platform dir the CLI already created for the stable install
@@ -65,10 +70,43 @@ runs:
         # `+<version>` selector resolves it; fall back to the host triple.
         PLAT="$(basename "$(find "$HOME/.compact/versions" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | head -1)" 2>/dev/null || true)"
         [ -z "$PLAT" ] && PLAT="$(uname -m)-unknown-linux-musl"
+
+        # The release publishes no checksum file, so the expected digests are
+        # pinned here (computed from the published assets). Overriding the
+        # version means supplying its digest too — this archive is unpacked and
+        # executed, and every other action in this file is pinned by SHA.
+        if [ -n "$SHA_OVERRIDE" ]; then
+          WANT="$SHA_OVERRIDE"
+        else
+          case "$VER/$PLAT" in
+            0.33.0-rc.2/x86_64-unknown-linux-musl)
+              WANT=3055ab92bbc8d5bb0d6282b661b83761d2a0de2ee37e21cf7107e25aaf2a9aad ;;
+            0.33.0-rc.2/aarch64-unknown-linux-musl)
+              WANT=3aa23812b0b086dbce07da3931a40dcb01bec9676b1ceed7f2d0be370ab2dc46 ;;
+            0.33.0-rc.2/x86_64-darwin)
+              WANT=dce1a57d82ce06208fcc5d9de5343f18c48654a5ff3acf6bafabe3d17bf1ef18 ;;
+            0.33.0-rc.2/aarch64-darwin)
+              WANT=35a28009c9a57d20902e4fcfd12f0ca9ea94338208954cf8bcd335652e24f382 ;;
+            *)
+              echo "::error::no pinned digest for $VER/$PLAT; pass compact-prerelease-sha256"
+              exit 1 ;;
+          esac
+        fi
+
         DEST="$HOME/.compact/versions/$VER/$PLAT"
         mkdir -p "$DEST"
         curl -fsSL -o /tmp/compactc.zip \
           "https://github.com/LFDT-Minokawa/compact/releases/download/compactc-v$VER/compactc_v${VER}_${PLAT}.zip"
+        # sha256sum on Linux runners, shasum on macOS.
+        if command -v sha256sum >/dev/null; then
+          echo "$WANT  /tmp/compactc.zip" | sha256sum -c -
+        else
+          echo "$WANT  /tmp/compactc.zip" | shasum -a 256 -c -
+        fi
         unzip -oq /tmp/compactc.zip -d "$DEST"
         chmod +x "$DEST"/*
         compact compile +"$VER" --version
+
+        # `test/setup.ts` reads COMPACTC_VERSION to pick the toolchain it
+        # compiles fixtures with; without this the input has no effect there.
+        echo "COMPACTC_VERSION=$VER" >> "$GITHUB_ENV"

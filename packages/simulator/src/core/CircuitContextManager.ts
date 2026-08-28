@@ -3,11 +3,10 @@ import {
   type CoinPublicKey,
   type ConstructorContext,
   type ContractAddress,
-  type ContractState,
   createCircuitContext,
   createConstructorContext,
-  type EncodedZswapLocalState,
 } from '@midnight-ntwrk/compact-runtime';
+import type { InitialStateResult } from '../types/Contract.js';
 
 /**
  * A composable utility class for managing Compact contract state in simulations.
@@ -15,17 +14,20 @@ import {
  * Handles initialization and lifecycle management of the `CircuitContext`,
  * which includes private state, public (ledger) state, zswap local state, and transaction context.
  */
-/** Shape of a compiled contract's constructor result (sync or async in 0.18). */
-type InitialStateResult<P> = {
-  currentPrivateState: P;
-  currentContractState: ContractState;
-  currentZswapLocalState: EncodedZswapLocalState;
-};
-
 export class CircuitContextManager<P> {
-  // Assigned by the async `init()`; the manager is always constructed and then
-  // awaited (`init`) before any circuit call reads the context.
-  public context!: CircuitContext<P>;
+  private _context?: CircuitContext<P>;
+
+  /** The built context. Throws if read before {@link init} has been awaited. */
+  get context(): CircuitContext<P> {
+    if (!this._context) {
+      throw new Error('CircuitContextManager: call init() before use');
+    }
+    return this._context;
+  }
+
+  set context(newContext: CircuitContext<P>) {
+    this._context = newContext;
+  }
 
   private readonly contract: {
     initialState: (
@@ -36,6 +38,7 @@ export class CircuitContextManager<P> {
   private readonly privateState: P;
   private readonly coinPK: CoinPublicKey;
   private readonly contractAddress: ContractAddress;
+  private readonly time: number;
   private readonly contractArgs: any[];
 
   /**
@@ -50,6 +53,8 @@ export class CircuitContextManager<P> {
    * @param privateState - The initial private state to inject into the contract
    * @param coinPK - The caller's coin public key
    * @param contractAddress - Optional override for the contract's address
+   * @param time - Block time in seconds since the epoch, as the kernel's time
+   *   operations observe it
    * @param contractArgs - Additional arguments to pass to the contract constructor
    */
   constructor(
@@ -62,12 +67,14 @@ export class CircuitContextManager<P> {
     privateState: P,
     coinPK: CoinPublicKey,
     contractAddress: ContractAddress,
+    time: number,
     ...contractArgs: any[]
   ) {
     this.contract = contract;
     this.privateState = privateState;
     this.coinPK = coinPK;
     this.contractAddress = contractAddress;
+    this.time = time;
     this.contractArgs = contractArgs;
   }
 
@@ -94,6 +101,10 @@ export class CircuitContextManager<P> {
       currentZswapLocalState,
       currentContractState.data,
       currentPrivateState,
+      undefined, // stateProvider: no cross-contract calls in the simulator
+      undefined, // gasLimit: runtime default
+      undefined, // costModel: runtime default
+      this.time,
     );
   }
 

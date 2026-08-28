@@ -14,8 +14,13 @@ import type { SimulatorOptions } from '../types/Options.js';
 import { createDrySimulator } from './createDrySimulator.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
-/** Prepared backend wiring handed to the simulator constructor. */
-interface BackendDeps<P, L> {
+/**
+ * Prepared backend wiring handed to the simulator constructor.
+ *
+ * Exported because it appears in `create` / `_create`, so a consumer that
+ * assigns `createSimulator(...)` to an exported binding must be able to name it.
+ */
+export interface BackendDeps<P, L> {
   backend: Backend<P, L>;
   signers: Signers;
   pureNames: string[];
@@ -54,7 +59,7 @@ export function createSimulator<
   TContract extends IMinimalContract,
   TArgs extends readonly any[] = readonly any[],
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
-  // Built once per factory; instances per `create()`. The synchronous primitive
+  // Built once per factory; instances per `create()`. The in-memory primitive
   // is the whole dry path and the local JS artifact for pure-circuit eval.
   const DrySimClass = createDrySimulator<P, L, W, TContract, TArgs>(config);
 
@@ -81,7 +86,7 @@ export function createSimulator<
   ): Promise<BackendDeps<P, L>> => {
     const kind = resolveBackendKind(options.backend);
 
-    // The local synchronous simulator: the whole dry path, and the pure-circuit
+    // The local in-memory simulator: the whole dry path, and the pure-circuit
     // evaluator in live (D2). In live this runs `initialState` in memory only —
     // it is never deployed on-chain.
     const localSim = new DrySimClass(contractArgs, options);

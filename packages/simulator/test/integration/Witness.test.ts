@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type {
   WitnessPrivateState,
   WitnessWitnessSet,
-} from '../fixtures/sample-contracts/witnesses/WitnessWitnesses';
-import { WitnessSimulator } from './WitnessSimulator';
+} from '../fixtures/sample-contracts/witnesses/WitnessWitnesses.js';
+import { WitnessSimulator } from './WitnessSimulator.js';
 
 const VAL1 = 3n;
 const VAL2 = 7n;
