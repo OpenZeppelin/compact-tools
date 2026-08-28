@@ -53,7 +53,9 @@ function readMaskedLine(): Promise<string> {
           return;
         }
         if (code === 0x7f || code === 0x08) {
-          buffer = buffer.slice(0, -1);
+          // Split by code point: `slice(-1)` on a string would strip half a
+          // surrogate pair, leaving a lone surrogate in the passphrase.
+          buffer = [...buffer].slice(0, -1).join('');
           continue;
         }
         buffer += ch;

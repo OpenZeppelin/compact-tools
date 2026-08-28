@@ -76,14 +76,27 @@ describe('configSchema — networks', () => {
     ).toThrow();
   });
 
-  it('should clamp wallet.index to 0..3 only', () => {
+  it('should accept the highest prefunded wallet.index', () => {
+    const parsed = configSchema.parse({
+      ...baseConfig,
+      networks: {
+        testnet: {
+          ...validNetwork,
+          wallet: { source: 'local', index: 4 },
+        },
+      },
+    });
+    expect(parsed.networks.testnet?.wallet?.index).toBe(4);
+  });
+
+  it('should clamp wallet.index to 0..4 only', () => {
     expect(() =>
       configSchema.parse({
         ...baseConfig,
         networks: {
           testnet: {
             ...validNetwork,
-            wallet: { source: 'local', index: 4 },
+            wallet: { source: 'local', index: 5 },
           },
         },
       }),

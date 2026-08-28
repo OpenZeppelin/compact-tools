@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -291,6 +292,9 @@ export class WalletHandler implements AsyncDisposable {
         filename,
       );
       await saver.save(subWallet as Parameters<typeof saver.save>[0]);
+      // WalletSaveStateProvider writes at the process umask and offers no
+      // mode control, so tighten the snapshot after the fact.
+      chmodSync(filePath, 0o600);
     } catch (e) {
       this.#logger.warn(
         { err: (e as Error).message, label, filePath },
@@ -364,7 +368,10 @@ function importSeedCache(
   if (backedUp) {
     copyFileSync(targetPath, backupPath);
   }
-  writeFileSync(tempPath, payload);
+  // 0o600: a wallet state snapshot exposes the full UTXO set and every
+  // derived address. Set at create time so the bytes are never group- or
+  // world-readable, not even between write and rename.
+  writeFileSync(tempPath, payload, { mode: 0o600 });
   renameSync(tempPath, targetPath);
   logger.info(
     `Imported ${kind} cache: ${absoluteSrc} → ${targetPath}${

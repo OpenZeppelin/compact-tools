@@ -1,18 +1,20 @@
 import { createHash } from 'node:crypto';
 
 /**
- * Derive a leveldb-compatible password from the wallet's encryption key.
- * level-private-state-provider rejects passwords with 4+ identical chars
- * in a row, which structured seeds (TEST_MNEMONIC, `0x…0001`) routinely
+ * Derive a leveldb-compatible password from secret key material. `secret`
+ * must be secret-derived (the deployer passes SHA-256 of the wallet seed);
+ * a public key would make the private-state DB decryptable by anyone who
+ * can read the wallet's address.
+ *
+ * level-private-state-provider rejects passwords with 4+ identical chars in
+ * a row, which structured seeds (TEST_MNEMONIC, `0x…0001`) routinely
  * produce. We SHA-256 + base64url + strip + rehash-on-collision until clean,
  * then append `A1!` for guaranteed character-class diversity.
  */
-export function derivePrivateStatePassword(
-  encryptionPublicKey: string,
-): string {
+export function derivePrivateStatePassword(secret: string): string {
   for (let counter = 0; counter < 1024; counter++) {
     const body = createHash('sha256')
-      .update(`${encryptionPublicKey}:${counter}`)
+      .update(`${secret}:${counter}`)
       .digest('base64url')
       .replace(/[^A-Za-z0-9]/g, '');
     if (!/(.)\1{3,}/.test(body)) {

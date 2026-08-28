@@ -158,5 +158,63 @@ describe('Keystore', () => {
         /missing crypto section/,
       );
     });
+
+    it('should reject a keystore missing kdfparams with WalletError', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const { kdfparams: _dropped, ...crypto } = ks.crypto;
+      const tampered = { ...ks, crypto } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(/kdfparams/);
+    });
+
+    it('should reject an absurd scrypt n that would exhaust memory', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 2 ** 30 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+    });
+
+    it('should reject a scrypt n that is not a power of two', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 3000 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(/power of two/);
+    });
+
+    it('should reject a non-hex ciphertext', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: { ...ks.crypto, ciphertext: 'zzzz' },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(/hex/);
+    });
+
+    it('should reject a dklen other than 32', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, dklen: 16 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+    });
+
+    it('should round-trip a valid keystore through fromJSON', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS);
+      expect(Keystore.fromJSON(ks.toJSON()).decrypt('pw')).toBe(SEED);
+    });
   });
 });

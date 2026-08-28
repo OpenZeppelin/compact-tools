@@ -6,6 +6,10 @@ compact-deploy Token --network local
 
 > **Status: developer-preview, testnet only.** Verified on local devnet + preview. Preprod blocked ([Known issues](#known-issues-may-2026)). Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling. See [Roadmap](#roadmap--todo).
 
+## Requirements
+
+- Node.js >= 24 — the deployer uses explicit resource management (`await using` / `AsyncDisposableStack`), global only from Node 24.
+
 ## Quick start
 
 1. Compile your contract with `compact-compiler` so artifacts land under `src/artifacts/<Name>/`.
@@ -98,7 +102,7 @@ Precedence, first non-null wins:
 1. `--seed-file <path>`
 2. `MN_DEPLOYER_SEED` env var (hex or BIP39 mnemonic)
 3. `[wallet].keystore` (encrypted JSON, passphrase prompted)
-4. `--network local` only: built-in prefunded standalone seed at `[networks.local].wallet.index` (0..3)
+4. `--network local` only: built-in prefunded standalone seed at `[networks.local].wallet.index` (0..4)
 
 ## Sample config
 
@@ -176,13 +180,46 @@ signing_key_file = "./deploy/Vault.signingkey"
 
 ## Programmatic API
 
-```ts
-import { deploy } from "@openzeppelin/compact-deployer";
+The package has no barrel entrypoint: each module is its own subpath export, so an import names the module it comes from and pulls in only that module.
 
-const result = await deploy({
+| Subpath | Exports |
+|---|---|
+| `/run-deploy` | `runDeploy`, `constructorArgs`, `ConstructorArgsOf`, `RunDeployOptions` |
+| `/deployer` | `Deployer`, `DeployerOptions`, `DeployResult` |
+| `/deployments` | `Deployments`, `DeploymentRecord`, `DeploymentsFile`, `DeploymentsHistory` |
+| `/errors` | `DeployError` and every typed subclass |
+| `/config/compact-config` | `CompactConfig` |
+| `/config/schema` | `ContractConfig`, `NetworkConfig`, `Profile`, `WalletConfig` |
+| `/loaders/args` · `/loaders/argv` · `/loaders/artifact` · `/loaders/init-state` · `/loaders/signing-key` | `ConstructorArgs`, `parseDeployArgv`, `Artifact`, `InitialPrivateState`, `SigningKey` |
+| `/providers/proof-server` | `ProofServer` |
+| `/wallet/handler` · `/wallet/keystore` · `/wallet/seeds` | `WalletHandler`, `Keystore`, `classifySeed`, `localPrefundedSeed` |
+
+Curried form — pass the compiled `Contract` class and the constructor args are typed function parameters:
+
+```ts
+import { runDeploy } from "@openzeppelin/compact-deployer/run-deploy";
+import { Contract } from "./src/artifacts/Token/contract/index.js";
+
+const result = await runDeploy(Contract, { network: "local" })(
+  "OpenZeppelin Token", // _name: string
+  "OZE",                // _symbol: string
+  18n,                  // _decimals: bigint
+);
+console.log(result.address);
+```
+
+Options-object form — name the contract as it appears in `compact.toml`, with args from the TOML or passed inline:
+
+```ts
+import { runDeploy } from "@openzeppelin/compact-deployer/run-deploy";
+
+const result = await runDeploy({
   contract: "Token",
   network: "local",
   configPath: "./compact.toml",
+  args: ["OpenZeppelin Token", "OZE", 18n],
 });
 console.log(result.address);
 ```
+
+Every option has a `process.argv` default (`--network`, `--config`, `--dry-run`, …), so the same script works with flags at the call site. On failure `runDeploy` sets `process.exitCode` and rethrows the original error; it never calls `process.exit`, so catch it if you want that exit code to reach the shell.

@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
 import type { CompactConfig } from '../config/compact-config.ts';
 import { ConfigError } from '../errors.ts';
+import { findArtifactEntry, resolveUnderRoot } from './artifact-path.ts';
 import { LoaderContext } from './context.ts';
 
 /**
@@ -28,7 +27,9 @@ export async function resolveContractName(
 
   for (const name of config.listContracts()) {
     const cfg = config.contract(name);
-    const entry = findContractEntry(rootDir, config.artifactsDir, cfg.artifact);
+    const entry = findArtifactEntry(
+      resolveUnderRoot(rootDir, cfg.artifact, config.artifactsDir),
+    );
     if (!entry) {
       tried.push({
         name,
@@ -62,31 +63,4 @@ export async function resolveContractName(
   throw new ConfigError(
     `Contract class did not match any [contracts.X] entry in compact.toml. Make sure the import path resolves to the same artifact directory referenced by the TOML.${tail}`,
   );
-}
-
-function findContractEntry(
-  rootDir: string,
-  artifactsDir: string,
-  artifact: string,
-): string | undefined {
-  const artifactPath = resolveUnderRoot(rootDir, artifact, artifactsDir);
-  const contractDir = resolve(artifactPath, 'contract');
-  const candidates = [
-    resolve(contractDir, 'index.cjs'),
-    resolve(contractDir, 'index.js'),
-    resolve(artifactPath, 'index.cjs'),
-    resolve(artifactPath, 'index.js'),
-  ];
-  return candidates.find(existsSync);
-}
-
-function resolveUnderRoot(
-  rootDir: string,
-  artifact: string,
-  artifactsDir: string,
-): string {
-  if (isAbsolute(artifact)) return artifact;
-  const direct = resolve(rootDir, artifact);
-  if (existsSync(direct)) return direct;
-  return resolve(rootDir, artifactsDir, artifact);
 }

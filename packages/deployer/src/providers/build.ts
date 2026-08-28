@@ -11,6 +11,7 @@ import type {
   MidnightWalletProvider,
 } from '@midnight-ntwrk/testkit-js';
 import type { ContractConfig } from '../config/schema.ts';
+import { ConfigError } from '../errors.ts';
 import { derivePrivateStatePassword } from './private-state-password.ts';
 
 export interface BuildProvidersOptions {
@@ -21,6 +22,11 @@ export interface BuildProvidersOptions {
   zkConfigPath: string;
   /** Inject `inMemoryPrivateStateProvider` in tests to avoid LevelDB file-lock contention. */
   privateStateProvider?: PrivateStateProvider;
+  /**
+   * Secret material for the default LevelDB password (SHA-256 of the wallet
+   * seed). Required unless {@link privateStateProvider} is supplied.
+   */
+  privateStateSecret?: string;
 }
 
 export function buildProviders({
@@ -30,12 +36,18 @@ export function buildProviders({
   contract,
   zkConfigPath,
   privateStateProvider,
+  privateStateSecret,
 }: BuildProvidersOptions): MidnightProviders {
   const zkConfigProvider = new NodeZkConfigProvider(zkConfigPath);
 
   const resolvedPrivateStateProvider: PrivateStateProvider =
     privateStateProvider ??
-    defaultLevelPrivateStateProvider(wallet, contract, contractName);
+    defaultLevelPrivateStateProvider(
+      wallet,
+      contract,
+      contractName,
+      privateStateSecret,
+    );
 
   return {
     privateStateProvider: resolvedPrivateStateProvider,
@@ -51,8 +63,17 @@ function defaultLevelPrivateStateProvider(
   wallet: MidnightWalletProvider,
   contract: ContractConfig,
   contractName: string,
+  privateStateSecret: string | undefined,
 ): PrivateStateProvider {
-  const password = derivePrivateStatePassword(wallet.getEncryptionPublicKey());
+  if (!privateStateSecret) {
+    // Reached only with an injected wallet and no injected provider. There is
+    // no seed to derive from, and falling back to wallet public-key material
+    // would leave the private-state DB readable by anyone holding the address.
+    throw new ConfigError(
+      'Cannot derive a private-state DB password without a deployer seed. Pass `privateStateProvider` alongside `walletProvider`.',
+    );
+  }
+  const password = derivePrivateStatePassword(privateStateSecret);
   return levelPrivateStateProvider({
     privateStateStoreName:
       contract.private_state_store_name ?? `${contractName}-private-state`,

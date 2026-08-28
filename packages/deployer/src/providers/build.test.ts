@@ -4,6 +4,8 @@ import type {
 } from '@midnight-ntwrk/testkit-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContractConfig } from '../config/schema.ts';
+import { ConfigError } from '../errors.ts';
+import { derivePrivateStatePassword } from './private-state-password.ts';
 
 vi.mock('@midnight-ntwrk/midnight-js-http-client-proof-provider', () => ({
   httpClientProofProvider: vi.fn((url: string) => ({ kind: 'proof', url })),
@@ -66,6 +68,9 @@ const wallet = {
   getCoinPublicKey: vi.fn(() => 'coin-pubkey-def'),
 } as unknown as MidnightWalletProvider;
 
+/** Stand-in for SHA-256 of a resolved seed; only its secrecy matters. */
+const SECRET = 'a1'.repeat(32);
+
 const baseContract: ContractConfig = {
   artifact: 'src/artifacts/Counter',
   signing_key_file: 'keys/counter.signing',
@@ -83,6 +88,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     const opts = vi.mocked(levelPrivateStateProvider).mock.calls[0]?.[0];
@@ -96,6 +102,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: { ...baseContract, private_state_store_name: 'custom-store' },
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     const opts = vi.mocked(levelPrivateStateProvider).mock.calls[0]?.[0];
@@ -109,22 +116,44 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     const opts = vi.mocked(levelPrivateStateProvider).mock.calls[0]?.[0];
     expect(opts?.accountId).toBe('coin-pubkey-def');
   });
 
-  it('should derive the private-state password from the wallet encryption pubkey', () => {
+  it('should derive the private-state password from the secret, never the wallet encryption pubkey', async () => {
     buildProviders({
       env,
       wallet,
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
-    expect(wallet.getEncryptionPublicKey).toHaveBeenCalledOnce();
+    expect(wallet.getEncryptionPublicKey).not.toHaveBeenCalled();
+
+    const opts = vi.mocked(levelPrivateStateProvider).mock.calls[0]?.[0] as {
+      privateStoragePasswordProvider: () => string | Promise<string>;
+    };
+    expect(await opts.privateStoragePasswordProvider()).toBe(
+      derivePrivateStatePassword(SECRET),
+    );
+  });
+
+  it('should reject an injected wallet with neither a secret nor a privateStateProvider', () => {
+    expect(() =>
+      buildProviders({
+        env,
+        wallet,
+        contractName: 'Counter',
+        contract: baseContract,
+        zkConfigPath: '/artifacts/Counter',
+      }),
+    ).toThrow(ConfigError);
+    expect(levelPrivateStateProvider).not.toHaveBeenCalled();
   });
 
   it('should expose a privateStoragePasswordProvider that returns the derived password', async () => {
@@ -134,6 +163,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     const opts = vi.mocked(levelPrivateStateProvider).mock.calls[0]?.[0] as {
@@ -151,6 +181,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     expect(NodeZkConfigProvider).toHaveBeenCalledWith('/artifacts/Counter');
@@ -163,6 +194,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     expect(indexerPublicDataProvider).toHaveBeenCalledWith(
@@ -178,6 +210,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     const firstArg = vi.mocked(httpClientProofProvider).mock.calls[0]?.[0];
@@ -191,6 +224,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     expect(providers.walletProvider).toBe(wallet);
@@ -225,6 +259,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      privateStateSecret: SECRET,
     });
 
     expect(Object.keys(providers).sort()).toEqual(

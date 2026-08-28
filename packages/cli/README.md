@@ -55,7 +55,7 @@ documentation, programmatic API, and behavioural details.
 
 ## Requirements
 
-- Node.js >= 20
+- Node.js >= 24 — the deployer uses explicit resource management (`await using` / `AsyncDisposableStack`), global only from Node 24
 - Midnight Compact toolchain installed and available in `PATH`
 
 ```bash

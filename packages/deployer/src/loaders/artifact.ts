@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { CompiledContract, type Contract } from '@midnight-ntwrk/compact-js';
 import type { Types } from 'effect';
 import {
@@ -8,6 +8,7 @@ import {
   isModuleRef,
 } from '../config/schema.ts';
 import { ArtifactNotFoundError, ConfigError } from '../errors.ts';
+import { findArtifactEntry, resolveUnderRoot } from './artifact-path.ts';
 import { LoaderContext } from './context.ts';
 
 /**
@@ -62,14 +63,14 @@ export class Artifact {
       throw new ArtifactNotFoundError(artifactPath);
     }
 
-    const entry = findEntry(resolve(artifactPath, 'contract'), artifactPath);
+    const entry = findArtifactEntry(artifactPath);
     if (!entry) {
       throw new ArtifactNotFoundError(
         `${artifactPath} (no contract/index.{cjs,js} or index.{cjs,js} found)`,
       );
     }
     // Bind compiled assets to the directory the entry actually lives in:
-    // `findEntry` may resolve a top-level `index.{cjs,js}` rather than the
+    // `findArtifactEntry` may resolve a top-level `index.{cjs,js}` rather than the
     // `contract/` subdir, in which case the hardcoded path would be wrong.
     const contractDir = dirname(entry);
 
@@ -160,30 +161,6 @@ function buildCompiledContract(input: {
 interface ArtifactModule {
   Contract?: Types.Ctor<AnyContract>;
   default?: { Contract?: Types.Ctor<AnyContract> };
-}
-
-function resolveUnderRoot(
-  rootDir: string,
-  artifact: string,
-  artifactsDir: string,
-): string {
-  if (isAbsolute(artifact)) return artifact;
-  const direct = resolve(rootDir, artifact);
-  if (existsSync(direct)) return direct;
-  return resolve(rootDir, artifactsDir, artifact);
-}
-
-function findEntry(
-  contractDir: string,
-  artifactDir: string,
-): string | undefined {
-  const candidates = [
-    resolve(contractDir, 'index.cjs'),
-    resolve(contractDir, 'index.js'),
-    resolve(artifactDir, 'index.cjs'),
-    resolve(artifactDir, 'index.js'),
-  ];
-  return candidates.find(existsSync);
 }
 
 function collectCircuitNames(zkirDir: string): string[] {

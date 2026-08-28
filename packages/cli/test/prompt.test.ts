@@ -121,6 +121,15 @@ describe('promptPassphrase', () => {
       expect(pp).toBe('xa');
     });
 
+    it('should delete a whole astral character on backspace, not half a surrogate pair', async () => {
+      const promise = promptPassphrase('label');
+      mockStdin.emit('data', Buffer.from('pw🔒'));
+      mockStdin.emit('data', Buffer.from([0x7f]));
+      mockStdin.emit('data', Buffer.from('x\n'));
+      const pp = await promise;
+      expect(pp).toBe('pwx');
+    });
+
     it('should drop a trailing backspace that empties the buffer', async () => {
       const promise = promptPassphrase('label');
       mockStdin.emit('data', Buffer.from([0x7f]));

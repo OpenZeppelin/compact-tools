@@ -6,7 +6,13 @@
  * shim is required: midnight-js's indexer client uses the browser WebSocket
  * interface, which Node only ships natively from v22.
  */
-import { DeployError, Deployer } from '@openzeppelin/compact-deployer';
+import { createRequire } from 'node:module';
+import { Deployer } from '@openzeppelin/compact-deployer/deployer';
+import { DeployError } from '@openzeppelin/compact-deployer/errors';
+import {
+  type ParsedDeployArgv,
+  parseDeployArgv,
+} from '@openzeppelin/compact-deployer/loaders/argv';
 import chalk from 'chalk';
 import ora from 'ora';
 import { WebSocket } from 'ws';
@@ -15,121 +21,16 @@ import { promptPassphrase } from './prompt.ts';
 
 (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
 
-interface ParsedArgs {
+/** Shared deploy flags plus the CLI-only contract positional. */
+interface ParsedArgs extends ParsedDeployArgv {
   contract?: string;
-  network?: string;
-  configPath?: string;
-  seedFile?: string;
-  proofServer?: string;
-  syncTimeoutSec?: number;
-  syncBatchSize?: number;
-  seedCacheFromDust?: string;
-  seedCacheFromShielded?: string;
-  noCache: boolean;
-  dryRun: boolean;
-  json: boolean;
-  verbose: boolean;
-  help: boolean;
-  version: boolean;
-  positional: string[];
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = {
-    noCache: false,
-    dryRun: false,
-    json: false,
-    verbose: false,
-    help: false,
-    version: false,
-    positional: [],
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i] as string;
-    switch (arg) {
-      case '-h':
-      case '--help':
-        out.help = true;
-        break;
-      case '--version':
-        out.version = true;
-        break;
-      case '-v':
-      case '--verbose':
-        out.verbose = true;
-        break;
-      case '--json':
-        out.json = true;
-        break;
-      case '--dry-run':
-        out.dryRun = true;
-        break;
-      case '--no-cache':
-        out.noCache = true;
-        break;
-      case '--seed-cache-from-dust':
-        out.seedCacheFromDust = expectValue(
-          argv,
-          ++i,
-          '--seed-cache-from-dust',
-        );
-        break;
-      case '--seed-cache-from-shielded':
-        out.seedCacheFromShielded = expectValue(
-          argv,
-          ++i,
-          '--seed-cache-from-shielded',
-        );
-        break;
-      case '--network':
-        out.network = expectValue(argv, ++i, '--network');
-        break;
-      case '--config':
-        out.configPath = expectValue(argv, ++i, '--config');
-        break;
-      case '--seed-file':
-        out.seedFile = expectValue(argv, ++i, '--seed-file');
-        break;
-      case '--proof-server':
-        out.proofServer = expectValue(argv, ++i, '--proof-server');
-        break;
-      case '--sync-timeout': {
-        const raw = expectValue(argv, ++i, '--sync-timeout');
-        const seconds = Number.parseInt(raw, 10);
-        if (!Number.isFinite(seconds) || seconds <= 0) {
-          throw new Error(
-            `--sync-timeout requires a positive integer (seconds); got "${raw}"`,
-          );
-        }
-        out.syncTimeoutSec = seconds;
-        break;
-      }
-      case '--sync-batch-size': {
-        const raw = expectValue(argv, ++i, '--sync-batch-size');
-        const size = Number.parseInt(raw, 10);
-        if (!Number.isFinite(size) || size <= 0) {
-          throw new Error(
-            `--sync-batch-size requires a positive integer; got "${raw}"`,
-          );
-        }
-        out.syncBatchSize = size;
-        break;
-      }
-      default:
-        if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`);
-        out.positional.push(arg);
-    }
-  }
-  out.contract = out.positional[0];
-  return out;
-}
-
-function expectValue(argv: string[], i: number, flag: string): string {
-  const v = argv[i];
-  if (v === undefined || v.startsWith('-')) {
-    throw new Error(`${flag} requires a value`);
-  }
-  return v;
+  // Unlike the library entrypoint, the CLI is the whole program: an
+  // unrecognised flag is a user typo, not a host app's extra argv.
+  const parsed = parseDeployArgv(argv, { rejectUnknownFlags: true });
+  return { ...parsed, contract: parsed.positional[0] };
 }
 
 async function main(): Promise<void> {
@@ -334,8 +235,19 @@ function showUsage(): void {
   );
 }
 
+/**
+ * The CLI's own version. `../package.json` resolves the same from `src/` and
+ * from the compiled `dist/`, both being one level under the package root.
+ */
 function packageVersion(): string {
-  return process.env.npm_package_version ?? 'dev';
+  try {
+    const require = createRequire(import.meta.url);
+    return (
+      (require('../package.json') as { version?: string }).version ?? 'dev'
+    );
+  } catch {
+    return 'dev';
+  }
 }
 
 main();

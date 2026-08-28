@@ -18,7 +18,8 @@ const profileSchema = z
 
 const localWalletSchema = z.object({
   source: z.literal('local'),
-  index: z.number().int().min(0).max(3).default(0),
+  // Upper bound matches LOCAL_PREFUNDED_SEEDS' five slots.
+  index: z.number().int().min(0).max(4).default(0),
 });
 
 const networkSchema = z.object({

@@ -5,6 +5,9 @@ import { DeployError } from './errors.ts';
 import * as contractResolveModule from './loaders/contract-resolve.ts';
 import { constructorArgs, runDeploy } from './runDeploy.ts';
 
+/** Never appears in a DeployResult; the pinning test asserts its absence. */
+const SIGNING_KEY_HEX = 'ab'.repeat(32);
+
 function fakeDeployResult(overrides: Record<string, unknown> = {}) {
   return {
     contractName: 'X',
@@ -13,7 +16,6 @@ function fakeDeployResult(overrides: Record<string, unknown> = {}) {
     txHash: '0xtx',
     txId: 'tx-id',
     blockHeight: 42,
-    signingKey: '0xsk',
     deployer: '0xdep',
     artifact: 'X',
     deploymentsFile: '/tmp/local.json',
@@ -37,11 +39,13 @@ function fakeDeployer(
 }
 
 let originalArgv: string[];
+let originalExitCode: typeof process.exitCode;
 let exitSpy: ReturnType<typeof vi.spyOn>;
 let writeSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   originalArgv = process.argv;
+  originalExitCode = process.exitCode;
   exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
     throw new Error(`process.exit(${code ?? 0})`);
   }) as never);
@@ -50,6 +54,9 @@ beforeEach(() => {
 
 afterEach(() => {
   process.argv = originalArgv;
+  // runDeploy sets process.exitCode on failure; left set, it would fail the
+  // whole vitest run even with every test green.
+  process.exitCode = originalExitCode;
   vi.restoreAllMocks();
 });
 
@@ -96,6 +103,41 @@ describe('runDeploy', () => {
     expect(
       (deployerModule.Deployer.prepare as any).mock.calls[0][0].syncTimeoutMs,
     ).toBe(120_000);
+  });
+
+  it('should thread --sync-batch-size to Deployer.prepare', async () => {
+    process.argv = ['node', 'script.ts', '--sync-batch-size', '2500'];
+    const fakeDep = fakeDeployer();
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDep as never,
+    );
+
+    await runDeploy({ contract: 'X' });
+
+    expect(
+      (deployerModule.Deployer.prepare as any).mock.calls[0][0].syncBatchSize,
+    ).toBe(2500);
+  });
+
+  it('should let an explicit syncBatchSize opt beat the argv value', async () => {
+    process.argv = ['node', 'script.ts', '--sync-batch-size', '2500'];
+    const fakeDep = fakeDeployer();
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDep as never,
+    );
+
+    await runDeploy({ contract: 'X', syncBatchSize: 9000 });
+
+    expect(
+      (deployerModule.Deployer.prepare as any).mock.calls[0][0].syncBatchSize,
+    ).toBe(9000);
+  });
+
+  it('should reject a non-positive --sync-batch-size', async () => {
+    process.argv = ['node', 'script.ts', '--sync-batch-size', '0'];
+    await expect(runDeploy({ contract: 'X' })).rejects.toThrow(
+      /--sync-batch-size requires a positive integer/,
+    );
   });
 
   it('should reject a non-positive --sync-timeout', async () => {
@@ -167,15 +209,43 @@ describe('runDeploy', () => {
     expect(parsed.address).toBe('0xaddr');
   });
 
-  it('should emit JSON error + exit with DeployError.exitCode in --json mode', async () => {
+  it('should keep the contract signing key out of the --json stdout object', async () => {
     process.argv = ['node', 'script.ts', '--json'];
-    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(
-      new DeployError('boom', 3),
+    const fakeDep = fakeDeployer();
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDep as never,
     );
 
-    await expect(runDeploy({ contract: 'X' })).rejects.toThrow(
-      'process.exit(3)',
+    await runDeploy({ contract: 'X' });
+
+    const written = writeSpy.mock.calls[0]?.[0] as string;
+    expect(written).not.toContain(SIGNING_KEY_HEX);
+    expect(Object.keys(JSON.parse(written))).not.toContain('signingKey');
+  });
+
+  it('should write nothing but the result object to stdout with the default logger', async () => {
+    process.argv = ['node', 'script.ts', '--json', '--verbose'];
+    const fakeDep = fakeDeployer();
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDep as never,
     );
+
+    // No `logger` opt: exercises buildLogger, which must target stderr.
+    await runDeploy({ contract: 'X' });
+
+    expect(writeSpy.mock.calls).toHaveLength(1);
+    expect(JSON.parse(writeSpy.mock.calls[0]?.[0] as string).contractName).toBe(
+      'X',
+    );
+  });
+
+  it('should emit JSON error + set exitCode from DeployError in --json mode', async () => {
+    process.argv = ['node', 'script.ts', '--json'];
+    const err = new DeployError('boom', 3);
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(err);
+
+    await expect(runDeploy({ contract: 'X' })).rejects.toBe(err);
+    expect(process.exitCode).toBe(3);
 
     const written = writeSpy.mock.calls[0]?.[0] as string;
     const parsed = JSON.parse(written);
@@ -184,16 +254,23 @@ describe('runDeploy', () => {
     expect(parsed.exitCode).toBe(3);
   });
 
-  it('should exit with code 1 on non-DeployError', async () => {
+  it('should set exitCode 1 and rethrow on a non-DeployError', async () => {
+    process.argv = ['node', 'script.ts'];
+    const err = new Error('generic');
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(err);
+
+    await expect(runDeploy({ contract: 'X' })).rejects.toBe(err);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('should never call process.exit — an embedding app keeps control', async () => {
     process.argv = ['node', 'script.ts'];
     vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(
-      new Error('generic'),
+      new DeployError('boom', 4),
     );
 
-    await expect(runDeploy({ contract: 'X' })).rejects.toThrow(
-      'process.exit(1)',
-    );
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    await expect(runDeploy({ contract: 'X' })).rejects.toThrow('boom');
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 
   it('should pass constructorArgs(Contract, ...) tuple through to Deployer.prepare', async () => {
@@ -352,7 +429,7 @@ describe('runDeploy', () => {
 
     await expect(
       runDeploy({ contract: 'X', logger: logger as never }),
-    ).rejects.toThrow('process.exit(1)');
+    ).rejects.toThrow('boom');
 
     expect(logger.debug).toHaveBeenCalledWith('Error: boom\n  at trace');
   });

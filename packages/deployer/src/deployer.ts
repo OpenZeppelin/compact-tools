@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { shieldedToken, unshieldedToken } from '@midnight-ntwrk/ledger-v8';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
@@ -119,7 +120,6 @@ export interface DeployResult {
   txHash: string;
   txId: string;
   blockHeight: number;
-  signingKey: string;
   deployer: string;
   artifact: string;
   deploymentsFile: string;
@@ -136,6 +136,12 @@ interface PreparedState {
   network: NetworkConfig;
   contract: ContractConfig;
   signingKey: SigningKey;
+  /**
+   * SHA-256 of the resolved seed: the secret material the default LevelDB
+   * private-state password derives from. `undefined` when the wallet was
+   * injected, in which case the caller must supply `privateStateProvider`.
+   */
+  privateStateSecret: string | undefined;
   artifact: Artifact;
   args: ConstructorArgs;
   initialPrivateState: InitialPrivateState | undefined;
@@ -201,6 +207,11 @@ export class Deployer implements AsyncDisposable {
     if (seedResolution) {
       logger.debug(`Resolved deployer seed from: ${seedResolution.origin}`);
     }
+    // Hashed here because `prepare` is the only scope holding the seed, and
+    // the private-state password must derive from secret material.
+    const privateStateSecret = seedResolution
+      ? createHash('sha256').update(seedResolution.seed.value).digest('hex')
+      : undefined;
 
     // Stack owns every resource acquired below. On any throw before
     // the final `stack.move()`, `await using` disposes them in reverse
@@ -313,6 +324,7 @@ export class Deployer implements AsyncDisposable {
       network,
       contract,
       signingKey,
+      privateStateSecret,
       artifact,
       args,
       initialPrivateState,
@@ -333,6 +345,7 @@ export class Deployer implements AsyncDisposable {
       contract: s.contract,
       zkConfigPath: s.artifact.zkConfigPath,
       privateStateProvider: s.opts.privateStateProvider,
+      privateStateSecret: s.privateStateSecret,
     });
     const txResult = await executeDeploy({
       providers,
@@ -346,7 +359,6 @@ export class Deployer implements AsyncDisposable {
 
     const record = toDeploymentRecord({
       deployTxData: txResult.deployTxData,
-      signingKey: s.signingKey.hex,
       deployer: s.deployer,
       artifact: s.contract.artifact,
     });
@@ -365,7 +377,6 @@ export class Deployer implements AsyncDisposable {
       txHash: record.txHash,
       txId: record.txId,
       blockHeight: record.blockHeight,
-      signingKey: record.signingKey,
       deployer: record.deployer,
       artifact: record.artifact,
       deploymentsFile: persisted.head,
@@ -395,7 +406,6 @@ export class Deployer implements AsyncDisposable {
       txHash: '',
       txId: '',
       blockHeight: 0,
-      signingKey: s.signingKey.hex,
       deployer: s.deployer,
       artifact: s.contract.artifact,
       deploymentsFile: '',
@@ -723,12 +733,10 @@ function buildExplorerUrl(base: string | undefined, address: string): string {
 
 function toDeploymentRecord({
   deployTxData,
-  signingKey,
   deployer,
   artifact,
 }: {
   deployTxData: ContractDeployResult['deployTxData'];
-  signingKey: string;
   deployer: string;
   artifact: string;
 }): DeploymentRecord {
@@ -737,7 +745,6 @@ function toDeploymentRecord({
     txHash: deployTxData.public.txHash,
     txId: deployTxData.public.txId,
     blockHeight: deployTxData.public.blockHeight,
-    signingKey,
     deployer,
     artifact,
     timestamp: new Date().toISOString(),

@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 /**
@@ -10,13 +17,17 @@ import { dirname, isAbsolute, resolve } from 'node:path';
  * Each deploy rotates the prior head into history.
  */
 
-/** A single confirmed deploy. Persisted under the contract name in the head map. */
+/**
+ * A single confirmed deploy. Persisted under the contract name in the head
+ * map. Never carries the contract-maintenance signing key: midnight-js
+ * already persists it via `privateStateProvider.setSigningKey`, and this
+ * file is world-readable and routinely committed.
+ */
 export interface DeploymentRecord {
   address: string;
   txHash: string;
   txId: string;
   blockHeight: number;
-  signingKey: string;
   deployer: string;
   artifact: string;
   timestamp: string;
@@ -55,25 +66,36 @@ export class Deployments {
     return { head: this.#headPath, history: this.#historyPath };
   }
 
-  /** Rotate the prior head for `contractName` into history; write `record` as new head. */
+  /**
+   * Rotate the prior head for `contractName` into history; write `record` as
+   * new head. Serialised across processes by `<network>.json.lock`: the whole
+   * body is a read-modify-write of two shared files, so concurrent deploys
+   * would otherwise drop each other's records.
+   */
   async record(
     contractName: string,
     record: DeploymentRecord,
   ): Promise<{ head: string; history: string }> {
     await mkdir(dirname(this.#headPath), { recursive: true });
 
-    const head = await this.#readHead();
-    const previous = head[contractName];
-    if (previous) {
-      const history = await this.#readHistory();
-      const bucket = history[contractName] ?? [];
-      bucket.unshift(previous);
-      history[contractName] = bucket;
-      await writeJson(this.#historyPath, history);
-    }
+    const lockPath = `${this.#headPath}.lock`;
+    await acquireLock(lockPath);
+    try {
+      const head = await this.#readHead();
+      const previous = head[contractName];
+      if (previous) {
+        const history = await this.#readHistory();
+        const bucket = history[contractName] ?? [];
+        bucket.unshift(previous);
+        history[contractName] = bucket;
+        await writeJson(this.#historyPath, history);
+      }
 
-    head[contractName] = record;
-    await writeJson(this.#headPath, head);
+      head[contractName] = record;
+      await writeJson(this.#headPath, head);
+    } finally {
+      await releaseLock(lockPath);
+    }
 
     return { head: this.#headPath, history: this.#historyPath };
   }
@@ -100,6 +122,61 @@ export class Deployments {
   #readHistory(): Promise<DeploymentsHistory> {
     return readJson<DeploymentsHistory>(this.#historyPath, {});
   }
+}
+
+/** A lock older than this is treated as abandoned by a crashed process. */
+const LOCK_STALE_MS = 30_000;
+const LOCK_RETRY_MS = 25;
+const LOCK_MAX_WAIT_MS = 10_000;
+
+/**
+ * Take `lockPath` exclusively via `open(O_CREAT|O_EXCL)`. Retries on EEXIST;
+ * unlinks and retries once the holder's mtime passes {@link LOCK_STALE_MS}
+ * so a killed deploy can't wedge the ledger permanently.
+ */
+async function acquireLock(lockPath: string): Promise<void> {
+  const deadline = Date.now() + LOCK_MAX_WAIT_MS;
+  for (;;) {
+    try {
+      await writeFile(lockPath, `${process.pid}\n`, { flag: 'wx' });
+      return;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      if (await breakIfStale(lockPath)) continue;
+      if (Date.now() > deadline) {
+        throw new Error(
+          `Timed out waiting for the deployments lock at ${lockPath}. Remove it if no deploy is running.`,
+        );
+      }
+      await delay(LOCK_RETRY_MS);
+    }
+  }
+}
+
+/** Unlink `lockPath` if its mtime is older than {@link LOCK_STALE_MS}. Reports whether it did. */
+async function breakIfStale(lockPath: string): Promise<boolean> {
+  try {
+    const { mtimeMs } = await stat(lockPath);
+    if (Date.now() - mtimeMs < LOCK_STALE_MS) return false;
+    await unlink(lockPath);
+    return true;
+  } catch {
+    // Holder released between our EEXIST and the stat/unlink; the next
+    // acquire attempt will win the race normally.
+    return false;
+  }
+}
+
+async function releaseLock(lockPath: string): Promise<void> {
+  try {
+    await unlink(lockPath);
+  } catch {
+    // Already gone (stale-broken by another waiter). Nothing to release.
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function readJson<T>(path: string, fallback: T): Promise<T> {

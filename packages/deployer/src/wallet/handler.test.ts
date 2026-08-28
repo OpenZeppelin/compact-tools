@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -42,6 +43,7 @@ vi.mock('node:fs', async (importOriginal) => {
     renameSync: vi.fn(),
     copyFileSync: vi.fn(),
     mkdirSync: vi.fn(),
+    chmodSync: vi.fn(),
   };
 });
 
@@ -412,6 +414,9 @@ describe('WalletHandler', () => {
       });
       await handler.saveCache();
       expect(save).toHaveBeenCalledWith(provider.wallet.shielded);
+      // WalletSaveStateProvider writes at the umask; the snapshot must end
+      // up owner-only.
+      expect(chmodSync).toHaveBeenCalledWith(expect.any(String), 0o600);
     });
   });
 
@@ -454,6 +459,23 @@ describe('WalletHandler', () => {
       );
       const payload = vi.mocked(writeFileSync).mock.calls[0]?.[1];
       expect(payload).toEqual(gzipped);
+    });
+
+    it('should write the imported cache with mode 0o600', async () => {
+      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
+      wireTestkitChain(fakeProvider());
+      await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: 'aa'.repeat(32) },
+        { seedCacheDust: '/state.json' },
+      );
+      // Owner-only from creation: the snapshot exposes the full UTXO set.
+      expect(writeFileSync).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.anything(),
+        { mode: 0o600 },
+      );
     });
 
     it('should ensure the .states/ directory exists before writing', async () => {

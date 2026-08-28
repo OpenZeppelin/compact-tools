@@ -10,13 +10,68 @@
   "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+    "./config/compact-config": {
+      "types": "./dist/config/compact-config.d.ts",
+      "import": "./dist/config/compact-config.js"
+    },
+    "./config/schema": {
+      "types": "./dist/config/schema.d.ts",
+      "import": "./dist/config/schema.js"
+    },
+    "./deployer": {
+      "types": "./dist/deployer.d.ts",
+      "import": "./dist/deployer.js"
+    },
+    "./deployments": {
+      "types": "./dist/deployments.d.ts",
+      "import": "./dist/deployments.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./loaders/args": {
+      "types": "./dist/loaders/args.d.ts",
+      "import": "./dist/loaders/args.js"
+    },
+    "./loaders/argv": {
+      "types": "./dist/loaders/argv.d.ts",
+      "import": "./dist/loaders/argv.js"
+    },
+    "./loaders/artifact": {
+      "types": "./dist/loaders/artifact.d.ts",
+      "import": "./dist/loaders/artifact.js"
+    },
+    "./loaders/init-state": {
+      "types": "./dist/loaders/init-state.d.ts",
+      "import": "./dist/loaders/init-state.js"
+    },
+    "./loaders/signing-key": {
+      "types": "./dist/loaders/signing-key.d.ts",
+      "import": "./dist/loaders/signing-key.js"
+    },
+    "./providers/proof-server": {
+      "types": "./dist/providers/proof-server.d.ts",
+      "import": "./dist/providers/proof-server.js"
+    },
+    "./run-deploy": {
+      "types": "./dist/runDeploy.d.ts",
+      "import": "./dist/runDeploy.js"
+    },
+    "./wallet/handler": {
+      "types": "./dist/wallet/handler.d.ts",
+      "import": "./dist/wallet/handler.js"
+    },
+    "./wallet/keystore": {
+      "types": "./dist/wallet/keystore.d.ts",
+      "import": "./dist/wallet/keystore.js"
+    },
+    "./wallet/seeds": {
+      "types": "./dist/wallet/seeds.d.ts",
+      "import": "./dist/wallet/seeds.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -35,8 +90,8 @@
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.3",
-    "@types/node": "24.10.1",
-    "typescript": "^5.9.3",
+    "@types/node": "25.9.1",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.6"
   },
   "dependencies": {
@@ -50,12 +105,10 @@
     "@midnight-ntwrk/midnight-js-network-id": "4.1.0",
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "4.1.0",
     "@midnight-ntwrk/midnight-js-types": "4.1.0",
-    "@midnight-ntwrk/midnight-js-utils": "4.1.0",
     "@midnight-ntwrk/testkit-js": "4.1.0",
     "@midnight-ntwrk/wallet-sdk-address-format": "3.1.1",
     "@midnight-ntwrk/wallet-sdk-dust-wallet": "4.0.0",
     "@midnight-ntwrk/wallet-sdk-facade": "4.0.0",
-    "@midnight-ntwrk/wallet-sdk-hd": "3.0.2",
     "@midnight-ntwrk/wallet-sdk-shielded": "3.0.0",
     "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "3.0.0",
     "@scure/bip39": "^1.2.1",

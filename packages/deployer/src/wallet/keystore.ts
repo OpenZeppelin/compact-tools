@@ -11,8 +11,10 @@ import {
   randomBytes,
   randomUUID,
   scryptSync,
+  timingSafeEqual,
 } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { z } from 'zod';
 import { WalletError } from '../errors.ts';
 
 const VERSION = 'midnight-1';
@@ -44,6 +46,50 @@ const DEFAULTS: Required<KeystoreCreateOptions> = {
   scryptR: 8,
   dklen: 32,
 };
+
+const hex = (bytes?: number) =>
+  z
+    .string()
+    .refine(
+      (s) =>
+        /^[0-9a-fA-F]*$/.test(s) &&
+        s.length % 2 === 0 &&
+        (bytes === undefined || s.length === bytes * 2),
+      bytes === undefined
+        ? 'expected a hex string'
+        : `expected ${bytes * 2} hex chars`,
+    );
+
+/**
+ * Full on-disk shape. The scrypt bounds cap the work a hostile keystore can
+ * force: `n` above 2^20 at r=8 needs gigabytes and minutes per attempt, so an
+ * unbounded value is a denial of service on anyone who opens the file. `dklen`
+ * is fixed at 32 because {@link Keystore.decrypt} splits it 16/16 into the AES
+ * key and the MAC key.
+ */
+const keystoreSchema = z.object({
+  version: z.literal(VERSION),
+  id: z.string().min(1),
+  crypto: z.object({
+    cipher: z.literal('aes-128-ctr'),
+    ciphertext: hex(),
+    cipherparams: z.object({ iv: hex(16) }),
+    kdf: z.literal('scrypt'),
+    kdfparams: z.object({
+      dklen: z.literal(32),
+      n: z
+        .number()
+        .int()
+        .min(1024)
+        .max(2 ** 20)
+        .refine((v) => (v & (v - 1)) === 0, 'expected a power of two'),
+      p: z.number().int().min(1).max(16),
+      r: z.number().int().min(1).max(32),
+      salt: hex(),
+    }),
+    mac: hex(32),
+  }),
+});
 
 /** Encrypted wallet-seed wrapper; invariants enforced at construction. */
 export class Keystore {
@@ -121,7 +167,11 @@ export class Keystore {
     return Keystore.fromJSON(parsed);
   }
 
-  /** Wrap parsed keystore JSON; validates shape + version/cipher/KDF eagerly. */
+  /**
+   * Wrap parsed keystore JSON. Validates the complete shape, so `decrypt`
+   * can index into `crypto` without guards and never surfaces a raw
+   * `TypeError` from a hand-edited or truncated file.
+   */
   static fromJSON(data: unknown): Keystore {
     if (!data || typeof data !== 'object') {
       throw new WalletError('Invalid keystore: expected an object');
@@ -130,7 +180,7 @@ export class Keystore {
     if (!d.crypto || typeof d.crypto !== 'object') {
       throw new WalletError('Invalid keystore: missing crypto section');
     }
-    const crypto = d.crypto as MidnightKeystore['crypto'];
+    const crypto = d.crypto as Partial<MidnightKeystore['crypto']>;
     if (d.version !== VERSION) {
       throw new WalletError(
         `Unsupported keystore version: ${String(d.version)} (expected ${VERSION})`,
@@ -146,7 +196,15 @@ export class Keystore {
         `Unsupported cipher: ${String(crypto.cipher)} (expected aes-128-ctr)`,
       );
     }
-    return new Keystore(d as MidnightKeystore);
+    const parsed = keystoreSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new WalletError(
+        `Invalid keystore: ${parsed.error.issues
+          .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
+          .join('; ')}`,
+      );
+    }
+    return new Keystore(parsed.data as MidnightKeystore);
   }
 
   /** Recover the hex-encoded seed. Throws {@link WalletError} on MAC mismatch. */
@@ -169,8 +227,11 @@ export class Keystore {
     const cipherBytes = Buffer.from(ciphertext, 'hex');
     const expectedMac = createHash('sha256')
       .update(Buffer.concat([macKey, cipherBytes]))
-      .digest('hex');
-    if (expectedMac !== mac) {
+      .digest();
+    // Constant-time: a length-dependent early exit would leak how much of a
+    // guessed passphrase's MAC matched. Lengths are equal by construction,
+    // `mac` being pinned to 32 bytes by the schema.
+    if (!timingSafeEqual(expectedMac, Buffer.from(mac, 'hex'))) {
       throw new WalletError(
         'Keystore MAC mismatch (wrong passphrase or corrupted file)',
       );

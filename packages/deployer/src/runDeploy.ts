@@ -1,7 +1,8 @@
-import { type Logger, pino } from 'pino';
+import pino, { type Logger } from 'pino';
 import { CompactConfig } from './config/compact-config.ts';
 import { Deployer, type DeployResult } from './deployer.ts';
 import { DeployError } from './errors.ts';
+import { parseDeployArgv } from './loaders/argv.ts';
 import { resolveContractName } from './loaders/contract-resolve.ts';
 
 /**
@@ -25,7 +26,7 @@ export type CompactContractClass = {
  * @example
  * ```ts
  * import type { Contract } from '../artifacts/Token/contract/index.js';
- * import { runDeploy, type ConstructorArgsOf } from '@openzeppelin/compact-deployer';
+ * import { runDeploy, type ConstructorArgsOf } from '@openzeppelin/compact-deployer/run-deploy';
  *
  * await runDeploy<ConstructorArgsOf<typeof Contract>>({
  *   contract: 'Token',
@@ -52,7 +53,7 @@ export type ConstructorArgsOf<C extends CompactContractClass> =
  *
  * @example
  * ```ts
- * import { runDeploy, constructorArgs } from '@openzeppelin/compact-deployer';
+ * import { runDeploy, constructorArgs } from '@openzeppelin/compact-deployer/run-deploy';
  * import { Contract } from '../artifacts/Token/contract/index.js';
  *
  * await runDeploy({
@@ -111,6 +112,8 @@ export interface RunDeployOptions<
   proofServer?: string;
   /** Wallet-sync timeout in seconds. Argv: `--sync-timeout`. */
   syncTimeoutSec?: number;
+  /** Dust/shielded sync batch size. Argv: `--sync-batch-size`. Default 5000. */
+  syncBatchSize?: number;
   /** Skip the on-disk wallet-state cache. Argv: `--no-cache`. */
   skipWalletCache?: boolean;
   /**
@@ -157,17 +160,18 @@ export interface RunDeployOptions<
  *    await runDeploy({ contract: 'TokenExample', args: [...] });
  *    ```
  *
- * Parses `--network`, `--dry-run`, `--sync-timeout`, `--no-cache`,
- * `--seed-cache-from-dust`, `--seed-cache-from-shielded`,
+ * Parses `--network`, `--dry-run`, `--sync-timeout`, `--sync-batch-size`,
+ * `--no-cache`, `--seed-cache-from-dust`, `--seed-cache-from-shielded`,
  * `--seed-file`, `--proof-server`, `--config`, `--json`, `-v` /
  * `--verbose` from `process.argv` as defaults. Explicit options win
- * over argv. Wires a pino logger, runs Deployer.prepare + deploy or
- * dryRun, prints the result, and exits with the typed exit code on
- * error.
+ * over argv. Wires a pino logger (stderr), runs Deployer.prepare +
+ * deploy or dryRun, and prints the result.
  *
  * Returns the result on success so callers can chain post-deploy work
- * (e.g. seeding state via callTx). On error: logs and calls
- * `process.exit` — never returns to the caller.
+ * (e.g. seeding state via callTx). On error: logs, sets `process.exitCode`
+ * to the typed exit code, and rethrows the original error. Never calls
+ * `process.exit`, so an embedding app keeps control; catch the rethrow to
+ * let that exit code reach the shell.
  */
 export function runDeploy<C extends CompactContractClass>(
   Contract: C,
@@ -209,7 +213,7 @@ async function runDeployImpl(
   opts: RunDeployOptions,
   Contract?: CompactContractClass,
 ): Promise<DeployResult> {
-  const argv = parseArgv(process.argv.slice(2));
+  const argv = parseDeployArgv(process.argv.slice(2));
   const json = opts.json ?? argv.json;
   const verbose = opts.verbose ?? argv.verbose;
   const dryRun = opts.dryRun ?? argv.dryRun;
@@ -238,6 +242,7 @@ async function runDeployImpl(
       args: opts.args,
       syncTimeoutMs:
         syncTimeoutSec !== undefined ? syncTimeoutSec * 1000 : undefined,
+      syncBatchSize: opts.syncBatchSize ?? argv.syncBatchSize,
       skipWalletCache: opts.skipWalletCache ?? argv.noCache,
       seedCacheDust: opts.seedCacheFromDust ?? argv.seedCacheFromDust,
       seedCacheShielded:
@@ -251,7 +256,6 @@ async function runDeployImpl(
     return result;
   } catch (e) {
     handleError(e, { json, verbose, logger });
-    throw e; // unreachable — handleError calls process.exit
   }
 }
 
@@ -259,103 +263,15 @@ async function runDeployImpl(
 // Helpers
 // ---------------------------------------------------------------------------
 
-interface ParsedArgv {
-  network?: string;
-  configPath?: string;
-  seedFile?: string;
-  proofServer?: string;
-  syncTimeoutSec?: number;
-  seedCacheFromDust?: string;
-  seedCacheFromShielded?: string;
-  noCache: boolean;
-  dryRun: boolean;
-  json: boolean;
-  verbose: boolean;
-}
-
-function parseArgv(argv: string[]): ParsedArgv {
-  const out: ParsedArgv = {
-    noCache: false,
-    dryRun: false,
-    json: false,
-    verbose: false,
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i] as string;
-    switch (arg) {
-      case '-v':
-      case '--verbose':
-        out.verbose = true;
-        break;
-      case '--json':
-        out.json = true;
-        break;
-      case '--dry-run':
-        out.dryRun = true;
-        break;
-      case '--no-cache':
-        out.noCache = true;
-        break;
-      case '--seed-cache-from-dust':
-        out.seedCacheFromDust = expectValue(
-          argv,
-          ++i,
-          '--seed-cache-from-dust',
-        );
-        break;
-      case '--seed-cache-from-shielded':
-        out.seedCacheFromShielded = expectValue(
-          argv,
-          ++i,
-          '--seed-cache-from-shielded',
-        );
-        break;
-      case '--network':
-        out.network = expectValue(argv, ++i, '--network');
-        break;
-      case '--config':
-        out.configPath = expectValue(argv, ++i, '--config');
-        break;
-      case '--seed-file':
-        out.seedFile = expectValue(argv, ++i, '--seed-file');
-        break;
-      case '--proof-server':
-        out.proofServer = expectValue(argv, ++i, '--proof-server');
-        break;
-      case '--sync-timeout': {
-        const raw = expectValue(argv, ++i, '--sync-timeout');
-        const seconds = Number.parseInt(raw, 10);
-        if (!Number.isFinite(seconds) || seconds <= 0) {
-          throw new Error(
-            `--sync-timeout requires a positive integer (seconds); got "${raw}"`,
-          );
-        }
-        out.syncTimeoutSec = seconds;
-        break;
-      }
-      default:
-        // Unknown flags are ignored so the helper coexists with extra
-        // argv the caller's wrapper script may inject.
-        break;
-    }
-  }
-  return out;
-}
-
-function expectValue(argv: string[], i: number, flag: string): string {
-  const v = argv[i];
-  if (v === undefined || v.startsWith('-')) {
-    throw new Error(`${flag} requires a value`);
-  }
-  return v;
-}
-
 function buildLogger(opts: { json: boolean; verbose: boolean }): Logger {
-  // JSON mode keeps stdout machine-parseable, so logger writes to stderr.
-  // Default mode goes to stdout with the standard pino-pretty fallback.
-  return pino({
-    level: opts.verbose ? 'debug' : 'info',
-  });
+  // Always stderr: `--json` reserves stdout for the single result object,
+  // and a deploy script's log lines must not corrupt a caller's pipe.
+  return pino(
+    {
+      level: opts.verbose ? 'debug' : 'info',
+    },
+    pino.destination(2),
+  );
 }
 
 function printResult(
@@ -384,6 +300,14 @@ function printResult(
   }
 }
 
+/**
+ * Report the failure and set the process exit code, then rethrow the
+ * original error. Deliberately does not call `process.exit`: `runDeploy` is
+ * a library entrypoint, and a script embedding it must keep its own cleanup
+ * and error handling. `code` reaches the shell only for a caller that
+ * catches and lets the process end normally; an uncaught rethrow takes
+ * Node's unhandled-rejection path and exits 1.
+ */
 function handleError(
   e: unknown,
   opts: { json: boolean; verbose: boolean; logger: Logger },
@@ -401,5 +325,6 @@ function handleError(
       opts.logger.debug(e.stack);
     }
   }
-  process.exit(code);
+  process.exitCode = code;
+  throw e;
 }

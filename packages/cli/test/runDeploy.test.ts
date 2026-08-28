@@ -1,23 +1,36 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { Deployer } from '@openzeppelin/compact-deployer/deployer';
 import {
   ArtifactNotFoundError,
   DeployError,
-  Deployer,
-} from '@openzeppelin/compact-deployer';
+} from '@openzeppelin/compact-deployer/errors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const cliPackageVersion: string = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../package.json', import.meta.url)),
+    'utf8',
+  ),
+).version;
 
 // --- Mocks --------------------------------------------------------------
 
-vi.mock('@openzeppelin/compact-deployer', async () => {
-  const actual = await vi.importActual<
-    typeof import('@openzeppelin/compact-deployer')
-  >('@openzeppelin/compact-deployer');
-  return {
-    ...actual,
-    Deployer: {
-      prepare: vi.fn(),
-    },
-  };
-});
+// Only the deploy entrypoint is stubbed; the error classes stay real so the
+// CLI's `instanceof DeployError` exit-code branch is exercised, not faked.
+vi.mock('@openzeppelin/compact-deployer/deployer', () => ({
+  Deployer: {
+    prepare: vi.fn(),
+  },
+}));
+
+// Registered as a mock resolving to the real module: the mock registry
+// survives the `vi.resetModules()` in `runMain`, so the CLI re-import keeps
+// the same error classes this file holds. Without it every reset hands the
+// CLI a second copy and `instanceof DeployError` is false against ours.
+vi.mock('@openzeppelin/compact-deployer/errors', async () =>
+  vi.importActual('@openzeppelin/compact-deployer/errors'),
+);
 
 vi.mock('chalk', () => ({
   default: {
@@ -185,28 +198,22 @@ describe('runDeploy CLI', () => {
       expect(mockPrepare).not.toHaveBeenCalled();
     });
 
-    it('should print the package version on --version', async () => {
+    it("should print the CLI's own package.json version on --version", async () => {
+      // Read from the manifest, not `npm_package_version`: that env var is
+      // set by whichever package's script is running, so under `npx` or a
+      // consumer's `yarn deploy` it reported the wrong project's version.
       const prev = process.env.npm_package_version;
       process.env.npm_package_version = '9.9.9';
       try {
         await runMain(['--version']);
-        expect(mockConsoleLog).toHaveBeenCalledWith('9.9.9');
+        expect(mockConsoleLog).toHaveBeenCalledWith(cliPackageVersion);
+        expect(mockConsoleLog).not.toHaveBeenCalledWith('9.9.9');
+        expect(cliPackageVersion).toMatch(/^\d+\.\d+\.\d+/);
       } finally {
         if (prev === undefined) delete process.env.npm_package_version;
         else process.env.npm_package_version = prev;
       }
       expect(mockPrepare).not.toHaveBeenCalled();
-    });
-
-    it('should fall back to "dev" when npm_package_version is unset', async () => {
-      const prev = process.env.npm_package_version;
-      delete process.env.npm_package_version;
-      try {
-        await runMain(['--version']);
-        expect(mockConsoleLog).toHaveBeenCalledWith('dev');
-      } finally {
-        if (prev !== undefined) process.env.npm_package_version = prev;
-      }
     });
   });
 

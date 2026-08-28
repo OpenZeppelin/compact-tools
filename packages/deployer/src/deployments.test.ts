@@ -4,13 +4,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { type DeploymentRecord, Deployments } from './deployments.ts';
 
+/** Never persisted; the pinning test asserts the ledger file omits it. */
+const SIGNING_KEY_HEX = 'aa'.repeat(32);
+
 function rec(address: string): DeploymentRecord {
   return {
     address,
     txHash: '0xhash',
     txId: '0xtx',
     blockHeight: 42,
-    signingKey: 'aa'.repeat(32),
     deployer: '0xdep',
     artifact: 'src/artifacts/Token/Token',
     timestamp: new Date('2026-05-15T00:00:00Z').toISOString(),
@@ -52,6 +54,36 @@ describe('Deployments', () => {
     const d = make(root);
     await d.record('Token', rec('0xT1'));
     const { head } = await d.record('Vault', rec('0xV1'));
+    const headJson = JSON.parse(readFileSync(head, 'utf8'));
+    expect(headJson.Token.address).toBe('0xT1');
+    expect(headJson.Vault.address).toBe('0xV1');
+  });
+
+  it('should never persist a signing key, in the head or in history', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', rec('0xT1'));
+    const { head, history } = await d.record('Token', rec('0xT2'));
+
+    for (const raw of [
+      readFileSync(head, 'utf8'),
+      readFileSync(history, 'utf8'),
+    ]) {
+      expect(raw).not.toContain(SIGNING_KEY_HEX);
+      expect(raw).not.toContain('signingKey');
+    }
+  });
+
+  it('should keep both records when two contracts are written concurrently', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    // Same head file, interleaved read-modify-write: without the lock the
+    // later write clobbers the earlier contract's record.
+    const [{ head }] = await Promise.all([
+      d.record('Token', rec('0xT1')),
+      d.record('Vault', rec('0xV1')),
+    ]);
+
     const headJson = JSON.parse(readFileSync(head, 'utf8'));
     expect(headJson.Token.address).toBe('0xT1');
     expect(headJson.Vault.address).toBe('0xV1');

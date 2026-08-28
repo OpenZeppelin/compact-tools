@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
@@ -375,6 +375,28 @@ describe('Deployer', () => {
     expect(result.blockHeight).toBe(1234);
     expect(result.deployer).toBe('0xDEPLOYER');
     expect(result.deploymentsFile).toContain('deployments');
+  });
+
+  it('should keep the signing key out of the result and the written ledger', async () => {
+    const injected = fakeProvider('0xDEPLOYER');
+    await using d = await Deployer.prepare({
+      contract: 'Counter',
+      network: 'local',
+      configPath: fx.configPath,
+      logger: silentLogger,
+      walletProvider: asInjected(injected),
+    });
+    const result = await d.deploy();
+
+    // The fixture's signing-key.hex; midnight-js persists it via
+    // privateStateProvider.setSigningKey, so nothing here should carry it.
+    const signingKeyHex = 'aa'.repeat(32);
+    expect(Object.keys(result)).not.toContain('signingKey');
+    expect(JSON.stringify(result)).not.toContain(signingKeyHex);
+
+    const ledger = readFileSync(result.deploymentsFile, 'utf8');
+    expect(ledger).not.toContain('signingKey');
+    expect(ledger).not.toContain(signingKeyHex);
   });
 
   it('should adopt an injected walletProvider and not call WalletHandler.build', async () => {
