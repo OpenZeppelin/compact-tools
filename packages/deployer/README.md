@@ -59,7 +59,7 @@ Exit codes: `0` ok · `2` config error · `3` wallet error · `4` provider unrea
 
 ## Deploying to real networks (preprod, preview, testnet)
 
-> Preprod is blocked on an upstream wallet-SDK bug. Use `--network preview`. See [Known issues](#known-issues-may-2026).
+> Neither public network is usable right now. Preprod is blocked on an upstream wallet-SDK bug and the preview endpoints are null-routed, so `make env-up` (local standalone) is the only working target. See [Known issues](#known-issues-may-2026).
 
 - **First sync is slow** (~3 min on preview, 30–60 min on preprod from genesis). Cache makes reruns near-instant.
 - **Bump sync timeout**: `--sync-timeout 3600` (default 10 min).

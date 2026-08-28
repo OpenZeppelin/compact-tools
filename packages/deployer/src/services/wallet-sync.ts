@@ -176,9 +176,16 @@ export async function syncAndVerifyFunds(
         .subscribe(() => {
           if (checkpointInFlight) return;
           checkpointInFlight = true;
-          onCheckpoint().finally(() => {
-            checkpointInFlight = false;
-          });
+          onCheckpoint()
+            .catch((e: unknown) => {
+              logger.warn(
+                { err: (e as Error).message },
+                'Wallet cache checkpoint failed; continuing sync',
+              );
+            })
+            .finally(() => {
+              checkpointInFlight = false;
+            });
         })
     : undefined;
 

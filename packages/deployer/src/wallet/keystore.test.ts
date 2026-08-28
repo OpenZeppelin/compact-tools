@@ -47,6 +47,14 @@ describe('Keystore', () => {
       );
     });
 
+    it('should reject a dklen the schema cannot read back', () => {
+      // A short derived key leaves an empty MAC key, so the keystore
+      // would be written and then fail its own schema on load.
+      expect(() =>
+        Keystore.encrypt(SEED, 'pw', { ...FAST_OPTS, dklen: 16 }),
+      ).toThrow(/dklen must be 32/);
+    });
+
     it('should reject a wrong passphrase with MAC mismatch', () => {
       const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
       expect(() => ks.decrypt('wrong')).toThrow(/MAC mismatch/);

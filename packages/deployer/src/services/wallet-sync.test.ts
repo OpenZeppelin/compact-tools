@@ -307,6 +307,25 @@ describe('syncAndVerifyFunds', () => {
     expect(onCheckpoint).toHaveBeenCalledTimes(1);
   });
 
+  it('should warn and keep syncing when onCheckpoint rejects', async () => {
+    // An unconsumed rejection here terminates the process by default,
+    // which would turn a best-effort snapshot into a failed deploy.
+    const onCheckpoint = vi.fn(() => Promise.reject(new Error('disk full')));
+    const { logger, warn } = spyLogger();
+    await expect(
+      syncAndVerifyFunds({
+        ...base,
+        logger,
+        wallet: fakeWallet(Rx.of(facadeState())),
+        onCheckpoint,
+      }),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      { err: 'disk full' },
+      'Wallet cache checkpoint failed; continuing sync',
+    );
+  });
+
   it('should not start a second checkpoint while the first is still in flight', async () => {
     // Re-entrancy guard: two emissions arrive before the first save
     // settles. A second concurrent snapshot would race the first over

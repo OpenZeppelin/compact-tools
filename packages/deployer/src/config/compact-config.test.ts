@@ -46,9 +46,24 @@ describe('CompactConfig', () => {
   });
 
   it('should reject a config whose default_network does not exist', async () => {
-    const dir = tmpRepo(`${MIN_VALID}\n[profile]\ndefault_network = "ghost"\n`);
+    // Rewrite the existing key rather than appending a second [profile]:
+    // a duplicate table is invalid TOML, so the parse would fail before
+    // the schema ever checks default_network.
+    const dir = tmpRepo(
+      MIN_VALID.replace(
+        'default_network = "local"',
+        'default_network = "ghost"',
+      ),
+    );
     await expect(CompactConfig.load(undefined, dir)).rejects.toThrow(
-      ConfigError,
+      /default_network must reference a defined \[networks\.X\] block/,
+    );
+  });
+
+  it('should reject a compact.toml that is not valid TOML', async () => {
+    const dir = tmpRepo('[profile\ndefault_network = "local"\n');
+    await expect(CompactConfig.load(undefined, dir)).rejects.toThrow(
+      /Invalid TOML in /,
     );
   });
 

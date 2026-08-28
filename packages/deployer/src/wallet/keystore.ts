@@ -107,6 +107,11 @@ export class Keystore {
   ): Keystore {
     const seed = seedFromHex(seedHex);
     const { scryptN, scryptP, scryptR, dklen } = { ...DEFAULTS, ...opts };
+    // `decrypt` splits the derived key 16/16 and the schema pins `dklen` to
+    // 32, so any other length writes a keystore that can never be read back.
+    if (dklen !== 32) {
+      throw new WalletError(`Keystore dklen must be 32, got ${dklen}`);
+    }
 
     const salt = randomBytes(32);
     const iv = randomBytes(16);
