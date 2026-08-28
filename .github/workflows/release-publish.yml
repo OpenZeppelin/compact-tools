@@ -59,39 +59,18 @@ jobs:
           INPUT_PACKAGE: ${{ inputs.package }}
         run: |
           if [[ "$EVENT" == "workflow_dispatch" ]]; then
-            PKG="$INPUT_PACKAGE"
-            case "$PKG" in
-              compact-builder)   DIR="builder" ;;
-              compact-cli)       DIR="cli" ;;
-              compact-simulator) DIR="simulator" ;;
-              *)
-                echo "::error::unknown package: $PKG"
-                exit 1
-                ;;
-            esac
+            node scripts/release/resolve-package.mjs --package "$INPUT_PACKAGE"
           else
-            mapfile -t CHANGED < <(git diff --name-only "$MERGE_SHA^" "$MERGE_SHA" -- 'packages/*/package.json')
-            COUNT=${#CHANGED[@]}
-            if [[ "$COUNT" -ne 1 ]]; then
-              echo "::error::expected exactly one packages/*/package.json change, found $COUNT"
-              printf '%s\n' "${CHANGED[@]}" >&2
-              exit 1
-            fi
-            DIR=$(echo "${CHANGED[0]}" | awk -F/ '{print $2}')
-            case "$DIR" in
-              builder)   PKG="compact-builder" ;;
-              cli)       PKG="compact-cli" ;;
-              simulator) PKG="compact-simulator" ;;
-              *)
-                echo "::error::unknown package directory: $DIR"
-                exit 1
-                ;;
-            esac
+            CHANGED=$(git diff --name-only "$MERGE_SHA^" "$MERGE_SHA" -- 'packages/*/package.json')
+            node scripts/release/resolve-package.mjs --changed-files "$CHANGED"
           fi
-          VERSION=$(node -p "require('./packages/$DIR/package.json').version")
-          echo "dir=$DIR" >> $GITHUB_OUTPUT
-          echo "name=$PKG" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Summarize
+        env:
+          EVENT: ${{ github.event_name }}
+          PKG: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
           {
             echo "### Publishing"
             echo "- Package: $PKG"

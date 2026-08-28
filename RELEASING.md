@@ -18,6 +18,13 @@
    - Publish the package to npm.
 6. Once published, go to "Releases" and create a GitHub release using the generated tag.
 
+## Adding a package to the rotation
+
+Both workflows resolve package names and directories through
+`scripts/release/packages.mjs`. Add the workspace to the `RELEASABLE` map
+there, then add its name to the `package` choice list in `release.yml` and
+`release-publish.yml`. `yarn test:scripts` covers the resolver.
+
 ## First-release order
 
 There's a one-step dependency chain across the three published packages:

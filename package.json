@@ -9,6 +9,7 @@
   "scripts": {
     "build": "turbo run build --log-prefix=none",
     "test": "turbo run test --log-prefix=none",
+    "test:scripts": "vitest run --config vitest.scripts.config.ts",
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
     "lint:ci": "biome ci . --no-errors-on-unmatched",
