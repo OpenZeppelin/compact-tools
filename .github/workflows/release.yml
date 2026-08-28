@@ -46,18 +46,9 @@ jobs:
 
       - name: Set package directory
         id: pkg
-        run: |
-          case "${{ inputs.package }}" in
-            "compact-builder")
-              echo "dir=builder" >> $GITHUB_OUTPUT
-              ;;
-            "compact-cli")
-              echo "dir=cli" >> $GITHUB_OUTPUT
-              ;;
-            "compact-simulator")
-              echo "dir=simulator" >> $GITHUB_OUTPUT
-              ;;
-          esac
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: node scripts/release/resolve-package.mjs --package "$PACKAGE"
 
       - name: Setup Environment
         uses: ./.github/actions/setup

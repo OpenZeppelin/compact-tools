@@ -36,3 +36,6 @@ jobs:
 
       - name: Run tests
         run: yarn test
+
+      - name: Run release script tests
+        run: yarn test:scripts
