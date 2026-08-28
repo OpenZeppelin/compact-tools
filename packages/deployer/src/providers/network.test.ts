@@ -34,19 +34,15 @@ describe('applyNetwork', () => {
     expect(env.proofServer).toBe('http://proof-server:6300');
   });
 
-  it.each([
-    'undeployed',
-    'devnet',
-    'qanet',
-    'testnet',
-    'preview',
-    'preprod',
-  ])('should accept known network id %s', (id) => {
-    expect(() =>
-      applyNetwork({ ...baseNetwork, network_id: id }, 'http://ps'),
-    ).not.toThrow();
-    expect(setNetworkId).toHaveBeenLastCalledWith(id);
-  });
+  it.each(['undeployed', 'devnet', 'qanet', 'testnet', 'preview', 'preprod'])(
+    'should accept known network id %s',
+    (id) => {
+      expect(() =>
+        applyNetwork({ ...baseNetwork, network_id: id }, 'http://ps'),
+      ).not.toThrow();
+      expect(setNetworkId).toHaveBeenLastCalledWith(id);
+    },
+  );
 
   it('should reject mainnet while the deployer is testnet/preview-only', () => {
     expect(() =>

@@ -1,7 +1,7 @@
 {
   "name": "@openzeppelin/compact-simulator",
   "description": "Simulator for testing Compact smart contracts",
-  "version": "0.0.1",
+  "version": "0.3.1",
   "keywords": [
     "compact",
     "compiler",
@@ -35,19 +35,34 @@
   },
   "scripts": {
     "build": "tsc -p .",
-    "types": "tsc -p tsconfig.json --noEmit",
-    "test": "yarn vitest run",
+    "types": "tsc -p tsconfig.types.json",
+    "test": "MIDNIGHT_BACKEND=dry vitest run",
+    "test:live": "MIDNIGHT_BACKEND=live vitest run",
     "clean": "git clean -fXd"
   },
   "devDependencies": {
+    "@midnight-ntwrk/midnight-js-contracts": "^4.1.0",
+    "@midnight-ntwrk/midnight-js-types": "^4.1.0",
     "@tsconfig/node24": "^24.0.3",
-    "@types/node": "25.9.1",
+    "@types/node": "26.1.2",
     "fast-check": "^4.5.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.16.0",
     "@midnight-ntwrk/ledger-v8": "8.1.0"
+  },
+  "peerDependencies": {
+    "@midnight-ntwrk/midnight-js-contracts": "^4.1.0",
+    "@midnight-ntwrk/midnight-js-types": "^4.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@midnight-ntwrk/midnight-js-contracts": {
+      "optional": true
+    },
+    "@midnight-ntwrk/midnight-js-types": {
+      "optional": true
+    }
   }
 }

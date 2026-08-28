@@ -406,19 +406,22 @@ describe('WalletHandler', () => {
       ['seedCacheShielded'],
       ['seedCacheDust'],
       ['seedCacheUnshielded'],
-    ])('should warn and skip the import when --no-cache is set alongside %s', async (flag) => {
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv(),
-        { kind: 'hex', value: 'aa'.repeat(32) },
-        { skipWalletCache: true, [flag]: '/state.json' },
-      );
-      expect(writeFileSync).not.toHaveBeenCalled();
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('--seed-cache-from-*'),
-      );
-    });
+    ])(
+      'should warn and skip the import when --no-cache is set alongside %s',
+      async (flag) => {
+        wireTestkitChain(fakeProvider());
+        await WalletHandler.build(
+          logger,
+          fakeEnv(),
+          { kind: 'hex', value: 'aa'.repeat(32) },
+          { skipWalletCache: true, [flag]: '/state.json' },
+        );
+        expect(writeFileSync).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('--seed-cache-from-*'),
+        );
+      },
+    );
 
     it('should not warn when --no-cache is set without any --seed-cache-from-*', async () => {
       wireTestkitChain(fakeProvider());

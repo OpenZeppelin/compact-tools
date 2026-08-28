@@ -1,4 +1,4 @@
-import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
+import { createSimulator, type SimulatorOptions } from '../../src/index';
 import {
   ledger,
   Contract as WitnessContract,
@@ -38,50 +38,36 @@ const WitnessSimulatorBase = createSimulator<
  * Witness Simulator
  */
 export class WitnessSimulator extends WitnessSimulatorBase {
-  constructor(
-    options: BaseSimulatorOptions<
+  static async create(
+    options: SimulatorOptions<
       WitnessPrivateState,
       ReturnType<typeof WitnessWitnesses>
     > = {},
-  ) {
-    super([], options);
+  ): Promise<WitnessSimulator> {
+    // biome-ignore lint/complexity/noThisInStatic: super._create must keep the subclass `this`
+    return super._create([], options) as Promise<WitnessSimulator>;
   }
 
-  public setBytes() {
-    this.circuits.impure.setBytes();
+  public setBytes(): Promise<[]> {
+    return this.circuits.impure.setBytes();
   }
 
-  public setField(arg: bigint) {
-    this.circuits.impure.setField(arg);
+  public setField(arg: bigint): Promise<[]> {
+    return this.circuits.impure.setField(arg);
   }
 
-  public setUint(arg1: bigint, arg2: bigint) {
-    this.circuits.impure.setUint(arg1, arg2);
+  public setUint(arg1: bigint, arg2: bigint): Promise<[]> {
+    return this.circuits.impure.setUint(arg1, arg2);
   }
 
   public readonly privateState = {
     injectSecretBytes: (
       newBytes: Buffer<ArrayBufferLike>,
-    ): WitnessPrivateState => {
-      const currentState =
-        this.circuitContextManager.getContext().currentPrivateState;
-      const updatedState = { ...currentState, secretBytes: newBytes };
-      this.circuitContextManager.updatePrivateState(updatedState);
-      return updatedState;
-    },
-    injectSecretField: (newField: bigint): WitnessPrivateState => {
-      const currentState =
-        this.circuitContextManager.getContext().currentPrivateState;
-      const updatedState = { ...currentState, secretField: newField };
-      this.circuitContextManager.updatePrivateState(updatedState);
-      return updatedState;
-    },
-    injectSecretUint: (newUint: bigint): WitnessPrivateState => {
-      const currentState =
-        this.circuitContextManager.getContext().currentPrivateState;
-      const updatedState = { ...currentState, secretUint: newUint };
-      this.circuitContextManager.updatePrivateState(updatedState);
-      return updatedState;
-    },
+    ): Promise<WitnessPrivateState> =>
+      this.updatePrivateState({ secretBytes: newBytes }),
+    injectSecretField: (newField: bigint): Promise<WitnessPrivateState> =>
+      this.updatePrivateState({ secretField: newField }),
+    injectSecretUint: (newUint: bigint): Promise<WitnessPrivateState> =>
+      this.updatePrivateState({ secretUint: newUint }),
   };
 }

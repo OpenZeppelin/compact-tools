@@ -1,4 +1,4 @@
-import { type BaseSimulatorOptions, createSimulator } from '../../src/index';
+import { createSimulator, type SimulatorOptions } from '../../src/index';
 import {
   ledger,
   Contract as SimpleContract,
@@ -29,20 +29,21 @@ const SimpleSimulatorBase = createSimulator<
  * Simple Simulator
  */
 export class SimpleSimulator extends SimpleSimulatorBase {
-  constructor(
-    options: BaseSimulatorOptions<
+  static async create(
+    options: SimulatorOptions<
       SimplePrivateState,
       ReturnType<typeof SimpleWitnesses>
     > = {},
-  ) {
-    super([], options);
+  ): Promise<SimpleSimulator> {
+    // biome-ignore lint/complexity/noThisInStatic: super._create must keep the subclass `this`
+    return super._create([], options) as Promise<SimpleSimulator>;
   }
 
-  public setVal(n: bigint) {
-    this.circuits.impure.setVal(n);
+  public setVal(n: bigint): Promise<[]> {
+    return this.circuits.impure.setVal(n);
   }
 
-  public getVal(): bigint {
+  public getVal(): Promise<bigint> {
     return this.circuits.impure.getVal();
   }
 }

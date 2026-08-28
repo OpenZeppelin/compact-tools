@@ -10,10 +10,10 @@ import { SampleZOwnablePrivateState } from '../fixtures/sample-contracts/witness
 import * as utils from '../fixtures/utils/address.js';
 import { SampleZOwnableSimulator } from './SampleZOwnableSimulator.js';
 
-// PKs
-const [OWNER, Z_OWNER] = utils.generatePubKeyPair('OWNER');
-const [NEW_OWNER, Z_NEW_OWNER] = utils.generatePubKeyPair('NEW_OWNER');
-const [UNAUTHORIZED, _] = utils.generatePubKeyPair('UNAUTHORIZED');
+// PKs — the caller identity now travels as an alias string (`as('OWNER')`); the
+// alias resolves to the same deterministic key these encoded PKs are built from.
+const [, Z_OWNER] = utils.generatePubKeyPair('OWNER');
+const [, Z_NEW_OWNER] = utils.generatePubKeyPair('NEW_OWNER');
 
 const INSTANCE_SALT = new Uint8Array(32).fill(8675309);
 const BAD_NONCE = Buffer.from(Buffer.alloc(32, 'BAD_NONCE'));
@@ -98,30 +98,30 @@ const buildCommitment = (
 
 describe('SampleZOwnable', () => {
   describe('before initialize', () => {
-    it('should fail when setting owner commitment as 0', () => {
-      expect(() => {
-        const badId = new Uint8Array(32).fill(0);
-        new SampleZOwnableSimulator(badId, INSTANCE_SALT);
-      }).toThrow('SampleZOwnable: invalid id');
+    it('should fail when setting owner commitment as 0', async () => {
+      const badId = new Uint8Array(32).fill(0);
+      await expect(
+        SampleZOwnableSimulator.create(badId, INSTANCE_SALT),
+      ).rejects.toThrow('SampleZOwnable: invalid id');
     });
 
-    it('should initialize with non-zero commitment', () => {
+    it('should initialize with non-zero commitment', async () => {
       const notZeroPK = utils.encodeToPK('NOT_ZERO');
       const notZeroNonce = new Uint8Array(32).fill(1);
       const nonZeroId = createIdHash(notZeroPK, notZeroNonce);
-      ownable = new SampleZOwnableSimulator(nonZeroId, INSTANCE_SALT);
+      ownable = await SampleZOwnableSimulator.create(nonZeroId, INSTANCE_SALT);
 
       const nonZeroCommitment = buildCommitmentFromId(
         nonZeroId,
         INSTANCE_SALT,
         INIT_COUNTER,
       );
-      expect(ownable.owner()).toEqual(nonZeroCommitment);
+      expect(await ownable.owner()).toEqual(nonZeroCommitment);
     });
   });
 
   describe('after initialization', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       // Create private state object and generate nonce
       const PS = SampleZOwnablePrivateState.generate();
       // Bind nonce for convenience
@@ -129,13 +129,13 @@ describe('SampleZOwnable', () => {
       // Prepare owner ID with gen nonce
       const ownerId = createIdHash(Z_OWNER, secretNonce);
       // Deploy contract with derived owner commitment and PS
-      ownable = new SampleZOwnableSimulator(ownerId, INSTANCE_SALT, {
+      ownable = await SampleZOwnableSimulator.create(ownerId, INSTANCE_SALT, {
         privateState: PS,
       });
     });
 
     describe('owner', () => {
-      it('should return the correct owner commitment', () => {
+      it('should return the correct owner commitment', async () => {
         const expCommitment = buildCommitment(
           Z_OWNER,
           secretNonce,
@@ -143,7 +143,7 @@ describe('SampleZOwnable', () => {
           INIT_COUNTER,
           DOMAIN,
         );
-        expect(ownable.owner()).toEqual(expCommitment);
+        expect(await ownable.owner()).toEqual(expCommitment);
       });
     });
 
@@ -167,56 +167,58 @@ describe('SampleZOwnable', () => {
         );
       });
 
-      it('should transfer ownership', () => {
-        ownable.as(OWNER).transferOwnership(newIdHash);
-        expect(ownable.owner()).toEqual(newOwnerCommitment);
+      it('should transfer ownership', async () => {
+        await ownable.as('OWNER').transferOwnership(newIdHash);
+        expect(await ownable.owner()).toEqual(newOwnerCommitment);
 
         // Old owner
-        expect(() => {
-          ownable.as(OWNER).assertOnlyOwner();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+        await expect(ownable.as('OWNER').assertOnlyOwner()).rejects.toThrow(
+          'SampleZOwnable: caller is not the owner',
+        );
 
         // Unauthorized
-        expect(() => {
-          ownable.as(UNAUTHORIZED).assertOnlyOwner();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+        await expect(
+          ownable.as('UNAUTHORIZED').assertOnlyOwner(),
+        ).rejects.toThrow('SampleZOwnable: caller is not the owner');
 
         // New owner
-        ownable.privateState.injectSecretNonce(Buffer.from(newOwnerNonce));
-        expect(ownable.as(NEW_OWNER).assertOnlyOwner()).not.to.throw;
+        await ownable.privateState.injectSecretNonce(
+          Buffer.from(newOwnerNonce),
+        );
+        await ownable.as('NEW_OWNER').assertOnlyOwner();
       });
 
-      it('should fail when transferring to id zero', () => {
+      it('should fail when transferring to id zero', async () => {
         const badId = new Uint8Array(32).fill(0);
-        expect(() => {
-          ownable.as(OWNER).transferOwnership(badId);
-        }).toThrow('SampleZOwnable: invalid id');
+        await expect(
+          ownable.as('OWNER').transferOwnership(badId),
+        ).rejects.toThrow('SampleZOwnable: invalid id');
       });
 
-      it('should fail when unauthorized transfers ownership', () => {
-        expect(() => {
-          ownable.as(UNAUTHORIZED).transferOwnership(newOwnerCommitment);
-        }).toThrow('SampleZOwnable: caller is not the owner');
+      it('should fail when unauthorized transfers ownership', async () => {
+        await expect(
+          ownable.as('UNAUTHORIZED').transferOwnership(newOwnerCommitment),
+        ).rejects.toThrow('SampleZOwnable: caller is not the owner');
       });
 
       /**
        * @description More thoroughly tested in `_transferOwnership`
        * */
-      it('should bump instance after transfer', () => {
-        const beforeInstance = ownable.getPublicState()._counter;
+      it('should bump instance after transfer', async () => {
+        const beforeInstance = (await ownable.getPublicState())._counter;
 
         // Transfer
-        ownable.as(OWNER).transferOwnership(newOwnerCommitment);
+        await ownable.as('OWNER').transferOwnership(newOwnerCommitment);
 
         // Check counter
-        const afterInstance = ownable.getPublicState()._counter;
+        const afterInstance = (await ownable.getPublicState())._counter;
         expect(afterInstance).toEqual(beforeInstance + 1n);
       });
 
-      it('should change commitment when transferring ownership to self with same pk + nonce)', () => {
+      it('should change commitment when transferring ownership to self with same pk + nonce)', async () => {
         // Confirm current commitment
         const repeatedId = createIdHash(Z_OWNER, secretNonce);
-        const initCommitment = ownable.owner();
+        const initCommitment = await ownable.owner();
         const expInitCommitment = buildCommitmentFromId(
           repeatedId,
           INSTANCE_SALT,
@@ -225,10 +227,10 @@ describe('SampleZOwnable', () => {
         expect(initCommitment).toEqual(expInitCommitment);
 
         // Transfer ownership to self with the same id -> `H(pk, nonce)`
-        ownable.as(OWNER).transferOwnership(repeatedId);
+        await ownable.as('OWNER').transferOwnership(repeatedId);
 
         // Check commitments don't match
-        const newCommitment = ownable.owner();
+        const newCommitment = await ownable.owner();
         expect(initCommitment).not.toEqual(newCommitment);
 
         // Build commitment locally and validate new commitment == expected
@@ -241,93 +243,93 @@ describe('SampleZOwnable', () => {
         expect(newCommitment).toEqual(expNewCommitment);
 
         // Check same owner maintains permissions after transfer
-        expect(ownable.as(OWNER).assertOnlyOwner()).not.to.throw;
+        await ownable.as('OWNER').assertOnlyOwner();
       });
     });
 
     describe('renounceOwnership', () => {
-      it('should renounce ownership', () => {
-        ownable.as(OWNER).renounceOwnership();
+      it('should renounce ownership', async () => {
+        await ownable.as('OWNER').renounceOwnership();
 
         // Check owner is reset
-        expect(ownable.owner()).toEqual(new Uint8Array(32).fill(0));
+        expect(await ownable.owner()).toEqual(new Uint8Array(32).fill(0));
 
         // Check revoked permissions
-        expect(() => {
-          ownable.assertOnlyOwner();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+        await expect(ownable.assertOnlyOwner()).rejects.toThrow(
+          'SampleZOwnable: caller is not the owner',
+        );
       });
 
-      it('should fail when renouncing from unauthorized', () => {
-        expect(() => {
-          ownable.as(UNAUTHORIZED).renounceOwnership();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+      it('should fail when renouncing from unauthorized', async () => {
+        await expect(
+          ownable.as('UNAUTHORIZED').renounceOwnership(),
+        ).rejects.toThrow('SampleZOwnable: caller is not the owner');
       });
 
-      it('should fail when renouncing from authorized with bad nonce', () => {
-        ownable.privateState.injectSecretNonce(BAD_NONCE);
-        expect(() => {
-          ownable.as(OWNER).renounceOwnership();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+      it('should fail when renouncing from authorized with bad nonce', async () => {
+        await ownable.privateState.injectSecretNonce(BAD_NONCE);
+        await expect(ownable.as('OWNER').renounceOwnership()).rejects.toThrow(
+          'SampleZOwnable: caller is not the owner',
+        );
       });
 
-      it('should fail when renouncing from unauthorized with bad nonce', () => {
-        ownable.privateState.injectSecretNonce(BAD_NONCE);
-        expect(() => {
-          ownable.as(UNAUTHORIZED).renounceOwnership();
-        });
+      it('should fail when renouncing from unauthorized with bad nonce', async () => {
+        await ownable.privateState.injectSecretNonce(BAD_NONCE);
+        await expect(
+          ownable.as('UNAUTHORIZED').renounceOwnership(),
+        ).rejects.toThrow('SampleZOwnable: caller is not the owner');
       });
     });
 
     describe('assertOnlyOwner', () => {
-      it('should allow authorized caller with correct nonce to call', () => {
+      it('should allow authorized caller with correct nonce to call', async () => {
         // Check nonce is correct
-        expect(ownable.privateState.getCurrentSecretNonce()).toEqual(
+        expect(await ownable.privateState.getCurrentSecretNonce()).toEqual(
           secretNonce,
         );
 
-        expect(ownable.as(OWNER).assertOnlyOwner()).to.not.throw;
+        await ownable.as('OWNER').assertOnlyOwner();
       });
 
-      it('should fail when the authorized caller has the wrong nonce', () => {
+      it('should fail when the authorized caller has the wrong nonce', async () => {
         // Inject bad nonce
-        ownable.privateState.injectSecretNonce(BAD_NONCE);
+        await ownable.privateState.injectSecretNonce(BAD_NONCE);
 
         // Check nonce does not match
-        expect(ownable.privateState.getCurrentSecretNonce()).not.toEqual(
+        expect(await ownable.privateState.getCurrentSecretNonce()).not.toEqual(
           secretNonce,
         );
 
         // Set caller and call circuit
-        expect(() => {
-          ownable.as(OWNER).assertOnlyOwner();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+        await expect(ownable.as('OWNER').assertOnlyOwner()).rejects.toThrow(
+          'SampleZOwnable: caller is not the owner',
+        );
       });
 
-      it('should fail when unauthorized caller has the correct nonce', () => {
+      it('should fail when unauthorized caller has the correct nonce', async () => {
         // Check nonce is correct
-        expect(ownable.privateState.getCurrentSecretNonce()).toEqual(
+        expect(await ownable.privateState.getCurrentSecretNonce()).toEqual(
           secretNonce,
         );
 
-        expect(() => {
-          ownable.as(UNAUTHORIZED).assertOnlyOwner();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+        await expect(
+          ownable.as('UNAUTHORIZED').assertOnlyOwner(),
+        ).rejects.toThrow('SampleZOwnable: caller is not the owner');
       });
 
-      it('should fail when unauthorized caller has the wrong nonce', () => {
+      it('should fail when unauthorized caller has the wrong nonce', async () => {
         // Inject bad nonce
-        ownable.privateState.injectSecretNonce(BAD_NONCE);
+        await ownable.privateState.injectSecretNonce(BAD_NONCE);
 
         // Check nonce does not match
-        expect(ownable.privateState.getCurrentSecretNonce()).not.toEqual(
+        expect(await ownable.privateState.getCurrentSecretNonce()).not.toEqual(
           secretNonce,
         );
 
         // Set unauthorized caller and call circuit
-        expect(() => {
-          ownable.as(UNAUTHORIZED).assertOnlyOwner();
-        }).toThrow('SampleZOwnable: caller is not the owner');
+        await expect(
+          ownable.as('UNAUTHORIZED').assertOnlyOwner(),
+        ).rejects.toThrow('SampleZOwnable: caller is not the owner');
       });
     });
 
@@ -350,33 +352,34 @@ describe('SampleZOwnable', () => {
           counter: MAX_U64,
         },
       ];
-      it.each(
-        testCases,
-      )('should match commitment for $label with counter $counter', ({
-        ownerPK,
-        counter,
-      }) => {
-        const id = createIdHash(ownerPK, secretNonce);
+      it.each(testCases)(
+        'should match commitment for $label with counter $counter',
+        async ({ ownerPK, counter }) => {
+          const id = createIdHash(ownerPK, secretNonce);
 
-        // Check buildCommitmentFromId
-        const hashFromContract = ownable._computeOwnerCommitment(id, counter);
-        const hashFromHelper1 = buildCommitmentFromId(
-          id,
-          INSTANCE_SALT,
-          counter,
-        );
-        expect(hashFromContract).toEqual(hashFromHelper1);
+          // Check buildCommitmentFromId
+          const hashFromContract = await ownable._computeOwnerCommitment(
+            id,
+            counter,
+          );
+          const hashFromHelper1 = buildCommitmentFromId(
+            id,
+            INSTANCE_SALT,
+            counter,
+          );
+          expect(hashFromContract).toEqual(hashFromHelper1);
 
-        // Check buildCommitment
-        const hashFromHelper2 = buildCommitment(
-          ownerPK,
-          secretNonce,
-          INSTANCE_SALT,
-          counter,
-          DOMAIN,
-        );
-        expect(hashFromHelper1).toEqual(hashFromHelper2);
-      });
+          // Check buildCommitment
+          const hashFromHelper2 = buildCommitment(
+            ownerPK,
+            secretNonce,
+            INSTANCE_SALT,
+            counter,
+            DOMAIN,
+          );
+          expect(hashFromHelper1).toEqual(hashFromHelper2);
+        },
+      );
     });
 
     describe('_computeOwnerId', () => {
@@ -398,23 +401,21 @@ describe('SampleZOwnable', () => {
         },
       ];
 
-      it.each(
-        testCases,
-      )('should match local and contract owner id for $label', ({
-        eitherOwner,
-        nonce,
-      }) => {
-        const ownerId = ownable._computeOwnerId(eitherOwner, nonce);
-        const expId = createIdHash(eitherOwner.left, nonce);
-        expect(ownerId).toEqual(expId);
-      });
+      it.each(testCases)(
+        'should match local and contract owner id for $label',
+        async ({ eitherOwner, nonce }) => {
+          const ownerId = await ownable._computeOwnerId(eitherOwner, nonce);
+          const expId = createIdHash(eitherOwner.left, nonce);
+          expect(ownerId).toEqual(expId);
+        },
+      );
 
-      it('should fail to compute ContractAddress id', () => {
+      it('should fail to compute ContractAddress id', async () => {
         const eitherContract =
           utils.createEitherTestContractAddress('CONTRACT');
-        expect(() => {
-          ownable._computeOwnerId(eitherContract, secretNonce);
-        }).toThrow(
+        await expect(
+          ownable._computeOwnerId(eitherContract, secretNonce),
+        ).rejects.toThrow(
           'SampleZOwnable: contract address owners are not yet supported',
         );
       });
