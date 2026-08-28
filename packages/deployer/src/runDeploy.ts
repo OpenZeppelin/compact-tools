@@ -125,6 +125,8 @@ export interface RunDeployOptions<
   seedCacheFromDust?: string;
   /** Like {@link seedCacheFromDust} but for the shielded sub-wallet. Argv: `--seed-cache-from-shielded`. */
   seedCacheFromShielded?: string;
+  /** Like {@link seedCacheFromDust} but for the unshielded sub-wallet. Argv: `--seed-cache-from-unshielded`. */
+  seedCacheFromUnshielded?: string;
   /** Dry-run mode (skip on-chain submission). Argv: `--dry-run`. */
   dryRun?: boolean;
   /** Emit a machine-readable JSON object on stdout instead of pretty lines. Argv: `--json`. */
@@ -162,8 +164,8 @@ export interface RunDeployOptions<
  *
  * Parses `--network`, `--dry-run`, `--sync-timeout`, `--sync-batch-size`,
  * `--no-cache`, `--seed-cache-from-dust`, `--seed-cache-from-shielded`,
- * `--seed-file`, `--proof-server`, `--config`, `--json`, `-v` /
- * `--verbose` from `process.argv` as defaults. Explicit options win
+ * `--seed-cache-from-unshielded`, `--seed-file`, `--proof-server`,
+ * `--config`, `--json`, `-v` / `--verbose` from `process.argv` as defaults. Explicit options win
  * over argv. Wires a pino logger (stderr), runs Deployer.prepare +
  * deploy or dryRun, and prints the result.
  *
@@ -247,6 +249,8 @@ async function runDeployImpl(
       seedCacheDust: opts.seedCacheFromDust ?? argv.seedCacheFromDust,
       seedCacheShielded:
         opts.seedCacheFromShielded ?? argv.seedCacheFromShielded,
+      seedCacheUnshielded:
+        opts.seedCacheFromUnshielded ?? argv.seedCacheFromUnshielded,
       promptPassphrase: opts.promptPassphrase,
       logger,
     });

@@ -1,39 +1,21 @@
-import { createHash } from 'node:crypto';
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import {
   DEFAULT_DUST_OPTIONS,
-  DEFAULT_WALLET_STATE_DIRECTORY,
   type DustWalletOptions,
   type EnvironmentConfiguration,
   FluentWalletBuilder,
   MidnightWalletProvider,
   WalletFactory,
-  WalletSaveStateProvider,
   WalletSeeds,
 } from '@midnight-ntwrk/testkit-js';
-import {
-  DustWallet,
-  type DustWalletAPI,
-} from '@midnight-ntwrk/wallet-sdk-dust-wallet';
 import type { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
-import type { ShieldedWalletAPI } from '@midnight-ntwrk/wallet-sdk-shielded';
 import {
   createKeystore,
   type UnshieldedKeystore,
 } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
-import { WalletError } from '../errors.ts';
+import type { ConfigShape } from '../services/wallet-cache.ts';
+import { WalletCache } from '../services/wallet-cache.ts';
 import type { WalletSeed } from './seeds.ts';
 
 /**
@@ -75,6 +57,8 @@ export interface WalletHandlerBuildOptions {
   seedCacheDust?: string;
   /** Like {@link seedCacheDust} but for the shielded sub-wallet. */
   seedCacheShielded?: string;
+  /** Like {@link seedCacheDust} but for the unshielded sub-wallet. */
+  seedCacheUnshielded?: string;
   /**
    * Sync batch size for the shielded + dust sub-wallets. Defaults to
    * {@link DEFAULT_SYNC_BATCH_SIZE} (5000). Raise it to replay a long dust
@@ -85,9 +69,10 @@ export interface WalletHandlerBuildOptions {
 }
 
 /**
- * Owned wallet handle: a built `MidnightWalletProvider` plus its
- * shielded + dust on-disk caches. Acquire via {@link build} and an
- * `AsyncDisposableStack.use()`; call {@link saveCache} after sync.
+ * Owned wallet handle: a built `MidnightWalletProvider` plus the
+ * on-disk caches for its three sub-wallets. Acquire via {@link build}
+ * and an `AsyncDisposableStack.use()`; call {@link saveCache} after
+ * sync.
  */
 export class WalletHandler implements AsyncDisposable {
   /** The underlying testkit-js wallet provider. */
@@ -95,21 +80,18 @@ export class WalletHandler implements AsyncDisposable {
   /** The unshielded keystore the wallet was built with. */
   readonly unshieldedKeystore: UnshieldedKeystore;
   readonly #logger: Logger;
-  readonly #shieldedCacheFilePath: string;
-  readonly #dustCacheFilePath: string;
+  readonly #cache: WalletCache;
 
   private constructor(
     provider: MidnightWalletProvider,
     keystore: UnshieldedKeystore,
     logger: Logger,
-    shieldedCacheFilePath: string,
-    dustCacheFilePath: string,
+    cache: WalletCache,
   ) {
     this.provider = provider;
     this.unshieldedKeystore = keystore;
     this.#logger = logger;
-    this.#shieldedCacheFilePath = shieldedCacheFilePath;
-    this.#dustCacheFilePath = dustCacheFilePath;
+    this.#cache = cache;
   }
 
   /**
@@ -118,8 +100,8 @@ export class WalletHandler implements AsyncDisposable {
    *  1. Tunes `additionalFeeOverhead` for non-mainnet wallet sizes.
    *  2. Routes mnemonic vs hex seed through the right derivation path
    *     (they derive *different* wallets from the same input).
-   *  3. Restores the shielded + dust sub-wallets from on-disk cache
-   *     when present (saves the 30–60 min first-preprod sync).
+   *  3. Restores all three sub-wallets from on-disk cache when present
+   *     (saves the 30–60 min first-preprod sync).
    * Caller drives `provider.start()`; call {@link saveCache} post-sync.
    */
   static async build(
@@ -167,62 +149,56 @@ export class WalletHandler implements AsyncDisposable {
       env.walletNetworkId as Parameters<typeof createKeystore>[1],
     );
 
-    const shieldedCacheFilePath = computeCacheFilePath(
+    const cache = new WalletCache({
+      logger,
       env,
-      walletSeeds.shielded,
-      'shielded',
-    );
-    const dustCacheFilePath = computeCacheFilePath(
-      env,
-      walletSeeds.dust,
-      'dust',
-    );
+      shieldedSeed: walletSeeds.shielded,
+      dustSeed: walletSeeds.dust,
+      unshieldedSeed: walletSeeds.unshielded,
+    });
 
     // Pre-warmed cache import: place the user-supplied state file at
     // the seed-derived `.states/` path so the existing restore path
     // picks it up. Mutual exclusion with `--no-cache` is a warn, not a
     // hard error — keeps the flag combinations cheap.
     if (opts.skipWalletCache === true) {
-      if (opts.seedCacheShielded || opts.seedCacheDust) {
+      if (
+        opts.seedCacheShielded ||
+        opts.seedCacheDust ||
+        opts.seedCacheUnshielded
+      ) {
         logger.warn(
           '--seed-cache-from-* is ignored under --no-cache (cache load is disabled)',
         );
       }
     } else {
       if (opts.seedCacheShielded) {
-        importSeedCache(
-          logger,
-          opts.seedCacheShielded,
-          shieldedCacheFilePath,
-          'shielded',
-        );
+        cache.importSeedCache(opts.seedCacheShielded, 'shielded');
       }
       if (opts.seedCacheDust) {
-        importSeedCache(logger, opts.seedCacheDust, dustCacheFilePath, 'dust');
+        cache.importSeedCache(opts.seedCacheDust, 'dust');
+      }
+      if (opts.seedCacheUnshielded) {
+        cache.importSeedCache(opts.seedCacheUnshielded, 'unshielded');
       }
     }
 
-    const shieldedWallet = await loadOrCreateShieldedWallet({
-      logger,
+    const shieldedWallet = await cache.loadOrCreateShieldedWallet({
       config,
       seed: walletSeeds.shielded,
-      cacheFilePath: shieldedCacheFilePath,
       skipCache: opts.skipWalletCache === true,
     });
 
-    const unshieldedWallet = WalletFactory.createUnshieldedWallet(
-      config as Parameters<typeof WalletFactory.createUnshieldedWallet>[0],
-      unshieldedKeystore as Parameters<
-        typeof WalletFactory.createUnshieldedWallet
-      >[1],
-    );
+    const unshieldedWallet = await cache.loadOrCreateUnshieldedWallet({
+      config,
+      keystore: unshieldedKeystore,
+      skipCache: opts.skipWalletCache === true,
+    });
 
-    const dustWallet = await loadOrCreateDustWallet({
-      logger,
+    const dustWallet = await cache.loadOrCreateDustWallet({
       config,
       seed: walletSeeds.dust,
       dustOptions,
-      cacheFilePath: dustCacheFilePath,
       skipCache: opts.skipWalletCache === true,
     });
 
@@ -245,62 +221,19 @@ export class WalletHandler implements AsyncDisposable {
       >[5],
     );
 
-    return new WalletHandler(
-      provider,
-      unshieldedKeystore,
-      logger,
-      shieldedCacheFilePath,
-      dustCacheFilePath,
-    );
+    return new WalletHandler(provider, unshieldedKeystore, logger, cache);
   }
 
   /**
-   * Snapshot the shielded + dust sub-wallets to disk. Best-effort and
-   * independent per sub-wallet. Both are cached because on real
-   * networks both are slow on first sync (shielded trial-decrypts every
-   * note; dust streams the global unfiltered ledger event log).
+   * Snapshot all three sub-wallets to disk. Best-effort and independent
+   * per sub-wallet. Shielded and dust are cached because they are slow
+   * on first sync (shielded trial-decrypts every note; dust streams the
+   * global unfiltered ledger event log). Unshielded is cached because
+   * the sync gate waits on its progress, so an uncached one re-syncs
+   * from genesis and dominates an otherwise-warm boot.
    */
   async saveCache(): Promise<void> {
-    await Promise.allSettled([
-      this.#saveSubWalletCache(
-        this.#shieldedCacheFilePath,
-        this.provider.wallet.shielded,
-        'shielded',
-      ),
-      this.#saveSubWalletCache(
-        this.#dustCacheFilePath,
-        this.provider.wallet.dust,
-        'dust',
-      ),
-    ]);
-  }
-
-  async #saveSubWalletCache(
-    filePath: string,
-    subWallet: unknown,
-    label: string,
-  ): Promise<void> {
-    try {
-      const dir = pathDir(filePath);
-      const filename = pathBase(filePath);
-      // `seed` param only feeds the default filename; we pass an
-      // explicit one, so the empty string is fine.
-      const saver = new WalletSaveStateProvider(
-        this.#logger,
-        '',
-        dir,
-        filename,
-      );
-      await saver.save(subWallet as Parameters<typeof saver.save>[0]);
-      // WalletSaveStateProvider writes at the process umask and offers no
-      // mode control, so tighten the snapshot after the fact.
-      chmodSync(filePath, 0o600);
-    } catch (e) {
-      this.#logger.warn(
-        { err: (e as Error).message, label, filePath },
-        'Wallet sub-wallet cache save failed; continuing',
-      );
-    }
+    await this.#cache.save(this.provider.wallet);
   }
 
   async [Symbol.asyncDispose](): Promise<void> {
@@ -310,197 +243,4 @@ export class WalletHandler implements AsyncDisposable {
       this.#logger.warn({ err: (e as Error).message }, 'Wallet stop failed');
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Internals
-// ---------------------------------------------------------------------------
-
-/** Opaque testkit-js `FluentWalletBuilder.config` (not exported by testkit). */
-type ConfigShape = unknown;
-
-/**
- * Drop a user-supplied wallet-state file into `.states/` under the
- * seed-derived filename so the existing restore path picks it up.
- * Detects gzip via magic bytes (`0x1f 0x8b`); raw JSON is gzipped on
- * the way in. Throws {@link WalletError} on read failure so a bad path
- * fails fast instead of silently doing a cold sync from genesis.
- *
- * Safety guarantees:
- *  1. **Source is read-only.** Only `readFileSync` touches `srcPath`.
- *  2. **Backup is preserved forever.** If the target `.gz` already
- *     exists, it is `copyFileSync`'d to `<target>.bak` *before* any
- *     write — never deleted, never overwritten by this helper. A user
- *     who hits a bad-format import can roll back with
- *     `mv <target>.bak <target>` and re-run.
- *  3. **Write is atomic.** New bytes land in `<target>.tmp` first,
- *     then `rename(2)` over the final path. POSIX rename is atomic
- *     within the same filesystem, so a mid-write crash can never leave
- *     the existing cache half-overwritten. A stale `.tmp` left by a
- *     failed rename is harmless (cache load only scans `.gz`) and gets
- *     overwritten by the next import attempt.
- */
-function importSeedCache(
-  logger: Logger,
-  srcPath: string,
-  targetPath: string,
-  kind: 'shielded' | 'dust',
-): void {
-  const absoluteSrc = resolve(process.cwd(), srcPath);
-  let bytes: Buffer;
-  try {
-    bytes = readFileSync(absoluteSrc);
-  } catch (e) {
-    throw new WalletError(
-      `--seed-cache-from-${kind}: cannot read ${absoluteSrc}: ${(e as Error).message}`,
-    );
-  }
-  const isGzipped = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-  const payload = isGzipped ? bytes : gzipSync(bytes);
-  const backupPath = `${targetPath}.bak`;
-  const tempPath = `${targetPath}.tmp`;
-  mkdirSync(pathDir(targetPath), { recursive: true });
-  // Preserve the previous cache forever as `<target>.bak` so a
-  // bad-format import is always recoverable by hand. We use copy (not
-  // rename) so the live `<target>` keeps its bytes throughout the
-  // window before the atomic rename below.
-  const backedUp = existsSync(targetPath);
-  if (backedUp) {
-    copyFileSync(targetPath, backupPath);
-  }
-  // 0o600: a wallet state snapshot exposes the full UTXO set and every
-  // derived address. Set at create time so the bytes are never group- or
-  // world-readable, not even between write and rename.
-  writeFileSync(tempPath, payload, { mode: 0o600 });
-  renameSync(tempPath, targetPath);
-  logger.info(
-    `Imported ${kind} cache: ${absoluteSrc} → ${targetPath}${
-      backedUp ? ` (previous cache backed up to ${backupPath})` : ''
-    }`,
-  );
-}
-
-/**
- * `<network>-<sha256(seed)[:16]>-<kind>.gz`. Per-kind suffix prevents
- * shielded/dust cross-load (different state schemas). Don't reuse
- * testkit's helper: it embeds the seed verbatim and gates the
- * network on env vars instead of runtime ID.
- */
-function computeCacheFilePath(
-  env: EnvironmentConfiguration,
-  seed: Uint8Array,
-  kind: 'shielded' | 'dust',
-): string {
-  const seedHash = createHash('sha256').update(seed).digest('hex').slice(0, 16);
-  const filename = `${env.walletNetworkId}-${seedHash}-${kind}.gz`;
-  return resolve(process.cwd(), DEFAULT_WALLET_STATE_DIRECTORY, filename);
-}
-
-/**
- * Restore dust wallet from cache, else build fresh. Routes through
- * `DustWallet(config).restore(...)` because testkit doesn't expose a
- * `WalletFactory.restoreDustWallet`. Caching turns preprod's 1 h+
- * first-run dust sync into seconds on subsequent boots.
- */
-async function loadOrCreateDustWallet(args: {
-  logger: Logger;
-  config: ConfigShape;
-  seed: Uint8Array;
-  dustOptions: DustWalletOptions;
-  cacheFilePath: string;
-  skipCache: boolean;
-}): Promise<DustWalletAPI> {
-  const { logger, config, seed, dustOptions, cacheFilePath, skipCache } = args;
-
-  if (!skipCache && existsSync(cacheFilePath)) {
-    try {
-      const dir = pathDir(cacheFilePath);
-      const filename = pathBase(cacheFilePath);
-      const loader = new WalletSaveStateProvider(logger, '', dir, filename);
-      const serializedState = await loader.load();
-      // `costParameters` is runtime state on the builder, not baked
-      // into the snapshot. Re-apply `dustOptions` so the restored
-      // wallet honours our `additionalFeeOverhead` override.
-      const dustConfig = buildDustConfig(config, dustOptions);
-      const dustClass = DustWallet(
-        dustConfig as Parameters<typeof DustWallet>[0],
-      );
-      const restored = dustClass.restore(serializedState);
-      logger.info(`Restored dust wallet state from ${cacheFilePath}`);
-      return restored as unknown as DustWalletAPI;
-    } catch (e) {
-      logger.warn(
-        { err: (e as Error).message, cacheFilePath },
-        'Dust wallet cache restore failed; falling back to fresh sync',
-      );
-    }
-  } else if (skipCache) {
-    logger.info('Dust wallet cache disabled (--no-cache); doing fresh sync');
-  }
-
-  return WalletFactory.createDustWallet(
-    config as Parameters<typeof WalletFactory.createDustWallet>[0],
-    seed,
-    dustOptions,
-  );
-}
-
-async function loadOrCreateShieldedWallet(args: {
-  logger: Logger;
-  config: ConfigShape;
-  seed: Uint8Array;
-  cacheFilePath: string;
-  skipCache: boolean;
-}): Promise<ShieldedWalletAPI> {
-  const { logger, config, seed, cacheFilePath, skipCache } = args;
-
-  if (!skipCache && existsSync(cacheFilePath)) {
-    try {
-      const dir = pathDir(cacheFilePath);
-      const filename = pathBase(cacheFilePath);
-      const loader = new WalletSaveStateProvider(logger, '', dir, filename);
-      const serializedState = await loader.load();
-      const restored = await WalletFactory.restoreShieldedWallet(
-        config as Parameters<typeof WalletFactory.restoreShieldedWallet>[0],
-        serializedState,
-      );
-      logger.info(`Restored wallet state from ${cacheFilePath}`);
-      return restored as ShieldedWalletAPI;
-    } catch (e) {
-      logger.warn(
-        { err: (e as Error).message, cacheFilePath },
-        'Wallet cache restore failed; falling back to fresh sync',
-      );
-    }
-  } else if (skipCache) {
-    logger.info('Wallet cache disabled (--no-cache); doing fresh sync');
-  }
-
-  return WalletFactory.createShieldedWallet(
-    config as Parameters<typeof WalletFactory.createShieldedWallet>[0],
-    seed,
-  ) as ShieldedWalletAPI;
-}
-
-/** Layer `dustOptions` onto the base config so cache-restored wallets honour `additionalFeeOverhead`. */
-function buildDustConfig(
-  config: ConfigShape,
-  dustOptions: DustWalletOptions,
-): ConfigShape {
-  return {
-    ...(config as Record<string, unknown>),
-    costParameters: {
-      ledgerParams: dustOptions.ledgerParams,
-      additionalFeeOverhead: dustOptions.additionalFeeOverhead,
-      feeBlocksMargin: dustOptions.feeBlocksMargin,
-    },
-  } as ConfigShape;
-}
-
-function pathDir(p: string): string {
-  return dirname(p);
-}
-
-function pathBase(p: string): string {
-  return basename(p);
 }

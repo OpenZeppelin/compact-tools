@@ -1,14 +1,7 @@
-import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import {
-  mkdir,
-  readFile,
-  rename,
-  stat,
-  unlink,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
+import { readJson, writeJson } from './services/atomic-json.ts';
+import { acquireLock, releaseLock } from './services/file-lock.ts';
 
 /**
  * Two-file per-network deployment ledger:
@@ -122,77 +115,4 @@ export class Deployments {
   #readHistory(): Promise<DeploymentsHistory> {
     return readJson<DeploymentsHistory>(this.#historyPath, {});
   }
-}
-
-/** A lock older than this is treated as abandoned by a crashed process. */
-const LOCK_STALE_MS = 30_000;
-const LOCK_RETRY_MS = 25;
-const LOCK_MAX_WAIT_MS = 10_000;
-
-/**
- * Take `lockPath` exclusively via `open(O_CREAT|O_EXCL)`. Retries on EEXIST;
- * unlinks and retries once the holder's mtime passes {@link LOCK_STALE_MS}
- * so a killed deploy can't wedge the ledger permanently.
- */
-async function acquireLock(lockPath: string): Promise<void> {
-  const deadline = Date.now() + LOCK_MAX_WAIT_MS;
-  for (;;) {
-    try {
-      await writeFile(lockPath, `${process.pid}\n`, { flag: 'wx' });
-      return;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-      if (await breakIfStale(lockPath)) continue;
-      if (Date.now() > deadline) {
-        throw new Error(
-          `Timed out waiting for the deployments lock at ${lockPath}. Remove it if no deploy is running.`,
-        );
-      }
-      await delay(LOCK_RETRY_MS);
-    }
-  }
-}
-
-/** Unlink `lockPath` if its mtime is older than {@link LOCK_STALE_MS}. Reports whether it did. */
-async function breakIfStale(lockPath: string): Promise<boolean> {
-  try {
-    const { mtimeMs } = await stat(lockPath);
-    if (Date.now() - mtimeMs < LOCK_STALE_MS) return false;
-    await unlink(lockPath);
-    return true;
-  } catch {
-    // Holder released between our EEXIST and the stat/unlink; the next
-    // acquire attempt will win the race normally.
-    return false;
-  }
-}
-
-async function releaseLock(lockPath: string): Promise<void> {
-  try {
-    await unlink(lockPath);
-  } catch {
-    // Already gone (stale-broken by another waiter). Nothing to release.
-  }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function readJson<T>(path: string, fallback: T): Promise<T> {
-  if (!existsSync(path)) return fallback;
-  const raw = await readFile(path, 'utf8');
-  if (!raw.trim()) return fallback;
-  return JSON.parse(raw) as T;
-}
-
-// Write atomically: a crash mid-write would otherwise leave a truncated
-// `*.json`, breaking subsequent reads and losing durable deploy state.
-// Write to a sibling temp file, then rename it into place (atomic on the
-// same filesystem).
-async function writeJson(path: string, value: unknown): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${randomUUID()}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
-  await rename(tmp, path);
 }

@@ -29,11 +29,14 @@ function fakeConfig(rootDir: string, keystore?: string): CompactConfig {
 }
 
 function fakeNetwork(opts: { local?: { index?: number } } = {}): NetworkConfig {
-  return {
-    wallet: opts.local
-      ? { source: 'local', index: opts.local.index ?? 0 }
-      : undefined,
-  } as unknown as NetworkConfig;
+  if (!opts.local) return {} as unknown as NetworkConfig;
+  // `index` stays absent unless the caller sets one, so the resolver's
+  // own default is what the no-index case exercises.
+  const wallet =
+    opts.local.index === undefined
+      ? { source: 'local' }
+      : { source: 'local', index: opts.local.index };
+  return { wallet } as unknown as NetworkConfig;
 }
 
 describe('classifySeed', () => {

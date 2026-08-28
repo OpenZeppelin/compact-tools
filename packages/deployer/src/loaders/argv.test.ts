@@ -32,6 +32,8 @@ describe('parseDeployArgv', () => {
       './dust.gz',
       '--seed-cache-from-shielded',
       './shielded.gz',
+      '--seed-cache-from-unshielded',
+      './unshielded.gz',
     ]);
     expect(p.network).toBe('preview');
     expect(p.configPath).toBe('./compact.toml');
@@ -41,6 +43,13 @@ describe('parseDeployArgv', () => {
     expect(p.syncBatchSize).toBe(2500);
     expect(p.seedCacheFromDust).toBe('./dust.gz');
     expect(p.seedCacheFromShielded).toBe('./shielded.gz');
+    expect(p.seedCacheFromUnshielded).toBe('./unshielded.gz');
+  });
+
+  it('should reject --seed-cache-from-unshielded with no follow-up value', () => {
+    expect(() => parseDeployArgv(['--seed-cache-from-unshielded'])).toThrow(
+      /--seed-cache-from-unshielded requires a value/,
+    );
   });
 
   it('should parse every boolean flag and its shorthand', () => {

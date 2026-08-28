@@ -243,6 +243,8 @@ describe('runDeploy CLI', () => {
         '/dust.json',
         '--seed-cache-from-shielded',
         '/shielded.gz',
+        '--seed-cache-from-unshielded',
+        '/unshielded.gz',
       ]);
 
       expect(mockPrepare).toHaveBeenCalledTimes(1);
@@ -257,6 +259,7 @@ describe('runDeploy CLI', () => {
       expect(opts.skipWalletCache).toBe(true);
       expect(opts.seedCacheDust).toBe('/dust.json');
       expect(opts.seedCacheShielded).toBe('/shielded.gz');
+      expect(opts.seedCacheUnshielded).toBe('/unshielded.gz');
     });
 
     it('should reject --seed-cache-from-dust with no follow-up value', async () => {

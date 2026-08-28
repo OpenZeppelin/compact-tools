@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileOrModuleRef } from '../config/schema.ts';
 import { ArtifactNotFoundError, ConfigError } from '../errors.ts';
 
 vi.mock('@midnight-ntwrk/compact-js', () => ({
@@ -196,6 +197,21 @@ describe('Artifact.load — error paths', () => {
     );
   });
 
+  it('should throw ConfigError when witnesses ref carries neither file nor module', async () => {
+    makeArtifactDir(root, 'WitnessShapeless');
+    await expect(
+      Artifact.load({
+        rootDir: root,
+        artifactsDir: 'src/artifacts',
+        artifact: 'WitnessShapeless',
+        contractName: 'WitnessShapeless',
+        // Programmatic callers bypass the TOML schema, so the shape is
+        // re-checked here rather than trusted.
+        witnesses: { export: 'witnesses' } as unknown as FileOrModuleRef,
+      }),
+    ).rejects.toThrow(/witnesses must be \{ module, export \}/);
+  });
+
   it('should throw ConfigError when witnesses module export does not resolve to an object', async () => {
     makeArtifactDir(root, 'WitnessNonObject');
     writeFileSync(
@@ -218,6 +234,26 @@ describe('Artifact.load — witnesses module ref', () => {
   let root: string;
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'artifact-wit-'));
+  });
+
+  it('should call a function-valued witnesses export and use its result', async () => {
+    makeArtifactDir(root, 'WitnessFactory');
+    writeFileSync(
+      join(root, 'w.mjs'),
+      'export const witnesses = () => ({ add: () => 1 });',
+    );
+    const art = await Artifact.load({
+      rootDir: root,
+      artifactsDir: 'src/artifacts',
+      artifact: 'WitnessFactory',
+      contractName: 'WitnessFactory',
+      witnesses: { module: 'w.mjs', export: 'witnesses' },
+    });
+    // The factory's return value reaches the compiled contract; the
+    // factory itself never does.
+    expect(art.compiledContract).toMatchObject({
+      w: { add: expect.any(Function) },
+    });
   });
 
   it('should accept a { module, export } witnesses ref that resolves to an object', async () => {

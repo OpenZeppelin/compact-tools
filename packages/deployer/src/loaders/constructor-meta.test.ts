@@ -1,6 +1,10 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ConfigError } from '../errors.ts';
+import { ArtifactNotFoundError, ConfigError } from '../errors.ts';
 import {
+  loadConstructorParamNames,
   parseConstructorParamNames,
   reorderNamedArgs,
 } from './constructor-meta.ts';
@@ -41,6 +45,14 @@ describe('parseConstructorParamNames', () => {
     ).toEqual(['salt', 'commitments', 'thresh']);
   });
 
+  it('handles parentheses nested inside a param type', () => {
+    expect(
+      parseConstructorParamNames(
+        dts('owner_0: (Uint8Array | ContractAddress), thresh_0: bigint'),
+      ),
+    ).toEqual(['owner', 'thresh']);
+  });
+
   it('keeps the SSA suffix when stripping would cause a name collision', () => {
     expect(
       parseConstructorParamNames(dts('foo_0: bigint, foo_1: bigint')),
@@ -53,6 +65,42 @@ describe('parseConstructorParamNames', () => {
 
   it('returns [] when initialState is not present', () => {
     expect(parseConstructorParamNames('// nothing here')).toEqual([]);
+  });
+
+  it('returns [] when the initialState parameter list is never closed', () => {
+    // Truncated `.d.ts`: the paren scan runs off the end without
+    // balancing, which must not be read as a no-arg constructor's `()`.
+    expect(
+      parseConstructorParamNames(
+        'initialState(context: Ctx<PS>, name_0: string',
+      ),
+    ).toEqual([]);
+  });
+
+  it('rejects a constructor param with no type annotation', () => {
+    expect(() => parseConstructorParamNames(dts('name_0'))).toThrow(
+      /Cannot parse constructor param: "name_0"/,
+    );
+  });
+});
+
+describe('loadConstructorParamNames', () => {
+  it('reads the ordered param names from the artifact d.ts', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctor-meta-'));
+    mkdirSync(join(dir, 'contract'));
+    writeFileSync(
+      join(dir, 'contract', 'index.d.ts'),
+      dts('_name_0: string, _supply_0: bigint'),
+    );
+    expect(loadConstructorParamNames(dir)).toEqual(['_name', '_supply']);
+  });
+
+  it('throws ArtifactNotFoundError when the artifact has no contract/index.d.ts', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctor-meta-'));
+    expect(() => loadConstructorParamNames(dir)).toThrow(ArtifactNotFoundError);
+    expect(() => loadConstructorParamNames(dir)).toThrow(
+      /cannot reorder named args/,
+    );
   });
 });
 

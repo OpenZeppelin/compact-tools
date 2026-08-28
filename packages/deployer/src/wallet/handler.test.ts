@@ -1,13 +1,10 @@
 import {
   chmodSync,
-  copyFileSync,
   existsSync,
-  mkdirSync,
   readFileSync,
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { gzipSync } from 'node:zlib';
 import type {
   EnvironmentConfiguration,
   MidnightWalletProvider,
@@ -20,7 +17,10 @@ import {
   WalletSaveStateProvider,
   WalletSeeds,
 } from '@midnight-ntwrk/testkit-js';
-import { createKeystore } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+import {
+  createKeystore,
+  UnshieldedWallet,
+} from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
 import {
   afterEach,
@@ -76,6 +76,9 @@ vi.mock('@midnight-ntwrk/testkit-js', () => ({
 
 vi.mock('@midnight-ntwrk/wallet-sdk-unshielded-wallet', () => ({
   createKeystore: vi.fn(() => ({ tag: 'keystore' })),
+  UnshieldedWallet: vi.fn(() => ({
+    restore: vi.fn(() => ({ tag: 'unshielded-restored' })),
+  })),
 }));
 
 vi.mock('@midnight-ntwrk/ledger-v8', () => ({
@@ -85,12 +88,20 @@ vi.mock('@midnight-ntwrk/ledger-v8', () => ({
 
 interface FakeProvider {
   stop: Mock;
-  wallet: { shielded: { tag: string } };
+  wallet: {
+    shielded: { tag: string };
+    dust: { tag: string };
+    unshielded: { tag: string };
+  };
 }
 
 function fakeProvider(opts: { failsOnStop?: boolean } = {}): FakeProvider {
   return {
-    wallet: { shielded: { tag: 'shielded-on-provider' } },
+    wallet: {
+      shielded: { tag: 'shielded-on-provider' },
+      dust: { tag: 'dust-on-provider' },
+      unshielded: { tag: 'unshielded-on-provider' },
+    },
     stop: vi.fn(
       opts.failsOnStop
         ? async () => {
@@ -298,17 +309,6 @@ describe('WalletHandler', () => {
   });
 
   describe('wallet-state cache', () => {
-    it('should build the shielded sub-wallet fresh when no cache file exists', async () => {
-      vi.mocked(existsSync).mockReturnValue(false);
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
-      expect(WalletFactory.createShieldedWallet).toHaveBeenCalledTimes(1);
-      expect(WalletFactory.restoreShieldedWallet).not.toHaveBeenCalled();
-    });
-
     it('should restore the shielded sub-wallet from cache when the file exists', async () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(WalletSaveStateProvider).mockImplementation(function (
@@ -333,28 +333,13 @@ describe('WalletHandler', () => {
       expect(WalletFactory.createShieldedWallet).not.toHaveBeenCalled();
     });
 
-    it('should skip the cache entirely when skipWalletCache is true', async () => {
-      vi.mocked(existsSync).mockReturnValue(true);
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv(),
-        { kind: 'hex', value: '00' },
-        { skipWalletCache: true },
-      );
-      expect(WalletFactory.restoreShieldedWallet).not.toHaveBeenCalled();
-      expect(WalletFactory.createShieldedWallet).toHaveBeenCalledTimes(1);
-    });
-
-    it('should fall back to a fresh build when restore throws', async () => {
+    it('should restore the unshielded sub-wallet from cache instead of rebuilding from the keystore', async () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(WalletSaveStateProvider).mockImplementation(function (
         this: object,
       ) {
         Object.assign(this, {
-          load: vi.fn(async () => {
-            throw new Error('corrupt');
-          }),
+          load: vi.fn(async () => 'serialized-state'),
           save: vi.fn(async () => undefined),
         });
       } as unknown as new (
@@ -365,39 +350,11 @@ describe('WalletHandler', () => {
         kind: 'hex',
         value: '00',
       });
-      expect(WalletFactory.createShieldedWallet).toHaveBeenCalledTimes(1);
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ err: 'corrupt' }),
-        expect.stringContaining('Wallet cache restore failed'),
-      );
+      expect(UnshieldedWallet).toHaveBeenCalledTimes(1);
+      expect(WalletFactory.createUnshieldedWallet).not.toHaveBeenCalled();
     });
 
-    it('should swallow save() failures with a warn log on saveCache()', async () => {
-      vi.mocked(WalletSaveStateProvider).mockImplementation(function (
-        this: object,
-      ) {
-        Object.assign(this, {
-          load: vi.fn(),
-          save: vi.fn(async () => {
-            throw new Error('disk-full');
-          }),
-        });
-      } as unknown as new (
-        ...args: unknown[]
-      ) => InstanceType<typeof WalletSaveStateProvider>);
-      wireTestkitChain(fakeProvider());
-      const handler = await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
-      await expect(handler.saveCache()).resolves.toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ err: 'disk-full' }),
-        'Wallet sub-wallet cache save failed; continuing',
-      );
-    });
-
-    it('should save the shielded sub-wallet through WalletSaveStateProvider on saveCache()', async () => {
+    it('should delegate saveCache() to the cache service for all three sub-wallets', async () => {
       const save = vi.fn(async () => undefined);
       vi.mocked(WalletSaveStateProvider).mockImplementation(function (
         this: object,
@@ -414,6 +371,8 @@ describe('WalletHandler', () => {
       });
       await handler.saveCache();
       expect(save).toHaveBeenCalledWith(provider.wallet.shielded);
+      expect(save).toHaveBeenCalledWith(provider.wallet.dust);
+      expect(save).toHaveBeenCalledWith(provider.wallet.unshielded);
       // WalletSaveStateProvider writes at the umask; the snapshot must end
       // up owner-only.
       expect(chmodSync).toHaveBeenCalledWith(expect.any(String), 0o600);
@@ -421,139 +380,39 @@ describe('WalletHandler', () => {
   });
 
   describe('seed cache import', () => {
-    it('should import a raw-JSON dust source by gzipping into the seed-derived path', async () => {
-      const raw = Buffer.from('{"state":"raw-json"}', 'utf8');
-      vi.mocked(readFileSync).mockReturnValue(raw);
+    it('should route each --seed-cache-from-* source to its own sub-wallet cache', async () => {
+      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
       wireTestkitChain(fakeProvider());
       await WalletHandler.build(
         logger,
         fakeEnv('preview'),
         { kind: 'hex', value: 'aa'.repeat(32) },
-        { seedCacheDust: '/path/to/state.json' },
+        {
+          seedCacheShielded: '/shielded.json',
+          seedCacheDust: '/dust.json',
+          seedCacheUnshielded: '/unshielded.json',
+        },
       );
-      // Atomic write: payload lands in `<target>.tmp`, then rename to
-      // `<target>`. Asserts both halves so a future regression that
-      // skips the rename (or writes directly to target) fails loudly.
-      expect(writeFileSync).toHaveBeenCalled();
-      const [tempPath, payload] = vi.mocked(writeFileSync).mock.calls[0] ?? [];
-      expect(String(tempPath)).toMatch(/preview-[0-9a-f]{16}-dust\.gz\.tmp$/);
-      // Payload was raw → must be gzipped on the way in (magic bytes).
-      const payloadBuf = payload as Buffer;
-      expect(payloadBuf[0]).toBe(0x1f);
-      expect(payloadBuf[1]).toBe(0x8b);
-      // rename(2) is atomic on POSIX within the same filesystem.
-      const [renameFrom, renameTo] = vi.mocked(renameSync).mock.calls[0] ?? [];
-      expect(String(renameFrom)).toBe(String(tempPath));
-      expect(String(renameTo)).toMatch(/preview-[0-9a-f]{16}-dust\.gz$/);
+      // Crossed routing would load one sub-wallet's snapshot into
+      // another, whose state schema differs.
+      const targets = vi.mocked(renameSync).mock.calls.map((c) => String(c[1]));
+      expect(targets).toHaveLength(3);
+      expect(targets[0]).toMatch(/-shielded\.gz$/);
+      expect(targets[1]).toMatch(/-dust\.gz$/);
+      expect(targets[2]).toMatch(/-unshielded\.gz$/);
     });
 
-    it('should pass a gzipped dust source through unchanged (no double-gzip)', async () => {
-      const gzipped = gzipSync(Buffer.from('{"state":"raw-json"}', 'utf8'));
-      vi.mocked(readFileSync).mockReturnValue(gzipped);
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv('preview'),
-        { kind: 'hex', value: 'aa'.repeat(32) },
-        { seedCacheDust: '/path/to/state.gz' },
-      );
-      const payload = vi.mocked(writeFileSync).mock.calls[0]?.[1];
-      expect(payload).toEqual(gzipped);
-    });
-
-    it('should write the imported cache with mode 0o600', async () => {
-      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
+    it.each([
+      ['seedCacheShielded'],
+      ['seedCacheDust'],
+      ['seedCacheUnshielded'],
+    ])('should warn and skip the import when --no-cache is set alongside %s', async (flag) => {
       wireTestkitChain(fakeProvider());
       await WalletHandler.build(
         logger,
         fakeEnv(),
         { kind: 'hex', value: 'aa'.repeat(32) },
-        { seedCacheDust: '/state.json' },
-      );
-      // Owner-only from creation: the snapshot exposes the full UTXO set.
-      expect(writeFileSync).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.anything(),
-        { mode: 0o600 },
-      );
-    });
-
-    it('should ensure the .states/ directory exists before writing', async () => {
-      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv(),
-        { kind: 'hex', value: 'aa'.repeat(32) },
-        { seedCacheDust: '/state.json' },
-      );
-      expect(mkdirSync).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ recursive: true }),
-      );
-    });
-
-    it('should throw WalletError when the source file is missing', async () => {
-      vi.mocked(readFileSync).mockImplementationOnce(() => {
-        throw new Error('ENOENT: no such file');
-      });
-      wireTestkitChain(fakeProvider());
-      await expect(
-        WalletHandler.build(
-          logger,
-          fakeEnv(),
-          { kind: 'hex', value: 'aa'.repeat(32) },
-          { seedCacheDust: '/missing.json' },
-        ),
-      ).rejects.toThrow(/--seed-cache-from-dust:.*missing\.json/);
-    });
-
-    it('should back up an existing target cache to <target>.bak before overwriting', async () => {
-      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
-      vi.mocked(existsSync).mockReturnValue(true);
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv(),
-        { kind: 'hex', value: 'aa'.repeat(32) },
-        { seedCacheDust: '/state.json' },
-      );
-      // copyFileSync MUST be called with (target, target.bak) so the
-      // previous cache bytes are preserved forever. If this assertion
-      // breaks, the safety net we promised the user is gone.
-      expect(copyFileSync).toHaveBeenCalledTimes(1);
-      const [src, dest] = vi.mocked(copyFileSync).mock.calls[0] ?? [];
-      expect(String(src)).toMatch(/-dust\.gz$/);
-      expect(String(dest)).toMatch(/-dust\.gz\.bak$/);
-      expect(String(dest)).toBe(`${String(src)}.bak`);
-      const sawBackupLog = vi
-        .mocked(logger.info)
-        .mock.calls.some((c) =>
-          String(c[0]).includes('previous cache backed up to'),
-        );
-      expect(sawBackupLog).toBe(true);
-    });
-
-    it('should NOT create a .bak when the target cache does not already exist', async () => {
-      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
-      vi.mocked(existsSync).mockReturnValue(false);
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv(),
-        { kind: 'hex', value: 'aa'.repeat(32) },
-        { seedCacheDust: '/state.json' },
-      );
-      expect(copyFileSync).not.toHaveBeenCalled();
-    });
-
-    it('should warn and skip the import when --no-cache is also set', async () => {
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv(),
-        { kind: 'hex', value: 'aa'.repeat(32) },
-        { skipWalletCache: true, seedCacheDust: '/state.json' },
+        { skipWalletCache: true, [flag]: '/state.json' },
       );
       expect(writeFileSync).not.toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalledWith(
@@ -561,19 +420,17 @@ describe('WalletHandler', () => {
       );
     });
 
-    it('should import a shielded source into the matching -shielded.gz path', async () => {
-      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
+    it('should not warn when --no-cache is set without any --seed-cache-from-*', async () => {
       wireTestkitChain(fakeProvider());
       await WalletHandler.build(
         logger,
-        fakeEnv('preview'),
+        fakeEnv(),
         { kind: 'hex', value: 'aa'.repeat(32) },
-        { seedCacheShielded: '/state.json' },
+        { skipWalletCache: true },
       );
-      // Final atomic rename lands on `-shielded.gz`; the intermediate
-      // tmp write goes to `-shielded.gz.tmp`.
-      const renameTo = vi.mocked(renameSync).mock.calls[0]?.[1];
-      expect(String(renameTo)).toMatch(/preview-[0-9a-f]{16}-shielded\.gz$/);
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('--seed-cache-from-*'),
+      );
     });
   });
 

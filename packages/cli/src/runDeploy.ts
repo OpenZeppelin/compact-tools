@@ -90,6 +90,7 @@ async function main(): Promise<void> {
       skipWalletCache: args.noCache,
       seedCacheDust: args.seedCacheFromDust,
       seedCacheShielded: args.seedCacheFromShielded,
+      seedCacheUnshielded: args.seedCacheFromUnshielded,
       syncBatchSize: args.syncBatchSize,
       logger,
       promptPassphrase: async (path) => {
@@ -198,6 +199,11 @@ function showUsage(): void {
     ),
   );
   console.log(
+    chalk.yellow(
+      '  --seed-cache-from-unshielded <path> Import a pre-warmed unshielded state file into .states/',
+    ),
+  );
+  console.log(
     chalk.yellow('  --dry-run             Load+validate, do NOT submit a tx'),
   );
   console.log(
@@ -246,6 +252,8 @@ function packageVersion(): string {
       (require('../package.json') as { version?: string }).version ?? 'dev'
     );
   } catch {
+    // A missing or malformed package.json means a broken install, and
+    // `--version` has no better answer than a placeholder.
     return 'dev';
   }
 }

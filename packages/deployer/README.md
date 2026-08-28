@@ -48,6 +48,7 @@ compact-deploy <Contract>
   --no-cache                ignore on-disk wallet-state cache; force fresh sync
   --seed-cache-from-dust <path>      import a pre-warmed dust state file into .states/
   --seed-cache-from-shielded <path>  import a pre-warmed shielded state file into .states/
+  --seed-cache-from-unshielded <path> import a pre-warmed unshielded state file into .states/
   --dry-run                 load, validate, build providers, log plan, DO NOT submit
   --json                    single JSON object on stdout (machine-readable)
   -v, --verbose             pino debug logs to .compact/logs/<timestamp>.log
@@ -70,7 +71,7 @@ Exit codes: `0` ok · `2` config error · `3` wallet error · `4` provider unrea
 
 ## Wallet cache
 
-After each successful sync the deployer writes `<cwd>/.states/<network>-<seed-hash>-<kind>.gz` (one file per shielded / dust sub-wallet). Next run restores from it instead of re-syncing from genesis.
+After each successful sync the deployer writes `<cwd>/.states/<network>-<seed-hash>-<kind>.gz` (one file per shielded / dust / unshielded sub-wallet). Next run restores from it instead of re-syncing from genesis.
 
 - Contents: gzipped sub-wallet state (UTXOs, checkpoint). No private keys (re-derived from seed each run).
 - Keyed by SHA-256(seed) + network ID, so `local` vs `preprod` keep separate caches.
@@ -85,9 +86,11 @@ If cold sync OOMs on preprod (the known upstream bug) and you already have a `wa
 ```
 compact-deploy <Contract> --network preprod \
   --seed-cache-from-dust /path/to/state.json \
-  --seed-cache-from-shielded /path/to/shielded.json   # optional
+  --seed-cache-from-shielded /path/to/shielded.json \
+  --seed-cache-from-unshielded /path/to/unshielded.json
 ```
 
+- The dust file is the one that matters on preprod; the shielded and unshielded imports are optional.
 - Accepts either raw JSON (the direct `serializeState()` output) or its gzipped copy. Gzip is detected by magic bytes.
 - The file is renamed to the seed-derived cache name and dropped into `.states/`.
 - **The previous cache (if any) is preserved at `<target>.gz.bak`** — never deleted, never overwritten by the import. To roll back from a bad import, `mv .states/<target>.gz.bak .states/<target>.gz`.

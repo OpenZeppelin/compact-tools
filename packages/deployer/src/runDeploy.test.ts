@@ -147,7 +147,7 @@ describe('runDeploy', () => {
     );
   });
 
-  it('should thread --seed-cache-from-dust and --seed-cache-from-shielded to Deployer.prepare', async () => {
+  it('should thread every --seed-cache-from-* flag to Deployer.prepare', async () => {
     process.argv = [
       'node',
       'script.ts',
@@ -155,6 +155,8 @@ describe('runDeploy', () => {
       '/path/to/dust.json',
       '--seed-cache-from-shielded',
       '/path/to/shielded.gz',
+      '--seed-cache-from-unshielded',
+      '/path/to/unshielded.gz',
     ];
     const fakeDep = fakeDeployer();
     vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
@@ -166,6 +168,7 @@ describe('runDeploy', () => {
     const callArgs = (deployerModule.Deployer.prepare as any).mock.calls[0][0];
     expect(callArgs.seedCacheDust).toBe('/path/to/dust.json');
     expect(callArgs.seedCacheShielded).toBe('/path/to/shielded.gz');
+    expect(callArgs.seedCacheUnshielded).toBe('/path/to/unshielded.gz');
   });
 
   it('should let explicit seedCacheFromDust opt beat the argv value', async () => {
@@ -261,6 +264,22 @@ describe('runDeploy', () => {
 
     await expect(runDeploy({ contract: 'X' })).rejects.toBe(err);
     expect(process.exitCode).toBe(1);
+  });
+
+  it('should stringify a non-Error rejection in --json mode', async () => {
+    process.argv = ['node', 'script.ts', '--json'];
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(
+      'proof server said no',
+    );
+
+    await expect(runDeploy({ contract: 'X' })).rejects.toBe(
+      'proof server said no',
+    );
+    expect(process.exitCode).toBe(1);
+
+    const parsed = JSON.parse(writeSpy.mock.calls[0]?.[0] as string);
+    expect(parsed.error).toBe('Error');
+    expect(parsed.message).toBe('proof server said no');
   });
 
   it('should never call process.exit — an embedding app keeps control', async () => {

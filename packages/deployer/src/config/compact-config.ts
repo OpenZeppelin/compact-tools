@@ -62,7 +62,13 @@ export class CompactConfig {
     const result = configSchema.safeParse(parsed);
     if (!result.success) {
       const issues = result.error.issues
-        .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+        .map((i) => {
+          // A TOML document always parses to a table, so an issue can
+          // never land at the empty root path.
+          /* v8 ignore next */
+          const at = i.path.join('.') || '(root)';
+          return `  - ${at}: ${i.message}`;
+        })
         .join('\n');
       throw new ConfigError(`compact.toml validation failed:\n${issues}`);
     }

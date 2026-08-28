@@ -113,6 +113,21 @@ signing_key_file = "./deploy/Vault.signingkey"
     );
   });
 
+  it('should resolve a relative --config path against cwd', async () => {
+    const dir = tmpRepo(MIN_VALID);
+    const config = await CompactConfig.load('compact.toml', dir);
+    expect(config.configPath).toBe(join(dir, 'compact.toml'));
+  });
+
+  it('should throw ConfigError when the --config path exists but cannot be read', async () => {
+    // A directory clears the existence check, then `readFile` fails EISDIR.
+    const dir = mkdtempSync(join(tmpdir(), 'compact-toml-unreadable-'));
+    await expect(CompactConfig.load(dir)).rejects.toThrow(ConfigError);
+    await expect(CompactConfig.load(dir)).rejects.toThrow(
+      /Failed to read .*: EISDIR/,
+    );
+  });
+
   it('should throw ConfigError when no compact.toml exists upward from cwd', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'no-compact-toml-'));
     await expect(CompactConfig.load(undefined, dir)).rejects.toThrow(

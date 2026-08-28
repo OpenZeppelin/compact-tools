@@ -159,6 +159,18 @@ describe('Keystore', () => {
       );
     });
 
+    it('should label a schema failure with no path as <root>', () => {
+      // Clears the shallow field checks but is not a plain object, so zod
+      // reports at the top level and the issue path is empty.
+      const arrayShaped = Object.assign([], {
+        version: 'midnight-1',
+        crypto: { kdf: 'scrypt', cipher: 'aes-128-ctr' },
+      });
+      expect(() => Keystore.fromJSON(arrayShaped)).toThrow(
+        /<root>: Expected object/,
+      );
+    });
+
     it('should reject a keystore missing kdfparams with WalletError', () => {
       const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
       const { kdfparams: _dropped, ...crypto } = ks.crypto;

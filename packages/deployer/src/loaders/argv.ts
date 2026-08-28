@@ -13,6 +13,7 @@ export interface ParsedDeployArgv {
   syncBatchSize?: number;
   seedCacheFromDust?: string;
   seedCacheFromShielded?: string;
+  seedCacheFromUnshielded?: string;
   noCache: boolean;
   dryRun: boolean;
   json: boolean;
@@ -80,6 +81,13 @@ export function parseDeployArgv(
           argv,
           ++i,
           '--seed-cache-from-shielded',
+        );
+        break;
+      case '--seed-cache-from-unshielded':
+        out.seedCacheFromUnshielded = expectValue(
+          argv,
+          ++i,
+          '--seed-cache-from-unshielded',
         );
         break;
       case '--network':

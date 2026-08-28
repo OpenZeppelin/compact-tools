@@ -14,7 +14,12 @@ afterEach(() => {
   rootDirs.length = 0;
 });
 
-function makeProject(entries: Record<string, { Contract: unknown }>): string {
+/** How the generated artifact module exposes its `Contract` class, if at all. */
+type ExportStyle = 'named' | 'default' | 'none';
+
+function makeProject(
+  entries: Record<string, { Contract: unknown; exportStyle?: ExportStyle }>,
+): string {
   const root = mkdtempSync(join(tmpdir(), 'contract-resolve-'));
   rootDirs.push(root);
   mkdirSync(join(root, 'artifacts'));
@@ -45,7 +50,9 @@ proof_server = "http://localhost:6300"
 ${contractsToml}
 `,
   );
-  for (const [name, { Contract }] of Object.entries(entries)) {
+  for (const [name, { Contract, exportStyle = 'named' }] of Object.entries(
+    entries,
+  )) {
     const contractDir = join(root, 'artifacts', name, 'contract');
     mkdirSync(contractDir, { recursive: true });
     // The exported class instance is shared via the module cache, so
@@ -53,10 +60,12 @@ ${contractsToml}
     const g = globalThis as unknown as Record<string, unknown>;
     const key = `__test_contract_${name}_${Date.now()}_${Math.random()}`;
     g[key] = Contract;
-    writeFileSync(
-      join(contractDir, 'index.js'),
-      `export const Contract = globalThis['${key}'];\n`,
-    );
+    const body = {
+      named: `export const Contract = globalThis['${key}'];\n`,
+      default: `export default { Contract: globalThis['${key}'] };\n`,
+      none: 'export const notAContract = 1;\n',
+    }[exportStyle];
+    writeFileSync(join(contractDir, 'index.js'), body);
   }
   return root;
 }
@@ -74,6 +83,35 @@ describe('resolveContractName', () => {
       OtherExample: { Contract: OtherContract },
     });
     const config = await CompactConfig.load(join(root, 'compact.toml'));
+    expect(await resolveContractName(TokenContract, config, root)).toBe(
+      'TokenExample',
+    );
+  });
+
+  it('matches a Contract reached through the module default export', async () => {
+    class TokenContract {
+      initialState() {}
+    }
+    const root = makeProject({
+      TokenExample: { Contract: TokenContract, exportStyle: 'default' },
+    });
+    const config = await CompactConfig.load(join(root, 'compact.toml'));
+    expect(await resolveContractName(TokenContract, config, root)).toBe(
+      'TokenExample',
+    );
+  });
+
+  it('passes over an artifact module that exports no Contract at all', async () => {
+    class TokenContract {
+      initialState() {}
+    }
+    const root = makeProject({
+      Bare: { Contract: TokenContract, exportStyle: 'none' },
+      TokenExample: { Contract: TokenContract },
+    });
+    const config = await CompactConfig.load(join(root, 'compact.toml'));
+    // `Bare` holds the same class but never exposes it, so it must not
+    // register as a second match and make the lookup ambiguous.
     expect(await resolveContractName(TokenContract, config, root)).toBe(
       'TokenExample',
     );
