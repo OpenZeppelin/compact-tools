@@ -34,11 +34,11 @@ const CONTRACT_FILES: readonly { file: string; zkirV3?: boolean }[] = [
   { file: 'Ecdsa.compact', zkirV3: true },
 ];
 
-// Pin the compiler to the ECDSA/0.18-runtime toolchain. The default toolchain
-// (compactc 0.31.x) emits code expecting compact-runtime 0.16.0, which the
-// 0.18.0-rc.1 runtime this package now depends on rejects at load time.
+// Pin the compiler to the toolchain matching this package's compact-runtime.
+// Generated artifacts assert the runtime minor at load time, so an older
+// compactc emits code the installed runtime rejects.
 // Override via COMPACTC_VERSION if a newer pinned toolchain is installed.
-const COMPILER_VERSION = process.env.COMPACTC_VERSION ?? '0.33.0-rc.2';
+const COMPILER_VERSION = process.env.COMPACTC_VERSION ?? '0.34.0';
 
 /** Identifies what an artifact was built with, so a change forces a rebuild. */
 const stampFor = (zkirV3: boolean): string =>

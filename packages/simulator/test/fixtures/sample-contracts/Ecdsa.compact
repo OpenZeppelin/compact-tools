@@ -5,8 +5,9 @@ pragma language_version >= 0.20.0;
 
 import CompactStandardLibrary;
 
-// Re-export the secp256k1 types so the generated TS exposes them.
-export { Secp256k1EcdsaSignature, Secp256k1Point };
+// Re-export the signature struct so the generated TS exposes it. `Secp256k1Point`
+// is an internally handled type and cannot be exported from a contract.
+export { Secp256k1EcdsaSignature };
 
 // Records the outcome of the last stored verification, so the simulator's
 // impure/state path is exercised (not just a pure passthrough).
