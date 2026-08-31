@@ -44,7 +44,7 @@ export function createDrySimulator<
      * before {@link init} has been awaited.
      */
     get contractAddress(): string {
-      if (!this._contractAddress) {
+      if (this._contractAddress === undefined) {
         throw new Error('Simulator: await init() before use');
       }
       return this._contractAddress;
@@ -218,6 +218,8 @@ export function createDrySimulator<
       const circuitCtx = this.circuitContext;
       return {
         ledger: this.getPublicState(),
+        // Runtime-typed `P | undefined`; always set after init (see
+        // `AbstractSimulator.getPrivateState`).
         privateState: circuitCtx.callContext.currentPrivateState as P,
         contractAddress: circuitCtx.callContext.currentQueryContext.address,
       };

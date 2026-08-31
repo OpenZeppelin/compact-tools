@@ -8,8 +8,10 @@
  * Exports nothing and is imported by nothing. The build config excludes
  * `*.type-test.ts` from emit so it never reaches `dist`; `yarn types` compiles it.
  */
+import type { CircuitContext } from '@midnight-ntwrk/compact-runtime';
 import { createSimulator } from './factory/createSimulator.js';
 import type { SimulatorConfig } from './factory/SimulatorConfig.js';
+import type { AsyncCircuits, ContextlessCircuits } from './types/Circuit.js';
 import type { IMinimalContract } from './types/Contract.js';
 
 type GuardPrivateState = { readonly value: number };
@@ -60,5 +62,41 @@ async function _callSiteSubtype(): Promise<void> {
   void instance.marker();
 }
 
+// --- Circuit proxies resolve to promises ------------------------------------
+// The wrapping proxies are async regardless of artifact era, so the mapped
+// type must yield `Promise<R>` for the 0.18 promise shape and the 0.16 sync
+// shape alike. A bare-`R` mapping reintroduces the un-awaited-result footgun.
+
+type GuardCircuits = {
+  modern: (
+    ctx: CircuitContext<GuardPrivateState>,
+    x: number,
+  ) => Promise<{ result: boolean; context: CircuitContext<GuardPrivateState> }>;
+  legacy: (
+    ctx: CircuitContext<GuardPrivateState>,
+    x: number,
+  ) => { result: boolean; context: CircuitContext<GuardPrivateState> };
+};
+
+declare const contextless: ContextlessCircuits<
+  GuardCircuits,
+  GuardPrivateState
+>;
+
+function _circuitsResolveToPromises(): void {
+  const modern: Promise<boolean> = contextless.modern(1);
+  const legacy: Promise<boolean> = contextless.legacy(1);
+  // @ts-expect-error the mapped circuit yields a promise, not a bare boolean.
+  const sync: boolean = contextless.modern(1);
+  void modern;
+  void legacy;
+  void sync;
+}
+
+// `AsyncCircuits` must stay interchangeable with `ContextlessCircuits`.
+const _alias: AsyncCircuits<GuardCircuits, GuardPrivateState> = contextless;
+
 void Guard;
 void _callSiteSubtype;
+void _circuitsResolveToPromises;
+void _alias;
