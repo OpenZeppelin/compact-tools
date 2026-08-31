@@ -3,9 +3,9 @@ name: Publish Release
 on:
   pull_request:
     types: [closed]
-    branches: [main]
+    branches: [main, beta]
   # Escape hatch: re-run a publish that failed mid-flow (e.g. after a fix to
-  # this workflow). Reads the version from the package.json currently on main.
+  # this workflow). Reads the version from the package.json on the chosen ref.
   workflow_dispatch:
     inputs:
       package:
@@ -57,6 +57,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           INPUT_PACKAGE: ${{ inputs.package }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           if [[ "$EVENT" == "workflow_dispatch" ]]; then
             PKG="$INPUT_PACKAGE"
@@ -89,13 +90,42 @@ jobs:
             esac
           fi
           VERSION=$(node -p "require('./packages/$DIR/package.json').version")
-          echo "dir=$DIR" >> $GITHUB_OUTPUT
-          echo "name=$PKG" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # The dist-tag comes from the version alone, so a prerelease can never
+          # take over `latest` regardless of which ref dispatched the run.
+          PRERELEASE="${VERSION#*-}"
+          if [[ "$PRERELEASE" == "$VERSION" ]]; then
+            DIST_TAG=latest
+          elif [[ "$PRERELEASE" == beta.* ]]; then
+            DIST_TAG=beta
+          else
+            echo "::error::unsupported prerelease identifier in $VERSION; expected beta.N"
+            exit 1
+          fi
+
+          # On the merge path the base branch is known, so hold the two channels
+          # apart: beta ships prereleases, main ships stable.
+          if [[ "$EVENT" == "pull_request" ]]; then
+            case "$BASE_REF:$DIST_TAG" in
+              beta:beta|main:latest) ;;
+              *)
+                echo "::error::$VERSION (dist-tag $DIST_TAG) cannot be released from '$BASE_REF'"
+                exit 1
+                ;;
+            esac
+          fi
+
+          {
+            echo "dir=$DIR"
+            echo "name=$PKG"
+            echo "version=$VERSION"
+            echo "dist_tag=$DIST_TAG"
+          } >> $GITHUB_OUTPUT
           {
             echo "### Publishing"
             echo "- Package: $PKG"
             echo "- Version: $VERSION"
+            echo "- npm dist-tag: $DIST_TAG"
             echo "- Trigger: $EVENT"
           } >> $GITHUB_STEP_SUMMARY
 
@@ -131,4 +161,4 @@ jobs:
         run: |
           yarn config set npmAuthToken "$NPM_TOKEN"
           cd packages/${{ steps.pkg.outputs.dir }}
-          yarn npm publish --access public --provenance
+          yarn npm publish --access public --provenance --tag ${{ steps.pkg.outputs.dist_tag }}
