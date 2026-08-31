@@ -1,4 +1,7 @@
-import type { StateValue } from '@midnight-ntwrk/compact-runtime';
+import {
+  dummyContractAddress,
+  type StateValue,
+} from '@midnight-ntwrk/compact-runtime';
 import { describe, expect, it } from 'vitest';
 import { PRIVATE_STATE_MUTATION_UNSUPPORTED } from '../../src/index.js';
 import type {
@@ -20,7 +23,9 @@ const makeWorld = (
 ): LiveContext<WitnessPrivateState> => {
   let stored = initial;
   const world: LiveContext<WitnessPrivateState> = {
-    contractAddress: '0200deadbeef',
+    // Runtime-parseable: the deployed address seeds the local evaluator's
+    // circuit context.
+    contractAddress: dummyContractAddress(),
     async handleFor(): Promise<DeployedTxHandle> {
       return { callTx: {} };
     },

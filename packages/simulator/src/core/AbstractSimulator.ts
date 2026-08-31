@@ -93,6 +93,8 @@ export abstract class AbstractSimulator<P, L>
    * @returns The current private state of type P
    */
   public getPrivateState(): P {
+    // The runtime types this `P | undefined`; the simulator always seeds a
+    // private state, so it is set after init.
     return this.circuitContext.callContext.currentPrivateState as P;
   }
 
