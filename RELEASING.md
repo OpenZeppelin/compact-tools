@@ -21,7 +21,7 @@ runs only from `beta`, `patch`/`minor`/`major` only from `main`.
 4. Choose the package to release and the version bump type.
    Following [SemVer](https://semver.org/):
    - **Patch** - Backward-compatible bug fixes.
-   - **Minor** - New functionality in a backward compatible way.
+   - **Minor** - New functionality in a backward-compatible way.
    - **Major** - Breaking API changes.
    - **Prepatch / preminor / premajor** - Open a new beta cycle at the
      corresponding bump (`0.3.1` + preminor -> `0.4.0-beta.0`).
@@ -36,7 +36,7 @@ runs only from `beta`, `patch`/`minor`/`major` only from `main`.
    - Create a git tag.
    - Publish the package to npm under the channel's dist-tag.
 7. Once published, go to "Releases" and create a GitHub release using the
-   generated tag. Mark beta tags as pre-releases.
+   generated tag. Mark beta tags as prereleases.
 
 ## Graduating a beta to stable
 
