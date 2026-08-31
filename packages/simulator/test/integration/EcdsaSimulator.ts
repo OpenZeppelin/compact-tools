@@ -1,9 +1,9 @@
+import type { Secp256k1Point } from '@midnight-ntwrk/compact-runtime';
 import { createSimulator, type SimulatorOptions } from '../../src/index.js';
 import {
   Contract as EcdsaContract,
   ledger,
   type Secp256k1EcdsaSignature,
-  type Secp256k1Point,
 } from '../fixtures/artifacts/Ecdsa/contract/index.js';
 import {
   EcdsaPrivateState,
