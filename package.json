@@ -16,10 +16,10 @@
     "clean": "turbo run clean"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.6",
     "@types/node": "26.1.2",
     "ts-node": "^10.9.2",
-    "turbo": "^2.9.18",
+    "turbo": "^2.10.8",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

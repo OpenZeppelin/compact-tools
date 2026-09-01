@@ -27,7 +27,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "compact-builder": "dist/runBuilder.js",
@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "@openzeppelin/compact-builder": "workspace:^",
-    "chalk": "^5.6.2",
-    "ora": "^9.0.0"
+    "chalk": "^6.0.0",
+    "ora": "^9.4.1"
   }
 }
