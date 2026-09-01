@@ -13,6 +13,19 @@ The dist-tag is derived from the version string, so a prerelease can never
 take over `latest`. The bump strategies are pinned to their branch: `pre*`
 runs only from `beta`, `patch`/`minor`/`major` only from `main`.
 
+## Changelog
+
+Each published package keeps its own `CHANGELOG.md`, following
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Any PR with a
+consumer-visible change adds an entry under that package's `## Unreleased`
+heading, with the PR number in parentheses. Mark API breaks with a
+`**Breaking:**` prefix.
+
+Beta bumps leave the entries under `## Unreleased`. When a cycle graduates to
+stable, rename the heading to `## <version> (YYYY-MM-DD)` and land that before
+running the workflow from `main`, so the published tarball and the GitHub
+release notes agree.
+
 ## Running the workflow
 
 1. Go to "Release Package" in Actions.
