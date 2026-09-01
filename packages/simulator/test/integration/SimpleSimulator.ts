@@ -1,4 +1,4 @@
-import { createSimulator, type SimulatorOptions } from '../../src/index';
+import { createSimulator, type SimulatorOptions } from '../../src/index.js';
 import {
   ledger,
   Contract as SimpleContract,
@@ -6,7 +6,7 @@ import {
 import {
   SimplePrivateState,
   SimpleWitnesses,
-} from '../fixtures/sample-contracts/witnesses/SimpleWitnesses';
+} from '../fixtures/sample-contracts/witnesses/SimpleWitnesses.js';
 
 /**
  * Base simulator

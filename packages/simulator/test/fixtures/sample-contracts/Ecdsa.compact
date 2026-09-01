@@ -1,0 +1,35 @@
+// Sample contract for testing
+// DO NOT USE IN PRODUCTION!!!
+
+pragma language_version >= 0.20.0;
+
+import CompactStandardLibrary;
+
+// Re-export the signature struct so the generated TS exposes it. `Secp256k1Point`
+// is an internally handled type and cannot be exported from a contract.
+export { Secp256k1EcdsaSignature };
+
+// Records the outcome of the last stored verification, so the simulator's
+// impure/state path is exercised (not just a pure passthrough).
+export ledger lastVerified: Boolean;
+
+// Ethereum-style: hash `msg` with keccak256 in-circuit, then verify the ECDSA
+// signature over that digest. Pure, no ledger or witness access.
+export circuit verifyEthereum(
+  msg: Bytes<32>,
+  sig: Secp256k1EcdsaSignature,
+  pk: Secp256k1Point
+): Boolean {
+  return secp256k1EcdsaVerify(keccak256<Bytes<32>>(msg), sig, pk);
+}
+
+// Same verification, but records the outcome on-ledger (impure).
+export circuit verifyAndStore(
+  msg: Bytes<32>,
+  sig: Secp256k1EcdsaSignature,
+  pk: Secp256k1Point
+): Boolean {
+  const ok = secp256k1EcdsaVerify(keccak256<Bytes<32>>(msg), sig, pk);
+  lastVerified = disclose(ok);
+  return ok;
+}

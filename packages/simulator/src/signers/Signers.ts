@@ -1,6 +1,5 @@
 import {
   type CoinPublicKey,
-  convertFieldToBytes,
   encodeCoinPublicKey,
 } from '@midnight-ntwrk/compact-runtime';
 import type { BackendKind } from '../backend/Backend.js';
@@ -28,10 +27,8 @@ export type Either<L, R> = {
 /**
  * Converts an ASCII alias to a 64-char zero-padded hex string.
  *
- * This is the exact derivation the existing test harness uses
- * (`generatePubKeyPair` / `encodeToPK`), so a backend-aware simulator resolves
- * an alias to the same key the current synchronous specs do — preserving dry
- * parity for migrated modules.
+ * The same derivation the test harness uses (`generatePubKeyPair` /
+ * `encodeToPK`), so an alias resolves to the key the specs encode directly.
  *
  * @param alias - The caller alias.
  * @returns A 64-char hex `CoinPublicKey`.
@@ -39,7 +36,10 @@ export type Either<L, R> = {
 const aliasToHex = (alias: string): CoinPublicKey =>
   Buffer.from(alias, 'ascii').toString('hex').padStart(64, '0');
 
-const zeroBytes = (): Uint8Array => convertFieldToBytes(32, 0n, '');
+// A 32-byte zero array. Previously derived via the runtime's
+// `convertFieldToBytes(32, 0n, '')`, which was removed in compact-runtime 0.18;
+// the value is identical (the byte encoding of field element 0).
+const zeroBytes = (): Uint8Array => new Uint8Array(32);
 
 /**
  * Configuration for {@link Signers}.

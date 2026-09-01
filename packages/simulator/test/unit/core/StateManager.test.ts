@@ -1,6 +1,7 @@
 import {
   ChargedState,
   type CircuitContext,
+  createCircuitContext,
   dummyContractAddress,
   type EncodedQualifiedShieldedCoinInfo,
   type EncodedZswapLocalState,
@@ -10,17 +11,18 @@ import {
   sampleRawTokenType,
 } from '@midnight-ntwrk/compact-runtime';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CircuitContextManager } from '../../../src/core/CircuitContextManager';
+import { CircuitContextManager } from '../../../src/core/CircuitContextManager.js';
 import { Contract as MockSimple } from '../../fixtures/artifacts/Simple/contract/index.js';
 import {
   type SimplePrivateState,
   SimpleWitnesses,
-} from '../../fixtures/sample-contracts/witnesses/SimpleWitnesses';
-import { encodeToAddress, toHexPadded } from '../../fixtures/utils/address';
+} from '../../fixtures/sample-contracts/witnesses/SimpleWitnesses.js';
+import { toHexPadded } from '../../fixtures/utils/address.js';
 
 // Constants
 const DEPLOYER = 'DEPLOYER';
 const deployer = toHexPadded(DEPLOYER);
+const OTHER_ADDRESS = toHexPadded('otherAddress');
 
 // Mut vars
 let mockContract: MockSimple<SimplePrivateState>;
@@ -33,7 +35,7 @@ describe('CircuitContextManager', () => {
    * Parametrize me!
    */
   describe('constructor', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       mockContract = new MockSimple<SimplePrivateState>(SimpleWitnesses());
       initialPrivateState = {};
 
@@ -42,13 +44,17 @@ describe('CircuitContextManager', () => {
         initialPrivateState,
         deployer,
         dummyContractAddress(),
+        0,
       );
 
+      // compact-runtime 0.18: the constructor no longer builds the context;
+      // init() runs the contract constructor and populates it.
+      await circuitCtxManager.init();
       ctx = circuitCtxManager.getContext();
     });
 
     it('should set private state', () => {
-      expect(ctx.currentPrivateState).toEqual(initialPrivateState);
+      expect(ctx.callContext.currentPrivateState).toEqual(initialPrivateState);
     });
 
     it('should set zswap local state', () => {
@@ -60,26 +66,69 @@ describe('CircuitContextManager', () => {
         inputs: [],
         outputs: [],
       };
-      expect(ctx.currentZswapLocalState).toEqual(expectedZswapState);
+      expect(ctx.callContext.currentZswapLocalState).toEqual(
+        expectedZswapState,
+      );
     });
 
     it('should set original state', () => {
-      expect(ctx.currentQueryContext).toBeInstanceOf(QueryContext);
-      expect(ctx.currentQueryContext).toHaveProperty('__wbg_ptr');
-      expect((ctx.currentQueryContext as any).__wbg_ptr).toBeTypeOf('number');
+      expect(ctx.callContext.currentQueryContext).toBeInstanceOf(QueryContext);
+      expect(ctx.callContext.currentQueryContext).toHaveProperty('__wbg_ptr');
+      expect((ctx.callContext.currentQueryContext as any).__wbg_ptr).toBeTypeOf(
+        'number',
+      );
+    });
+
+    it('defaults block time to zero', () => {
+      expect(ctx.callContext.time).toStrictEqual(0);
+    });
+
+    it('honours an explicit block time', async () => {
+      const pinned = new CircuitContextManager(
+        mockContract,
+        initialPrivateState,
+        deployer,
+        dummyContractAddress(),
+        1_700_000_000,
+      );
+      await pinned.init();
+
+      expect(pinned.getContext().callContext.time).toStrictEqual(1_700_000_000);
     });
 
     it('should set tx ctx', () => {
       // Need to go deeper
-      expect(ctx.currentQueryContext).toBeInstanceOf(QueryContext);
-      expect(ctx.currentQueryContext.address).toEqual(dummyContractAddress());
-      expect(ctx.currentQueryContext.state).toBeInstanceOf(ChargedState);
-      expect(ctx.currentQueryContext.state).toHaveProperty('__wbg_ptr');
+      expect(ctx.callContext.currentQueryContext).toBeInstanceOf(QueryContext);
+      expect(ctx.callContext.currentQueryContext.address).toEqual(
+        dummyContractAddress(),
+      );
+      expect(ctx.callContext.currentQueryContext.state).toBeInstanceOf(
+        ChargedState,
+      );
+      expect(ctx.callContext.currentQueryContext.state).toHaveProperty(
+        '__wbg_ptr',
+      );
+    });
+  });
+
+  describe('init guard', () => {
+    it('rejects a context read before init', () => {
+      const uninitialized = new CircuitContextManager(
+        new MockSimple<SimplePrivateState>(SimpleWitnesses()),
+        {},
+        deployer,
+        dummyContractAddress(),
+        0,
+      );
+
+      expect(() => uninitialized.getContext()).toThrowError(
+        'CircuitContextManager: call init() before use',
+      );
     });
   });
 
   describe('setContext', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       mockContract = new MockSimple<SimplePrivateState>(SimpleWitnesses());
       initialPrivateState = {};
 
@@ -88,15 +137,16 @@ describe('CircuitContextManager', () => {
         initialPrivateState,
         deployer,
         dummyContractAddress(),
+        0,
       );
 
+      // compact-runtime 0.18: the constructor no longer builds the context;
+      // init() runs the contract constructor and populates it.
+      await circuitCtxManager.init();
       ctx = circuitCtxManager.getContext();
     });
 
-    /**
-     * Improve me
-     */
-    it('should set new ctx', () => {
+    it('stores the replacement context', () => {
       const oldCtx = circuitCtxManager.getContext();
 
       const qualCoin: QualifiedShieldedCoinInfo = {
@@ -108,8 +158,7 @@ describe('CircuitContextManager', () => {
       const encQualCoin: EncodedQualifiedShieldedCoinInfo =
         encodeQualifiedShieldedCoinInfo(qualCoin);
 
-      // zswap local state
-      const zswapLocalState_1: EncodedZswapLocalState = {
+      const zswapLocalState: EncodedZswapLocalState = {
         coinPublicKey: {
           bytes: Uint8Array.from(Buffer.from(toHexPadded('goldenFace'), 'hex')),
         },
@@ -118,23 +167,25 @@ describe('CircuitContextManager', () => {
         outputs: [],
       };
 
-      // Query ctx
-      const modifiedTxCtx: QueryContext = {
-        ...ctx.currentQueryContext,
-        address: encodeToAddress('otherAddress'),
-      } as unknown as QueryContext;
-
-      // Build new ctx
-      const newCtx: CircuitContext<SimplePrivateState> = {
-        currentQueryContext: modifiedTxCtx,
-        currentPrivateState: initialPrivateState,
-        currentZswapLocalState: zswapLocalState_1,
-        costModel: ctx.costModel,
-      };
+      // Built through the runtime factory, not a literal: the 0.18 call-tree
+      // shape carries fields a hand-rolled object silently omits.
+      const newCtx = createCircuitContext<SimplePrivateState>(
+        'circuit',
+        OTHER_ADDRESS,
+        zswapLocalState,
+        oldCtx.callContext.currentQueryContext.state,
+        initialPrivateState,
+      );
 
       circuitCtxManager.setContext(newCtx);
-      expect(circuitCtxManager.getContext()).toEqual(newCtx);
-      expect(circuitCtxManager.getContext()).not.toEqual(oldCtx);
+
+      expect(circuitCtxManager.getContext()).toBe(newCtx);
+      expect(
+        circuitCtxManager.getContext().callContext.currentQueryContext.address,
+      ).toStrictEqual(OTHER_ADDRESS);
+      expect(
+        circuitCtxManager.getContext().callContext.currentZswapLocalState,
+      ).toStrictEqual(zswapLocalState);
     });
   });
 });

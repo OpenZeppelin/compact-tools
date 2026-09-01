@@ -1,4 +1,4 @@
-import { createSimulator, type SimulatorOptions } from '../../src/index';
+import { createSimulator, type SimulatorOptions } from '../../src/index.js';
 import {
   type ContractAddress,
   type Either,
@@ -9,7 +9,7 @@ import {
 import {
   SampleZOwnablePrivateState,
   SampleZOwnableWitnesses,
-} from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses';
+} from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses.js';
 
 /** Type constructor args */
 type SampleZOwnableArgs = readonly [

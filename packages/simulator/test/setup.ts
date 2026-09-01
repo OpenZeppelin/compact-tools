@@ -3,13 +3,19 @@
  * Runs once before all tests via Vitest's globalSetup.
  */
 
-import { exec, type SpawnSyncReturns } from 'node:child_process';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,46 +23,50 @@ const __dirname = dirname(__filename);
 const SAMPLE_CONTRACTS_DIR = join(__dirname, 'fixtures', 'sample-contracts');
 const ARTIFACTS_DIR = join(__dirname, 'fixtures', 'artifacts');
 
-const CONTRACT_FILES = [
-  'Simple.compact',
-  'Witness.compact',
-  'SampleZOwnable.compact',
+/**
+ * The fixtures to compile. `zkirV3` opts a fixture into the ZKIR v3 backend,
+ * the only one carrying the secp256k1 primitives.
+ */
+const CONTRACT_FILES: readonly { file: string; zkirV3?: boolean }[] = [
+  { file: 'Simple.compact' },
+  { file: 'Witness.compact' },
+  { file: 'SampleZOwnable.compact' },
+  { file: 'Ecdsa.compact', zkirV3: true },
 ];
 
-function isSpawnSyncRet(
-  err: unknown,
-): err is SpawnSyncReturns<string | Buffer> {
-  if (typeof err !== 'object' || err === null) {
-    return false;
-  }
+// Pin the compiler to the toolchain matching this package's compact-runtime.
+// Generated artifacts assert the runtime minor at load time, so an older
+// compactc emits code the installed runtime rejects.
+// Override via COMPACTC_VERSION if a newer pinned toolchain is installed.
+const COMPILER_VERSION = process.env.COMPACTC_VERSION ?? '0.34.0';
 
-  const typedErr = err as Partial<SpawnSyncReturns<string | Buffer>> &
-    Record<string, unknown>;
+/** Identifies what an artifact was built with, so a change forces a rebuild. */
+const stampFor = (zkirV3: boolean): string =>
+  `${COMPILER_VERSION}${zkirV3 ? '+zkir-v3' : ''}`;
 
-  const okErr = typedErr.error instanceof Error;
-  const okStdout =
-    typeof typedErr.stdout === 'string' || Buffer.isBuffer(typedErr.stdout);
-  const okStderr =
-    typeof typedErr.stderr === 'string' || Buffer.isBuffer(typedErr.stderr);
-  const okStatus =
-    typeof typedErr.status === 'number' || typedErr.status === null;
-
-  return okErr && okStdout && okStderr && okStatus;
-}
-
-async function compileContract(contractFile: string): Promise<void> {
+async function compileContract(contract: {
+  file: string;
+  zkirV3?: boolean;
+}): Promise<void> {
+  const { file: contractFile, zkirV3 = false } = contract;
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
   const contractName = contractFile.replace('.compact', '');
   const outputDir = join(ARTIFACTS_DIR, contractName);
   const contractArtifact = join(outputDir, 'contract', 'index.js');
+  const stampPath = join(outputDir, '.compiler-stamp');
+  const stamp = stampFor(zkirV3);
 
-  // Skip if artifact already exists and is newer than source
+  // Skip only if the artifact is newer than the source AND was built by this
+  // toolchain. Without the stamp, an existing clone keeps artifacts the current
+  // runtime rejects at load time.
   if (existsSync(contractArtifact) && existsSync(inputPath)) {
     const artifactTime = statSync(contractArtifact).mtime;
     const sourceTime = statSync(inputPath).mtime;
-    if (artifactTime >= sourceTime) {
+    const stampMatches =
+      existsSync(stampPath) && readFileSync(stampPath, 'utf8').trim() === stamp;
+    if (artifactTime >= sourceTime && stampMatches) {
       console.log(`✓ ${contractFile} (already compiled)`);
-      return; // Already compiled and up to date
+      return;
     }
   }
 
@@ -68,23 +78,28 @@ async function compileContract(contractFile: string): Promise<void> {
   mkdirSync(outputDir, { recursive: true });
   mkdirSync(join(outputDir, 'keys'), { recursive: true });
 
-  const command = `compact compile --skip-zk "${inputPath}" "${outputDir}"`;
+  // execFile (no shell) with an argument array: the compiler version and paths
+  // are passed as discrete args, never interpolated into a command string, so
+  // none of them can inject shell.
+  const args = [
+    'compile',
+    `+${COMPILER_VERSION}`,
+    ...(zkirV3 ? ['--feature-zkir-v3'] : []),
+    '--skip-zk',
+    inputPath,
+    outputDir,
+  ];
   try {
-    await execAsync(command);
+    await execFileAsync('compact', args);
   } catch (err: unknown) {
-    if (!isSpawnSyncRet(err)) {
-      throw err;
+    // Without a shell, a missing `compact` binary surfaces as ENOENT.
+    if ((err as { code?: unknown } | null)?.code === 'ENOENT') {
+      throw new Error('`compact` not found. Is it installed and on PATH?');
     }
-
-    if (err.status === 127) {
-      throw new Error(
-        '`compact` not found (exit code 127). Is it installed and on PATH?',
-      );
-    }
-
     throw err;
   }
 
+  writeFileSync(stampPath, `${stamp}\n`);
   console.log(`✓ Compiled ${contractFile}`);
 }
 
@@ -92,8 +107,8 @@ async function setup(): Promise<void> {
   mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
   // Compile each contract sequentially
-  for (const contractFile of CONTRACT_FILES) {
-    await compileContract(contractFile);
+  for (const contract of CONTRACT_FILES) {
+    await compileContract(contract);
   }
 }
 
@@ -105,4 +120,10 @@ export default async function globalSetup(): Promise<void> {
     console.log(`❌ Setup failed: ${error}`);
     process.exit(1);
   }
+}
+
+// Also runnable directly (`yarn compile:fixtures`), so the type check can
+// depend on the artifacts without going through vitest.
+if (process.argv[1] === __filename) {
+  await globalSetup();
 }

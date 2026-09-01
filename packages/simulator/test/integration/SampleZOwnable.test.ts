@@ -1,10 +1,10 @@
 import {
   CompactTypeBytes,
   CompactTypeVector,
-  convertFieldToBytes,
   persistentHash,
 } from '@midnight-ntwrk/compact-runtime';
 import { beforeEach, describe, expect, it } from 'vitest';
+
 import type { ZswapCoinPublicKey } from '../fixtures/artifacts/SampleZOwnable/contract/index.js';
 import { SampleZOwnablePrivateState } from '../fixtures/sample-contracts/witnesses/SampleZOwnableWitnesses.js';
 import * as utils from '../fixtures/utils/address.js';
@@ -53,7 +53,7 @@ const buildCommitmentFromId = (
   counter: bigint,
 ): Uint8Array => {
   const rt_type = new CompactTypeVector(4, new CompactTypeBytes(32));
-  const bCounter = convertFieldToBytes(32, counter, '');
+  const bCounter = utils.convertFieldToBytes(counter);
   const bDomain = new TextEncoder().encode(DOMAIN);
 
   const commitment = persistentHash(rt_type, [
@@ -84,7 +84,7 @@ const buildCommitment = (
   const id = createIdHash(pk, nonce);
 
   const rt_type = new CompactTypeVector(4, new CompactTypeBytes(32));
-  const bCounter = convertFieldToBytes(32, counter, '');
+  const bCounter = utils.convertFieldToBytes(counter);
   const bDomain = new TextEncoder().encode(domain);
 
   const commitment = persistentHash(rt_type, [
