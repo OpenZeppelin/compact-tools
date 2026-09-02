@@ -1153,6 +1153,45 @@ describe('CompactCompiler', () => {
       );
       expect(testMockExec).toHaveBeenCalledTimes(4);
     });
+
+    it('prints the captured output when the failure carries no stderr', async () => {
+      mockReaddir.mockResolvedValue([
+        {
+          name: 'MockElGamal.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ] as any);
+      mockExistsSync.mockReturnValue(true);
+
+      const ptyError = new Error('compact exited with code 1') as Error & {
+        stdout: string;
+        stderr: string;
+      };
+      ptyError.stdout =
+        'Exception in thread "main" Unsupported test_eq: JubjubScalar == JubjubScalar\n';
+      ptyError.stderr = '';
+
+      const testMockExec = vi
+        .fn()
+        .mockResolvedValueOnce({ stdout: 'compact 0.1.0', stderr: '' })
+        .mockResolvedValueOnce({ stdout: 'compact 0.1.0', stderr: '' })
+        .mockResolvedValueOnce({ stdout: 'Compactc 0.26.0', stderr: '' })
+        .mockRejectedValueOnce(ptyError);
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      compiler = new CompactCompiler({}, testMockExec);
+
+      await expect(compiler.compile()).rejects.toThrow(CompilationError);
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Unsupported test_eq: JubjubScalar == JubjubScalar',
+        ),
+      );
+
+      logSpy.mockRestore();
+    });
   });
 
   describe('Real-world scenarios', () => {

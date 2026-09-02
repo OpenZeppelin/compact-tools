@@ -41,7 +41,10 @@ function tokenizeFlags(flags: string): string[] {
  *
  * Handles both macOS and Linux `script` syntax:
  * - macOS: `script -q <file> <command> [args...]`
- * - Linux: `script -qc "<command> [args...]" <file>`
+ * - Linux: `script -qec "<command> [args...]" <file>`
+ *
+ * util-linux `script` exits 0 whatever the child did unless `-e` is given.
+ * BSD `script` on macOS already returns the child's status.
  *
  * Note: Circuit constraint output is only available when compiling WITHOUT
  * `--skip-zk`, as the k/rows values come from the ZK proving pass. When
@@ -61,11 +64,11 @@ async function spawnWithPty(
       // macOS: script -q <file> <command> [args...]
       scriptArgs = ['-q', tmpFile, 'compact', ...args];
     } else {
-      // Linux: script -qc "<command>" <file>
+      // Linux: script -qec "<command>" <file>
       const cmd = ['compact', ...args]
         .map((a) => (a.includes(' ') ? `'${a}'` : a))
         .join(' ');
-      scriptArgs = ['-qc', cmd, tmpFile];
+      scriptArgs = ['-qec', cmd, tmpFile];
     }
 
     const proc = spawn('script', scriptArgs, {
