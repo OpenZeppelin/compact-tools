@@ -335,9 +335,13 @@ export class CompactCompiler {
           UIService.printOutput(summary, chalk.cyan);
         }
 
-        const cleanStderr = cleanForDisplay(execError.stderr);
-        if (cleanStderr) {
-          UIService.printOutput(cleanStderr, chalk.red);
+        // Under `script` the compiler's stderr is merged into the captured
+        // PTY output, so stdout is the only place the error text lives.
+        const details =
+          cleanForDisplay(execError.stderr) ||
+          cleanForDisplay(execError.stdout);
+        if (details) {
+          UIService.printOutput(details, chalk.red);
         }
       }
 
