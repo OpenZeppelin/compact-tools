@@ -54,10 +54,6 @@ vi.mock('ora', () => ({
   default: mockOra,
 }));
 
-vi.mock('ws', () => ({
-  WebSocket: class FakeWebSocket {},
-}));
-
 vi.mock('../src/logger.ts', () => ({
   createLogger: vi.fn(() => ({
     trace: vi.fn(),

@@ -2,9 +2,8 @@
 // biome-ignore-all lint/suspicious/noConsole: CLI writes user-facing diagnostics to stdout/stderr
 
 /**
- * `compact-deploy` CLI shell over {@link Deployer}. The `globalThis.WebSocket`
- * shim is required: midnight-js's indexer client uses the browser WebSocket
- * interface, which Node only ships natively from v22.
+ * `compact-deploy` CLI shell over {@link Deployer}: parses argv, runs one
+ * deploy or dry-run, and renders the result or the failure.
  */
 import { createRequire } from 'node:module';
 import { Deployer } from '@openzeppelin/compact-deployer/deployer';
@@ -16,11 +15,8 @@ import {
 import { formatError } from '@openzeppelin/compact-deployer/services/error-format';
 import chalk from 'chalk';
 import ora from 'ora';
-import { WebSocket } from 'ws';
 import { createLogger } from './logger.ts';
 import { promptPassphrase } from './prompt.ts';
-
-(globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
 
 /** Shared deploy flags plus the CLI-only contract positional. */
 interface ParsedArgs extends ParsedDeployArgv {

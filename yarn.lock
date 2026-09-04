@@ -1133,14 +1133,12 @@ __metadata:
     "@openzeppelin/compact-deployer": "workspace:^"
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:26.1.2"
-    "@types/ws": "npm:^8.5.10"
     chalk: "npm:^6.0.0"
     ora: "npm:^9.4.1"
     pino: "npm:^9.7.0"
     pino-pretty: "npm:^13.0.0"
     typescript: "npm:^6.0.3"
     vitest: "npm:^4.1.9"
-    ws: "npm:^8.16.0"
   bin:
     compact-builder: dist/runBuilder.js
     compact-compiler: dist/runCompiler.js
@@ -2247,15 +2245,6 @@ __metadata:
     "@types/node": "npm:*"
     "@types/ssh2-streams": "npm:*"
   checksum: 10/fc2584af091da49da9d6628dd8a5e851b217bb9b1b732b0361903894f2730ab3fdf8634f954be34c5a513f7eb0b2772d059d64062bcf6b4a0eb73bfc83c4b858
-  languageName: node
-  linkType: hard
-
-"@types/ws@npm:^8.5.10":
-  version: 8.18.1
-  resolution: "@types/ws@npm:8.18.1"
-  dependencies:
-    "@types/node": "npm:*"
-  checksum: 10/1ce05e3174dcacf28dae0e9b854ef1c9a12da44c7ed73617ab6897c5cbe4fccbb155a20be5508ae9a7dde2f83bd80f5cf3baa386b934fc4b40889ec963e94f3a
   languageName: node
   linkType: hard
 
@@ -5873,7 +5862,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.16.0, ws@npm:^8.18.0, ws@npm:^8.8.1":
+"ws@npm:^8.18.0, ws@npm:^8.8.1":
   version: 8.20.1
   resolution: "ws@npm:8.20.1"
   peerDependencies:
