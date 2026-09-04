@@ -1,9 +1,18 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
+import {
+  createUnprovenDeployTx,
+  submitTxAsync,
+} from '@midnight-ntwrk/midnight-js-contracts';
 import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
-import pino from 'pino';
+import pino, { type Logger } from 'pino';
 import * as Rx from 'rxjs';
 import {
   afterEach,
@@ -15,9 +24,16 @@ import {
   vi,
 } from 'vitest';
 import { Deployer } from './deployer.ts';
-import { DeployTxFailedError } from './errors.ts';
+import {
+  DeploymentsFileError,
+  DeployTxFailedError,
+  PendingDeployExistsError,
+} from './errors.ts';
 import { buildProviders } from './providers/build.ts';
 import { WalletHandler } from './wallet/handler.ts';
+
+/** Lets one test make the deployments lock unobtainable. */
+const lock = vi.hoisted(() => ({ failure: undefined as Error | undefined }));
 
 vi.mock('./loaders/artifact.ts', () => ({
   Artifact: {
@@ -42,7 +58,7 @@ vi.mock('./providers/proof-server.ts', () => ({
 }));
 
 vi.mock('./providers/build.ts', () => ({
-  buildProviders: vi.fn(() => ({})),
+  buildProviders: vi.fn(),
 }));
 
 vi.mock('./wallet/handler.ts', () => ({
@@ -50,8 +66,23 @@ vi.mock('./wallet/handler.ts', () => ({
 }));
 
 vi.mock('@midnight-ntwrk/midnight-js-contracts', () => ({
-  deployContract: vi.fn(),
+  createUnprovenDeployTx: vi.fn(),
+  submitTxAsync: vi.fn(),
 }));
+
+// Real lock everywhere except the one test that needs a timeout: the wait is
+// 10 s in production, too long to spend proving that deploy() reports it.
+vi.mock('./services/file-lock.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./services/file-lock.ts')>();
+  return {
+    ...actual,
+    acquireLock: async (lockPath: string) => {
+      if (lock.failure) throw lock.failure;
+      await actual.acquireLock(lockPath);
+    },
+  };
+});
 
 // Identity-throttle so `syncAndVerifyFunds`'s progress + checkpoint
 // subscriptions fire on the single state emission instead of waiting
@@ -227,18 +258,70 @@ function fakeProviderWithState(
   };
 }
 
-type DeployTxResult = Awaited<ReturnType<typeof deployContract>>;
-function fakeDeployTxResult(address = '0xCONTRACT'): DeployTxResult {
+function fakeUnsubmittedDeploy(address = '0xCONTRACT') {
   return {
-    deployTxData: {
-      public: {
-        contractAddress: address,
-        txHash: '0xHASH',
-        txId: '0xTX',
-        blockHeight: 1234,
-      },
+    public: { contractAddress: address },
+    private: {
+      unprovenTx: { tag: 'unproven' },
+      signingKey: 'contract-maintenance-key',
+      initialPrivateState: { seeded: true },
     },
-  } as unknown as DeployTxResult;
+  };
+}
+
+function fakeFinalized(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'SucceedEntirely',
+    txId: '0xTX',
+    txHash: '0xHASH',
+    blockHeight: 1234,
+    ...overrides,
+  };
+}
+
+interface FakeProviders {
+  publicDataProvider: { watchForTxData: Mock };
+  privateStateProvider: {
+    setContractAddress: Mock;
+    set: Mock;
+    setSigningKey: Mock;
+  };
+}
+
+function fakeProviders(): FakeProviders {
+  return {
+    publicDataProvider: {
+      watchForTxData: vi.fn(async () => fakeFinalized()),
+    },
+    privateStateProvider: {
+      setContractAddress: vi.fn(),
+      set: vi.fn(async () => undefined),
+      setSigningKey: vi.fn(async () => undefined),
+    },
+  };
+}
+
+/** Pino stubbed down to the four levels the deploy path uses. */
+function recordingLogger(): { logger: Logger; info: Mock } {
+  const info = vi.fn();
+  return {
+    logger: {
+      info,
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Logger,
+    info,
+  };
+}
+
+/** The head ledger file for the fixture's only network. */
+function headPath(rootDir: string): string {
+  return join(rootDir, 'deployments', 'local.json');
+}
+
+function readHead(rootDir: string): Record<string, Record<string, unknown>> {
+  return JSON.parse(readFileSync(headPath(rootDir), 'utf8'));
 }
 
 interface Fixture {
@@ -252,6 +335,7 @@ function writeFixture(
     explorer?: string;
     syncTimeout?: number;
     syncBatchSize?: number;
+    initPrivateState?: string;
   } = {},
 ): Fixture {
   const rootDir = mkdtempSync(join(tmpdir(), 'deployer-test-'));
@@ -263,6 +347,10 @@ function writeFixture(
   const syncBatchLine =
     opts.syncBatchSize !== undefined
       ? `sync_batch_size = ${opts.syncBatchSize}\n`
+      : '';
+  const initStateLine =
+    opts.initPrivateState !== undefined
+      ? `init_private_state = { file = "${opts.initPrivateState}" }\n`
       : '';
   const toml = `
 [profile]
@@ -281,7 +369,7 @@ ${explorerLine}${syncTimeoutLine}${syncBatchLine}
 [contracts.Counter]
 artifact = "Counter"
 signing_key_file = "signing-key.hex"
-`;
+${initStateLine}`;
   writeFileSync(join(rootDir, 'compact.toml'), toml);
   writeFileSync(join(rootDir, 'signing-key.hex'), `${'aa'.repeat(32)}\n`);
   return {
@@ -293,6 +381,7 @@ signing_key_file = "signing-key.hex"
 
 describe('Deployer', () => {
   let fx: Fixture;
+  let providers: FakeProviders;
 
   beforeEach(() => {
     fx = writeFixture();
@@ -301,13 +390,35 @@ describe('Deployer', () => {
     vi.mocked(WalletHandler.build).mockImplementation(
       async () => fakeOwnedWallet().owned,
     );
-    vi.mocked(deployContract).mockResolvedValue(fakeDeployTxResult());
+    providers = fakeProviders();
+    vi.mocked(buildProviders).mockImplementation(() => providers as never);
+    vi.mocked(createUnprovenDeployTx).mockResolvedValue(
+      fakeUnsubmittedDeploy() as never,
+    );
+    vi.mocked(submitTxAsync).mockResolvedValue('0xTX');
   });
 
   afterEach(() => {
     fx.cleanup();
+    lock.failure = undefined;
     vi.clearAllMocks();
   });
+
+  /** Prepared deployer over the fixture config with an injected wallet. */
+  function prepared(
+    opts: { logger?: Logger; force?: boolean; txTimeoutMs?: number } = {},
+    coinKey = '0xDEPLOYER',
+  ): Promise<Deployer> {
+    return Deployer.prepare({
+      contract: 'Counter',
+      network: 'local',
+      configPath: fx.configPath,
+      logger: opts.logger ?? silentLogger,
+      walletProvider: asInjected(fakeProvider(coinKey)),
+      force: opts.force,
+      txTimeoutMs: opts.txTimeoutMs,
+    });
+  }
 
   it('should return dryRun:true and not submit a tx on dryRun', async () => {
     const injected = fakeProvider('0xINJECTED');
@@ -327,21 +438,14 @@ describe('Deployer', () => {
     expect(result.contractName).toBe('Counter');
     expect(result.network).toBe('local');
     expect(result.deployer).toBe('0xINJECTED');
-    expect(deployContract).not.toHaveBeenCalled();
+    expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
   it('should submit the tx and return the populated success result on deploy', async () => {
-    const injected = fakeProvider('0xDEPLOYER');
-    await using d = await Deployer.prepare({
-      contract: 'Counter',
-      network: 'local',
-      configPath: fx.configPath,
-      logger: silentLogger,
-      walletProvider: asInjected(injected),
-    });
+    await using d = await prepared();
     const result = await d.deploy();
 
-    expect(deployContract).toHaveBeenCalledTimes(1);
+    expect(submitTxAsync).toHaveBeenCalledTimes(1);
     expect(buildProviders).toHaveBeenCalledTimes(1);
     expect(result.dryRun).toBe(false);
     expect(result.address).toBe('0xCONTRACT');
@@ -454,18 +558,239 @@ describe('Deployer', () => {
   });
 
   it('should wrap midnight-js deploy failures in DeployTxFailedError', async () => {
-    vi.mocked(deployContract).mockRejectedValueOnce(
-      new Error('chain rejected'),
-    );
-    const injected = fakeProvider();
-    await using d = await Deployer.prepare({
-      contract: 'Counter',
-      network: 'local',
-      configPath: fx.configPath,
-      logger: silentLogger,
-      walletProvider: asInjected(injected),
-    });
+    vi.mocked(submitTxAsync).mockRejectedValueOnce(new Error('chain rejected'));
+    await using d = await prepared();
     await expect(d.deploy()).rejects.toBeInstanceOf(DeployTxFailedError);
+  });
+
+  describe('pending-then-confirmed ledger', () => {
+    it('should log the address and txId before the wait for finalization', async () => {
+      const { logger, info } = recordingLogger();
+      let loggedBeforeWatch: unknown[] = [];
+      providers.publicDataProvider.watchForTxData.mockImplementation(
+        async () => {
+          loggedBeforeWatch = info.mock.calls.flat();
+          return fakeFinalized();
+        },
+      );
+
+      await using d = await prepared({ logger });
+      await d.deploy();
+
+      expect(loggedBeforeWatch).toContainEqual(
+        expect.objectContaining({ address: '0xCONTRACT', txId: '0xTX' }),
+      );
+    });
+
+    it('should have the pending record on disk before the wait for finalization', async () => {
+      let headDuringWatch: Record<string, unknown> = {};
+      providers.publicDataProvider.watchForTxData.mockImplementation(
+        async () => {
+          headDuringWatch = readHead(fx.rootDir).Counter ?? {};
+          return fakeFinalized();
+        },
+      );
+
+      await using d = await prepared();
+      await d.deploy();
+
+      expect(headDuringWatch).toMatchObject({
+        status: 'pending',
+        address: '0xCONTRACT',
+        txId: '0xTX',
+        deployer: '0xDEPLOYER',
+      });
+    });
+
+    it('should promote the record to confirmed once the tx succeeds', async () => {
+      await using d = await prepared();
+      const result = await d.deploy();
+
+      expect(readHead(fx.rootDir).Counter).toMatchObject({
+        status: 'confirmed',
+        address: '0xCONTRACT',
+        txId: '0xTX',
+        txHash: '0xHASH',
+        blockHeight: 1234,
+      });
+      // Promotion replaces the pending half of the same deploy in place.
+      expect(result.deploymentsFile).toBe(headPath(fx.rootDir));
+    });
+
+    it('should leave the record pending and name the txId when the watch rejects', async () => {
+      providers.publicDataProvider.watchForTxData.mockRejectedValue(
+        new Error('socket closed'),
+      );
+
+      await using d = await prepared();
+      const thrown = await d.deploy().catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(DeployTxFailedError);
+      expect((thrown as Error).message).toContain('0xTX');
+      expect((thrown as Error).message).toContain('0xCONTRACT');
+      expect(readHead(fx.rootDir).Counter).toMatchObject({
+        status: 'pending',
+      });
+    });
+
+    it('should leave the record pending and name the txId when the watch times out', async () => {
+      providers.publicDataProvider.watchForTxData.mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      await using d = await prepared({ txTimeoutMs: 5 });
+      const thrown = await d.deploy().catch((e: unknown) => e);
+
+      expect((thrown as Error).message).toContain(
+        'no finalization within 5 ms',
+      );
+      expect((thrown as Error).message).toContain('0xTX');
+      expect(readHead(fx.rootDir).Counter).toMatchObject({
+        status: 'pending',
+      });
+    });
+
+    it('should refuse to deploy over a pending record without submitting a tx', async () => {
+      providers.publicDataProvider.watchForTxData.mockRejectedValue(
+        new Error('socket closed'),
+      );
+      {
+        await using first = await prepared();
+        await first.deploy().catch(() => undefined);
+      }
+      vi.mocked(submitTxAsync).mockClear();
+
+      await using second = await prepared();
+      const thrown = await second.deploy().catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(PendingDeployExistsError);
+      expect((thrown as Error).message).toContain('0xTX');
+      expect(submitTxAsync).not.toHaveBeenCalled();
+    });
+
+    it('should replace a pending record under force', async () => {
+      providers.publicDataProvider.watchForTxData.mockRejectedValueOnce(
+        new Error('socket closed'),
+      );
+      {
+        await using first = await prepared();
+        await first.deploy().catch(() => undefined);
+      }
+
+      await using second = await prepared({ force: true });
+      const result = await second.deploy();
+
+      expect(result.address).toBe('0xCONTRACT');
+      expect(readHead(fx.rootDir).Counter).toMatchObject({
+        status: 'confirmed',
+      });
+    });
+
+    it('should store the private state and signing key only after a success status', async () => {
+      providers.publicDataProvider.watchForTxData.mockResolvedValue(
+        fakeFinalized({ status: 'FailEntirely' }),
+      );
+
+      await using d = await prepared();
+      await expect(d.deploy()).rejects.toThrow(/FailEntirely/);
+
+      expect(
+        providers.privateStateProvider.setContractAddress,
+      ).not.toHaveBeenCalled();
+      expect(
+        providers.privateStateProvider.setSigningKey,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should store the address and the signing key once the tx succeeds', async () => {
+      await using d = await prepared();
+      await d.deploy();
+
+      expect(
+        providers.privateStateProvider.setContractAddress,
+      ).toHaveBeenCalledWith('0xCONTRACT');
+      expect(providers.privateStateProvider.setSigningKey).toHaveBeenCalledWith(
+        '0xCONTRACT',
+        'contract-maintenance-key',
+      );
+      // No [contracts.Counter].private_state_id in the fixture.
+      expect(providers.privateStateProvider.set).not.toHaveBeenCalled();
+    });
+
+    it('should surface the refusal when another process claims the contract mid-deploy', async () => {
+      // The precheck passed against an empty ledger; a second deploy wrote its
+      // pending record before ours reached the lock.
+      vi.mocked(submitTxAsync).mockImplementation(async () => {
+        mkdirSync(join(fx.rootDir, 'deployments'), { recursive: true });
+        writeFileSync(
+          headPath(fx.rootDir),
+          JSON.stringify({
+            Counter: {
+              status: 'pending',
+              address: '0xOTHER',
+              txId: '0xOTHERTX',
+              deployer: '0xDEPLOYER',
+              artifact: 'Counter',
+              submittedAt: new Date().toISOString(),
+            },
+          }),
+        );
+        return '0xTX';
+      });
+
+      await using d = await prepared();
+      const thrown = await d.deploy().catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(PendingDeployExistsError);
+      expect((thrown as Error).message).toContain('0xOTHERTX');
+    });
+  });
+
+  describe('ledger write failures', () => {
+    it('should name the address in the error when the deployments lock times out', async () => {
+      lock.failure = new Error(
+        'Timed out waiting for the deployments lock at /tmp/local.json.lock',
+      );
+
+      await using d = await prepared();
+      const thrown = await d.deploy().catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(DeploymentsFileError);
+      expect((thrown as Error).message).toContain('0xCONTRACT');
+      expect((thrown as Error).message).toContain('0xTX');
+      expect((thrown as Error).message).toContain('Timed out waiting');
+    });
+
+    it('should name the file and submit nothing when <network>.json is already corrupt', async () => {
+      mkdirSync(join(fx.rootDir, 'deployments'), { recursive: true });
+      writeFileSync(headPath(fx.rootDir), '{"Counter": {');
+
+      await using d = await prepared();
+      const thrown = await d.deploy().catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(DeploymentsFileError);
+      expect((thrown as Error).message).toContain('is not valid JSON');
+      expect((thrown as Error).message).toContain(headPath(fx.rootDir));
+      expect(submitTxAsync).not.toHaveBeenCalled();
+    });
+
+    it('should carry the txHash when the confirmed write is the one that fails', async () => {
+      // Corrupt the ledger between the pending write and the promotion, so the
+      // failure lands on the write that has an on-chain txHash to report.
+      providers.publicDataProvider.watchForTxData.mockImplementation(
+        async () => {
+          writeFileSync(headPath(fx.rootDir), '{"Counter": {');
+          return fakeFinalized();
+        },
+      );
+
+      await using d = await prepared();
+      const thrown = await d.deploy().catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(DeploymentsFileError);
+      expect((thrown as Error).message).toContain('txHash 0xHASH');
+      expect((thrown as Error).message).toContain('0xTX');
+    });
   });
 
   describe('wallet build options', () => {

@@ -10,11 +10,13 @@ export interface ParsedDeployArgv {
   seedFile?: string;
   proofServer?: string;
   syncTimeoutSec?: number;
+  txTimeoutSec?: number;
   syncBatchSize?: number;
   seedCacheFromDust?: string;
   seedCacheFromShielded?: string;
   seedCacheFromUnshielded?: string;
   noCache: boolean;
+  force: boolean;
   dryRun: boolean;
   json: boolean;
   verbose: boolean;
@@ -39,6 +41,7 @@ export function parseDeployArgv(
 ): ParsedDeployArgv {
   const out: ParsedDeployArgv = {
     noCache: false,
+    force: false,
     dryRun: false,
     json: false,
     verbose: false,
@@ -68,6 +71,9 @@ export function parseDeployArgv(
         break;
       case '--no-cache':
         out.noCache = true;
+        break;
+      case '--force':
+        out.force = true;
         break;
       case '--seed-cache-from-dust':
         out.seedCacheFromDust = expectValue(
@@ -106,6 +112,13 @@ export function parseDeployArgv(
         out.syncTimeoutSec = expectPositiveInt(
           expectValue(argv, ++i, '--sync-timeout'),
           '--sync-timeout',
+          ' (seconds)',
+        );
+        break;
+      case '--tx-timeout':
+        out.txTimeoutSec = expectPositiveInt(
+          expectValue(argv, ++i, '--tx-timeout'),
+          '--tx-timeout',
           ' (seconds)',
         );
         break;

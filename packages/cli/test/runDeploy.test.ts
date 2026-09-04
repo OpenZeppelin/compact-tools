@@ -236,9 +236,12 @@ describe('runDeploy CLI', () => {
         'http://proof:6300',
         '--sync-timeout',
         '30',
+        '--tx-timeout',
+        '90',
         '--sync-batch-size',
         '5000',
         '--no-cache',
+        '--force',
         '--seed-cache-from-dust',
         '/dust.json',
         '--seed-cache-from-shielded',
@@ -255,8 +258,10 @@ describe('runDeploy CLI', () => {
       expect(opts.seedFile).toBe('/seed.hex');
       expect(opts.proofServer).toBe('http://proof:6300');
       expect(opts.syncTimeoutMs).toBe(30_000);
+      expect(opts.txTimeoutMs).toBe(90_000);
       expect(opts.syncBatchSize).toBe(5000);
       expect(opts.skipWalletCache).toBe(true);
+      expect(opts.force).toBe(true);
       expect(opts.seedCacheDust).toBe('/dust.json');
       expect(opts.seedCacheShielded).toBe('/shielded.gz');
       expect(opts.seedCacheUnshielded).toBe('/unshielded.gz');
@@ -274,6 +279,21 @@ describe('runDeploy CLI', () => {
       await runMain(['Token']);
       const opts = mockPrepare.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(opts.syncTimeoutMs).toBeUndefined();
+    });
+
+    it('should leave txTimeoutMs undefined and force false when both flags are omitted', async () => {
+      await runMain(['Token']);
+      const opts = mockPrepare.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(opts.txTimeoutMs).toBeUndefined();
+      expect(opts.force).toBe(false);
+    });
+
+    it('should reject zero/negative --tx-timeout', async () => {
+      await runMain(['Token', '--tx-timeout', '0']);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('--tx-timeout requires a positive integer'),
+      );
+      expect(mockExit).toHaveBeenCalledWith(2);
     });
 
     it('should reject unknown flags with exit code 2', async () => {

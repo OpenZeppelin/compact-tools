@@ -2,6 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DeploymentsFileError } from '../errors.ts';
 import { readJson, writeJson } from './atomic-json.ts';
 
 function scratch(): string {
@@ -24,6 +25,16 @@ describe('readJson', () => {
     const path = join(scratch(), 'head.json');
     writeFileSync(path, '{"Token":{"address":"0xT1"}}');
     expect(await readJson(path, {})).toEqual({ Token: { address: '0xT1' } });
+  });
+
+  it('should name the file in a typed error when the document is malformed', async () => {
+    const path = join(scratch(), 'local.json');
+    writeFileSync(path, '{"Token": {');
+    const thrown = await readJson(path, {}).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(DeploymentsFileError);
+    expect((thrown as DeploymentsFileError).message).toContain(path);
+    expect((thrown as DeploymentsFileError).exitCode).toBe(6);
+    expect((thrown as DeploymentsFileError).cause).toBeInstanceOf(SyntaxError);
   });
 });
 

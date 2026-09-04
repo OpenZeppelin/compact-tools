@@ -113,6 +113,10 @@ export interface RunDeployOptions<
   proofServer?: string;
   /** Wallet-sync timeout in seconds. Argv: `--sync-timeout`. */
   syncTimeoutSec?: number;
+  /** Deploy-tx finalization timeout in seconds. Argv: `--tx-timeout`. Default 600. */
+  txTimeoutSec?: number;
+  /** Replace a pending deploy record for this contract. Argv: `--force`. */
+  force?: boolean;
   /** Dust/shielded sync batch size. Argv: `--sync-batch-size`. Default 5000. */
   syncBatchSize?: number;
   /** Skip the on-disk wallet-state cache. Argv: `--no-cache`. */
@@ -163,9 +167,10 @@ export interface RunDeployOptions<
  *    await runDeploy({ contract: 'TokenExample', args: [...] });
  *    ```
  *
- * Parses `--network`, `--dry-run`, `--sync-timeout`, `--sync-batch-size`,
- * `--no-cache`, `--seed-cache-from-dust`, `--seed-cache-from-shielded`,
- * `--seed-cache-from-unshielded`, `--seed-file`, `--proof-server`,
+ * Parses `--network`, `--dry-run`, `--sync-timeout`, `--tx-timeout`,
+ * `--sync-batch-size`, `--no-cache`, `--force`, `--seed-cache-from-dust`,
+ * `--seed-cache-from-shielded`, `--seed-cache-from-unshielded`,
+ * `--seed-file`, `--proof-server`,
  * `--config`, `--json`, `-v` / `--verbose` from `process.argv` as defaults. Explicit options win
  * over argv. Wires a pino logger (stderr), runs Deployer.prepare +
  * deploy or dryRun, and prints the result.
@@ -221,6 +226,7 @@ async function runDeployImpl(
   const verbose = opts.verbose ?? argv.verbose;
   const dryRun = opts.dryRun ?? argv.dryRun;
   const syncTimeoutSec = opts.syncTimeoutSec ?? argv.syncTimeoutSec;
+  const txTimeoutSec = opts.txTimeoutSec ?? argv.txTimeoutSec;
   const logger = opts.logger ?? buildLogger({ json, verbose });
   const configPath = opts.configPath ?? argv.configPath;
 
@@ -245,6 +251,8 @@ async function runDeployImpl(
       args: opts.args,
       syncTimeoutMs:
         syncTimeoutSec !== undefined ? syncTimeoutSec * 1000 : undefined,
+      txTimeoutMs: txTimeoutSec !== undefined ? txTimeoutSec * 1000 : undefined,
+      force: opts.force ?? argv.force,
       syncBatchSize: opts.syncBatchSize ?? argv.syncBatchSize,
       skipWalletCache: opts.skipWalletCache ?? argv.noCache,
       seedCacheDust: opts.seedCacheFromDust ?? argv.seedCacheFromDust,

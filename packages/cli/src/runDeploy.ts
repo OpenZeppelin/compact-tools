@@ -88,6 +88,9 @@ async function main(): Promise<void> {
         args.syncTimeoutSec !== undefined
           ? args.syncTimeoutSec * 1000
           : undefined,
+      txTimeoutMs:
+        args.txTimeoutSec !== undefined ? args.txTimeoutSec * 1000 : undefined,
+      force: args.force,
       skipWalletCache: args.noCache,
       seedCacheDust: args.seedCacheFromDust,
       seedCacheShielded: args.seedCacheFromShielded,
@@ -185,6 +188,11 @@ function showUsage(): void {
   );
   console.log(
     chalk.yellow(
+      '  --tx-timeout <s>      Max seconds to wait for tx finalization (default 600)',
+    ),
+  );
+  console.log(
+    chalk.yellow(
       '  --sync-batch-size <n> Dust/shielded sync batch size (default 5000)',
     ),
   );
@@ -206,6 +214,11 @@ function showUsage(): void {
   console.log(
     chalk.yellow(
       '  --seed-cache-from-unshielded <path> Import a pre-warmed unshielded state file into .states/',
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      '  --force               Replace a pending deploy record for this contract',
     ),
   );
   console.log(

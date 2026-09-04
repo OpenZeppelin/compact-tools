@@ -5,6 +5,7 @@ describe('parseDeployArgv', () => {
   it('should default every flag to off', () => {
     expect(parseDeployArgv([])).toEqual({
       noCache: false,
+      force: false,
       dryRun: false,
       json: false,
       verbose: false,
@@ -26,6 +27,8 @@ describe('parseDeployArgv', () => {
       'http://proof:6300',
       '--sync-timeout',
       '900',
+      '--tx-timeout',
+      '300',
       '--sync-batch-size',
       '2500',
       '--seed-cache-from-dust',
@@ -40,6 +43,7 @@ describe('parseDeployArgv', () => {
     expect(p.seedFile).toBe('./seed.hex');
     expect(p.proofServer).toBe('http://proof:6300');
     expect(p.syncTimeoutSec).toBe(900);
+    expect(p.txTimeoutSec).toBe(300);
     expect(p.syncBatchSize).toBe(2500);
     expect(p.seedCacheFromDust).toBe('./dust.gz');
     expect(p.seedCacheFromShielded).toBe('./shielded.gz');
@@ -57,6 +61,7 @@ describe('parseDeployArgv', () => {
       '--json',
       '--dry-run',
       '--no-cache',
+      '--force',
       '-v',
       '-h',
       '--version',
@@ -65,6 +70,7 @@ describe('parseDeployArgv', () => {
       json: true,
       dryRun: true,
       noCache: true,
+      force: true,
       verbose: true,
       help: true,
       version: true,
@@ -108,6 +114,15 @@ describe('parseDeployArgv', () => {
     );
     expect(() => parseDeployArgv(['--sync-batch-size', '0'])).toThrow(
       /--sync-batch-size requires a positive integer; got "0"/,
+    );
+  });
+
+  it('should reject a non-positive --tx-timeout', () => {
+    expect(() => parseDeployArgv(['--tx-timeout', '0'])).toThrow(
+      /--tx-timeout requires a positive integer \(seconds\); got "0"/,
+    );
+    expect(() => parseDeployArgv(['--tx-timeout'])).toThrow(
+      /--tx-timeout requires a value/,
     );
   });
 });

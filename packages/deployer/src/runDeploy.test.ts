@@ -105,6 +105,48 @@ describe('runDeploy', () => {
     ).toBe(120_000);
   });
 
+  it('should convert --tx-timeout seconds to milliseconds', async () => {
+    process.argv = ['node', 'script.ts', '--tx-timeout', '90'];
+    const fakeDep = fakeDeployer();
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDep as never,
+    );
+
+    await runDeploy({ contract: 'X' });
+
+    expect(
+      (deployerModule.Deployer.prepare as any).mock.calls[0][0].txTimeoutMs,
+    ).toBe(90_000);
+  });
+
+  it('should leave txTimeoutMs undefined when --tx-timeout is omitted', async () => {
+    process.argv = ['node', 'script.ts'];
+    const fakeDep = fakeDeployer();
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDep as never,
+    );
+
+    await runDeploy({ contract: 'X' });
+
+    expect(
+      (deployerModule.Deployer.prepare as any).mock.calls[0][0].txTimeoutMs,
+    ).toBeUndefined();
+  });
+
+  it('should thread --force to Deployer.prepare', async () => {
+    process.argv = ['node', 'script.ts', '--force'];
+    const fakeDep = fakeDeployer();
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDep as never,
+    );
+
+    await runDeploy({ contract: 'X' });
+
+    expect(
+      (deployerModule.Deployer.prepare as any).mock.calls[0][0].force,
+    ).toBe(true);
+  });
+
   it('should thread --sync-batch-size to Deployer.prepare', async () => {
     process.argv = ['node', 'script.ts', '--sync-batch-size', '2500'];
     const fakeDep = fakeDeployer();

@@ -7,8 +7,13 @@ import type {
 import type { Logger } from 'pino';
 import { CompactConfig } from './config/compact-config.ts';
 import type { ContractConfig, NetworkConfig } from './config/schema.ts';
+import type { DeploymentRecord, DeploymentsPaths } from './deployments.ts';
 import { Deployments } from './deployments.ts';
-import { ConfigError } from './errors.ts';
+import {
+  ConfigError,
+  DeploymentsFileError,
+  PendingDeployExistsError,
+} from './errors.ts';
 import { ConstructorArgs } from './loaders/args.ts';
 import { Artifact } from './loaders/artifact.ts';
 import { InitialPrivateState } from './loaders/init-state.ts';
@@ -17,9 +22,13 @@ import { buildProviders } from './providers/build.ts';
 import { applyNetwork } from './providers/network.ts';
 import { ProofServer } from './providers/proof-server.ts';
 import {
+  awaitDeployFinalization,
   buildExplorerUrl,
-  executeDeploy,
-  toDeploymentRecord,
+  DEFAULT_TX_TIMEOUT_MS,
+  persistDeployPrivateState,
+  submitDeploy,
+  toConfirmedRecord,
+  toPendingRecord,
 } from './services/deploy-tx.ts';
 import { formatError } from './services/error-format.ts';
 import {
@@ -89,6 +98,18 @@ export interface DeployerOptions {
    * Argv: `--sync-batch-size`.
    */
   syncBatchSize?: number;
+  /**
+   * Ceiling on the wait for deploy-tx finalization. Default
+   * {@link DEFAULT_TX_TIMEOUT_MS}. On timeout the pending ledger record
+   * survives so the tx can be reconciled by hand. Argv: `--tx-timeout`
+   * (seconds).
+   */
+  txTimeoutMs?: number;
+  /**
+   * Replace a pending ledger record for this contract instead of refusing to
+   * deploy over it. Argv: `--force`.
+   */
+  force?: boolean;
 }
 
 /** Result of {@link Deployer.deploy} / {@link Deployer.dryRun}. On-chain fields are empty when `dryRun: true`. */
@@ -329,22 +350,40 @@ export class Deployer implements AsyncDisposable {
     });
   }
 
-  /** Submit the deploy tx, persist the record under `deployments/<network>.json`, return the result. */
+  /**
+   * Submit the deploy tx, persist a pending record, wait for finalization,
+   * then promote the record to confirmed under `deployments/<network>.json`.
+   *
+   * The pending record is what makes the deploy recoverable: every failure
+   * after submission leaves the address and txId on disk and names them in
+   * the thrown error.
+   */
   async deploy(): Promise<DeployResult> {
     const s = this.#state;
+    const contractName = s.opts.contract;
+    const deployments = new Deployments({
+      rootDir: s.config.rootDir,
+      deploymentsDir: s.config.deploymentsDir,
+      network: s.networkName,
+    });
+    const force = s.opts.force === true;
+    // Checked before proving: submitting a tx we would then refuse to record
+    // costs the user fees for nothing.
+    await deployments.assertRecordable(contractName, { force });
+
     const providers = buildProviders({
       env: s.env,
       wallet: s.wallet,
-      contractName: s.opts.contract,
+      contractName,
       contract: s.contract,
       zkConfigPath: s.artifact.zkConfigPath,
       rootDir: s.config.rootDir,
       privateStateProvider: s.opts.privateStateProvider,
       privateStateSecret: s.privateStateSecret,
     });
-    const txResult = await executeDeploy({
+    const submitted = await submitDeploy({
       providers,
-      contractName: s.opts.contract,
+      contractName,
       contract: s.contract,
       artifact: s.artifact,
       signingKey: s.signingKey.hex,
@@ -352,21 +391,36 @@ export class Deployer implements AsyncDisposable {
       initialPrivateState: s.initialPrivateState?.value,
     });
 
-    const record = toDeploymentRecord({
-      deployTxData: txResult.deployTxData,
+    const pending = toPendingRecord({
+      submitted,
       deployer: s.deployer,
       artifact: s.contract.artifact,
     });
+    await this.#persist(pending, () =>
+      deployments.record(contractName, pending, { force }),
+    );
 
-    const deployments = new Deployments({
-      rootDir: s.config.rootDir,
-      deploymentsDir: s.config.deploymentsDir,
-      network: s.networkName,
+    const finalized = await awaitDeployFinalization({
+      providers,
+      contractName,
+      submitted,
+      txTimeoutMs: s.opts.txTimeoutMs ?? DEFAULT_TX_TIMEOUT_MS,
     });
-    const persisted = await deployments.record(s.opts.contract, record);
+    // Order copied from midnight-js's own post-success path, and reached only
+    // on `SucceedEntirely`.
+    await persistDeployPrivateState({
+      providers,
+      contract: s.contract,
+      submitted,
+    });
+
+    const record = toConfirmedRecord({ pending, finalized });
+    const persisted = await this.#persist(record, () =>
+      deployments.confirm(contractName, record),
+    );
 
     return {
-      contractName: s.opts.contract,
+      contractName,
       network: s.networkName,
       address: record.address,
       txHash: record.txHash,
@@ -409,6 +463,28 @@ export class Deployer implements AsyncDisposable {
     };
   }
 
+  /**
+   * Log `record` at info, then write it. A ledger write can fail on a lock
+   * timeout, a permission error, or a corrupt `<network>.json`, none of which
+   * undo the tx, so the log line and the rethrown message both carry the
+   * on-chain identifiers.
+   */
+  async #persist(
+    record: DeploymentRecord,
+    write: () => Promise<DeploymentsPaths>,
+  ): Promise<DeploymentsPaths> {
+    this.#state.logger.info(record, `Deploy record (${record.status})`);
+    try {
+      return await write();
+    } catch (e) {
+      if (e instanceof PendingDeployExistsError) throw e;
+      throw new DeploymentsFileError(
+        `Deploy of "${this.contractName}" was submitted but the deployments ledger write failed: ${formatError(e)}. Record it by hand: ${identifiers(record)}.`,
+        { cause: e },
+      );
+    }
+  }
+
   async [Symbol.asyncDispose](): Promise<void> {
     await this.#state.resources.disposeAsync();
   }
@@ -417,6 +493,13 @@ export class Deployer implements AsyncDisposable {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function identifiers(record: DeploymentRecord): string {
+  const base = `address ${record.address}, txId ${record.txId}`;
+  return record.status === 'confirmed'
+    ? `${base}, txHash ${record.txHash}`
+    : base;
+}
 
 interface ResolvedTargets {
   networkName: string;

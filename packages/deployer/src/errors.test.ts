@@ -3,9 +3,9 @@ import {
   ArtifactNotFoundError,
   ConfigError,
   DeployError,
+  DeploymentsFileError,
   DeployTxFailedError,
-  IndexerUnreachableError,
-  ProofServerUnreachableError,
+  PendingDeployExistsError,
   UnfundedWalletError,
   WalletError,
 } from './errors.ts';
@@ -59,24 +59,26 @@ describe('subclass exit codes', () => {
     expect(e.message).toContain('mn_addr1...');
   });
 
-  it('should pin ProofServerUnreachableError to 4', () => {
-    const e = new ProofServerUnreachableError('http://ps');
-    expect(e.exitCode).toBe(4);
-    expect(e.name).toBe('ProofServerUnreachableError');
-    expect(e.message).toContain('http://ps');
-  });
-
-  it('should pin IndexerUnreachableError to 4', () => {
-    const e = new IndexerUnreachableError('http://idx');
-    expect(e.exitCode).toBe(4);
-    expect(e.name).toBe('IndexerUnreachableError');
-    expect(e.message).toContain('http://idx');
+  it('should pin PendingDeployExistsError to 2 and name the txId and the override', () => {
+    const e = new PendingDeployExistsError('Token', '0xTX');
+    expect(e.exitCode).toBe(2);
+    expect(e.name).toBe('PendingDeployExistsError');
+    expect(e.message).toContain('Token');
+    expect(e.message).toContain('0xTX');
+    expect(e.message).toContain('--force');
+    expect(e).toBeInstanceOf(ConfigError);
   });
 
   it('should pin DeployTxFailedError to 5', () => {
     const e = new DeployTxFailedError('rejected');
     expect(e.exitCode).toBe(5);
     expect(e.name).toBe('DeployTxFailedError');
+  });
+
+  it('should pin DeploymentsFileError to 6', () => {
+    const e = new DeploymentsFileError('local.json is not valid JSON');
+    expect(e.exitCode).toBe(6);
+    expect(e.name).toBe('DeploymentsFileError');
   });
 });
 
@@ -86,10 +88,10 @@ describe('instanceof chain', () => {
       new ConfigError('x'),
       new WalletError('x'),
       new ArtifactNotFoundError('x'),
-      new ProofServerUnreachableError('x'),
-      new IndexerUnreachableError('x'),
+      new PendingDeployExistsError('x', '0xTX'),
       new UnfundedWalletError('x'),
       new DeployTxFailedError('x'),
+      new DeploymentsFileError('x'),
     ];
     for (const c of cases) {
       expect(c).toBeInstanceOf(DeployError);

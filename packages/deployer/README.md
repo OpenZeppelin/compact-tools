@@ -62,8 +62,10 @@ compact-deploy <Contract>
   --seed-file <path>        seed override (raw hex or BIP39 mnemonic, one line)
   --proof-server <url>      override [networks.X].proof_server
   --sync-timeout <seconds>  max wait for wallet to reach chain tip (default 600)
+  --tx-timeout <seconds>    max wait for deploy-tx finalization (default 600)
   --sync-batch-size <n>     dust/shielded sync batch size (default 5000)
   --no-cache                ignore on-disk wallet-state cache; force fresh sync
+  --force                   replace a pending deploy record for this contract
   --seed-cache-from-dust <path>      import a pre-warmed dust state file into .states/
   --seed-cache-from-shielded <path>  import a pre-warmed shielded state file into .states/
   --seed-cache-from-unshielded <path> import a pre-warmed unshielded state file into .states/
@@ -73,7 +75,9 @@ compact-deploy <Contract>
   -h, --help                --version
 ```
 
-Exit codes: `0` ok · `2` config error · `3` wallet error · `4` provider unreachable · `5` deploy tx failed · `1` unexpected.
+Exit codes: `0` ok · `2` config error (includes a pending deploy record without `--force`) · `3` wallet error · `5` deploy tx failed or not confirmed · `6` deployments ledger unreadable or unwritable · `1` unexpected.
+
+A deploy writes a `status: "pending"` record (address, txId) to `deployments/<network>.json` as soon as the node accepts the tx, then promotes it to `status: "confirmed"` (txHash, blockHeight) on finalization. A dropped connection or `--tx-timeout` leaves the pending record in place and names the address and txId in the error; the next deploy of that contract refuses until you check the tx on chain and pass `--force`.
 
 ## Deploying to real networks (preprod, preview, testnet)
 
@@ -215,7 +219,7 @@ The package has no barrel entrypoint: each module is its own subpath export, so 
 |---|---|
 | `/run-deploy` | `runDeploy`, `constructorArgs`, `ConstructorArgsOf`, `RunDeployOptions` |
 | `/deployer` | `Deployer`, `DeployerOptions`, `DeployResult` |
-| `/deployments` | `Deployments`, `DeploymentRecord`, `DeploymentsFile`, `DeploymentsHistory` |
+| `/deployments` | `Deployments`, `DeploymentRecord` (`PendingDeploymentRecord` \| `ConfirmedDeploymentRecord`, discriminated on `status`), `DeploymentsFile`, `DeploymentsHistory` |
 | `/errors` | `DeployError` and every typed subclass |
 | `/config/compact-config` | `CompactConfig` |
 | `/config/schema` | `ContractConfig`, `NetworkConfig`, `Profile`, `WalletConfig` |
