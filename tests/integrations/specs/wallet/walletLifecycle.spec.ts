@@ -13,10 +13,7 @@ import {
   harnessPrivateStateProvider,
 } from '../../_harness/deployer.ts';
 import { testLogger } from '../../_harness/logger.ts';
-import {
-  localNetworkConfig,
-  setupLocalNetwork,
-} from '../../_harness/network.ts';
+import { setupLocalNetwork } from '../../_harness/network.ts';
 import {
   CONFIG_PATH,
   requireArtifact,
@@ -47,7 +44,7 @@ describe('compact-deploy — injected wallets are not touched by the deployer', 
   });
 
   it('should not call wallet.stop() when the deployer is disposed', async () => {
-    const wallet = await getSharedPool(localNetworkConfig()).signerFor('ALICE');
+    const wallet = await getSharedPool().signerFor('ALICE');
     const stopSpy = vi.spyOn(wallet, 'stop');
 
     {
@@ -69,7 +66,7 @@ describe('compact-deploy — injected wallets are not touched by the deployer', 
   }, 240_000);
 
   it('should leave the injected wallet usable after dispose', async () => {
-    const wallet = await getSharedPool(localNetworkConfig()).signerFor('BOB');
+    const wallet = await getSharedPool().signerFor('BOB');
 
     {
       await using deployer = await Deployer.prepare({

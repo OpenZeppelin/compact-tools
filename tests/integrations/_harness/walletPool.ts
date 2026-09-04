@@ -1,32 +1,31 @@
-import {
-  type EnvironmentConfiguration,
-  type MidnightWalletProvider,
-  TEST_MNEMONIC,
+import type {
+  EnvironmentConfiguration,
+  MidnightWalletProvider,
 } from '@midnight-ntwrk/testkit-js';
 import { WalletHandler } from '@openzeppelin/compact-deployer/wallet/handler';
-import { classifySeed } from '@openzeppelin/compact-deployer/wallet/seeds';
+import {
+  classifySeed,
+  localPrefundedSeed,
+} from '@openzeppelin/compact-deployer/wallet/seeds';
 import { testLogger } from './logger.ts';
+import { localNetworkConfig } from './network.ts';
 import { ROOT_DIR } from './paths.ts';
 
 /**
- * Aliases mapped to seeds prefunded by `midnight-node --preset=dev`.
- *
- * - `DEPLOYER` uses `TEST_MNEMONIC`, the canonical `abandon × 23 diesel`
- *   BIP39 phrase recognised by the dev preset as the genesis-funded
- *   account. Routed through `FluentWalletBuilder.withMnemonic`.
- * - `ALICE`/`BOB`/`CHARLIE`/`DAVE` map to the hex seeds the standalone
- *   testkit exposes via `LocalTestEnvironment.genesisMintWalletSeed`.
- *   Routed through `FluentWalletBuilder.withSeed`.
+ * Aliases mapped to slots in the deployer's `LOCAL_PREFUNDED_SEEDS`, the
+ * accounts `midnight-node --preset=dev` funds at genesis. Slot 0 is
+ * `TEST_MNEMONIC` (routed through `FluentWalletBuilder.withMnemonic`);
+ * slots 1..4 are hex seeds (`withSeed`).
  */
-export const PREFUNDED_SEEDS = {
-  DEPLOYER: TEST_MNEMONIC,
-  ALICE: '0000000000000000000000000000000000000000000000000000000000000001',
-  BOB: '0000000000000000000000000000000000000000000000000000000000000002',
-  CHARLIE: '0000000000000000000000000000000000000000000000000000000000000003',
-  DAVE: '0000000000000000000000000000000000000000000000000000000000000004',
+export const PREFUNDED_SLOTS = {
+  DEPLOYER: 0,
+  ALICE: 1,
+  BOB: 2,
+  CHARLIE: 3,
+  DAVE: 4,
 } as const;
 
-export type PoolAlias = keyof typeof PREFUNDED_SEEDS;
+export type PoolAlias = keyof typeof PREFUNDED_SLOTS;
 
 /**
  * Process-shared pool of test wallets keyed by alias.
@@ -56,7 +55,7 @@ export class WalletPool {
       const owned = await WalletHandler.build(
         testLogger(),
         this.#env,
-        classifySeed(PREFUNDED_SEEDS[alias]),
+        classifySeed(localPrefundedSeed(PREFUNDED_SLOTS[alias])),
         // `make env-down` wipes the chain, so a snapshot from a previous
         // run would restore UTXOs that no longer exist. Local sync from
         // genesis is seconds; always take it.
@@ -95,11 +94,12 @@ export class WalletPool {
 let sharedPool: WalletPool | undefined;
 
 /**
- * Process-singleton pool. First call builds it against `env`; subsequent
- * calls return the cached instance. Reset via `resetSharedPool()`.
+ * Process-singleton pool over the local stack. Reset via
+ * `resetSharedPool()`. A spec that must not share warm wallets with the
+ * rest of the suite constructs its own {@link WalletPool} instead.
  */
-export function getSharedPool(env: EnvironmentConfiguration): WalletPool {
-  if (!sharedPool) sharedPool = new WalletPool(env);
+export function getSharedPool(): WalletPool {
+  if (!sharedPool) sharedPool = new WalletPool(localNetworkConfig());
   return sharedPool;
 }
 

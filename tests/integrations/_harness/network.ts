@@ -8,24 +8,21 @@ import type { EnvironmentConfiguration } from '@midnight-ntwrk/testkit-js';
 export const LOCAL_NETWORK_ID = 'undeployed';
 
 /**
- * Endpoints for the local stack brought up by `make env-up`. Each one is
- * overridable via a `MIDNIGHT_*` env var so the same harness can be pointed
- * at a relocated stack (e.g. a remote CI runner).
+ * Endpoints for the local stack brought up by `make env-up`. Not
+ * overridable: every deploy in the suite resolves its endpoints from
+ * `[networks.local]` in `tests/integrations/compact.toml`, so pool
+ * wallets built here must be pointed at the same stack. Change both
+ * together.
  */
 export function localNetworkConfig(): EnvironmentConfiguration {
   return {
     walletNetworkId: LOCAL_NETWORK_ID,
     networkId: LOCAL_NETWORK_ID,
-    indexer:
-      process.env.MIDNIGHT_INDEXER_URL ??
-      'http://127.0.0.1:8088/api/v4/graphql',
-    indexerWS:
-      process.env.MIDNIGHT_INDEXER_WS_URL ??
-      'ws://127.0.0.1:8088/api/v4/graphql/ws',
-    node: process.env.MIDNIGHT_NODE_URL ?? 'http://127.0.0.1:9944',
-    nodeWS: process.env.MIDNIGHT_NODE_WS_URL ?? 'ws://127.0.0.1:9944',
-    proofServer:
-      process.env.MIDNIGHT_PROOF_SERVER_URL ?? 'http://127.0.0.1:6300',
+    indexer: 'http://127.0.0.1:8088/api/v4/graphql',
+    indexerWS: 'ws://127.0.0.1:8088/api/v4/graphql/ws',
+    node: 'http://127.0.0.1:9944',
+    nodeWS: 'ws://127.0.0.1:9944',
+    proofServer: 'http://127.0.0.1:6300',
     faucet: undefined,
   };
 }

@@ -8,7 +8,7 @@ import {
   type DeployResult,
 } from '@openzeppelin/compact-deployer/deployer';
 import { testLogger } from './logger.ts';
-import { localNetworkConfig, setupLocalNetwork } from './network.ts';
+import { setupLocalNetwork } from './network.ts';
 import { CONFIG_PATH } from './paths.ts';
 import { getSharedPool, type PoolAlias } from './walletPool.ts';
 
@@ -54,7 +54,7 @@ export async function deployFixture(
   } = {},
 ): Promise<DeployResult> {
   setupLocalNetwork();
-  const wallet = await getSharedPool(localNetworkConfig()).signerFor(alias);
+  const wallet = await getSharedPool().signerFor(alias);
   // Wait for the wallet's UTXO view to catch up to the chain head before
   // submitting another deploy. Without this, rapid back-to-back deploys
   // with the same alias (e.g. spec A → spec B both using BOB) see

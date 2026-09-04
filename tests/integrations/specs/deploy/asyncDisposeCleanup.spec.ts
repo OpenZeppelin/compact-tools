@@ -3,10 +3,7 @@ import { ArtifactNotFoundError } from '@openzeppelin/compact-deployer/errors';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { deployFixture } from '../../_harness/deployer.ts';
 import { testLogger } from '../../_harness/logger.ts';
-import {
-  localNetworkConfig,
-  setupLocalNetwork,
-} from '../../_harness/network.ts';
+import { setupLocalNetwork } from '../../_harness/network.ts';
 import {
   CONFIG_PATH,
   requireArtifact,
@@ -44,7 +41,7 @@ describe.skip('compact-deploy — resource cleanup on mid-prepare failure', () =
   });
 
   it('should throw ArtifactNotFoundError when the artifact directory is missing', async () => {
-    const wallet = await getSharedPool(localNetworkConfig()).signerFor('DAVE');
+    const wallet = await getSharedPool().signerFor('DAVE');
 
     await expect(
       Deployer.prepare({

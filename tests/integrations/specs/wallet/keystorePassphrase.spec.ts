@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { Deployer } from '@openzeppelin/compact-deployer/deployer';
 import { WalletError } from '@openzeppelin/compact-deployer/errors';
 import { Keystore } from '@openzeppelin/compact-deployer/wallet/keystore';
+import { localPrefundedSeed } from '@openzeppelin/compact-deployer/wallet/seeds';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { testLogger } from '../../_harness/logger.ts';
 import {
@@ -11,7 +12,7 @@ import {
   setupLocalNetwork,
 } from '../../_harness/network.ts';
 import { ARTIFACTS_DIR, ROOT_DIR } from '../../_harness/paths.ts';
-import { PREFUNDED_SEEDS } from '../../_harness/walletPool.ts';
+import { PREFUNDED_SLOTS } from '../../_harness/walletPool.ts';
 
 /**
  * Spec: the `[wallet].keystore` path in `compact.toml` resolves the
@@ -31,7 +32,7 @@ const FIXTURES_SIGNING_KEY = resolve(
 
 // Prefunded, so the wallet built from the keystore has the dev-preset's
 // genesis balance and can submit a deploy.
-const ALICE_SEED = PREFUNDED_SEEDS.ALICE;
+const ALICE_SEED = localPrefundedSeed(PREFUNDED_SLOTS.ALICE);
 const PASSPHRASE = 'hunter2-keystore-spec';
 // Scrypt parameters relaxed for test speed; the real CLI uses defaults
 // (~1s derivation). Matches the convention from
