@@ -16,11 +16,11 @@
 //   Bytes<8>           smaller fixed-size byte arrays (tag)
 //
 // Extra constructor args beyond what FungibleToken_initialize needs are
-// saved into ledger fields so each value is observable on-chain after
+// saved into ledger fields so each value is readable on-chain after
 // deploy.
 //
-// NOT for production use — minimal wrapper, no access control, no
-// supply cap enforcement.
+// NOT for production use: minimal wrapper, getters only (no mint or
+// transfer circuit), no access control, no supply cap enforcement.
 
 pragma language_version >= 0.21.0;
 
@@ -28,7 +28,7 @@ import CompactStandardLibrary;
 
 import "./token/FungibleToken" prefix FungibleToken_;
 
-export { ContractAddress, Either, Maybe };
+export { ContractAddress, Either };
 
 // ── Per-deploy configuration captured from the constructor ──
 
