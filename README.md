@@ -1,10 +1,19 @@
-[![Generic badge](https://img.shields.io/badge/Compact%20Compiler-0.31.0-1abc9c.svg)](https://docs.midnight.network/relnotes/compact/)
+[![Generic badge](https://img.shields.io/badge/Compact%20Compiler-0.34.0-1abc9c.svg)](https://docs.midnight.network/relnotes/compact/)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools/badge)](https://api.securityscorecards.dev/projects/github.com/OpenZeppelin/compact-tools)
 
 This project extends the Midnight Network with additional developer tooling.
 
 # OpenZeppelin Compact Tools
+
+> [!WARNING]
+> **Internal tooling. Not audited.**
+>
+> These packages are built and maintained for the OpenZeppelin team's own
+> Midnight development. They have not been audited, may contain bugs, and
+> their APIs can change between releases without notice. Use them at your own
+> risk. See [SECURITY.md](./SECURITY.md) for the full disclaimer and for how
+> to report a vulnerability.
 
 Tools for compiling, building, and testing Compact smart contracts. This is a monorepo containing:
 

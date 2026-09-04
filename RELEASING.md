@@ -1,22 +1,82 @@
 # Releasing
 
+## Channels
+
+Two release channels, keyed to the branch the workflow runs from:
+
+| Branch | Versions        | npm dist-tag | Install with              |
+| ------ | --------------- | ------------ | ------------------------- |
+| `main` | `0.3.2`         | `latest`     | `yarn add <pkg>`          |
+| `beta` | `0.3.2-beta.0`  | `beta`       | `yarn add <pkg>@beta`     |
+
+The dist-tag is derived from the version string, so a prerelease can never
+take over `latest`. The bump strategies are pinned to their branch: `pre*`
+runs only from `beta`, `patch`/`minor`/`major` only from `main`.
+
+## Changelog
+
+Each published package keeps its own `CHANGELOG.md`, following
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Any PR with a
+consumer-visible change adds an entry under that package's `## Unreleased`
+heading, with the PR number in parentheses. Mark API breaks with a
+`**Breaking:**` prefix.
+
+Beta bumps leave the entries under `## Unreleased`. When a cycle graduates to
+stable, rename the heading to `## <version> (YYYY-MM-DD)` and land that before
+running the workflow from `main`, so the published tarball and the GitHub
+release notes agree.
+
 ## Running the workflow
 
 1. Go to "Release Package" in Actions.
 2. Click on the "Run workflow" dropdown menu.
-3. Choose the package to release and the version bump type.
+3. Pick the branch: `main` for a stable release, `beta` for a prerelease.
+4. Choose the package to release and the version bump type.
    Following [SemVer](https://semver.org/):
    - **Patch** - Backward-compatible bug fixes.
-   - **Minor** - New functionality in a backward compatible way.
+   - **Minor** - New functionality in a backward-compatible way.
    - **Major** - Breaking API changes.
+   - **Prepatch / preminor / premajor** - Open a new beta cycle at the
+     corresponding bump (`0.3.1` + preminor -> `0.4.0-beta.0`).
+   - **Prerelease** - Advance the current beta cycle (`0.4.0-beta.0` ->
+     `0.4.0-beta.1`). From a stable version it behaves like prepatch.
 
-4. A maintainer must approve the release before it proceeds.
-5. Once approved, the CI will automatically:
+5. A maintainer must approve the release before it proceeds.
+6. Once approved, the CI will automatically:
    - Run tests.
    - Bump the version.
+   - Open a release PR against the branch you ran from, and auto-merge it.
    - Create a git tag.
-   - Publish the package to npm.
-6. Once published, go to "Releases" and create a GitHub release using the generated tag.
+   - Publish the package to npm under the channel's dist-tag.
+7. Once published, go to "Releases" and create a GitHub release using the
+   generated tag. Mark beta tags as prereleases.
+
+## Graduating a beta to stable
+
+The bump strategies read the version already in `package.json`, so promote in
+this order:
+
+1. Merge `beta` into `main`, carrying the `-beta.N` version with it.
+2. Run "Release Package" from `main` with `patch`, `minor`, or `major`. Each
+   drops the prerelease suffix: `0.4.0-beta.3` + patch -> `0.4.0`.
+
+Use `patch` to ship the beta's version as-is. Use `minor` or `major` only when
+the final release warrants a higher bump than the beta cycle assumed.
+
+A full cycle, starting from `0.3.1` on `main`:
+
+| Branch | Bump         | Version        | dist-tag |
+| ------ | ------------ | -------------- | -------- |
+| `beta` | `preminor`   | `0.4.0-beta.0` | `beta`   |
+| `beta` | `prerelease` | `0.4.0-beta.1` | `beta`   |
+| `beta` | `prerelease` | `0.4.0-beta.2` | `beta`   |
+| `main` | `patch`      | `0.4.0`        | `latest` |
+
+The `pre*` bump names the version the cycle is heading for, so pick it from
+what the finished release will be rather than from the size of the first beta:
+`prepatch` for a bugfix, `preminor` for new features, `premajor` for a
+breaking change. After that, only `prerelease` moves the counter. Running
+`preminor` again mid-cycle starts a new one (`0.4.0-beta.2` -> `0.5.0-beta.0`).
 
 ## First-release order
 

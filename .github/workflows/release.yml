@@ -12,13 +12,17 @@ on:
           - compact-cli
           - compact-simulator
       version_bump:
-        description: "Version bump type"
+        description: "Version bump type (pre* strategies are beta-only)"
         required: true
         type: choice
         options:
           - patch
           - minor
           - major
+          - prerelease
+          - prepatch
+          - preminor
+          - premajor
 
 jobs:
   release:
@@ -31,6 +35,33 @@ jobs:
       pull-requests: write  # open the PR + enable auto-merge
 
     steps:
+      # Prerelease versions carry the `beta` npm dist-tag and stable versions
+      # carry `latest`. Pinning each strategy to its branch keeps a beta out of
+      # main's history and a stable out of beta's.
+      - name: Validate bump strategy for this branch
+        env:
+          BRANCH: ${{ github.ref_name }}
+          BUMP: ${{ inputs.version_bump }}
+        run: |
+          case "$BUMP" in
+            prerelease|prepatch|preminor|premajor)
+              if [[ "$BRANCH" != "beta" ]]; then
+                echo "::error::$BUMP is beta-only, but this run is on '$BRANCH'"
+                exit 1
+              fi
+              ;;
+            patch|minor|major)
+              if [[ "$BRANCH" != "main" ]]; then
+                echo "::error::$BUMP is main-only, but this run is on '$BRANCH'"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::unknown bump strategy: $BUMP"
+              exit 1
+              ;;
+          esac
+
       - name: Get github app token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: gh-app-token
@@ -39,7 +70,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
       - name: Check out code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.gh-app-token.outputs.token }}
@@ -74,13 +105,29 @@ jobs:
           cd packages/${{ steps.pkg.outputs.dir }}
           yarn version ${{ inputs.version_bump }}
           NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "branch=release/${{ inputs.package }}-v$NEW_VERSION" >> $GITHUB_OUTPUT
+          # Yarn has no --preid, so a pre* strategy off a stable version yields a
+          # bare counter (0.3.1 -> 0.3.2-0). Relabel it once; from there yarn
+          # carries the identifier forward (0.3.2-beta.0 -> 0.3.2-beta.1).
+          if [[ "$NEW_VERSION" =~ -[0-9]+$ ]]; then
+            yarn version "${NEW_VERSION%-*}-beta.0"
+            NEW_VERSION=$(node -p "require('./package.json').version")
+          fi
+          if [[ "$NEW_VERSION" == *-beta.* ]]; then
+            DIST_TAG=beta
+          else
+            DIST_TAG=latest
+          fi
+          {
+            echo "new=$NEW_VERSION"
+            echo "branch=release/${{ inputs.package }}-v$NEW_VERSION"
+            echo "dist_tag=$DIST_TAG"
+          } >> $GITHUB_OUTPUT
           {
             echo "### Release Summary"
             echo "- Package: ${{ inputs.package }}"
             echo "- New version: $NEW_VERSION"
             echo "- Bump type: ${{ inputs.version_bump }}"
+            echo "- npm dist-tag: $DIST_TAG"
           } >> $GITHUB_STEP_SUMMARY
 
       - name: Verify package contents
@@ -130,6 +177,8 @@ jobs:
         run: |
           cat > /tmp/pr-body.md <<EOF
           Automated release PR for **${{ inputs.package }}** v${{ steps.version.outputs.new }} (${{ inputs.version_bump }} bump).
+
+          Publishes to npm under the \`${{ steps.version.outputs.dist_tag }}\` dist-tag.
 
           This PR was opened by the release workflow. Once required checks pass (semgrep, CodeQL, code-owner review), it will auto-merge. Merging will trigger the publish workflow, which tags the release and publishes to npm.
           EOF

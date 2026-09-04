@@ -1,12 +1,15 @@
-import type { StateValue } from '@midnight-ntwrk/compact-runtime';
+import {
+  dummyContractAddress,
+  type StateValue,
+} from '@midnight-ntwrk/compact-runtime';
 import { describe, expect, it } from 'vitest';
-import { PRIVATE_STATE_MUTATION_UNSUPPORTED } from '../../src/index';
+import { PRIVATE_STATE_MUTATION_UNSUPPORTED } from '../../src/index.js';
 import type {
   DeployedTxHandle,
   LiveContext,
 } from '../../src/live/LiveContext.js';
-import { WitnessPrivateState } from '../fixtures/sample-contracts/witnesses/WitnessWitnesses';
-import { WitnessSimulator } from './WitnessSimulator';
+import { WitnessPrivateState } from '../fixtures/sample-contracts/witnesses/WitnessWitnesses.js';
+import { WitnessSimulator } from './WitnessSimulator.js';
 
 /**
  * A mutable in-memory live world. Only the private-state read/write paths are
@@ -20,7 +23,9 @@ const makeWorld = (
 ): LiveContext<WitnessPrivateState> => {
   let stored = initial;
   const world: LiveContext<WitnessPrivateState> = {
-    contractAddress: '0200deadbeef',
+    // Runtime-parseable: the deployed address seeds the local evaluator's
+    // circuit context.
+    contractAddress: dummyContractAddress(),
     async handleFor(): Promise<DeployedTxHandle> {
       return { callTx: {} };
     },

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { SimpleSimulator } from './SimpleSimulator';
+import { SimpleSimulator } from './SimpleSimulator.js';
 
 let simple: SimpleSimulator;
 

@@ -3,7 +3,7 @@
   "tasks": {
     "test": {
       "dependsOn": ["^build"],
-      "env": ["COMPACT_HOME"],
+      "env": ["COMPACT_HOME", "COMPACTC_VERSION"],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.compact",
@@ -39,9 +39,20 @@
       ],
       "outputs": ["dist/**"]
     },
+    "compile:fixtures": {
+      "env": ["COMPACT_HOME", "COMPACTC_VERSION"],
+      "inputs": ["test/fixtures/sample-contracts/**", "test/setup.ts"],
+      "outputs": ["test/fixtures/artifacts/**"]
+    },
     "types": {
-      "dependsOn": ["^build"],
-      "inputs": ["src/**/*.ts", "tsconfig.json", "tsconfig.types.json"],
+      "dependsOn": ["^build", "compile:fixtures"],
+      "inputs": [
+        "src/**/*.ts",
+        "test/**/*.ts",
+        "tsconfig.json",
+        "tsconfig.types.json",
+        "tsconfig.test.json"
+      ],
       "outputs": []
     },
     "lint": {},

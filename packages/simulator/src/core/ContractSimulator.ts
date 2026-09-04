@@ -1,5 +1,6 @@
 import {
   type CircuitContext,
+  copyCircuitContext,
   emptyZswapLocalState,
 } from '@midnight-ntwrk/compact-runtime';
 import { AbstractSimulator } from './AbstractSimulator.js';
@@ -43,15 +44,19 @@ export abstract class ContractSimulator<P, L> extends AbstractSimulator<P, L> {
     const activeCaller = this.callerOverride || this.persistentCallerOverride;
     const baseCtx = this.circuitContext;
 
-    return {
-      currentPrivateState: baseCtx.currentPrivateState,
-      currentQueryContext: baseCtx.currentQueryContext,
-      currentZswapLocalState: activeCaller
-        ? emptyZswapLocalState(activeCaller)
-        : baseCtx.currentZswapLocalState,
-      costModel: baseCtx.costModel,
-      gasLimit: baseCtx.gasLimit,
-    };
+    if (!activeCaller) {
+      return baseCtx;
+    }
+
+    // compact-runtime 0.18: the caller-scoped fields live on `callContext`.
+    // Copy (shallow-clones `callContext`) before overriding the Zswap local
+    // state so the base context is left untouched.
+    // `copyCircuitContext` is `@internal` upstream, so a patch release could
+    // drop it; hand-rolling the copy is the worse option.
+    // TODO: drop this note once the runtime makes it public.
+    const ctx = copyCircuitContext(baseCtx) as CircuitContext<P>;
+    ctx.callContext.currentZswapLocalState = emptyZswapLocalState(activeCaller);
+    return ctx;
   }
 
   /**

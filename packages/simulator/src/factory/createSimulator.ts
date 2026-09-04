@@ -14,8 +14,13 @@ import type { SimulatorOptions } from '../types/Options.js';
 import { createDrySimulator } from './createDrySimulator.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
-/** Prepared backend wiring handed to the simulator constructor. */
-interface BackendDeps<P, L> {
+/**
+ * Prepared backend wiring handed to the simulator constructor.
+ *
+ * Exported because it appears in `create` / `_create`, so a consumer that
+ * assigns `createSimulator(...)` to an exported binding must be able to name it.
+ */
+export interface BackendDeps<P, L> {
   backend: Backend<P, L>;
   signers: Signers;
   pureNames: string[];
@@ -54,7 +59,7 @@ export function createSimulator<
   TContract extends IMinimalContract,
   TArgs extends readonly any[] = readonly any[],
 >(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
-  // Built once per factory; instances per `create()`. The synchronous primitive
+  // Built once per factory; instances per `create()`. The in-memory primitive
   // is the whole dry path and the local JS artifact for pure-circuit eval.
   const DrySimClass = createDrySimulator<P, L, W, TContract, TArgs>(config);
 
@@ -81,16 +86,28 @@ export function createSimulator<
   ): Promise<BackendDeps<P, L>> => {
     const kind = resolveBackendKind(options.backend);
 
-    // The local synchronous simulator: the whole dry path, and the pure-circuit
+    // The local in-memory simulator: the whole dry path, and the pure-circuit
     // evaluator in live (D2). In live this runs `initialState` in memory only —
     // it is never deployed on-chain.
-    const localSim = new DrySimClass(contractArgs, options);
-    const contract = localSim.contract;
-    const impureNames = Object.keys(contract.impureCircuits);
-    const impureSet = new Set(impureNames);
-    const pureNames = Object.keys(contract.circuits).filter(
-      (name) => !impureSet.has(name),
-    );
+    // 0.18: `initialState` is async, so the constructor defers the constructor
+    // run to `init()`. Await it before deriving names / wiring any backend.
+    const buildLocalSim = async (contractAddress?: string) => {
+      const sim = new DrySimClass(
+        contractArgs,
+        contractAddress ? { ...options, contractAddress } : options,
+      );
+      await sim.init();
+      return sim;
+    };
+
+    const circuitNames = (contract: IMinimalContract) => {
+      const impureNames = Object.keys(contract.impureCircuits);
+      const impureSet = new Set(impureNames);
+      const pureNames = Object.keys(contract.circuits).filter(
+        (name) => !impureSet.has(name),
+      );
+      return { pureNames, impureNames };
+    };
 
     if (kind === 'live') {
       const signers = new Signers({
@@ -119,6 +136,23 @@ export function createSimulator<
         );
       }
 
+      // The deployed address is the contract's identity; an explicit override
+      // that disagrees with it can only produce wrong results.
+      if (
+        options.contractAddress &&
+        options.contractAddress !== liveCtx.contractAddress
+      ) {
+        throw new Error(
+          `contractAddress ${options.contractAddress} does not match the ` +
+            `deployed contract at ${liveCtx.contractAddress}`,
+        );
+      }
+
+      // Bind the local evaluator to the deployed address so pure circuits
+      // never observe a dummy address.
+      const localSim = await buildLocalSim(liveCtx.contractAddress);
+      const { pureNames, impureNames } = circuitNames(localSim.contract);
+
       // The live adapter value is reached only via dynamic import,
       // so a dry import never statically links it (and any future heavy deps).
       const { LiveBackend } = await import('../live/LiveBackend.js');
@@ -131,6 +165,8 @@ export function createSimulator<
       return { backend, signers, pureNames, impureNames };
     }
 
+    const localSim = await buildLocalSim();
+    const { pureNames, impureNames } = circuitNames(localSim.contract);
     const signers = new Signers({ mode: 'dry', dryKeys: options.signerKeys });
     const backend = new DryBackend<P, L>(
       localSim as unknown as SyncSimulator<P, L>,
@@ -244,6 +280,15 @@ export function createSimulator<
     /** The alias resolver for circuit-arg keys (`signers.eitherFor('OWNER')`). */
     get signers(): Signers {
       return this._signers;
+    }
+
+    /**
+     * The deployed contract's address. Needed by callers that must reconstruct
+     * a circuit's message digest off-chain (e.g. signing an operation bound to
+     * `kernel.self()`).
+     */
+    get contractAddress(): string {
+      return this._backend.contractAddress;
     }
 
     /**

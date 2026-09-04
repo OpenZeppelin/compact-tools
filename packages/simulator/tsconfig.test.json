@@ -1,0 +1,13 @@
+{
+  // Typecheck-only project for the test tree, run by `yarn types:test`.
+  //
+  // Separate from `tsconfig.types.json` because the build config roots at
+  // `./src`; `test/**` sits outside that root and would trip TS6059.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist", "test/fixtures/artifacts"]
+}

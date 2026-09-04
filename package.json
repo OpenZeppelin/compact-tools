@@ -17,19 +17,18 @@
     "clean": "turbo run clean"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.6",
     "@openzeppelin/compact-deployer": "workspace:^",
     "@types/node": "26.1.2",
     "@vitest/coverage-v8": "4.1.9",
     "pino": "^9.7.0",
     "ts-node": "^10.9.2",
-    "turbo": "^2.9.18",
+    "turbo": "^2.10.8",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
   "resolutions": {
     "@midnight-ntwrk/ledger-v8": "8.0.3",
-    "@midnight-ntwrk/midnight-js-protocol": "4.1.0",
     "undici": "^6.24.0",
     "glob": "^11.0.0",
     "uuid": "^13.0.0"

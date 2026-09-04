@@ -1,7 +1,7 @@
 {
   "name": "@openzeppelin/compact-cli",
   "description": "CLI for compiling, building, and deploying Compact smart contracts",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "keywords": [
     "compact",
     "cli",
@@ -53,8 +53,8 @@
   "dependencies": {
     "@openzeppelin/compact-builder": "workspace:^",
     "@openzeppelin/compact-deployer": "workspace:^",
-    "chalk": "^5.6.2",
-    "ora": "^9.0.0",
+    "chalk": "^6.0.0",
+    "ora": "^9.4.1",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "ws": "^8.16.0"
