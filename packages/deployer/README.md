@@ -1,0 +1,258 @@
+# @openzeppelin/compact-deployer
+
+```bash
+compact-deploy Token --network local
+```
+
+> **Status: developer-preview, testnet only.** Verified on local devnet and on preprod (dry run to chain tip, 2026-09-04); the preview endpoints are null-routed ([Known issues](#known-issues-may-2026)). Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling. See [Roadmap](#roadmap--todo).
+
+## Requirements
+
+- Node.js >= 24 — the deployer uses explicit resource management (`await using` / `AsyncDisposableStack`), global only from Node 24.
+
+## Quick start
+
+1. Compile your contract with `compact-compiler` so artifacts land under `src/artifacts/<Name>/`.
+2. Drop a `compact.toml` at your repo root (see [Sample config](#sample-config)).
+3. Generate a signing key per contract: `head -c 32 /dev/urandom | xxd -p -c 32 > deploy/Token.signingkey`.
+4. Run:
+   ```bash
+   compact-deploy Token --network local
+   ```
+
+The deploy result lands in `deployments/compact/<network>.json`.
+
+## Install & run
+
+The `compact-deploy` bin ships in `@openzeppelin/compact-cli`. Install it as a dev dependency of the project that holds your compiled artifacts, then run it with `npx`:
+
+```bash
+npm i -D @openzeppelin/compact-cli         # or pnpm/yarn
+npx compact-deploy Token --network local   # resolves the local install
+```
+
+`npx` prefers the local `node_modules/.bin`, so the deployer and your compiled contracts share **one** `@midnight-ntwrk/compact-runtime` copy. A real deploy requires this: the deploy-tx builder creates a `ContractMaintenanceAuthority` from the runtime and hands it to your contract, and the WASM check rejects it unless both sides are the same physical copy.
+
+> **Ephemeral `npx @openzeppelin/compact-cli compact-deploy …` (no local install)** is fine for `--help`, `--version`, and `--dry-run` / validation, but **not reliable for a real deploy**: npx fetches the CLI into its own cache tree, so its `compact-runtime` differs from your project's and the submit fails with `expected instance of ContractMaintenanceAuthority`. Install it locally for real deploys.
+
+## Supported stack
+
+The deployer pins one Midnight stack, and artifacts have to be compiled against a matching compiler.
+
+| Component | Version |
+|---|---|
+| `@midnight-ntwrk/compact-runtime` | 0.16.0 |
+| `@midnight-ntwrk/ledger-v8` | 8.1.2 |
+| `@midnight-ntwrk/midnight-js-*` | 4.1.1 |
+| `@midnight-ntwrk/testkit-js` | 4.1.1 |
+| `@midnight-ntwrk/wallet-sdk-facade` | 4.0.1 |
+| Compact compiler | 0.31.1 |
+
+Compile with the pinned compiler: `compact compile +0.31.1`. The current default compactc (0.34.x) emits code for compact-runtime 0.19.0, and the deploy then fails with a `Version mismatch` runtime error.
+
+- As of 2026-09, `OpenZeppelin/compact-contracts` `main` is on compact-runtime 0.19.0 / ledger-v9 1.0.0-rc.3, so contracts built there are not deployable with this tool today.
+- Moving the deployer to the v9 stack is pending a published `@midnight-ntwrk/ledger-v9`: `@midnight-ntwrk/compact-js` 2.5.3 depends on an unpublished ledger-v9 alpha, which yarn rejects with `YN0082`.
+
+## CLI
+
+```
+compact-deploy <Contract>
+  --network <name>          required unless [profile].default_network is set
+  --config <path>           default: walk up from CWD for compact.toml
+  --seed-file <path>        seed override (raw hex or BIP39 mnemonic, one line)
+  --proof-server <url>      override [networks.X].proof_server
+  --sync-timeout <seconds>  max wait for wallet to reach chain tip (default 600)
+  --tx-timeout <seconds>    max wait for deploy-tx finalization (default 600)
+  --sync-batch-size <n>     dust/shielded sync batch size (default 5000)
+  --no-cache                ignore on-disk wallet-state cache; force fresh sync
+  --force                   replace a pending deploy record for this contract
+  --seed-cache-from-dust <path>      import a pre-warmed dust state file into .states/
+  --seed-cache-from-shielded <path>  import a pre-warmed shielded state file into .states/
+  --seed-cache-from-unshielded <path> import a pre-warmed unshielded state file into .states/
+  --dry-run                 load, validate, build providers, log plan, DO NOT submit
+  --json                    single JSON object on stdout (machine-readable)
+  -v, --verbose             pino debug logs to .compact/logs/<timestamp>.log
+  -h, --help                --version
+```
+
+Exit codes: `0` ok · `2` config error (includes a pending deploy record without `--force`) · `3` wallet error · `5` deploy tx failed or not confirmed · `6` deployments ledger unreadable or unwritable · `1` unexpected.
+
+A deploy writes a `status: "pending"` record (address, txId) to `deployments/<network>.json` as soon as the node accepts the tx, then promotes it to `status: "confirmed"` (txHash, blockHeight) on finalization. A dropped connection or `--tx-timeout` leaves the pending record in place and names the address and txId in the error; the next deploy of that contract refuses until you check the tx on chain and pass `--force`.
+
+## Deploying to real networks (preprod, preview, testnet)
+
+> Preview is down (null-routed DNS); preprod is reachable. A first cold preprod sync takes ~37 min, so raise `--sync-timeout`. Local standalone (`make env-up`) is still the fastest target. See [Known issues](#known-issues-may-2026).
+
+- **First sync is slow** (~3 min on preview, ~37 min on preprod from genesis, measured 2026-09-04). Cache makes reruns near-instant.
+- **Bump sync timeout**: `--sync-timeout 3600` (default 10 min).
+- **Bump Node heap** for long-history chains: `NODE_OPTIONS="--max-old-space-size=8192"`.
+- **Tune the sync batch size**: `--sync-batch-size <n>` (default 5000). Larger replays a long dust history faster but uses more memory per batch; lower it on a memory-constrained host.
+- **Persist the sync knobs in TOML**: set `sync_timeout` (seconds) and/or `sync_batch_size` under `[networks.X]` so you don't pass the flags every run. The matching CLI flag overrides the TOML value when both are present (CLI > TOML > default).
+- **Tip gate is tolerant**: sync completes once every sub-wallet is within 50 events of the tip, not at an exact gap of 0. On a live network the global dust stream advances continuously, so an exact-match gate would never fire.
+- **Seed source**: `--seed-file`, `MN_DEPLOYER_SEED`, or `[wallet].keystore`. The `wallet = { source = "local" }` shorthand is dev-preset only.
+
+## Wallet cache
+
+After each successful sync the deployer writes `<compact.toml dir>/.states/<network>-<seed-hash>-<kind>.gz` (one file per shielded / dust / unshielded sub-wallet). Next run restores from it instead of re-syncing from genesis.
+
+- Contents: gzipped sub-wallet state (UTXOs, checkpoint). No private keys (re-derived from seed each run).
+- Keyed by SHA-256(seed) + network ID, so `local` vs `preprod` keep separate caches.
+- Bust it: `--no-cache` (force fresh) or `rm -rf .states/`. Auto-falls-back on corrupt or version-mismatched files.
+- Best-effort writes; never block a deploy. Concurrent runs against the same seed race. Don't.
+- Resolved against the `compact.toml` directory, not the shell CWD, so running from a subdirectory reuses the same cache. Same for the LevelDB private-state store (`<compact.toml dir>/midnight-level-db/`).
+- Both live under the `compact.toml` directory, which makes the project the unit of deployer state. Run one `compact-deploy` at a time per project: a second concurrent run fails on the LevelDB lock.
+- Library callers that run several deploys in one process must pass `privateStateProvider` (e.g. the SDK's in-memory provider) alongside `walletProvider`. The default LevelDB store holds its lock until the process exits.
+- `.states/` is gitignored.
+
+### Importing a pre-warmed state file
+
+If cold sync OOMs on preprod (the known upstream bug) and you already have a `wallet.serializeState()` snapshot from a prior session, drop it in with:
+
+```
+compact-deploy <Contract> --network preprod \
+  --seed-cache-from-dust /path/to/state.json \
+  --seed-cache-from-shielded /path/to/shielded.json \
+  --seed-cache-from-unshielded /path/to/unshielded.json
+```
+
+- The dust file is the one that matters on preprod; the shielded and unshielded imports are optional.
+- Accepts either raw JSON (the direct `serializeState()` output) or its gzipped copy. Gzip is detected by magic bytes.
+- The file is renamed to the seed-derived cache name and dropped into `.states/`.
+- **The previous cache (if any) is preserved at `<target>.gz.bak`** — never deleted, never overwritten by the import. To roll back from a bad import, `mv .states/<target>.gz.bak .states/<target>.gz`.
+- The write itself is atomic: payload lands in `<target>.gz.tmp` first, then is renamed over `<target>.gz`. A mid-write crash can never leave the live cache half-overwritten.
+- Restore failure (e.g. schema mismatch) falls through to the normal "fresh sync from genesis" path with a `warn` log — so the deploy still completes if the import doesn't take.
+- Ignored under `--no-cache` (with a warning), since load is disabled in that mode.
+
+## Wallet seed resolution
+
+Precedence, first non-null wins:
+
+1. `--seed-file <path>`
+2. `MN_DEPLOYER_SEED` env var (hex or BIP39 mnemonic)
+3. `[wallet].keystore` (encrypted JSON, passphrase prompted)
+4. `--network local` only: built-in prefunded standalone seed at `[networks.local].wallet.index` (0..4)
+
+## Sample config
+
+```toml
+[profile]
+default_network = "local"
+artifacts_dir   = "src/artifacts"
+deployments_dir = "deployments/compact"
+
+# ---------- Networks ----------
+[networks.local]
+network_id   = "undeployed"
+indexer      = "http://127.0.0.1:8088/api/v3/graphql"
+indexer_ws   = "ws://127.0.0.1:8088/api/v3/graphql/ws"
+node         = "http://127.0.0.1:9944"
+node_ws      = "ws://127.0.0.1:9944"
+proof_server = "http://127.0.0.1:6300"
+wallet       = { source = "local", index = 0 }
+
+[networks.preview]
+network_id   = "preview"
+indexer      = "https://indexer.preview.midnight.network/api/v4/graphql"
+indexer_ws   = "wss://indexer.preview.midnight.network/api/v4/graphql/ws"
+node         = "https://rpc.preview.midnight.network"
+node_ws      = "wss://rpc.preview.midnight.network"
+proof_server = "auto"
+explorer     = "https://preview.midnightexplorer.com"
+
+[networks.preprod]
+network_id   = "preprod"
+indexer      = "https://indexer.preprod.midnight.network/api/v4/graphql"
+indexer_ws   = "wss://indexer.preprod.midnight.network/api/v4/graphql/ws"
+node         = "https://rpc.preprod.midnight.network"
+node_ws      = "wss://rpc.preprod.midnight.network"
+proof_server = "auto"
+explorer     = "https://preprod.midnightexplorer.com"
+sync_timeout    = 5400   # seconds; overridden by --sync-timeout
+sync_batch_size = 5000   # dust/shielded batch; overridden by --sync-batch-size
+
+# ---------- Wallet (non-local) ----------
+[wallet]
+keystore = "./deployer.keystore.json"
+
+# ---------- Contracts ----------
+[contracts.Token]
+artifact           = "src/artifacts/Token/Token"
+private_state_id   = "tokenPrivateState"
+init_private_state = { file = "./deploy/Token.private-state.json" }
+args               = ["MyToken", "MTK", 18]
+signing_key_file   = "./deploy/Token.signingkey"
+
+[contracts.Vault]
+artifact         = "src/artifacts/Vault/Vault"
+args             = []
+signing_key_file = "./deploy/Vault.signingkey"
+```
+
+`proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the duration of the deploy; omitting it falls back to the env var `PROOF_SERVER_PORT` then to `http://127.0.0.1:6300`.
+
+## Keystore format
+
+`compact-deploy` reads/writes a JSON keystore with the Ethereum V3 shape (scrypt + AES-128-CTR) but with `version: "midnight-1"` so other tooling does not silently mis-read it as an Ethereum key. The encrypted secret is a 32-byte Midnight wallet seed (hex).
+
+## Known issues (May 2026)
+
+1. **Preview endpoints null-routed.** `rpc.preview.midnight.network` and `indexer.preview.midnight.network` resolve to `0.0.0.0` on the authoritative AWS Route 53 nameservers for `midnight.network` (verified against Google, Cloudflare, and Quad9). Preview was alive on 2026-05-22, broken on 2026-05-24. Blocks every consumer of testkit-js's `PreviewTestEnvironment`. File at [midnightntwrk/servicedesk](https://github.com/midnightntwrk/servicedesk/issues/new?template=bug-report.yml). **Workaround:** none on public testnet. `make env-up` (local standalone) is the only working target until Midnight restores the endpoints.
+
+2. **Preprod blocked: `Wallet.Sync: Could not deserialize Ledger Event` on `DustSpendProcessed`.** Dust sync aborts mid-stream on a `DustSpendProcessed` event whose `midnight:event[v9]:`-prefixed `raw` bytes fail `effect/Schema` parsing. The thrown `Wallet.Sync` corrupts `DustLocalState`. The next `walletBalance()` call hits `RuntimeError: unreachable` in the ledger WASM. Two independent runs, two different event IDs: 2026-05-22 id **565,975** (confirmed in Midnight dev Discord by `Knife`); 2026-05-24 id **571,224** with `maxId` 676,018. Affected stack: `wallet-sdk-dust-wallet@4.0.0`, `ledger-v8@8.0.3`, `testkit-js@4.1.0`. File at [midnightntwrk/midnight-wallet](https://github.com/midnightntwrk/midnight-wallet/issues/new). Distinct from [#361 `InvalidDustSpendProof`](https://github.com/midnightntwrk/midnight-wallet/issues/361), which is a chain-side tx rejection (this bug is client-side event ingest). **Workaround:** none. Preview is also down (see #1). Local standalone is the only working target today.
+
+   **2026-09-04, stack `wallet-sdk-dust-wallet@4.1.0` / `ledger-v8@8.1.2` / `testkit-js@4.1.1`:** not reproduced.
+   A cold preprod dry run reached chain tip on all three sub-wallets (~37 min) and ended at the expected `UnfundedWalletError`.
+
+3. **Faucet is manual.** The deployer never hits a faucet. Fund the wallet's `unshielded` address (logged at startup) via the official Midnight faucet site or Discord bot before running.
+
+4. **Dust fee overhead default breaks faucet wallets.** testkit-js default `additionalFeeOverhead` is `5e20` vs a faucet wallet's `~3e15` dust → `Insufficient Funds: could not balance dust`. Deployer overrides to `5e14` for non-mainnet. Library users constructing their own provider must mirror this.
+
+5. **Long-history dust sync exhausts default Node heap.** The deployer now raises the dust/shielded sync batch size (`batchUpdates = { size: 5000, … }`) so the replay no longer OOMs mid-stream ([midnightntwrk/midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)). First hit on `wallet-sdk-dust-wallet@4.0.0`; the override is kept on the shipped 4.1.0 and has not been re-tested without it. The restored dust tree plus shielded trial-decryption can still spike past V8's ~2 GB default old-space on a first preprod sync, so set `NODE_OPTIONS="--max-old-space-size=8192"` for that run. Cache fixes subsequent runs.
+
+6. **Root `resolutions` pin the wallet-SDK packages; do not drop them on a bump.** `testkit-js@4.1.1` pulls `@midnight-ntwrk/wallet-sdk@1.1.0`, which declares `wallet-sdk-facade ^4.0.1` and so resolves to 4.1.0 — a version that imports a nonexistent `Clock` export and fails to load. Without the pins the tree also duplicates `wallet-sdk-dust-wallet` (4.2.0) and `wallet-sdk-shielded` (3.0.2). The root `package.json` therefore pins `wallet-sdk-address-format 3.1.2`, `wallet-sdk-dust-wallet 4.1.0`, `wallet-sdk-facade 4.0.1`, `wallet-sdk-shielded 3.0.1`, `wallet-sdk-unshielded-wallet 3.1.0`.
+
+## Programmatic API
+
+The package has no barrel entrypoint: each module is its own subpath export, so an import names the module it comes from and pulls in only that module.
+
+| Subpath | Exports |
+|---|---|
+| `/run-deploy` | `runDeploy`, `constructorArgs`, `ConstructorArgsOf`, `RunDeployOptions` |
+| `/deployer` | `Deployer`, `DeployerOptions`, `DeployResult` |
+| `/deployments` | `Deployments`, `DeploymentRecord` (`PendingDeploymentRecord` \| `ConfirmedDeploymentRecord`, discriminated on `status`), `DeploymentsFile`, `DeploymentsHistory` |
+| `/errors` | `DeployError` and every typed subclass |
+| `/config/compact-config` | `CompactConfig` |
+| `/config/schema` | `ContractConfig`, `NetworkConfig`, `Profile`, `WalletConfig` |
+| `/loaders/args` · `/loaders/argv` · `/loaders/artifact` · `/loaders/init-state` · `/loaders/signing-key` | `ConstructorArgs`, `parseDeployArgv`, `Artifact`, `InitialPrivateState`, `SigningKey` |
+| `/providers/proof-server` | `ProofServer` |
+| `/wallet/handler` · `/wallet/keystore` · `/wallet/seeds` | `WalletHandler`, `Keystore`, `classifySeed`, `localPrefundedSeed` |
+
+Curried form — pass the compiled `Contract` class and the constructor args are typed function parameters:
+
+```ts
+import { runDeploy } from "@openzeppelin/compact-deployer/run-deploy";
+import { Contract } from "./src/artifacts/Token/contract/index.js";
+
+const result = await runDeploy(Contract, { network: "local" })(
+  "OpenZeppelin Token", // _name: string
+  "OZE",                // _symbol: string
+  18n,                  // _decimals: bigint
+);
+console.log(result.address);
+```
+
+Options-object form — name the contract as it appears in `compact.toml`, with args from the TOML or passed inline:
+
+```ts
+import { runDeploy } from "@openzeppelin/compact-deployer/run-deploy";
+
+const result = await runDeploy({
+  contract: "Token",
+  network: "local",
+  configPath: "./compact.toml",
+  args: ["OpenZeppelin Token", "OZE", 18n],
+});
+console.log(result.address);
+```
+
+Every option has a `process.argv` default (`--network`, `--config`, `--dry-run`, …), so the same script works with flags at the call site. On failure `runDeploy` sets `process.exitCode` and rethrows the original error; it never calls `process.exit`, so catch it if you want that exit code to reach the shell.

@@ -1,9 +1,11 @@
 # @openzeppelin/compact-cli
 
-CLI wrapper around [`@openzeppelin/compact-builder`](../builder).
-Provides the `compact-compiler` and `compact-builder` binaries for use in
-`package.json` scripts. Contains no programmatic API of its own. If you want
-to call the compiler/builder from TypeScript, use the library package directly.
+CLI wrapper around [`@openzeppelin/compact-builder`](../builder) and
+[`@openzeppelin/compact-deployer`](../deployer). Provides the
+`compact-compiler`, `compact-builder`, and `compact-deploy` binaries for use
+in `package.json` scripts. Contains no programmatic API of its own. If you
+want to call the compiler, builder, or deployer from TypeScript, use the
+library package directly.
 
 ## Install
 
@@ -16,6 +18,7 @@ yarn add --dev @openzeppelin/compact-cli
 ```bash
 yarn compact-compiler --help
 yarn compact-builder --help
+yarn compact-deploy --help
 ```
 
 Typical `package.json` scripts (replace `<version>` with the Compact
@@ -34,9 +37,20 @@ toolchain release you want to pin, e.g. `+0.29.0`):
 
 ## Options
 
-Both binaries accept the same compiler-side options (forwarded to the
-underlying library); `compact-builder` additionally accepts dist-layout
-options:
+### `compact-deploy`
+
+Deploys a compiled contract to a Midnight network. Options are documented
+in full under [`@openzeppelin/compact-deployer`](../deployer); the common
+ones are `--network`, `--config`, `--seed-file`, `--dry-run`, and `--json`.
+
+```bash
+compact-deploy <Contract> --network local
+```
+
+### `compact-compiler` and `compact-builder`
+
+Both accept the same compiler-side options (forwarded to the underlying
+library); `compact-builder` additionally accepts dist-layout options:
 
 | Flag | Applies to | Description |
 |---|---|---|
@@ -55,7 +69,7 @@ documentation, programmatic API, and behavioural details.
 
 ## Requirements
 
-- Node.js >= 20
+- Node.js >= 24 for `compact-deploy`, which uses explicit resource management (`await using` / `AsyncDisposableStack`), global only from Node 24. The compiler and builder binaries run on older releases.
 - Midnight Compact toolchain installed and available in `PATH`
 
 ```bash

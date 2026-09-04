@@ -13,6 +13,19 @@
       "outputs": [],
       "cache": false
     },
+    "coverage": {
+      "dependsOn": ["^build"],
+      "env": ["COMPACT_HOME"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.compact",
+        "test/**/*.ts",
+        "vitest.config.ts",
+        "package.json"
+      ],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
     "build": {
       "dependsOn": ["^build"],
       "env": ["COMPACT_HOME"],

@@ -1,0 +1,309 @@
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WalletError } from '../errors.ts';
+import { Keystore, type MidnightKeystore } from './keystore.ts';
+
+const FAST_OPTS = { scryptN: 1024, scryptR: 8, scryptP: 1, dklen: 32 };
+const SEED = 'deadbeef'.repeat(8);
+
+describe('Keystore', () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'keystore-test-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  describe('encrypt / decrypt', () => {
+    it('should round-trip a seed through encrypt → decrypt', () => {
+      const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
+      const json = ks.toJSON();
+      expect(json.version).toBe('midnight-1');
+      expect(json.crypto.cipher).toBe('aes-128-ctr');
+      expect(json.crypto.kdf).toBe('scrypt');
+      expect(ks.decrypt('hunter2')).toBe(SEED);
+    });
+
+    it('should accept a 0x-prefixed hex seed and round-trip back to unprefixed hex', () => {
+      const ks = Keystore.encrypt(`0x${SEED}`, 'pw', FAST_OPTS);
+      expect(ks.decrypt('pw')).toBe(SEED);
+    });
+
+    it('should reject a non-hex seed', () => {
+      expect(() => Keystore.encrypt('not hex!', 'pw', FAST_OPTS)).toThrow(
+        WalletError,
+      );
+    });
+
+    it('should reject an odd-length hex seed', () => {
+      expect(() => Keystore.encrypt('abc', 'pw', FAST_OPTS)).toThrow(
+        WalletError,
+      );
+    });
+
+    it('should reject a dklen the schema cannot read back', () => {
+      // A short derived key leaves an empty MAC key, so the keystore
+      // would be written and then fail its own schema on load.
+      expect(() =>
+        Keystore.encrypt(SEED, 'pw', { ...FAST_OPTS, dklen: 16 }),
+      ).toThrow(/dklen must be 32/);
+    });
+
+    it('should reject scrypt params that exceed the memory limit', () => {
+      expect(() =>
+        Keystore.encrypt(SEED, 'pw', {
+          ...FAST_OPTS,
+          scryptN: 1 << 17,
+          scryptR: 32,
+        }),
+      ).toThrow(WalletError);
+      expect(() =>
+        Keystore.encrypt(SEED, 'pw', {
+          ...FAST_OPTS,
+          scryptN: 1 << 17,
+          scryptR: 32,
+        }),
+      ).toThrow(/over the 512 MiB scrypt memory limit/);
+    });
+
+    it('should round-trip under the default scrypt params', () => {
+      const ks = Keystore.encrypt(SEED, 'pw');
+      expect(ks.toJSON().crypto.kdfparams).toMatchObject({
+        dklen: 32,
+        n: 1 << 17,
+        p: 1,
+        r: 8,
+      });
+      expect(ks.decrypt('pw')).toBe(SEED);
+    });
+
+    it('should reject a wrong passphrase with MAC mismatch', () => {
+      const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
+      expect(() => ks.decrypt('wrong')).toThrow(/MAC mismatch/);
+    });
+
+    it('should produce a different ciphertext on each encryption (random salt/iv)', () => {
+      const a = Keystore.encrypt(SEED, 'pp', FAST_OPTS).toJSON();
+      const b = Keystore.encrypt(SEED, 'pp', FAST_OPTS).toJSON();
+      expect(a.crypto.ciphertext).not.toBe(b.crypto.ciphertext);
+      expect(a.crypto.kdfparams.salt).not.toBe(b.crypto.kdfparams.salt);
+    });
+  });
+
+  describe('toJSON', () => {
+    it('should expose the full on-disk shape with all crypto fields', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS);
+      const json = ks.toJSON();
+      expect(json.version).toBe('midnight-1');
+      expect(typeof json.id).toBe('string');
+      expect(json.crypto.cipher).toBe('aes-128-ctr');
+      expect(json.crypto.kdf).toBe('scrypt');
+      expect(typeof json.crypto.ciphertext).toBe('string');
+      expect(typeof json.crypto.mac).toBe('string');
+      expect(typeof json.crypto.cipherparams.iv).toBe('string');
+      expect(json.crypto.kdfparams).toMatchObject({
+        dklen: 32,
+        n: 1024,
+        p: 1,
+        r: 8,
+      });
+      expect(typeof json.crypto.kdfparams.salt).toBe('string');
+    });
+  });
+
+  describe('writeToFile', () => {
+    it('should write JSON to disk with mode 0o600', async () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS);
+      const path = join(tmp, 'wallet.json');
+      await ks.writeToFile(path);
+      const st = statSync(path);
+      // mask out file-type bits, only check perm bits
+      expect(st.mode & 0o777).toBe(0o600);
+      const parsed = JSON.parse(await readFile(path, 'utf8'));
+      expect(parsed.version).toBe('midnight-1');
+    });
+  });
+
+  describe('readFromFile', () => {
+    it('should round-trip through writeToFile + readFromFile + decrypt', async () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS);
+      const path = join(tmp, 'wallet.json');
+      await ks.writeToFile(path);
+      const loaded = await Keystore.readFromFile(path);
+      expect(loaded.decrypt('pw')).toBe(SEED);
+    });
+
+    it('should wrap fs errors as WalletError', async () => {
+      await expect(
+        Keystore.readFromFile(join(tmp, 'does-not-exist.json')),
+      ).rejects.toThrow(/Failed to read keystore at/);
+    });
+
+    it('should reject invalid JSON with WalletError', async () => {
+      const path = join(tmp, 'bad.json');
+      await writeFile(path, '{ not valid json');
+      await expect(Keystore.readFromFile(path)).rejects.toThrow(
+        /Invalid JSON in keystore/,
+      );
+    });
+  });
+
+  describe('fromJSON validation', () => {
+    it('should reject an unsupported version', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS);
+      const tampered = {
+        ...ks.toJSON(),
+        version: 'eth-3',
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /version: Invalid literal value, expected "midnight-1"/,
+      );
+    });
+
+    it('should reject an unsupported KDF', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: { ...ks.crypto, kdf: 'pbkdf2' },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /crypto\.kdf: Invalid literal value, expected "scrypt"/,
+      );
+    });
+
+    it('should reject an unsupported cipher', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: { ...ks.crypto, cipher: 'aes-256-gcm' },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /crypto\.cipher: Invalid literal value, expected "aes-128-ctr"/,
+      );
+    });
+
+    it('should reject a non-object with WalletError (not a raw TypeError)', () => {
+      expect(() => Keystore.fromJSON(null)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON('nope')).toThrow(
+        /<root>: Expected object, received string/,
+      );
+    });
+
+    it('should reject JSON missing the crypto section with WalletError', () => {
+      expect(() => Keystore.fromJSON({ version: 'midnight-1' })).toThrow(
+        /crypto: Required/,
+      );
+    });
+
+    it('should label a schema failure with no path as <root>', () => {
+      // An array carrying the right fields is not a plain object, so zod
+      // reports at the top level and the issue path is empty.
+      const arrayShaped = Object.assign([], {
+        version: 'midnight-1',
+        crypto: { kdf: 'scrypt', cipher: 'aes-128-ctr' },
+      });
+      expect(() => Keystore.fromJSON(arrayShaped)).toThrow(
+        /<root>: Expected object/,
+      );
+    });
+
+    it('should reject a keystore missing kdfparams with WalletError', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const { kdfparams: _dropped, ...crypto } = ks.crypto;
+      const tampered = { ...ks, crypto } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(/kdfparams/);
+    });
+
+    it('should reject an absurd scrypt n that would exhaust memory', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 2 ** 30 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+    });
+
+    it('should reject in-range scrypt params that exceed the memory limit', () => {
+      // n=2^20 with r=8 satisfies every per-field bound, and `scryptSync`
+      // then refuses it with a raw OpenSSL RangeError.
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 2 ** 20 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /over the 512 MiB scrypt memory limit/,
+      );
+    });
+
+    it('should reject a scrypt n above the ceiling for its r', () => {
+      // n=2^20 needs only 134 MiB at r=1, but scrypt caps n at 2 ** (16 * r).
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 2 ** 20, r: 1 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /ceiling of 2 \*\* \(16 \* r\)/,
+      );
+    });
+
+    it('should reject a scrypt n that is not a power of two', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 3000 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(/power of two/);
+    });
+
+    it('should reject a non-hex ciphertext', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: { ...ks.crypto, ciphertext: 'zzzz' },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(/hex/);
+    });
+
+    it('should reject a dklen other than 32', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, dklen: 16 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+    });
+
+    it('should round-trip a valid keystore through fromJSON', () => {
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS);
+      expect(Keystore.fromJSON(ks.toJSON()).decrypt('pw')).toBe(SEED);
+    });
+  });
+});

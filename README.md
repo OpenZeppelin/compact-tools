@@ -15,10 +15,11 @@ This project extends the Midnight Network with additional developer tooling.
 > risk. See [SECURITY.md](./SECURITY.md) for the full disclaimer and for how
 > to report a vulnerability.
 
-Tools for compiling, building, and testing Compact smart contracts. This is a monorepo containing:
+Tools for compiling, building, testing, and deploying Compact smart contracts. This is a monorepo containing:
 
 - [`packages/builder`](./packages/builder) — programmatic library that drives the Compact compiler + builder
-- [`packages/cli`](./packages/cli) — thin bin wrapper around the builder library (`compact-compiler`, `compact-builder`)
+- [`packages/cli`](./packages/cli) — thin bin wrapper around the builder and deployer libraries (`compact-compiler`, `compact-builder`, `compact-deploy`)
+- [`packages/deployer`](./packages/deployer) — deployer library that submits a compiled contract to a Midnight network. Pins one Midnight stack: see [Supported stack](./packages/deployer/README.md#supported-stack)
 - [`packages/simulator`](./packages/simulator) — TypeScript simulator to run and test Compact contracts locally
 
 See each package's README for usage, options, and examples.
@@ -36,14 +37,19 @@ yarn add --dev @openzeppelin/compact-cli
 
 # Simulator — test Compact contracts locally
 yarn add --dev @openzeppelin/compact-simulator
+
+# Deployer — deploy a compiled contract from TypeScript
+yarn add --dev @openzeppelin/compact-deployer
 ```
 
-`compact-cli` depends transitively on `compact-builder`, so installing the CLI
-gives you both the binaries and the underlying library.
+`compact-cli` depends transitively on `compact-builder` and
+`compact-deployer`, so installing the CLI gives you both the binaries and the
+underlying libraries.
 
 ```bash
 yarn compact-compiler --help
 yarn compact-builder --help
+yarn compact-deploy --help
 ```
 
 ```ts
@@ -53,7 +59,7 @@ import { createSimulator } from '@openzeppelin/compact-simulator';
 
 ## Requirements
 
-- Node.js >= 20 (root and `packages/cli`), >= 22 for `packages/simulator`
+- Node.js >= 22 for `packages/builder` and `packages/simulator`, >= 24 for `packages/cli` and `packages/deployer`
 - Yarn 4 (Berry)
 - Turbo
 - Optional: Midnight Compact toolchain installed and available in `PATH`

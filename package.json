@@ -9,6 +9,7 @@
   "scripts": {
     "build": "turbo run build --log-prefix=none",
     "test": "turbo run test --log-prefix=none",
+    "coverage": "turbo run coverage --log-prefix=none",
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
     "lint:ci": "biome ci . --no-errors-on-unmatched",
@@ -17,10 +18,24 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",
+    "@openzeppelin/compact-deployer": "workspace:^",
     "@types/node": "26.1.2",
+    "@vitest/coverage-v8": "4.1.9",
+    "pino": "^9.7.0",
     "ts-node": "^10.9.2",
     "turbo": "^2.10.8",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
+  },
+  "resolutions": {
+    "@midnight-ntwrk/ledger-v8": "8.1.2",
+    "@midnight-ntwrk/wallet-sdk-address-format": "3.1.2",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "4.1.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "4.0.1",
+    "@midnight-ntwrk/wallet-sdk-shielded": "3.0.1",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "3.1.0",
+    "undici": "^6.24.0",
+    "glob": "^11.0.0",
+    "uuid": "^13.0.0"
   }
 }

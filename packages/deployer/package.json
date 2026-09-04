@@ -1,0 +1,130 @@
+{
+  "name": "@openzeppelin/compact-deployer",
+  "description": "Forge-style deployer library for Midnight Compact contracts",
+  "version": "0.0.1",
+  "keywords": [
+    "compact",
+    "midnight",
+    "deploy"
+  ],
+  "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenZeppelin/compact-tools.git",
+    "directory": "packages/deployer"
+  },
+  "type": "module",
+  "exports": {
+    "./config/compact-config": {
+      "types": "./dist/config/compact-config.d.ts",
+      "import": "./dist/config/compact-config.js"
+    },
+    "./config/schema": {
+      "types": "./dist/config/schema.d.ts",
+      "import": "./dist/config/schema.js"
+    },
+    "./deployer": {
+      "types": "./dist/deployer.d.ts",
+      "import": "./dist/deployer.js"
+    },
+    "./deployments": {
+      "types": "./dist/deployments.d.ts",
+      "import": "./dist/deployments.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./loaders/args": {
+      "types": "./dist/loaders/args.d.ts",
+      "import": "./dist/loaders/args.js"
+    },
+    "./loaders/argv": {
+      "types": "./dist/loaders/argv.d.ts",
+      "import": "./dist/loaders/argv.js"
+    },
+    "./loaders/artifact": {
+      "types": "./dist/loaders/artifact.d.ts",
+      "import": "./dist/loaders/artifact.js"
+    },
+    "./loaders/init-state": {
+      "types": "./dist/loaders/init-state.d.ts",
+      "import": "./dist/loaders/init-state.js"
+    },
+    "./loaders/signing-key": {
+      "types": "./dist/loaders/signing-key.d.ts",
+      "import": "./dist/loaders/signing-key.js"
+    },
+    "./providers/proof-server": {
+      "types": "./dist/providers/proof-server.d.ts",
+      "import": "./dist/providers/proof-server.js"
+    },
+    "./run-deploy": {
+      "types": "./dist/runDeploy.d.ts",
+      "import": "./dist/runDeploy.js"
+    },
+    "./services/error-format": {
+      "types": "./dist/services/error-format.d.ts",
+      "import": "./dist/services/error-format.js"
+    },
+    "./wallet/handler": {
+      "types": "./dist/wallet/handler.d.ts",
+      "import": "./dist/wallet/handler.js"
+    },
+    "./wallet/keystore": {
+      "types": "./dist/wallet/keystore.d.ts",
+      "import": "./dist/wallet/keystore.js"
+    },
+    "./wallet/seeds": {
+      "types": "./dist/wallet/seeds.d.ts",
+      "import": "./dist/wallet/seeds.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "types": "tsc -p tsconfig.json --noEmit",
+    "test": "yarn vitest run",
+    "coverage": "yarn vitest run --coverage",
+    "clean": "git clean -fXd"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.3",
+    "@types/node": "26.1.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "2.5.1",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/ledger-v8": "8.1.2",
+    "@midnight-ntwrk/midnight-js-contracts": "4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "4.1.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "4.1.1",
+    "@midnight-ntwrk/testkit-js": "4.1.1",
+    "@midnight-ntwrk/wallet-sdk-address-format": "3.1.2",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "4.1.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "4.0.1",
+    "@midnight-ntwrk/wallet-sdk-shielded": "3.0.1",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "3.1.0",
+    "@scure/bip39": "^1.2.1",
+    "pino": "^9.7.0",
+    "rxjs": "^7.8.1",
+    "smol-toml": "^1.3.4",
+    "zod": "^3.23.8"
+  }
+}
