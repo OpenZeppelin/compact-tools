@@ -152,6 +152,8 @@ args             = { module = "./deploy/TokenExample.args.mjs", export = "args" 
 
 ## Public testnets (preview, preprod)
 
+Both testnet blocks in `compact.toml` point `proof_server` at `http://127.0.0.1:6300`, so start one before deploying: `make env-up` from the repo root, or `docker run -p 6300:6300 midnightntwrk/proof-server:8.0.3`. `proof_server = "auto"` is not usable here — it boots a container from a `proof-server.yml` in the working directory, which this repo does not ship.
+
 ```bash
 yarn deploy:preview   # or yarn cli:preview
 yarn deploy:preprod   # or yarn cli:preprod
