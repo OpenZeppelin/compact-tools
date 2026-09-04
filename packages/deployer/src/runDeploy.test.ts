@@ -282,6 +282,17 @@ describe('runDeploy', () => {
     expect(parsed.message).toBe('proof server said no');
   });
 
+  it('should render a tagged wallet-SDK rejection instead of [object Object]', async () => {
+    process.argv = ['node', 'script.ts', '--json'];
+    const rejection = { _tag: 'Wallet.Sync', message: 'boom' };
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(rejection);
+
+    await expect(runDeploy({ contract: 'X' })).rejects.toBe(rejection);
+
+    const parsed = JSON.parse(writeSpy.mock.calls[0]?.[0] as string);
+    expect(parsed.message).toBe('Wallet.Sync: boom');
+  });
+
   it('should never call process.exit — an embedding app keeps control', async () => {
     process.argv = ['node', 'script.ts'];
     vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(

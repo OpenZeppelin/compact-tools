@@ -4,6 +4,7 @@ import { Deployer, type DeployResult } from './deployer.ts';
 import { DeployError } from './errors.ts';
 import { parseDeployArgv } from './loaders/argv.ts';
 import { resolveContractName } from './loaders/contract-resolve.ts';
+import { formatError } from './services/error-format.ts';
 
 /**
  * Shape every Compact-compiled `Contract` class satisfies. The
@@ -318,7 +319,10 @@ function handleError(
 ): never {
   const code = e instanceof DeployError ? e.exitCode : 1;
   const name = e instanceof Error ? e.name : 'Error';
-  const message = e instanceof Error ? e.message : String(e);
+  // `formatError` only on the non-Error arm: a DeployError already embeds its
+  // cause in `message`. The arm that matters is the wallet SDK's tagged
+  // records, which `String(e)` rendered as `[object Object]`.
+  const message = e instanceof Error ? e.message : formatError(e);
   if (opts.json) {
     process.stdout.write(
       `${JSON.stringify({ error: name, message, exitCode: code })}\n`,
