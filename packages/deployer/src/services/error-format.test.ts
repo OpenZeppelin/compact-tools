@@ -67,6 +67,12 @@ describe('formatError', () => {
     );
   });
 
+  it('should use the message of an untagged record that carries one', () => {
+    expect(formatError({ message: 'socket hang up' })).toStrictEqual(
+      'socket hang up',
+    );
+  });
+
   it('should render null and undefined without throwing', () => {
     expect(formatError(null)).toStrictEqual('null');
     expect(formatError(undefined)).toStrictEqual('undefined');
