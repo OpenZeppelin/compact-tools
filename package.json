@@ -18,7 +18,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
     "lint:ci": "biome ci . --no-errors-on-unmatched",
-    "types": "turbo run types && tsc -p tests/integrations",
+    "types": "turbo run build types --log-prefix=none && tsc -p tests/integrations",
     "clean": "turbo run clean"
   },
   "devDependencies": {
@@ -27,7 +27,7 @@
     "@midnight-ntwrk/midnight-js-network-id": "4.1.1",
     "@midnight-ntwrk/testkit-js": "4.1.1",
     "@openzeppelin/compact-deployer": "workspace:^",
-    "@tsconfig/node24": "^24.0.3",
+    "@tsconfig/node24": "24.0.3",
     "@types/node": "26.1.2",
     "@vitest/coverage-v8": "4.1.9",
     "pino": "^9.7.0",

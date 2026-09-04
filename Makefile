@@ -112,11 +112,16 @@ $(PRIVATE_OUT): $(INTEGRATION_DIR)/fixtures/PrivateCounter.compact
 # ── End-to-end integration test ────────────────────────────────────────
 #
 # Runs the whole pipeline in one /bin/sh invocation (note the `\`
-# continuations) so the `trap` survives across the chain. Teardown
-# fires on success, on any failure, and on Ctrl+C (INT / TERM).
+# continuations) so the `trap` survives across the chain. EXIT alone
+# covers success, failure, and Ctrl+C; adding INT / TERM ran `env-down`
+# twice on Ctrl+C, because the EXIT handler fires after the signal
+# handler.
 
-test-integration:
-	@trap '$(MAKE) env-down' EXIT INT TERM; \
+# `build` is a prerequisite, not part of the chain: the specs import the
+# deployer from `dist/`, and a build failure should not bring a stack up
+# only to tear it down again.
+test-integration: build
+	@trap '$(MAKE) env-down' EXIT; \
 		$(MAKE) env-up && \
 		$(MAKE) compile && \
 		yarn vitest run --config $(INTEGRATION_DIR)/vitest.config.ts

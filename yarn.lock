@@ -2058,7 +2058,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tsconfig/node24@npm:^24.0.3":
+"@tsconfig/node24@npm:24.0.3, @tsconfig/node24@npm:^24.0.3":
   version: 24.0.3
   resolution: "@tsconfig/node24@npm:24.0.3"
   checksum: 10/02318441e4fc1a493be0ea4299813f952cc564e8eac7b23508f22a1774692e7b362ba58b9dddd9ffb052d1c9fadc4f1937f5590bc581584fe662ae83512feb8d
@@ -2966,7 +2966,7 @@ __metadata:
     "@midnight-ntwrk/midnight-js-network-id": "npm:4.1.1"
     "@midnight-ntwrk/testkit-js": "npm:4.1.1"
     "@openzeppelin/compact-deployer": "workspace:^"
-    "@tsconfig/node24": "npm:^24.0.3"
+    "@tsconfig/node24": "npm:24.0.3"
     "@types/node": "npm:26.1.2"
     "@vitest/coverage-v8": "npm:4.1.9"
     pino: "npm:^9.7.0"

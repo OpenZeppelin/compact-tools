@@ -42,7 +42,6 @@ pointed at this folder. The root `yarn types` type-checks these sources via
 From the repo root (`compact-tools/`):
 
 ```bash
-make build                                                # build compact-deployer
 make test-integration                                     # env-up → compile → test → env-down
 ```
 
@@ -51,11 +50,11 @@ compact-runtime 0.16.0, and an artifact from the default compactc (0.34.x)
 fails at submit with a `Version mismatch`. See "Supported stack" in
 [`packages/deployer/README.md`](../../packages/deployer/README.md).
 
-`make test-integration` is fully self-contained: it brings the docker
-stack up, compiles the fixture contracts, runs the specs, and tears the
-stack down at the end. Teardown is wired via a `trap … EXIT INT TERM`
-inside the Makefile recipe so it fires even when the tests fail or
-you `Ctrl+C` out.
+`make test-integration` is fully self-contained: it builds the deployer
+(the specs import it from `dist/`), brings the docker stack up, compiles
+the fixture contracts, runs the specs, and tears the stack down at the
+end. Teardown is wired via a `trap … EXIT` inside the Makefile recipe
+so it fires once, whether the tests pass, fail, or you `Ctrl+C` out.
 
 `yarn test:integration` is kept as a thin wrapper around the same
 Make target so the CI invocation surface stays consistent with the
@@ -68,6 +67,7 @@ dance is wasted time. Bring the stack up once, then call vitest
 directly:
 
 ```bash
+make build                                                # the specs import compact-deployer from dist/
 make env-up                                               # one-time
 make compile                                              # idempotent; no-op if sources unchanged
 yarn vitest run --config tests/integrations/vitest.config.ts
@@ -90,5 +90,5 @@ make env-down                                             # when you're done ite
 
 - Specs inject their wallet through `walletProvider`, taken from the shared pool in `_harness/walletPool.ts` (the dev preset's genesis accounts: `TEST_MNEMONIC` plus hex seeds `0x…0001`–`0x…0004`). `[networks.local].wallet = { source = "local", index = 0 }` in `compact.toml` is there for a manual `compact-deploy --config tests/integrations/compact.toml` run; no spec goes through it.
 - Pool wallets are built with `skipWalletCache`, since `make env-down` wipes the chain and a stale `.states/` snapshot would restore UTXOs that no longer exist.
-- The CMA signing key in `fixtures/signingkeys/Counter.signingkey` is a fixed test value. Never use it for real deploys.
+- The CMA signing keys in `fixtures/signingkeys/*.signingkey` are fixed test values. Never use them for real deploys.
 - The `deployments/` directory is wiped between test runs to keep specs hermetic. It, `fixtures/artifacts/`, and `logs/` are covered by the repo-root `.gitignore`.
