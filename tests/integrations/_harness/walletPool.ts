@@ -94,17 +94,11 @@ export class WalletPool {
 let sharedPool: WalletPool | undefined;
 
 /**
- * Process-singleton pool over the local stack. Reset via
- * `resetSharedPool()`. A spec that must not share warm wallets with the
- * rest of the suite constructs its own {@link WalletPool} instead.
+ * Process-singleton pool over the local stack, released when the vitest
+ * worker exits. A spec that would tear its wallets down mid-suite
+ * constructs its own {@link WalletPool} instead.
  */
 export function getSharedPool(): WalletPool {
   if (!sharedPool) sharedPool = new WalletPool(localNetworkConfig());
   return sharedPool;
-}
-
-export async function resetSharedPool(): Promise<void> {
-  if (!sharedPool) return;
-  await sharedPool.reset();
-  sharedPool = undefined;
 }

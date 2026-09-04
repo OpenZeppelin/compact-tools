@@ -50,7 +50,8 @@ describe('compact-deploy — Counter deploys to local stack', () => {
     const head = JSON.parse(await readFile(HEAD_PATH, 'utf8'));
 
     // Exact shape, not field probes: the record must never regrow a
-    // `signingKey` field — the ledger is world-readable and committed.
+    // `signingKey` field, since the ledger is written to disk in
+    // plaintext.
     expect(head).toStrictEqual({
       Counter: {
         status: 'confirmed',

@@ -113,14 +113,18 @@ describe('compact-deploy — [wallet].keystore resolves via promptPassphrase', (
   }, 60_000);
 
   it('should reject when the passphrase is wrong (MAC mismatch)', async () => {
-    await expect(
-      Deployer.prepare({
-        contract: 'Counter',
-        network: 'local',
-        configPath: tomlPath,
-        logger: testLogger(),
-        promptPassphrase: async () => 'definitely-not-the-passphrase',
-      }),
-    ).rejects.toThrow(/MAC mismatch/);
+    const error = await Deployer.prepare({
+      contract: 'Counter',
+      network: 'local',
+      configPath: tomlPath,
+      logger: testLogger(),
+      promptPassphrase: async () => 'definitely-not-the-passphrase',
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(WalletError);
+    expect(error).toHaveProperty(
+      'message',
+      expect.stringMatching(/MAC mismatch/),
+    );
   }, 60_000);
 });

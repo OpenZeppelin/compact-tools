@@ -2,47 +2,58 @@ import { Deployer } from '@openzeppelin/compact-deployer/deployer';
 import { ConfigError } from '@openzeppelin/compact-deployer/errors';
 import { describe, expect, it } from 'vitest';
 import { testLogger } from '../../_harness/logger.ts';
-import { CONFIG_PATH, requireArtifact } from '../../_harness/paths.ts';
+import { CONFIG_PATH } from '../../_harness/paths.ts';
 
 /**
  * Spec: Deployer.prepare surfaces typed `ConfigError`s for foreseeable
  * user mistakes, with messages that name the offending key/value. These
- * run against the live stack but never get past the config-validation
- * phase, so they're fast.
+ * never get past config validation, so no artifact and no live stack
+ * are needed.
  */
 describe('compact-deploy — config errors are typed and actionable', () => {
-  it('should reject an unknown contract name', async () => {
-    requireArtifact('Counter');
-    await expect(
+  /** Both the class and the message: the message is the user's only clue. */
+  async function expectConfigError(
+    prepare: Promise<unknown>,
+    message: RegExp,
+  ): Promise<void> {
+    const error = await prepare.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ConfigError);
+    expect(error).toHaveProperty('message', expect.stringMatching(message));
+  }
+
+  it('should name the unknown contract and list the defined ones', async () => {
+    await expectConfigError(
       Deployer.prepare({
         contract: 'Nonexistent',
         network: 'local',
         configPath: CONFIG_PATH,
         logger: testLogger(),
       }),
-    ).rejects.toThrow(ConfigError);
+      /Contract "Nonexistent" not defined\. Available: .*\bCounter\b/,
+    );
   });
 
-  it('should reject an unknown network name', async () => {
-    requireArtifact('Counter');
-    await expect(
+  it('should name the unknown network and list the defined ones', async () => {
+    await expectConfigError(
       Deployer.prepare({
         contract: 'Counter',
         network: 'unknown-network',
         configPath: CONFIG_PATH,
         logger: testLogger(),
       }),
-    ).rejects.toThrow(ConfigError);
+      /Network "unknown-network" not defined\. Available: .*\blocal\b/,
+    );
   });
 
-  it('should reject a missing compact.toml path', async () => {
-    await expect(
+  it('should name the compact.toml path that does not exist', async () => {
+    await expectConfigError(
       Deployer.prepare({
         contract: 'Counter',
         network: 'local',
         configPath: '/nonexistent/compact.toml',
         logger: testLogger(),
       }),
-    ).rejects.toThrow(ConfigError);
+      /--config path does not exist: \/nonexistent\/compact\.toml/,
+    );
   });
 });
