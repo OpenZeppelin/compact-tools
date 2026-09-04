@@ -100,7 +100,7 @@ export class WalletHandler implements AsyncDisposable {
   /**
    * Build a `MidnightWalletProvider` with three fixes over the bare
    * testkit-js builder:
-   *  1. Tunes `additionalFeeOverhead` for non-mainnet wallet sizes.
+   *  1. Tunes `additionalFeeOverhead` down to real wallet dust balances.
    *  2. Routes mnemonic vs hex seed through the right derivation path
    *     (they derive *different* wallets from the same input).
    *  3. Restores all three sub-wallets from on-disk cache when present
@@ -117,11 +117,8 @@ export class WalletHandler implements AsyncDisposable {
       ...DEFAULT_DUST_OPTIONS,
       // testkit's 5e20 default exceeds a typical preview/preprod
       // wallet's ~3e15 dust, breaking fee balance. 5e14 keeps margin
-      // without exceeding the balance on non-mainnet networks.
-      additionalFeeOverhead:
-        env.walletNetworkId === 'mainnet'
-          ? DEFAULT_DUST_OPTIONS.additionalFeeOverhead
-          : 500_000_000_000_000n,
+      // without exceeding the balance on any network the deployer accepts.
+      additionalFeeOverhead: 500_000_000_000_000n,
     };
 
     const walletSeeds: WalletSeeds =

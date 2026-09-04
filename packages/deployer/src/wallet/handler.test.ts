@@ -11,7 +11,6 @@ import type {
   MidnightWalletProvider,
 } from '@midnight-ntwrk/testkit-js';
 import {
-  DEFAULT_DUST_OPTIONS,
   FluentWalletBuilder,
   MidnightWalletProvider as MidnightWalletProviderClass,
   WalletFactory,
@@ -198,7 +197,7 @@ describe('WalletHandler', () => {
   });
 
   describe('dust overhead', () => {
-    it('should override additionalFeeOverhead to a smaller value on non-mainnet networks', async () => {
+    it('should override additionalFeeOverhead to a smaller value than the testkit default', async () => {
       wireTestkitChain(fakeProvider());
       await WalletHandler.build(
         logger,
@@ -213,23 +212,6 @@ describe('WalletHandler', () => {
         expect.any(Uint8Array),
         expect.objectContaining({
           additionalFeeOverhead: 500_000_000_000_000n,
-        }),
-      );
-    });
-
-    it('should keep the testkit default additionalFeeOverhead on mainnet', async () => {
-      wireTestkitChain(fakeProvider());
-      await WalletHandler.build(
-        logger,
-        fakeEnv('mainnet'),
-        { kind: 'hex', value: '00' },
-        { rootDir: ROOT_DIR },
-      );
-      expect(WalletFactory.createDustWallet).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.any(Uint8Array),
-        expect.objectContaining({
-          additionalFeeOverhead: DEFAULT_DUST_OPTIONS.additionalFeeOverhead,
         }),
       );
     });
