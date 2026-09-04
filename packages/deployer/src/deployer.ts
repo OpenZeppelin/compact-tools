@@ -233,6 +233,21 @@ export class Deployer implements AsyncDisposable {
       `Artifact: ${artifact.artifactPath} (${artifact.circuitNames.length} circuits)`,
     );
 
+    // Loaded before the wallet block: both depend only on the config and the
+    // artifact, and a bad args source or init-state ref must fail now rather
+    // than after a 30-60 min first sync.
+    const args = await ConstructorArgs.load(
+      contract,
+      rootDir,
+      opts.argsOverride,
+      opts.args,
+      artifact.artifactPath,
+    );
+    const initialPrivateState = await InitialPrivateState.load(
+      contract.init_private_state,
+      rootDir,
+    );
+
     let wallet: MidnightWalletProvider;
     if (walletSource.kind === 'injected') {
       wallet = walletSource.provider;
@@ -293,17 +308,6 @@ export class Deployer implements AsyncDisposable {
       }
     }
 
-    const args = await ConstructorArgs.load(
-      contract,
-      rootDir,
-      opts.argsOverride,
-      opts.args,
-      artifact.artifactPath,
-    );
-    const initialPrivateState = await InitialPrivateState.load(
-      contract.init_private_state,
-      rootDir,
-    );
     const deployer = wallet.getCoinPublicKey();
 
     return new Deployer({

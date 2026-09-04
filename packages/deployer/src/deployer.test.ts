@@ -581,6 +581,41 @@ describe('Deployer', () => {
     });
   });
 
+  describe('load order', () => {
+    it('should reject a bad args source before the wallet is built', async () => {
+      // A typo in --args must not cost a 30-60 min first sync.
+      await expect(
+        Deployer.prepare({
+          contract: 'Counter',
+          network: 'local',
+          configPath: fx.configPath,
+          logger: silentLogger,
+          argsOverride: '[1, 2',
+        }),
+      ).rejects.toThrow(/args: invalid JSON at --args/);
+      expect(WalletHandler.build).not.toHaveBeenCalled();
+    });
+
+    it('should reject a missing init-state file before the wallet is built', async () => {
+      const customFx = writeFixture({
+        initPrivateState: '/missing/state.json',
+      });
+      try {
+        await expect(
+          Deployer.prepare({
+            contract: 'Counter',
+            network: 'local',
+            configPath: customFx.configPath,
+            logger: silentLogger,
+          }),
+        ).rejects.toThrow();
+        expect(WalletHandler.build).not.toHaveBeenCalled();
+      } finally {
+        customFx.cleanup();
+      }
+    });
+  });
+
   describe('explorer URL', () => {
     it('should surface the explorer URL built from the deployed address', async () => {
       const customFx = writeFixture({ explorer: 'https://explorer.example' });
