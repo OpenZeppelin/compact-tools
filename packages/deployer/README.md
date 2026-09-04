@@ -78,6 +78,7 @@ After each successful sync the deployer writes `<compact.toml dir>/.states/<netw
 - Bust it: `--no-cache` (force fresh) or `rm -rf .states/`. Auto-falls-back on corrupt or version-mismatched files.
 - Best-effort writes; never block a deploy. Concurrent runs against the same seed race. Don't.
 - Resolved against the `compact.toml` directory, not the shell CWD, so running from a subdirectory reuses the same cache. Same for the LevelDB private-state store (`<compact.toml dir>/midnight-level-db/`).
+- Both live under the `compact.toml` directory, which makes the project the unit of deployer state. Run one `compact-deploy` at a time per project: a second concurrent run fails on the LevelDB lock.
 - `.states/` is gitignored.
 
 ### Importing a pre-warmed state file
