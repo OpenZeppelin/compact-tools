@@ -101,7 +101,7 @@ await runDeploy(Contract, { network: 'preview', dryRun: true })(
 );
 ```
 
-`runDeploy()` parses `--network`, `--dry-run`, `--sync-timeout`, `--tx-timeout`, `--sync-batch-size`, `--no-cache`, `--force`, `--seed-file`, `--proof-server`, `--config`, `--json`, and `-v` / `--verbose` from `process.argv` as defaults. Explicit options on the call win.
+`runDeploy()` parses the same flags as the `compact-deploy` CLI out of `process.argv` and uses them as defaults; both go through `parseDeployArgv`, so the flag list under ["CLI" in `packages/deployer/README.md`](../../packages/deployer/README.md#cli) is the one to read. Explicit options on the call win.
 
 Alternative call shapes:
 - `runDeploy({ contract: 'TokenExample', args: [...] })` — options-object form. Use when args come from `compact.toml`, when one `compact.toml` has multiple entries for the same Contract class, or for programmatic flows.
@@ -159,7 +159,7 @@ yarn deploy:preview   # or yarn cli:preview
 yarn deploy:preprod   # or yarn cli:preprod
 ```
 
-First sync takes a few minutes on preview and 30–60 minutes on preprod (the deployer caches both shielded + dust state under `.states/` so subsequent runs are near-instant).
+The deployer caches both shielded + dust state under `.states/`, so only the first sync on a network is slow; subsequent runs are near-instant.
 
 > Preview's endpoints are null-routed. Preprod is reachable but a cold first sync runs ~37 min. See the deployer's "Known issues" section in [`packages/deployer/README.md`](../../packages/deployer/README.md).
 
