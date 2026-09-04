@@ -4,6 +4,7 @@ import {
 } from '@midnight-ntwrk/testkit-js';
 import {
   Deployer,
+  type DeployerOptions,
   type DeployResult,
 } from '@openzeppelin/compact-deployer/deployer';
 import { testLogger } from './logger.ts';
@@ -39,11 +40,18 @@ export function harnessPrivateStateProvider() {
  *
  * Wallet lifecycle is owned by the shared pool: built and started on
  * first use, released when the test worker exits.
+ *
+ * Pass `privateStateProvider` to keep a handle the spec can read back
+ * after the deploy; the default is a throwaway store.
  */
 export async function deployFixture(
   contract: FixtureContract,
   alias: PoolAlias,
-  overrides: { dryRun?: boolean; proofServer?: string } = {},
+  overrides: {
+    dryRun?: boolean;
+    proofServer?: string;
+    privateStateProvider?: DeployerOptions['privateStateProvider'];
+  } = {},
 ): Promise<DeployResult> {
   setupLocalNetwork();
   const wallet = await getSharedPool(localNetworkConfig()).signerFor(alias);
@@ -61,7 +69,8 @@ export async function deployFixture(
     logger: testLogger(),
     walletProvider: wallet,
     proofServer: overrides.proofServer,
-    privateStateProvider: harnessPrivateStateProvider(),
+    privateStateProvider:
+      overrides.privateStateProvider ?? harnessPrivateStateProvider(),
   });
   return overrides.dryRun ? deployer.dryRun() : deployer.deploy();
 }
