@@ -156,7 +156,7 @@ jobs:
           fi
 
       - name: Commit version bump
-        uses: iarekylew00t/verified-bot-commit@33985d44b7719dcaf0b854a0f4b0caad9bdc5b86 # v2.3.3
+        uses: iarekylew00t/verified-bot-commit@42a042b0407248f3c0acac00c389e729e3476e86 # v2.3.5
         with:
           message: "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}"
           token: ${{ steps.gh-app-token.outputs.token }}
