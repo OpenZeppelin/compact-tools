@@ -80,23 +80,26 @@ breaking change. After that, only `prerelease` moves the counter. Running
 
 ## First-release order
 
-There's a one-step dependency chain across the three published packages:
+There's a one-step dependency chain across the four published packages:
 
 ```text
 compact-cli (bin wrapper)
-  └─ depends on compact-builder
+  ├─ depends on compact-builder
+  └─ depends on compact-deployer
 compact-builder (library)
+compact-deployer (library)
 compact-simulator (library)
 ```
 
-The `workspace:^` dep is rewritten by yarn into the resolved version at
+The `workspace:^` deps are rewritten by yarn into the resolved versions at
 `yarn pack` time. For the very first release, publish in dependency order so
 each dependent finds its deps already on npm:
 
 1. `compact-builder` (no internal deps)
 2. `compact-simulator` (no internal deps)
-3. `compact-cli` (depends on `compact-builder`; pull `main` first so the bump
-   commit is present locally before triggering)
+3. `compact-deployer` (no internal deps)
+4. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
+   `main` first so both bump commits are present locally before triggering)
 
-After the first release, the three packages version independently — bump any
+After the first release, the four packages version independently — bump any
 one of them in isolation without re-publishing the others.

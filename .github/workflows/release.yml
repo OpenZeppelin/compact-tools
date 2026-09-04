@@ -10,6 +10,7 @@ on:
         options:
           - compact-builder
           - compact-cli
+          - compact-deployer
           - compact-simulator
       version_bump:
         description: "Version bump type (pre* strategies are beta-only)"
@@ -84,6 +85,9 @@ jobs:
               ;;
             "compact-cli")
               echo "dir=cli" >> $GITHUB_OUTPUT
+              ;;
+            "compact-deployer")
+              echo "dir=deployer" >> $GITHUB_OUTPUT
               ;;
             "compact-simulator")
               echo "dir=simulator" >> $GITHUB_OUTPUT
