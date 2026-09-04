@@ -50,6 +50,10 @@ deployments/
 .states/
 **/.states/
 
+# compact-deployer run logs, written by `compact-deploy --verbose`.
+.compact/
+**/.compact/
+
 # Third-party source pulled in for local experimentation (e.g. the
 # midnight-node fork validation under vendor/midnight-node/ — see
 # plans/tooling/compact-deploy-rust-fork.md). Never committed.
