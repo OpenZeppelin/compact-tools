@@ -14,6 +14,62 @@ describe('formatError', () => {
     expect(formatError(wrapped)).toStrictEqual('Deploy failed: chain rejected');
   });
 
+  it('should collapse a wrapper that only repeats its own cause message', () => {
+    // The wallet SDK's proving service re-wraps its failure with
+    // `message: error.message`, so the phrase would otherwise appear twice.
+    const wrapped = new Error('Failed to prove transaction', {
+      cause: new Error('Failed to prove transaction', {
+        cause: new Error('connect ECONNREFUSED 127.0.0.1:6300'),
+      }),
+    });
+    expect(formatError(wrapped)).toStrictEqual(
+      'Failed to prove transaction: connect ECONNREFUSED 127.0.0.1:6300',
+    );
+  });
+
+  it('should reach the failure inside an Effect FiberFailure', () => {
+    // `Effect.runPromise` rejects with this shape: the squashed message is
+    // copied onto the wrapper, `cause` is left unset, and the real error
+    // hangs off the cause symbol.
+    const fiberFailure = Object.assign(
+      new Error('Failed to prove transaction'),
+      {
+        [Symbol.for('effect/Runtime/FiberFailure/Cause')]: {
+          _tag: 'Fail',
+          error: new Error('Failed to prove transaction', {
+            cause: new Error('Failed to connect to Proof Server: fetch failed'),
+          }),
+        },
+      },
+    );
+    expect(formatError(fiberFailure)).toStrictEqual(
+      'Failed to prove transaction: Failed to connect to Proof Server: fetch failed',
+    );
+  });
+
+  it('should reach the defect inside a died Effect FiberFailure', () => {
+    const fiberFailure = Object.assign(new Error('boom'), {
+      [Symbol.for('effect/Runtime/FiberFailure/Cause')]: {
+        _tag: 'Die',
+        defect: 'proof server returned no body',
+      },
+    });
+    expect(formatError(fiberFailure)).toStrictEqual(
+      'proof server returned no body',
+    );
+  });
+
+  it('should fall back to the wrapper for a cause symbol it cannot read', () => {
+    const interrupted = Object.assign(new Error('interrupted'), {
+      [Symbol.for('effect/Runtime/FiberFailure/Cause')]: { _tag: 'Interrupt' },
+    });
+    expect(formatError(interrupted)).toStrictEqual('interrupted');
+    const empty = Object.assign(new Error('no cause'), {
+      [Symbol.for('effect/Runtime/FiberFailure/Cause')]: null,
+    });
+    expect(formatError(empty)).toStrictEqual('no cause');
+  });
+
   it('should render a thrown string unchanged', () => {
     expect(formatError('plain failure')).toStrictEqual('plain failure');
   });
