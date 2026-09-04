@@ -2,7 +2,7 @@ import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
 import pino from 'pino';
 import * as Rx from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
-import { UnfundedWalletError } from '../errors.ts';
+import { UnfundedWalletError, WalletError } from '../errors.ts';
 import {
   describeProgress,
   logWalletAddresses,
@@ -209,13 +209,13 @@ describe('syncAndVerifyFunds', () => {
   const base = { timeoutMs: 1000, logger: silentLogger };
 
   it('should reject with a timeout error when the wallet never reaches chain tip', async () => {
-    await expect(
-      syncAndVerifyFunds({
-        ...base,
-        wallet: fakeWallet(Rx.NEVER, '0xSTUCK'),
-        timeoutMs: 50,
-      }),
-    ).rejects.toThrow(/Wallet sync timeout after 50ms/);
+    const pending = syncAndVerifyFunds({
+      ...base,
+      wallet: fakeWallet(Rx.NEVER, '0xSTUCK'),
+      timeoutMs: 50,
+    });
+    await expect(pending).rejects.toBeInstanceOf(WalletError);
+    await expect(pending).rejects.toThrow(/Wallet sync timeout after 50ms/);
   });
 
   it('should complete when sub-wallets are within the gap but not strictly complete', async () => {

@@ -9,7 +9,7 @@ import {
 import type { FacadeState } from '@midnight-ntwrk/wallet-sdk-facade';
 import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
-import { UnfundedWalletError } from '../errors.ts';
+import { UnfundedWalletError, WalletError } from '../errors.ts';
 import { formatError } from './error-format.ts';
 
 /**
@@ -128,8 +128,8 @@ export interface SyncAndVerifyFundsArgs {
  * gate times out on a perfectly usable wallet (#115). The gate still waits
  * on all three sub-wallets; dropping the dust/shielded wait entirely
  * regressed on local with `Invalid Transaction (custom error 170)`.
- * Throttles progress logs to once per 30 s. Throws
- * {@link UnfundedWalletError} on empty wallet.
+ * Throttles progress logs to once per 30 s. Throws {@link WalletError} on
+ * timeout and {@link UnfundedWalletError} on an empty wallet.
  */
 export async function syncAndVerifyFunds(
   args: SyncAndVerifyFundsArgs,
@@ -249,7 +249,7 @@ export async function syncAndVerifyFunds(
           each: timeoutMs,
           with: () =>
             Rx.throwError(
-              () => new Error(`Wallet sync timeout after ${timeoutMs}ms`),
+              () => new WalletError(`Wallet sync timeout after ${timeoutMs}ms`),
             ),
         }),
       ),
