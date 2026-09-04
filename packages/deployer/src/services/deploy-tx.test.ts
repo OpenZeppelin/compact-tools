@@ -91,6 +91,19 @@ describe('executeDeploy', () => {
     // The original failure stays reachable for CLI stack traces.
     expect((thrown as DeployTxFailedError).cause).toBe(cause);
   });
+
+  it('should render a tagged wallet-SDK rejection in the wrapped message', async () => {
+    // midnight-js surfaces wallet-SDK rejections verbatim; they are
+    // tagged records with no `.message` reachable via `(e as Error)`.
+    vi.mocked(deployContract).mockRejectedValue({
+      _tag: 'Wallet.Sync',
+      message: 'Could not deserialize Ledger Event',
+    });
+    const thrown = await executeDeploy(args()).catch((e: unknown) => e);
+    expect((thrown as DeployTxFailedError).message).toBe(
+      'Deploy of "Counter" failed: Wallet.Sync: Could not deserialize Ledger Event',
+    );
+  });
 });
 
 describe('buildExplorerUrl', () => {

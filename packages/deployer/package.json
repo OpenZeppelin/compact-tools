@@ -59,6 +59,10 @@
       "types": "./dist/runDeploy.d.ts",
       "import": "./dist/runDeploy.js"
     },
+    "./services/error-format": {
+      "types": "./dist/services/error-format.d.ts",
+      "import": "./dist/services/error-format.js"
+    },
     "./wallet/handler": {
       "types": "./dist/wallet/handler.d.ts",
       "import": "./dist/wallet/handler.js"

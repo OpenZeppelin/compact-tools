@@ -6,6 +6,14 @@ describe('formatError', () => {
     expect(formatError(new Error('disk full'))).toStrictEqual('disk full');
   });
 
+  it('should append the cause chain of a wrapped Error', () => {
+    // The wrapper's message is the generic half; the cause carries why.
+    const wrapped = new Error('Deploy failed', {
+      cause: new Error('chain rejected'),
+    });
+    expect(formatError(wrapped)).toStrictEqual('Deploy failed: chain rejected');
+  });
+
   it('should render a thrown string unchanged', () => {
     expect(formatError('plain failure')).toStrictEqual('plain failure');
   });
@@ -29,20 +37,20 @@ describe('formatError', () => {
 
   it('should serialize a tagged error with neither message nor cause', () => {
     expect(formatError({ _tag: 'Wallet.Sync', eventId: 571224 })).toStrictEqual(
-      'Wallet.Sync: {"_tag":"Wallet.Sync","eventId":571224}',
+      "Wallet.Sync: { _tag: 'Wallet.Sync', eventId: 571224 }",
     );
   });
 
   it('should serialize an untagged object', () => {
-    expect(formatError({ code: 'ENOENT' })).toStrictEqual('{"code":"ENOENT"}');
+    expect(formatError({ code: 'ENOENT' })).toStrictEqual("{ code: 'ENOENT' }");
   });
 
-  it('should stringify bigint fields instead of throwing on them', () => {
+  it('should render bigint fields instead of throwing on them', () => {
     // Wallet-SDK payloads carry balances and event ids as bigint, which
     // plain JSON.stringify rejects with a TypeError.
     expect(
       formatError({ _tag: 'Dust', highestIndex: 1_465_505n }),
-    ).toStrictEqual('Dust: {"_tag":"Dust","highestIndex":"1465505"}');
+    ).toStrictEqual("Dust: { _tag: 'Dust', highestIndex: 1465505n }");
   });
 
   it('should cap the serialized fallback at 500 characters plus an ellipsis', () => {
@@ -51,10 +59,12 @@ describe('formatError', () => {
     expect(formatted.endsWith('…')).toStrictEqual(true);
   });
 
-  it('should fall back to String() on a circular payload', () => {
+  it('should mark the back-reference on a circular payload', () => {
     const circular: Record<string, unknown> = { detail: 'loop' };
     circular.self = circular;
-    expect(formatError(circular)).toStrictEqual('[object Object]');
+    expect(formatError(circular)).toStrictEqual(
+      "<ref *1> { detail: 'loop', self: [Circular *1] }",
+    );
   });
 
   it('should render null and undefined without throwing', () => {

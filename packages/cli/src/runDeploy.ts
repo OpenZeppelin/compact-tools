@@ -13,6 +13,7 @@ import {
   type ParsedDeployArgv,
   parseDeployArgv,
 } from '@openzeppelin/compact-deployer/loaders/argv';
+import { formatError } from '@openzeppelin/compact-deployer/services/error-format';
 import chalk from 'chalk';
 import ora from 'ora';
 import { WebSocket } from 'ws';
@@ -38,7 +39,7 @@ async function main(): Promise<void> {
   try {
     args = parseArgs(process.argv.slice(2));
   } catch (e) {
-    console.error(chalk.red(`[DEPLOY] ${(e as Error).message}`));
+    console.error(chalk.red(`[DEPLOY] ${formatError(e)}`));
     showUsage();
     process.exit(2);
     return;
@@ -137,7 +138,11 @@ async function main(): Promise<void> {
   } catch (e) {
     const code = e instanceof DeployError ? e.exitCode : 1;
     const name = e instanceof Error ? e.name : 'Error';
-    const message = e instanceof Error ? e.message : String(e);
+    // `formatError` only on the non-Error arm: a DeployError already
+    // embeds its cause in `message`, and formatError would append the
+    // same cause a second time. The arm that matters is the wallet SDK's
+    // tagged records, which `String(e)` rendered as `[object Object]`.
+    const message = e instanceof Error ? e.message : formatError(e);
     if (args.json) {
       process.stdout.write(
         `${JSON.stringify({ error: name, message, exitCode: code })}\n`,

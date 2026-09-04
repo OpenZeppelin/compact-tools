@@ -1,4 +1,6 @@
-/** Cap on the JSON fallback so one wallet-SDK payload can't flood a log line. */
+import { inspect } from 'node:util';
+
+/** Cap on the inspect fallback so one wallet-SDK payload can't flood a log line. */
 const MAX_SERIALIZED_LENGTH = 500;
 
 /**
@@ -8,10 +10,17 @@ const MAX_SERIALIZED_LENGTH = 500;
  * (`{ _tag: 'Wallet.Sync', … }`) rather than `Error` instances, so the
  * usual `(e as Error).message` yields `undefined` and `${e}` yields
  * `[object Object]` — both erase the only diagnostic the user gets for a
- * failed sync. Prefer `_tag` plus `message`/`cause`, else serialize.
+ * failed sync. Prefer `_tag` plus `message`/`cause`, else inspect.
  */
 export function formatError(error: unknown): string {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    // The wrapping layer's message is usually the generic half ("Deploy
+    // failed"); the cause carries the reason. Append it so one log line
+    // holds the whole chain.
+    return error.cause !== undefined
+      ? `${error.message}: ${formatError(error.cause)}`
+      : error.message;
+  }
   if (typeof error === 'string') return error;
   if (typeof error === 'object' && error !== null) {
     const record = error as {
@@ -35,20 +44,17 @@ export function formatError(error: unknown): string {
 }
 
 /**
- * JSON with a length cap. `bigint` needs a replacer (wallet-SDK payloads
- * carry balances and event ids) and a circular graph throws, so both fall
- * back to `String` rather than taking down the log call.
+ * `util.inspect` with a length cap. Unlike `JSON.stringify` it renders
+ * `bigint` (wallet-SDK payloads carry balances and event ids as bigint)
+ * and marks circular references instead of throwing, so no try/catch or
+ * replacer is needed. `depth: 3` keeps a nested payload readable without
+ * dumping the whole graph.
  */
 function serialize(value: unknown): string {
-  let out: string;
-  try {
-    out =
-      JSON.stringify(value, (_key, v) =>
-        typeof v === 'bigint' ? v.toString() : v,
-      ) ?? String(value);
-  } catch {
-    out = String(value);
-  }
+  const out = inspect(value, {
+    depth: 3,
+    breakLength: Number.POSITIVE_INFINITY,
+  });
   return out.length > MAX_SERIALIZED_LENGTH
     ? `${out.slice(0, MAX_SERIALIZED_LENGTH)}…`
     : out;

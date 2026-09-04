@@ -3,6 +3,7 @@ import type { ContractConfig } from '../config/schema.ts';
 import type { DeploymentRecord } from '../deployments.ts';
 import { DeployTxFailedError } from '../errors.ts';
 import type { Artifact } from '../loaders/artifact.ts';
+import { formatError } from './error-format.ts';
 
 export type ContractDeployResult = Awaited<ReturnType<typeof deployContract>>;
 
@@ -47,7 +48,7 @@ export async function executeDeploy({
     return await deployContract(providers, deployOptions);
   } catch (e) {
     throw new DeployTxFailedError(
-      `Deploy of "${contractName}" failed: ${(e as Error).message}`,
+      `Deploy of "${contractName}" failed: ${formatError(e)}`,
       { cause: e },
     );
   }

@@ -518,6 +518,23 @@ describe('runDeploy CLI', () => {
       );
     });
 
+    it('should render a tagged wallet-SDK rejection instead of [object Object]', async () => {
+      // The wallet SDK rejects with effect-style records, not Errors, so
+      // `String(e)` collapsed the only diagnostic to `[object Object]`.
+      mockPrepare.mockRejectedValue({
+        _tag: 'Wallet.Sync',
+        message: 'Could not deserialize Ledger Event',
+      });
+      await runMain(['Token']);
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Wallet.Sync: Could not deserialize Ledger Event',
+        ),
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
     it('should use the DeployError.exitCode verbatim', async () => {
       class CustomError extends DeployError {
         constructor() {

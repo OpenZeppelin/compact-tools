@@ -5,6 +5,7 @@ import {
 import type { Logger } from 'pino';
 import type { NetworkConfig } from '../config/schema.ts';
 import { ConfigError } from '../errors.ts';
+import { formatError } from '../services/error-format.ts';
 
 export interface ProofServerOptions {
   cliOverride?: string;
@@ -105,10 +106,7 @@ export class ProofServer {
     try {
       await this.#dispose();
     } catch (e) {
-      this.#logger.warn(
-        { err: (e as Error).message },
-        'Proof server dispose failed',
-      );
+      this.#logger.warn({ err: formatError(e) }, 'Proof server dispose failed');
     }
   }
 }
