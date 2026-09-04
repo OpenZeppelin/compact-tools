@@ -68,6 +68,9 @@ export function classifySeed(input: string): WalletSeed {
 /**
  * Precedence: `--seed-file` > `MN_DEPLOYER_SEED` > `[wallet].keystore`
  * (passphrase-prompted) > `[networks.local].wallet.source = "local"`.
+ * A relative `--seed-file` resolves against the CWD, like every other path
+ * the CLI takes; a relative `[wallet].keystore` resolves against `rootDir`,
+ * so a `compact.toml` value means the same thing from any directory.
  * Throws {@link WalletError} when none match.
  */
 export interface SeedResolution {
@@ -86,9 +89,8 @@ export interface ResolveOptions {
 export async function resolveSeed(
   opts: ResolveOptions,
 ): Promise<SeedResolution> {
-  const { rootDir } = opts.config;
   if (opts.seedFile) {
-    const path = absoluteUnder(rootDir, opts.seedFile);
+    const path = absoluteUnder(process.cwd(), opts.seedFile);
     const raw = await safeRead(path, '--seed-file');
     return { seed: classifySeed(raw), origin: 'cli' };
   }
@@ -100,7 +102,7 @@ export async function resolveSeed(
 
   const keystorePath = opts.config.wallet?.keystore;
   if (keystorePath) {
-    const path = absoluteUnder(rootDir, keystorePath);
+    const path = absoluteUnder(opts.config.rootDir, keystorePath);
     if (!existsSync(path)) {
       throw new WalletError(`Keystore file not found: ${path}`);
     }

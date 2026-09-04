@@ -18,6 +18,8 @@ vi.mock('./keystore.ts', () => ({
 }));
 
 const HEX_SEED = 'aa'.repeat(32);
+/** Planted where the wrong path anchor would look, so a mix-up is visible. */
+const DECOY_SEED = 'bb'.repeat(32);
 const MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
@@ -86,15 +88,27 @@ describe('localPrefundedSeed', () => {
 
 describe('resolveSeed', () => {
   let rootDir: string;
+  let cwdDir: string;
+  let restoreCwd: (() => void) | undefined;
   const originalEnvSeed = process.env.MN_DEPLOYER_SEED;
+
+  /** Run the resolver as if the user had invoked the CLI from `dir`. */
+  function runFrom(dir: string): void {
+    const spy = vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    restoreCwd = () => spy.mockRestore();
+  }
 
   beforeEach(() => {
     rootDir = mkdtempSync(join(tmpdir(), 'seeds-resolve-'));
+    cwdDir = mkdtempSync(join(tmpdir(), 'seeds-cwd-'));
     delete process.env.MN_DEPLOYER_SEED;
   });
 
   afterEach(() => {
+    restoreCwd?.();
+    restoreCwd = undefined;
     rmSync(rootDir, { recursive: true, force: true });
+    rmSync(cwdDir, { recursive: true, force: true });
     vi.clearAllMocks();
     if (originalEnvSeed === undefined) {
       delete process.env.MN_DEPLOYER_SEED;
@@ -104,8 +118,10 @@ describe('resolveSeed', () => {
   });
 
   describe('--seed-file branch', () => {
-    it('should read seed from a relative seedFile path under rootDir', async () => {
-      writeFileSync(join(rootDir, 'seed.hex'), `${HEX_SEED}\n`);
+    it('should resolve a relative seedFile against the CWD, not rootDir', async () => {
+      writeFileSync(join(cwdDir, 'seed.hex'), `${HEX_SEED}\n`);
+      writeFileSync(join(rootDir, 'seed.hex'), `${DECOY_SEED}\n`);
+      runFrom(cwdDir);
       const result = await resolveSeed({
         config: fakeConfig(rootDir),
         networkName: 'testnet',
@@ -191,6 +207,23 @@ describe('resolveSeed', () => {
           network: fakeNetwork(),
         }),
       ).rejects.toThrow(/no passphrase prompt provided/);
+    });
+
+    it('should resolve a relative keystore path against rootDir, not the CWD', async () => {
+      const ksPath = join(rootDir, 'keystore.json');
+      writeFileSync(ksPath, '{}');
+      writeFileSync(join(cwdDir, 'keystore.json'), '{}');
+      runFrom(cwdDir);
+      vi.mocked(Keystore.readFromFile).mockResolvedValue({
+        decrypt: () => HEX_SEED,
+      } as unknown as Keystore);
+      await resolveSeed({
+        config: fakeConfig(rootDir, 'keystore.json'),
+        networkName: 'testnet',
+        network: fakeNetwork(),
+        promptPassphrase: async () => 'pw',
+      });
+      expect(Keystore.readFromFile).toHaveBeenCalledWith(ksPath);
     });
 
     it('should decrypt the keystore and return origin=keystore on the happy path', async () => {
