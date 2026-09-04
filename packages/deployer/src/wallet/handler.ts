@@ -5,6 +5,7 @@ import {
   type EnvironmentConfiguration,
   FluentWalletBuilder,
   MidnightWalletProvider,
+  logger as testkitLogger,
   WalletFactory,
   WalletSeeds,
 } from '@midnight-ntwrk/testkit-js';
@@ -18,6 +19,12 @@ import { formatError } from '../services/error-format.ts';
 import type { ConfigShape } from '../services/wallet-cache.ts';
 import { WalletCache } from '../services/wallet-cache.ts';
 import type { WalletSeed } from './seeds.ts';
+
+// testkit-js builds its own pino logger at import and pretty-prints through it
+// to stdout, ignoring the logger passed into every call. `--json` reserves
+// stdout for the single result object, so silence it before the first
+// `FluentWalletBuilder.forEnvironment` call.
+testkitLogger.level = 'silent';
 
 /**
  * Subset of the wallet-SDK sync `batchUpdates` knob we set. The SDK only

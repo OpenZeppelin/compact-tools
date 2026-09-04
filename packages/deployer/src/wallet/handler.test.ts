@@ -13,6 +13,7 @@ import type {
 import {
   FluentWalletBuilder,
   MidnightWalletProvider as MidnightWalletProviderClass,
+  logger as testkitLogger,
   WalletFactory,
   WalletSaveStateProvider,
   WalletSeeds,
@@ -51,6 +52,7 @@ vi.mock('@midnight-ntwrk/testkit-js', () => ({
   DEFAULT_DUST_OPTIONS: { additionalFeeOverhead: 1000n },
   DEFAULT_WALLET_STATE_DIRECTORY: './.states',
   FluentWalletBuilder: { forEnvironment: vi.fn() },
+  logger: { level: 'info' },
   MidnightWalletProvider: { withWallet: vi.fn() },
   WalletFactory: {
     createShieldedWallet: vi.fn(() => ({ tag: 'shielded-fresh' })),
@@ -166,6 +168,13 @@ describe('WalletHandler', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('should silence the testkit logger at module load', async () => {
+    // The SDK's own logger pretty-prints to stdout, which `--json` reserves
+    // for the result object. Importing handler.ts is what runs the assignment.
+    await import('./handler.ts');
+    expect(testkitLogger.level).toBe('silent');
   });
 
   describe('seed routing', () => {
