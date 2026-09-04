@@ -35,6 +35,24 @@ npx compact-deploy Token --network local   # resolves the local install
 
 > **Ephemeral `npx @openzeppelin/compact-cli compact-deploy …` (no local install)** is fine for `--help`, `--version`, and `--dry-run` / validation, but **not reliable for a real deploy**: npx fetches the CLI into its own cache tree, so its `compact-runtime` differs from your project's and the submit fails with `expected instance of ContractMaintenanceAuthority`. Install it locally for real deploys.
 
+## Supported stack
+
+The deployer pins one Midnight stack, and artifacts have to be compiled against a matching compiler.
+
+| Component | Version |
+|---|---|
+| `@midnight-ntwrk/compact-runtime` | 0.16.0 |
+| `@midnight-ntwrk/ledger-v8` | 8.1.2 |
+| `@midnight-ntwrk/midnight-js-*` | 4.1.1 |
+| `@midnight-ntwrk/testkit-js` | 4.1.1 |
+| `@midnight-ntwrk/wallet-sdk-facade` | 4.0.1 |
+| Compact compiler | 0.31.1 |
+
+Compile with the pinned compiler: `compact compile +0.31.1`. The current default compactc (0.34.x) emits code for compact-runtime 0.19.0, and the deploy then fails with a `Version mismatch` runtime error.
+
+- As of 2026-09, `OpenZeppelin/compact-contracts` `main` is on compact-runtime 0.19.0 / ledger-v9 1.0.0-rc.3, so contracts built there are not deployable with this tool today.
+- Moving the deployer to the v9 stack is pending a published `@midnight-ntwrk/ledger-v9`: `@midnight-ntwrk/compact-js` 2.5.3 depends on an unpublished ledger-v9 alpha, which yarn rejects with `YN0082`.
+
 ## CLI
 
 ```
