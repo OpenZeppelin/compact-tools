@@ -7,6 +7,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
+import { dirname } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import type { EnvironmentConfiguration } from '@midnight-ntwrk/testkit-js';
 import {
@@ -99,13 +100,17 @@ function wireSaveStateProvider(impl: { load?: unknown; save?: unknown }): void {
   ) => InstanceType<typeof WalletSaveStateProvider>);
 }
 
+/** Stands in for the directory `compact.toml` was loaded from. */
+const ROOT_DIR = '/project/root';
+
 describe('WalletCache', () => {
   let logger: Logger;
 
-  function makeCache(env = fakeEnv()): WalletCache {
+  function makeCache(env = fakeEnv(), rootDir = ROOT_DIR): WalletCache {
     return new WalletCache({
       logger,
       env,
+      rootDir,
       shieldedSeed: new Uint8Array(32).fill(0x11),
       dustSeed: new Uint8Array(32).fill(0x33),
       unshieldedSeed: new Uint8Array(32).fill(0x22),
@@ -143,6 +148,26 @@ describe('WalletCache', () => {
         cache.unshieldedCacheFilePath,
       ];
       expect(new Set(paths).size).toBe(3);
+    });
+
+    it('should anchor .states/ on rootDir even when the process CWD differs', () => {
+      // The regression this pins: resolving against the CWD made the
+      // cache invisible to a deploy run from a subdirectory, so every
+      // such run re-synced from genesis.
+      const cwd = vi
+        .spyOn(process, 'cwd')
+        .mockReturnValue('/somewhere/else/entirely');
+      const cache = makeCache(fakeEnv('preprod'), '/project/root');
+      expect([
+        dirname(cache.shieldedCacheFilePath),
+        dirname(cache.dustCacheFilePath),
+        dirname(cache.unshieldedCacheFilePath),
+      ]).toStrictEqual([
+        '/project/root/.states',
+        '/project/root/.states',
+        '/project/root/.states',
+      ]);
+      cwd.mockRestore();
     });
   });
 
@@ -231,6 +256,19 @@ describe('WalletCache', () => {
       vi.mocked(existsSync).mockReturnValue(false);
       makeCache().importSeedCache('/state.json', 'dust');
       expect(copyFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should resolve a relative source path against the CWD, not rootDir', () => {
+      // `--seed-cache-from-*` is a path the user typed at the shell, so
+      // it stays CWD-relative; rootDir only governs where the deployer
+      // writes its own files.
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue('/user/shell/cwd');
+      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
+      makeCache().importSeedCache('snapshots/dust.json', 'dust');
+      expect(vi.mocked(readFileSync).mock.calls[0]?.[0]).toStrictEqual(
+        '/user/shell/cwd/snapshots/dust.json',
+      );
+      cwd.mockRestore();
     });
 
     it('should route a shielded import to the matching -shielded.gz path', () => {
@@ -363,6 +401,27 @@ describe('WalletCache', () => {
       expect(WalletFactory.createDustWallet).toHaveBeenCalledTimes(1);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ err: 'corrupt-dust' }),
+        expect.stringContaining('Dust wallet cache restore failed'),
+      );
+    });
+
+    it('should log a tagged wallet-SDK rejection by its _tag, not [object Object]', async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+      wireSaveStateProvider({
+        // The wallet SDK rejects with an effect-style tagged record, not
+        // an Error, so `(e as Error).message` used to log `undefined`.
+        load: vi.fn(() =>
+          Promise.reject({
+            _tag: 'Wallet.Sync',
+            message: 'Could not deserialize Ledger Event',
+          }),
+        ),
+      });
+      await makeCache().loadOrCreateDustWallet(args);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          err: 'Wallet.Sync: Could not deserialize Ledger Event',
+        }),
         expect.stringContaining('Dust wallet cache restore failed'),
       );
     });

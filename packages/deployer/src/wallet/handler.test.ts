@@ -5,6 +5,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
+import { dirname } from 'node:path';
 import type {
   EnvironmentConfiguration,
   MidnightWalletProvider,
@@ -147,6 +148,9 @@ function spyLogger(): Logger {
   return logger as unknown as Logger;
 }
 
+/** Stands in for the directory `compact.toml` was loaded from. */
+const ROOT_DIR = '/project/root';
+
 function fakeEnv(
   walletNetworkId: EnvironmentConfiguration['walletNetworkId'] = 'testnet',
 ): EnvironmentConfiguration {
@@ -168,10 +172,12 @@ describe('WalletHandler', () => {
   describe('seed routing', () => {
     it('should route a mnemonic seed through WalletSeeds.fromMnemonic', async () => {
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'mnemonic',
-        value: 'abandon abandon abandon',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'mnemonic', value: 'abandon abandon abandon' },
+        { rootDir: ROOT_DIR },
+      );
       expect(WalletSeeds.fromMnemonic).toHaveBeenCalledWith(
         'abandon abandon abandon',
       );
@@ -180,10 +186,12 @@ describe('WalletHandler', () => {
 
     it('should route a hex seed through WalletSeeds.fromMasterSeed', async () => {
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: 'aa'.repeat(32),
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: 'aa'.repeat(32) },
+        { rootDir: ROOT_DIR },
+      );
       expect(WalletSeeds.fromMasterSeed).toHaveBeenCalledWith('aa'.repeat(32));
       expect(WalletSeeds.fromMnemonic).not.toHaveBeenCalled();
     });
@@ -192,10 +200,12 @@ describe('WalletHandler', () => {
   describe('dust overhead', () => {
     it('should override additionalFeeOverhead to a smaller value on non-mainnet networks', async () => {
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv('preview'), {
-        kind: 'hex',
-        value: '00',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv('preview'),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       // testkit's 5e20 default exceeds a typical preview/preprod wallet's
       // dust balance, breaking fee balance. We tune down to 5e14.
       expect(WalletFactory.createDustWallet).toHaveBeenCalledWith(
@@ -209,10 +219,12 @@ describe('WalletHandler', () => {
 
     it('should keep the testkit default additionalFeeOverhead on mainnet', async () => {
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv('mainnet'), {
-        kind: 'hex',
-        value: '00',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv('mainnet'),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       expect(WalletFactory.createDustWallet).toHaveBeenCalledWith(
         expect.anything(),
         expect.any(Uint8Array),
@@ -226,10 +238,12 @@ describe('WalletHandler', () => {
   describe('sync batching', () => {
     it('should default the batchUpdates size to 5000 on the shared config for both sub-wallets', async () => {
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv('preprod'), {
-        kind: 'hex',
-        value: '00',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv('preprod'),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       // The shared config is mutated in place and threaded into every
       // sub-wallet factory, so asserting on the dust + shielded calls proves
       // the OOM workaround (issue #115) covers both. Default SDK batch size
@@ -254,7 +268,7 @@ describe('WalletHandler', () => {
         logger,
         fakeEnv('preprod'),
         { kind: 'hex', value: '00' },
-        { syncBatchSize: 1000 },
+        { rootDir: ROOT_DIR, syncBatchSize: 1000 },
       );
       // timeout/spacing stay at the validated values; only size changes.
       const withBatch = expect.objectContaining({
@@ -276,19 +290,23 @@ describe('WalletHandler', () => {
     it('should expose the wallet built by MidnightWalletProvider.withWallet via .provider', async () => {
       const provider = fakeProvider();
       wireTestkitChain(provider);
-      const handler = await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
+      const handler = await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       expect(handler.provider).toBe(provider);
     });
 
     it('should pass the createWalletFacade output to MidnightWalletProvider.withWallet', async () => {
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       // The 3rd positional arg to withWallet is the WalletFacade.
       const args = vi.mocked(MidnightWalletProviderClass.withWallet).mock
         .calls[0];
@@ -297,10 +315,12 @@ describe('WalletHandler', () => {
 
     it('should derive the unshielded keystore from the seed bytes and network id', async () => {
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv('testnet'), {
-        kind: 'hex',
-        value: '00',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv('testnet'),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       expect(createKeystore).toHaveBeenCalledWith(
         expect.any(Uint8Array),
         'testnet',
@@ -322,10 +342,12 @@ describe('WalletHandler', () => {
         ...args: unknown[]
       ) => InstanceType<typeof WalletSaveStateProvider>);
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       expect(WalletFactory.restoreShieldedWallet).toHaveBeenCalledWith(
         expect.anything(),
         'serialized-state',
@@ -346,10 +368,12 @@ describe('WalletHandler', () => {
         ...args: unknown[]
       ) => InstanceType<typeof WalletSaveStateProvider>);
       wireTestkitChain(fakeProvider());
-      await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
+      await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       expect(UnshieldedWallet).toHaveBeenCalledTimes(1);
       expect(WalletFactory.createUnshieldedWallet).not.toHaveBeenCalled();
     });
@@ -365,10 +389,12 @@ describe('WalletHandler', () => {
       ) => InstanceType<typeof WalletSaveStateProvider>);
       const provider = fakeProvider();
       wireTestkitChain(provider);
-      const handler = await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
+      const handler = await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       await handler.saveCache();
       expect(save).toHaveBeenCalledWith(provider.wallet.shielded);
       expect(save).toHaveBeenCalledWith(provider.wallet.dust);
@@ -388,6 +414,7 @@ describe('WalletHandler', () => {
         fakeEnv('preview'),
         { kind: 'hex', value: 'aa'.repeat(32) },
         {
+          rootDir: ROOT_DIR,
           seedCacheShielded: '/shielded.json',
           seedCacheDust: '/dust.json',
           seedCacheUnshielded: '/unshielded.json',
@@ -414,7 +441,7 @@ describe('WalletHandler', () => {
           logger,
           fakeEnv(),
           { kind: 'hex', value: 'aa'.repeat(32) },
-          { skipWalletCache: true, [flag]: '/state.json' },
+          { rootDir: ROOT_DIR, skipWalletCache: true, [flag]: '/state.json' },
         );
         expect(writeFileSync).not.toHaveBeenCalled();
         expect(logger.warn).toHaveBeenCalledWith(
@@ -423,13 +450,26 @@ describe('WalletHandler', () => {
       },
     );
 
+    it('should place the wallet-state cache under the rootDir it was given', async () => {
+      vi.mocked(readFileSync).mockReturnValue(Buffer.from('{}', 'utf8'));
+      wireTestkitChain(fakeProvider());
+      await WalletHandler.build(
+        logger,
+        fakeEnv('preprod'),
+        { kind: 'hex', value: 'aa'.repeat(32) },
+        { rootDir: ROOT_DIR, seedCacheDust: '/dust.json' },
+      );
+      const target = String(vi.mocked(renameSync).mock.calls[0]?.[1]);
+      expect(dirname(target)).toStrictEqual('/project/root/.states');
+    });
+
     it('should not warn when --no-cache is set without any --seed-cache-from-*', async () => {
       wireTestkitChain(fakeProvider());
       await WalletHandler.build(
         logger,
         fakeEnv(),
         { kind: 'hex', value: 'aa'.repeat(32) },
-        { skipWalletCache: true },
+        { rootDir: ROOT_DIR, skipWalletCache: true },
       );
       expect(logger.warn).not.toHaveBeenCalledWith(
         expect.stringContaining('--seed-cache-from-*'),
@@ -441,10 +481,12 @@ describe('WalletHandler', () => {
     it('should stop the underlying wallet on Symbol.asyncDispose', async () => {
       const provider = fakeProvider();
       wireTestkitChain(provider);
-      const handler = await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
+      const handler = await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       await handler[Symbol.asyncDispose]();
       expect(provider.stop).toHaveBeenCalledTimes(1);
     });
@@ -452,10 +494,12 @@ describe('WalletHandler', () => {
     it('should swallow stop() failures with a warn log on Symbol.asyncDispose', async () => {
       const provider = fakeProvider({ failsOnStop: true });
       wireTestkitChain(provider);
-      const handler = await WalletHandler.build(logger, fakeEnv(), {
-        kind: 'hex',
-        value: '00',
-      });
+      const handler = await WalletHandler.build(
+        logger,
+        fakeEnv(),
+        { kind: 'hex', value: '00' },
+        { rootDir: ROOT_DIR },
+      );
       await expect(handler[Symbol.asyncDispose]()).resolves.toBeUndefined();
       expect(provider.stop).toHaveBeenCalledTimes(1);
       expect(logger.warn).toHaveBeenCalledWith(

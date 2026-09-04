@@ -14,6 +14,7 @@ import {
   type UnshieldedKeystore,
 } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
+import { formatError } from '../services/error-format.ts';
 import type { ConfigShape } from '../services/wallet-cache.ts';
 import { WalletCache } from '../services/wallet-cache.ts';
 import type { WalletSeed } from './seeds.ts';
@@ -36,8 +37,8 @@ interface BatchUpdatesConfig {
  * global dust stream on `wallet-sdk-dust-wallet@4.0.0`
  * (midnightntwrk/midnight-wallet#425, "Ineffective mark-compacts near heap
  * limit"). A larger batch streams the replay in bigger chunks; size 5000
- * was validated at ~146 MB peak, ~1000 events/sec. Harmless on the
- * upstream-fixed 4.1.0, which no longer needs the workaround.
+ * was validated at ~146 MB peak, ~1000 events/sec. Kept on the shipped
+ * 4.1.0, which has not been run without it.
  */
 const DEFAULT_SYNC_BATCH_SIZE = 5000;
 
@@ -45,6 +46,12 @@ const DEFAULT_SYNC_BATCH_SIZE = 5000;
 const SYNC_BATCH_TIMING = { timeout: 1, spacing: 4 } as const;
 
 export interface WalletHandlerBuildOptions {
+  /**
+   * Directory that owns the wallet-state cache: `.states/` is created
+   * under it. Pass the `compact.toml` directory (`CompactConfig.rootDir`)
+   * so the cache follows the project rather than the shell's CWD.
+   */
+  rootDir: string;
   /** Force a fresh sync from genesis (skip the on-disk cache). Default `false`. */
   skipWalletCache?: boolean;
   /**
@@ -108,7 +115,7 @@ export class WalletHandler implements AsyncDisposable {
     logger: Logger,
     env: EnvironmentConfiguration,
     seed: WalletSeed,
-    opts: WalletHandlerBuildOptions = {},
+    opts: WalletHandlerBuildOptions,
   ): Promise<WalletHandler> {
     const dustOptions: DustWalletOptions = {
       ...DEFAULT_DUST_OPTIONS,
@@ -152,6 +159,7 @@ export class WalletHandler implements AsyncDisposable {
     const cache = new WalletCache({
       logger,
       env,
+      rootDir: opts.rootDir,
       shieldedSeed: walletSeeds.shielded,
       dustSeed: walletSeeds.dust,
       unshieldedSeed: walletSeeds.unshielded,
@@ -240,7 +248,7 @@ export class WalletHandler implements AsyncDisposable {
     try {
       await this.provider.stop();
     } catch (e) {
-      this.#logger.warn({ err: (e as Error).message }, 'Wallet stop failed');
+      this.#logger.warn({ err: formatError(e) }, 'Wallet stop failed');
     }
   }
 }

@@ -10,6 +10,7 @@ import type { FacadeState } from '@midnight-ntwrk/wallet-sdk-facade';
 import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
 import { UnfundedWalletError } from '../errors.ts';
+import { formatError } from './error-format.ts';
 
 /**
  * Default sync ceiling (10 min). Overrides testkit-js's hardcoded 90 s
@@ -61,7 +62,7 @@ export async function logWalletAddresses(
     logger.info(`  dust:       ${dust}`);
   } catch (e) {
     logger.warn(
-      { err: (e as Error).message },
+      { err: formatError(e) },
       'Could not derive wallet addresses for display; continuing',
     );
   }
@@ -179,7 +180,7 @@ export async function syncAndVerifyFunds(
           onCheckpoint()
             .catch((e: unknown) => {
               logger.warn(
-                { err: (e as Error).message },
+                { err: formatError(e) },
                 'Wallet cache checkpoint failed; continuing sync',
               );
             })

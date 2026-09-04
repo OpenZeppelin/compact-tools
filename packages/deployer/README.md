@@ -4,7 +4,7 @@
 compact-deploy Token --network local
 ```
 
-> **Status: developer-preview, testnet only.** Verified on local devnet + preview. Preprod blocked ([Known issues](#known-issues-may-2026)). Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling. See [Roadmap](#roadmap--todo).
+> **Status: developer-preview, testnet only.** Verified on local devnet and on preprod (dry run to chain tip, 2026-09-04); the preview endpoints are null-routed ([Known issues](#known-issues-may-2026)). Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling. See [Roadmap](#roadmap--todo).
 
 ## Requirements
 
@@ -59,9 +59,9 @@ Exit codes: `0` ok · `2` config error · `3` wallet error · `4` provider unrea
 
 ## Deploying to real networks (preprod, preview, testnet)
 
-> Neither public network is usable right now. Preprod is blocked on an upstream wallet-SDK bug and the preview endpoints are null-routed, so `make env-up` (local standalone) is the only working target. See [Known issues](#known-issues-may-2026).
+> Preview is down (null-routed DNS); preprod is reachable. A first cold preprod sync takes ~37 min, so raise `--sync-timeout`. Local standalone (`make env-up`) is still the fastest target. See [Known issues](#known-issues-may-2026).
 
-- **First sync is slow** (~3 min on preview, 30–60 min on preprod from genesis). Cache makes reruns near-instant.
+- **First sync is slow** (~3 min on preview, ~37 min on preprod from genesis, measured 2026-09-04). Cache makes reruns near-instant.
 - **Bump sync timeout**: `--sync-timeout 3600` (default 10 min).
 - **Bump Node heap** for long-history chains: `NODE_OPTIONS="--max-old-space-size=8192"`.
 - **Tune the sync batch size**: `--sync-batch-size <n>` (default 5000). Larger replays a long dust history faster but uses more memory per batch; lower it on a memory-constrained host.
@@ -71,12 +71,13 @@ Exit codes: `0` ok · `2` config error · `3` wallet error · `4` provider unrea
 
 ## Wallet cache
 
-After each successful sync the deployer writes `<cwd>/.states/<network>-<seed-hash>-<kind>.gz` (one file per shielded / dust / unshielded sub-wallet). Next run restores from it instead of re-syncing from genesis.
+After each successful sync the deployer writes `<compact.toml dir>/.states/<network>-<seed-hash>-<kind>.gz` (one file per shielded / dust / unshielded sub-wallet). Next run restores from it instead of re-syncing from genesis.
 
 - Contents: gzipped sub-wallet state (UTXOs, checkpoint). No private keys (re-derived from seed each run).
 - Keyed by SHA-256(seed) + network ID, so `local` vs `preprod` keep separate caches.
 - Bust it: `--no-cache` (force fresh) or `rm -rf .states/`. Auto-falls-back on corrupt or version-mismatched files.
 - Best-effort writes; never block a deploy. Concurrent runs against the same seed race. Don't.
+- Resolved against the `compact.toml` directory, not the shell CWD, so running from a subdirectory reuses the same cache. Same for the LevelDB private-state store (`<compact.toml dir>/midnight-level-db/`).
 - `.states/` is gitignored.
 
 ### Importing a pre-warmed state file
@@ -175,11 +176,16 @@ signing_key_file = "./deploy/Vault.signingkey"
 
 2. **Preprod blocked: `Wallet.Sync: Could not deserialize Ledger Event` on `DustSpendProcessed`.** Dust sync aborts mid-stream on a `DustSpendProcessed` event whose `midnight:event[v9]:`-prefixed `raw` bytes fail `effect/Schema` parsing. The thrown `Wallet.Sync` corrupts `DustLocalState`. The next `walletBalance()` call hits `RuntimeError: unreachable` in the ledger WASM. Two independent runs, two different event IDs: 2026-05-22 id **565,975** (confirmed in Midnight dev Discord by `Knife`); 2026-05-24 id **571,224** with `maxId` 676,018. Affected stack: `wallet-sdk-dust-wallet@4.0.0`, `ledger-v8@8.0.3`, `testkit-js@4.1.0`. File at [midnightntwrk/midnight-wallet](https://github.com/midnightntwrk/midnight-wallet/issues/new). Distinct from [#361 `InvalidDustSpendProof`](https://github.com/midnightntwrk/midnight-wallet/issues/361), which is a chain-side tx rejection (this bug is client-side event ingest). **Workaround:** none. Preview is also down (see #1). Local standalone is the only working target today.
 
+   **2026-09-04, stack `wallet-sdk-dust-wallet@4.1.0` / `ledger-v8@8.1.2` / `testkit-js@4.1.1`:** not reproduced.
+   A cold preprod dry run reached chain tip on all three sub-wallets (~37 min) and ended at the expected `UnfundedWalletError`.
+
 3. **Faucet is manual.** The deployer never hits a faucet. Fund the wallet's `unshielded` address (logged at startup) via the official Midnight faucet site or Discord bot before running.
 
 4. **Dust fee overhead default breaks faucet wallets.** testkit-js default `additionalFeeOverhead` is `5e20` vs a faucet wallet's `~3e15` dust → `Insufficient Funds: could not balance dust`. Deployer overrides to `5e14` for non-mainnet. Library users constructing their own provider must mirror this.
 
-5. **Long-history dust sync exhausts default Node heap.** The deployer now raises the dust/shielded sync batch size (`batchUpdates = { size: 5000, … }`) so the replay no longer OOMs mid-stream on `wallet-sdk-dust-wallet@4.0.0` ([midnightntwrk/midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)). The restored dust tree plus shielded trial-decryption can still spike past V8's ~2 GB default old-space on a first preprod sync, so set `NODE_OPTIONS="--max-old-space-size=8192"` for that run. Cache fixes subsequent runs.
+5. **Long-history dust sync exhausts default Node heap.** The deployer now raises the dust/shielded sync batch size (`batchUpdates = { size: 5000, … }`) so the replay no longer OOMs mid-stream ([midnightntwrk/midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)). First hit on `wallet-sdk-dust-wallet@4.0.0`; the override is kept on the shipped 4.1.0 and has not been re-tested without it. The restored dust tree plus shielded trial-decryption can still spike past V8's ~2 GB default old-space on a first preprod sync, so set `NODE_OPTIONS="--max-old-space-size=8192"` for that run. Cache fixes subsequent runs.
+
+6. **Root `resolutions` pin the wallet-SDK packages; do not drop them on a bump.** `testkit-js@4.1.1` pulls `@midnight-ntwrk/wallet-sdk@1.1.0`, which declares `wallet-sdk-facade ^4.0.1` and so resolves to 4.1.0 — a version that imports a nonexistent `Clock` export and fails to load. Without the pins the tree also duplicates `wallet-sdk-dust-wallet` (4.2.0) and `wallet-sdk-shielded` (3.0.2). The root `package.json` therefore pins `wallet-sdk-address-format 3.1.2`, `wallet-sdk-dust-wallet 4.1.0`, `wallet-sdk-facade 4.0.1`, `wallet-sdk-shielded 3.0.1`, `wallet-sdk-unshielded-wallet 3.1.0`.
 
 ## Programmatic API
 

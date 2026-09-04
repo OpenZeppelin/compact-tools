@@ -29,6 +29,7 @@ import {
 } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
 import { WalletError } from '../errors.ts';
+import { formatError } from './error-format.ts';
 
 /** Opaque testkit-js `FluentWalletBuilder.config` (not exported by testkit). */
 export type ConfigShape = unknown;
@@ -39,6 +40,12 @@ export type SubWalletKind = 'shielded' | 'dust' | 'unshielded';
 export interface WalletCacheOptions {
   logger: Logger;
   env: EnvironmentConfiguration;
+  /**
+   * Directory `compact.toml` was loaded from. `.states/` hangs off it so
+   * the cache belongs to the project, not to whichever directory the
+   * user happened to run `compact-deploy` from.
+   */
+  rootDir: string;
   shieldedSeed: Uint8Array;
   dustSeed: Uint8Array;
   unshieldedSeed: Uint8Array;
@@ -67,16 +74,19 @@ export class WalletCache {
   constructor(opts: WalletCacheOptions) {
     this.#logger = opts.logger;
     this.shieldedCacheFilePath = computeCacheFilePath(
+      opts.rootDir,
       opts.env,
       opts.shieldedSeed,
       'shielded',
     );
     this.dustCacheFilePath = computeCacheFilePath(
+      opts.rootDir,
       opts.env,
       opts.dustSeed,
       'dust',
     );
     this.unshieldedCacheFilePath = computeCacheFilePath(
+      opts.rootDir,
       opts.env,
       opts.unshieldedSeed,
       'unshielded',
@@ -110,6 +120,10 @@ export class WalletCache {
       dust: this.dustCacheFilePath,
       unshielded: this.unshieldedCacheFilePath,
     }[kind];
+    // CWD-relative on purpose: `srcPath` is what the user typed after
+    // `--seed-cache-from-*`, usually shell-completed against the
+    // directory they are standing in. `rootDir` governs where the
+    // deployer *puts* its own files, not how it reads the user's.
     const absoluteSrc = resolve(process.cwd(), srcPath);
     let bytes: Buffer;
     try {
@@ -168,7 +182,7 @@ export class WalletCache {
         return restored as ShieldedWalletAPI;
       } catch (e) {
         logger.warn(
-          { err: (e as Error).message, cacheFilePath },
+          { err: formatError(e), cacheFilePath },
           'Wallet cache restore failed; falling back to fresh sync',
         );
       }
@@ -216,7 +230,7 @@ export class WalletCache {
         return restored as unknown as DustWalletAPI;
       } catch (e) {
         logger.warn(
-          { err: (e as Error).message, cacheFilePath },
+          { err: formatError(e), cacheFilePath },
           'Dust wallet cache restore failed; falling back to fresh sync',
         );
       }
@@ -261,7 +275,7 @@ export class WalletCache {
         return restored;
       } catch (e) {
         logger.warn(
-          { err: (e as Error).message, cacheFilePath },
+          { err: formatError(e), cacheFilePath },
           'Unshielded wallet cache restore failed; falling back to fresh sync',
         );
       }
@@ -323,7 +337,7 @@ export class WalletCache {
       chmodSync(filePath, 0o600);
     } catch (e) {
       this.#logger.warn(
-        { err: (e as Error).message, label, filePath },
+        { err: formatError(e), label, filePath },
         'Wallet sub-wallet cache save failed; continuing',
       );
     }
@@ -331,19 +345,21 @@ export class WalletCache {
 }
 
 /**
- * `<network>-<sha256(seed)[:16]>-<kind>.gz`. Per-kind suffix prevents
- * cross-loading one sub-wallet's snapshot into another (different state
- * schemas). Don't reuse testkit's helper: it embeds the seed verbatim
- * and gates the network on env vars instead of runtime ID.
+ * `<rootDir>/.states/<network>-<sha256(seed)[:16]>-<kind>.gz`. Per-kind
+ * suffix prevents cross-loading one sub-wallet's snapshot into another
+ * (different state schemas). Don't reuse testkit's helper: it embeds the
+ * seed verbatim, resolves against the CWD, and gates the network on env
+ * vars instead of runtime ID.
  */
 function computeCacheFilePath(
+  rootDir: string,
   env: EnvironmentConfiguration,
   seed: Uint8Array,
   kind: SubWalletKind,
 ): string {
   const seedHash = createHash('sha256').update(seed).digest('hex').slice(0, 16);
   const filename = `${env.walletNetworkId}-${seedHash}-${kind}.gz`;
-  return resolve(process.cwd(), DEFAULT_WALLET_STATE_DIRECTORY, filename);
+  return resolve(rootDir, DEFAULT_WALLET_STATE_DIRECTORY, filename);
 }
 
 /** Layer `dustOptions` onto the base config so cache-restored wallets honour `additionalFeeOverhead`. */

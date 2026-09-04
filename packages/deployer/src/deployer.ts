@@ -21,6 +21,7 @@ import {
   executeDeploy,
   toDeploymentRecord,
 } from './services/deploy-tx.ts';
+import { formatError } from './services/error-format.ts';
 import {
   DEFAULT_SYNC_TIMEOUT_MS,
   logWalletAddresses,
@@ -250,6 +251,7 @@ export class Deployer implements AsyncDisposable {
         env,
         walletSource.resolution.seed,
         {
+          rootDir,
           skipWalletCache: opts.skipWalletCache,
           seedCacheDust: opts.seedCacheDust,
           seedCacheShielded: opts.seedCacheShielded,
@@ -285,7 +287,7 @@ export class Deployer implements AsyncDisposable {
         await owned.saveCache();
       } catch (e) {
         logger.warn(
-          { err: (e as Error).message },
+          { err: formatError(e) },
           'Wallet cache save failed; next run will re-sync',
         );
       }
@@ -332,6 +334,7 @@ export class Deployer implements AsyncDisposable {
       contractName: s.opts.contract,
       contract: s.contract,
       zkConfigPath: s.artifact.zkConfigPath,
+      rootDir: s.config.rootDir,
       privateStateProvider: s.opts.privateStateProvider,
       privateStateSecret: s.privateStateSecret,
     });

@@ -20,11 +20,19 @@ vi.mock('@midnight-ntwrk/midnight-js-indexer-public-data-provider', () => ({
 }));
 
 vi.mock('@midnight-ntwrk/midnight-js-level-private-state-provider', () => ({
+  // Mirrors the real module's exported default so the provider's own
+  // DB-directory name stays the source of truth for the rootDir join.
+  DEFAULT_CONFIG: { midnightDbName: 'midnight-level-db' },
   levelPrivateStateProvider: vi.fn(
-    (opts: { privateStateStoreName: string; accountId: string }) => ({
+    (opts: {
+      privateStateStoreName: string;
+      accountId: string;
+      midnightDbName?: string;
+    }) => ({
       kind: 'private',
       storeName: opts.privateStateStoreName,
       accountId: opts.accountId,
+      dbName: opts.midnightDbName,
     }),
   ),
 }));
@@ -71,6 +79,9 @@ const wallet = {
 /** Stand-in for SHA-256 of a resolved seed; only its secrecy matters. */
 const SECRET = 'a1'.repeat(32);
 
+/** Stands in for the directory `compact.toml` was loaded from. */
+const ROOT_DIR = '/project/root';
+
 const baseContract: ContractConfig = {
   artifact: 'src/artifacts/Counter',
   signing_key_file: 'keys/counter.signing',
@@ -88,11 +99,34 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
     const opts = vi.mocked(levelPrivateStateProvider).mock.calls[0]?.[0];
     expect(opts?.privateStateStoreName).toBe('Counter-private-state');
+  });
+
+  it('should place the LevelDB directory under rootDir, not the process CWD', () => {
+    // `midnightDbName` is the Level location: bare, the DB lands in
+    // whatever directory the deploy was launched from and the contract
+    // starts from an empty private state.
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue('/somewhere/else');
+    buildProviders({
+      env,
+      wallet,
+      contractName: 'Counter',
+      contract: baseContract,
+      zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
+      privateStateSecret: SECRET,
+    });
+
+    const opts = vi.mocked(levelPrivateStateProvider).mock.calls[0]?.[0];
+    expect(opts?.midnightDbName).toStrictEqual(
+      '/project/root/midnight-level-db',
+    );
+    cwd.mockRestore();
   });
 
   it('should honor a contract-provided private_state_store_name', () => {
@@ -102,6 +136,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: { ...baseContract, private_state_store_name: 'custom-store' },
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -116,6 +151,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -130,6 +166,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -151,6 +188,7 @@ describe('buildProviders', () => {
         contractName: 'Counter',
         contract: baseContract,
         zkConfigPath: '/artifacts/Counter',
+        rootDir: ROOT_DIR,
       }),
     ).toThrow(ConfigError);
     expect(levelPrivateStateProvider).not.toHaveBeenCalled();
@@ -163,6 +201,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -181,6 +220,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -194,6 +234,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -210,6 +251,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -224,6 +266,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
@@ -244,6 +287,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateProvider: injected,
     });
 
@@ -259,6 +303,7 @@ describe('buildProviders', () => {
       contractName: 'Counter',
       contract: baseContract,
       zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
       privateStateSecret: SECRET,
     });
 
