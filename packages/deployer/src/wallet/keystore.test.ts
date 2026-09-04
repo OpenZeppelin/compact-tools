@@ -55,6 +55,34 @@ describe('Keystore', () => {
       ).toThrow(/dklen must be 32/);
     });
 
+    it('should reject scrypt params that exceed the memory limit', () => {
+      expect(() =>
+        Keystore.encrypt(SEED, 'pw', {
+          ...FAST_OPTS,
+          scryptN: 1 << 17,
+          scryptR: 32,
+        }),
+      ).toThrow(WalletError);
+      expect(() =>
+        Keystore.encrypt(SEED, 'pw', {
+          ...FAST_OPTS,
+          scryptN: 1 << 17,
+          scryptR: 32,
+        }),
+      ).toThrow(/over the 512 MiB scrypt memory limit/);
+    });
+
+    it('should round-trip under the default scrypt params', () => {
+      const ks = Keystore.encrypt(SEED, 'pw');
+      expect(ks.toJSON().crypto.kdfparams).toMatchObject({
+        dklen: 32,
+        n: 1 << 17,
+        p: 1,
+        r: 8,
+      });
+      expect(ks.decrypt('pw')).toBe(SEED);
+    });
+
     it('should reject a wrong passphrase with MAC mismatch', () => {
       const ks = Keystore.encrypt(SEED, 'hunter2', FAST_OPTS);
       expect(() => ks.decrypt('wrong')).toThrow(/MAC mismatch/);
@@ -133,8 +161,9 @@ describe('Keystore', () => {
         ...ks.toJSON(),
         version: 'eth-3',
       } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
       expect(() => Keystore.fromJSON(tampered)).toThrow(
-        /Unsupported keystore version/,
+        /version: Invalid literal value, expected "midnight-1"/,
       );
     });
 
@@ -144,7 +173,10 @@ describe('Keystore', () => {
         ...ks,
         crypto: { ...ks.crypto, kdf: 'pbkdf2' },
       } as unknown as MidnightKeystore;
-      expect(() => Keystore.fromJSON(tampered)).toThrow(/Unsupported KDF/);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /crypto\.kdf: Invalid literal value, expected "scrypt"/,
+      );
     });
 
     it('should reject an unsupported cipher', () => {
@@ -153,22 +185,27 @@ describe('Keystore', () => {
         ...ks,
         crypto: { ...ks.crypto, cipher: 'aes-256-gcm' },
       } as unknown as MidnightKeystore;
-      expect(() => Keystore.fromJSON(tampered)).toThrow(/Unsupported cipher/);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /crypto\.cipher: Invalid literal value, expected "aes-128-ctr"/,
+      );
     });
 
     it('should reject a non-object with WalletError (not a raw TypeError)', () => {
       expect(() => Keystore.fromJSON(null)).toThrow(WalletError);
-      expect(() => Keystore.fromJSON('nope')).toThrow(/expected an object/);
+      expect(() => Keystore.fromJSON('nope')).toThrow(
+        /<root>: Expected object, received string/,
+      );
     });
 
     it('should reject JSON missing the crypto section with WalletError', () => {
       expect(() => Keystore.fromJSON({ version: 'midnight-1' })).toThrow(
-        /missing crypto section/,
+        /crypto: Required/,
       );
     });
 
     it('should label a schema failure with no path as <root>', () => {
-      // Clears the shallow field checks but is not a plain object, so zod
+      // An array carrying the right fields is not a plain object, so zod
       // reports at the top level and the issue path is empty.
       const arrayShaped = Object.assign([], {
         version: 'midnight-1',
@@ -197,6 +234,38 @@ describe('Keystore', () => {
         },
       } as unknown as MidnightKeystore;
       expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+    });
+
+    it('should reject in-range scrypt params that exceed the memory limit', () => {
+      // n=2^20 with r=8 satisfies every per-field bound, and `scryptSync`
+      // then refuses it with a raw OpenSSL RangeError.
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 2 ** 20 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(WalletError);
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /over the 512 MiB scrypt memory limit/,
+      );
+    });
+
+    it('should reject a scrypt n above the ceiling for its r', () => {
+      // n=2^20 needs only 134 MiB at r=1, but scrypt caps n at 2 ** (16 * r).
+      const ks = Keystore.encrypt(SEED, 'pw', FAST_OPTS).toJSON();
+      const tampered = {
+        ...ks,
+        crypto: {
+          ...ks.crypto,
+          kdfparams: { ...ks.crypto.kdfparams, n: 2 ** 20, r: 1 },
+        },
+      } as unknown as MidnightKeystore;
+      expect(() => Keystore.fromJSON(tampered)).toThrow(
+        /ceiling of 2 \*\* \(16 \* r\)/,
+      );
     });
 
     it('should reject a scrypt n that is not a power of two', () => {

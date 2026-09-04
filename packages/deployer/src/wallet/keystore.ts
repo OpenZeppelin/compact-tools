@@ -47,6 +47,34 @@ const DEFAULTS: Required<KeystoreCreateOptions> = {
   dklen: 32,
 };
 
+/** `maxmem` handed to every `scryptSync` call, and the budget params are held to. */
+const SCRYPT_MAX_MEM_BYTES = 512 * 1024 * 1024;
+
+const asMiB = (bytes: number) => Math.round(bytes / (1024 * 1024));
+
+/**
+ * Describe why `scryptSync` would refuse these params, or `undefined` when it
+ * accepts them. Peak allocation is OpenSSL's `Blen + Vlen`, and `n` is capped
+ * at `2 ** (16 * r)` however little memory that needs. Without this, a
+ * hostile or hand-edited keystore surfaces as a raw OpenSSL `RangeError`
+ * instead of a {@link WalletError}.
+ */
+function scryptParamsFault(params: {
+  n: number;
+  p: number;
+  r: number;
+}): string | undefined {
+  const { n, p, r } = params;
+  const bytes = 128 * r * (n + p + 2);
+  if (bytes > SCRYPT_MAX_MEM_BYTES) {
+    return `n=${n} r=${r} p=${p} needs ${asMiB(bytes)} MiB, over the ${asMiB(SCRYPT_MAX_MEM_BYTES)} MiB scrypt memory limit`;
+  }
+  if (n >= 2 ** (16 * r)) {
+    return `n=${n} is at or above scrypt's ceiling of 2 ** (16 * r) for r=${r}`;
+  }
+  return undefined;
+}
+
 const hex = (bytes?: number) =>
   z
     .string()
@@ -61,11 +89,11 @@ const hex = (bytes?: number) =>
     );
 
 /**
- * Full on-disk shape. The scrypt bounds cap the work a hostile keystore can
- * force: `n` above 2^20 at r=8 needs gigabytes and minutes per attempt, so an
- * unbounded value is a denial of service on anyone who opens the file. `dklen`
- * is fixed at 32 because {@link Keystore.decrypt} splits it 16/16 into the AES
- * key and the MAC key.
+ * Full on-disk shape, and the only validation `fromJSON` performs. The scrypt
+ * bounds cap the work a hostile keystore can force on anyone who opens the
+ * file, and {@link scryptParamsFault} rejects the combinations `scryptSync`
+ * itself refuses. `dklen` is fixed at 32 because {@link Keystore.decrypt}
+ * splits it 16/16 into the AES key and the MAC key.
  */
 const keystoreSchema = z.object({
   version: z.literal(VERSION),
@@ -75,18 +103,25 @@ const keystoreSchema = z.object({
     ciphertext: hex(),
     cipherparams: z.object({ iv: hex(16) }),
     kdf: z.literal('scrypt'),
-    kdfparams: z.object({
-      dklen: z.literal(32),
-      n: z
-        .number()
-        .int()
-        .min(1024)
-        .max(2 ** 20)
-        .refine((v) => (v & (v - 1)) === 0, 'expected a power of two'),
-      p: z.number().int().min(1).max(16),
-      r: z.number().int().min(1).max(32),
-      salt: hex(),
-    }),
+    kdfparams: z
+      .object({
+        dklen: z.literal(32),
+        n: z
+          .number()
+          .int()
+          .min(1024)
+          .max(2 ** 20)
+          .refine((v) => (v & (v - 1)) === 0, 'expected a power of two'),
+        p: z.number().int().min(1).max(16),
+        r: z.number().int().min(1).max(32),
+        salt: hex(),
+      })
+      .superRefine((params, ctx) => {
+        const fault = scryptParamsFault(params);
+        if (fault) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: fault });
+        }
+      }),
     mac: hex(32),
   }),
 });
@@ -112,6 +147,10 @@ export class Keystore {
     if (dklen !== 32) {
       throw new WalletError(`Keystore dklen must be 32, got ${dklen}`);
     }
+    const fault = scryptParamsFault({ n: scryptN, p: scryptP, r: scryptR });
+    if (fault) {
+      throw new WalletError(`Unusable keystore scrypt params: ${fault}`);
+    }
 
     const salt = randomBytes(32);
     const iv = randomBytes(16);
@@ -119,7 +158,7 @@ export class Keystore {
       N: scryptN,
       p: scryptP,
       r: scryptR,
-      maxmem: 512 * 1024 * 1024,
+      maxmem: SCRYPT_MAX_MEM_BYTES,
     });
 
     const encKey = derived.subarray(0, 16);
@@ -178,29 +217,6 @@ export class Keystore {
    * `TypeError` from a hand-edited or truncated file.
    */
   static fromJSON(data: unknown): Keystore {
-    if (!data || typeof data !== 'object') {
-      throw new WalletError('Invalid keystore: expected an object');
-    }
-    const d = data as Partial<MidnightKeystore>;
-    if (!d.crypto || typeof d.crypto !== 'object') {
-      throw new WalletError('Invalid keystore: missing crypto section');
-    }
-    const crypto = d.crypto as Partial<MidnightKeystore['crypto']>;
-    if (d.version !== VERSION) {
-      throw new WalletError(
-        `Unsupported keystore version: ${String(d.version)} (expected ${VERSION})`,
-      );
-    }
-    if (crypto.kdf !== 'scrypt') {
-      throw new WalletError(
-        `Unsupported KDF: ${String(crypto.kdf)} (expected scrypt)`,
-      );
-    }
-    if (crypto.cipher !== 'aes-128-ctr') {
-      throw new WalletError(
-        `Unsupported cipher: ${String(crypto.cipher)} (expected aes-128-ctr)`,
-      );
-    }
     const parsed = keystoreSchema.safeParse(data);
     if (!parsed.success) {
       throw new WalletError(
@@ -209,7 +225,7 @@ export class Keystore {
           .join('; ')}`,
       );
     }
-    return new Keystore(parsed.data as MidnightKeystore);
+    return new Keystore(parsed.data);
   }
 
   /** Recover the hex-encoded seed. Throws {@link WalletError} on MAC mismatch. */
@@ -223,7 +239,7 @@ export class Keystore {
         N: kdfparams.n,
         p: kdfparams.p,
         r: kdfparams.r,
-        maxmem: 512 * 1024 * 1024,
+        maxmem: SCRYPT_MAX_MEM_BYTES,
       },
     );
     const encKey = derived.subarray(0, 16);
