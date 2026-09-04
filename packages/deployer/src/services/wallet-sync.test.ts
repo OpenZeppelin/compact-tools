@@ -72,10 +72,25 @@ interface ProgressStub {
   withinGap?: boolean;
 }
 
+/** Index-shaped progress, as the shielded and dust sub-wallets report it. */
 function progress(stub: ProgressStub = {}): unknown {
   return {
     isStrictlyComplete: () => stub.strictlyComplete ?? true,
     isCompleteWithin: () => stub.withinGap ?? true,
+    appliedIndex: 0n,
+    highestIndex: 0n,
+    isConnected: true,
+  };
+}
+
+/** Id-shaped progress, as the unshielded sub-wallet reports it. */
+function unshieldedProgress(stub: ProgressStub = {}): unknown {
+  return {
+    isStrictlyComplete: () => stub.strictlyComplete ?? true,
+    isCompleteWithin: () => stub.withinGap ?? true,
+    appliedId: 0n,
+    highestTransactionId: 0n,
+    isConnected: true,
   };
 }
 
@@ -96,7 +111,7 @@ function facadeState(
     },
     unshielded: {
       balances: opts.unshielded ?? anyToken(1n),
-      progress: progress(opts.unshieldedProgress),
+      progress: unshieldedProgress(opts.unshieldedProgress),
     },
     dust: {
       state: { progress: progress(opts.dustProgress) },
@@ -129,7 +144,7 @@ describe('describeProgress', () => {
         appliedIndex: 10n,
         highestIndex: 100n,
         isConnected: true,
-      } as never),
+      }),
     ).toBe('10/100 (10%) connected=true complete=false');
   });
 
@@ -140,16 +155,21 @@ describe('describeProgress', () => {
         appliedId: 5n,
         highestTransactionId: 50n,
         isConnected: true,
-      } as never),
+      }),
     ).toBe('5/50 (10%) connected=true complete=true');
   });
 
   it('should report an unknown tip before the indexer reports a max event id', () => {
     // highest=0 means "indexer has not told us the tip yet"; surfacing the
     // connection state lets a user tell "connecting" from "no events yet".
-    expect(describeProgress({ isStrictlyComplete: () => false } as never)).toBe(
-      'applied=0 highest=? connected=false complete=false',
-    );
+    expect(
+      describeProgress({
+        isStrictlyComplete: () => false,
+        appliedIndex: 0n,
+        highestIndex: 0n,
+        isConnected: false,
+      }),
+    ).toBe('applied=0 highest=? connected=false complete=false');
   });
 });
 

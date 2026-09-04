@@ -46,11 +46,7 @@ const DEFAULT_SYNC_BATCH_SIZE = 5000;
 const SYNC_BATCH_TIMING = { timeout: 1, spacing: 4 } as const;
 
 export interface WalletHandlerBuildOptions {
-  /**
-   * Directory that owns the wallet-state cache: `.states/` is created
-   * under it. Pass the `compact.toml` directory (`CompactConfig.rootDir`)
-   * so the cache follows the project rather than the shell's CWD.
-   */
+  /** Directory `compact.toml` was loaded from; see `CompactConfig.rootDir`. */
   rootDir: string;
   /** Force a fresh sync from genesis (skip the on-disk cache). Default `false`. */
   skipWalletCache?: boolean;

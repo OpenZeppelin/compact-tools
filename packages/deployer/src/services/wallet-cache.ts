@@ -40,11 +40,7 @@ export type SubWalletKind = 'shielded' | 'dust' | 'unshielded';
 export interface WalletCacheOptions {
   logger: Logger;
   env: EnvironmentConfiguration;
-  /**
-   * Directory `compact.toml` was loaded from. `.states/` hangs off it so
-   * the cache belongs to the project, not to whichever directory the
-   * user happened to run `compact-deploy` from.
-   */
+  /** Directory `compact.toml` was loaded from; see `CompactConfig.rootDir`. */
   rootDir: string;
   shieldedSeed: Uint8Array;
   dustSeed: Uint8Array;
@@ -179,7 +175,7 @@ export class WalletCache {
           serializedState,
         );
         logger.info(`Restored wallet state from ${cacheFilePath}`);
-        return restored as ShieldedWalletAPI;
+        return restored;
       } catch (e) {
         logger.warn(
           { err: formatError(e), cacheFilePath },
@@ -193,7 +189,7 @@ export class WalletCache {
     return WalletFactory.createShieldedWallet(
       config as Parameters<typeof WalletFactory.createShieldedWallet>[0],
       seed,
-    ) as ShieldedWalletAPI;
+    );
   }
 
   /**
@@ -227,7 +223,7 @@ export class WalletCache {
         );
         const restored = dustClass.restore(serializedState);
         logger.info(`Restored dust wallet state from ${cacheFilePath}`);
-        return restored as unknown as DustWalletAPI;
+        return restored;
       } catch (e) {
         logger.warn(
           { err: formatError(e), cacheFilePath },

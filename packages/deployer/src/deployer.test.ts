@@ -133,14 +133,21 @@ function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
         progress: {
           isStrictlyComplete: () => true,
           isCompleteWithin: () => true,
+          appliedIndex: 0n,
+          highestIndex: 0n,
+          isConnected: true,
         },
       },
     },
     unshielded: {
       balances: anyKeyHasBalance,
+      // Id-shaped, unlike the index-shaped shielded and dust progress.
       progress: {
         isStrictlyComplete: () => true,
         isCompleteWithin: () => true,
+        appliedId: 0n,
+        highestTransactionId: 0n,
+        isConnected: true,
       },
     },
     dust: {
@@ -148,6 +155,9 @@ function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
         progress: {
           isStrictlyComplete: () => true,
           isCompleteWithin: () => true,
+          appliedIndex: 0n,
+          highestIndex: 0n,
+          isConnected: true,
         },
       },
       balance: () => 1n,

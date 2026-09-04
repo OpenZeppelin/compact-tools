@@ -24,12 +24,7 @@ export interface BuildProvidersOptions {
   contractName: string;
   contract: ContractConfig;
   zkConfigPath: string;
-  /**
-   * Directory `compact.toml` was loaded from. The LevelDB private-state
-   * directory is created under it, so the deployed contract's private
-   * state stays with the project instead of landing wherever
-   * `compact-deploy` was invoked from.
-   */
+  /** Directory `compact.toml` was loaded from; see `CompactConfig.rootDir`. */
   rootDir: string;
   /** Inject `inMemoryPrivateStateProvider` in tests to avoid LevelDB file-lock contention. */
   privateStateProvider?: PrivateStateProvider;

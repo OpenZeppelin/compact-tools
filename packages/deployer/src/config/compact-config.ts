@@ -18,6 +18,13 @@ import {
  */
 export class CompactConfig {
   readonly configPath: string;
+  /**
+   * Directory `compact.toml` was loaded from, and the anchor for every
+   * path the deployer writes: the `.states/` wallet-cache snapshots and
+   * the LevelDB private-state store both hang off it. State therefore
+   * belongs to the project rather than to whichever directory the user
+   * happened to run `compact-deploy` from.
+   */
   readonly rootDir: string;
   readonly #data: CompactConfigData;
 

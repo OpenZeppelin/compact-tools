@@ -69,25 +69,37 @@ export async function logWalletAddresses(
 }
 
 /**
+ * The two sub-wallet progress shapes, mirrored structurally: neither
+ * `SyncProgress` (`wallet-sdk-abstractions`, used by shielded and dust)
+ * nor its unshielded twin (`wallet-sdk-unshielded-wallet/v1/SyncProgress`)
+ * is re-exported from a package root we depend on. Only the fields this
+ * module reads are declared, so both SDK types stay assignable.
+ */
+export type SubWalletSyncProgress =
+  | {
+      isStrictlyComplete: () => boolean;
+      readonly appliedIndex: bigint;
+      readonly highestIndex: bigint;
+      readonly isConnected: boolean;
+    }
+  | {
+      isStrictlyComplete: () => boolean;
+      readonly appliedId: bigint;
+      readonly highestTransactionId: bigint;
+      readonly isConnected: boolean;
+    };
+
+/**
  * One-liner progress string for "Still syncing". Accepts both progress
  * shapes (shielded/dust use `appliedIndex`/`highestIndex`; unshielded
  * uses `appliedId`/`highestTransactionId`).
  */
-export function describeProgress(p: {
-  isStrictlyComplete: () => boolean;
-}): string {
+export function describeProgress(p: SubWalletSyncProgress): string {
   const complete = p.isStrictlyComplete();
-  const fields = p as unknown as {
-    appliedIndex?: bigint;
-    highestIndex?: bigint;
-    highestRelevantIndex?: bigint;
-    appliedId?: bigint;
-    highestTransactionId?: bigint;
-    isConnected?: boolean;
-  };
-  const applied = fields.appliedIndex ?? fields.appliedId ?? 0n;
-  const highest = fields.highestIndex ?? fields.highestTransactionId ?? 0n;
-  const connected = fields.isConnected ?? false;
+  const indexed = 'appliedIndex' in p;
+  const applied = indexed ? p.appliedIndex : p.appliedId;
+  const highest = indexed ? p.highestIndex : p.highestTransactionId;
+  const connected = p.isConnected;
   // Once the indexer has told the wallet its max event id, we can
   // render a real progress percentage. Until then surface "applied,
   // highest unknown" and the subscription's connection state so the
