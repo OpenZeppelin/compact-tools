@@ -2,13 +2,16 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
+  readFileSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DeployError } from '../errors.ts';
 import { acquireLock, LOCK_STALE_MS, releaseLock } from './file-lock.ts';
 
 /**
@@ -20,10 +23,25 @@ const unlinkFault = vi.hoisted(() => ({
   code: undefined as string | undefined,
 }));
 
+/**
+ * Reproduces the two-waiter stale-break race: while armed, the next `stat`
+ * reports the real (aged) lock and then replaces it on disk, standing in for
+ * the waiter that broke the stale lock and took it for itself.
+ */
+const takeoverOnStat = vi.hoisted(() => ({ armed: false }));
+
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
+    stat: async (path: Parameters<typeof actual.stat>[0]) => {
+      const stats = await actual.stat(path);
+      if (takeoverOnStat.armed) {
+        takeoverOnStat.armed = false;
+        writeFileSync(String(path), '111111\n');
+      }
+      return stats;
+    },
     unlink: (path: Parameters<typeof actual.unlink>[0]) => {
       if (unlinkFault.code === undefined) return actual.unlink(path);
       const err: NodeJS.ErrnoException = new Error(
@@ -37,6 +55,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 afterEach(() => {
   unlinkFault.code = undefined;
+  takeoverOnStat.armed = false;
 });
 
 function lockPath(): string {
@@ -93,9 +112,26 @@ describe('acquireLock', () => {
   it('should throw a removal hint when a fresh lock outlives maxWaitMs', async () => {
     const path = lockPath();
     writeFileSync(path, '999999\n');
+    const pending = acquireLock(path, { retryMs: 1, maxWaitMs: 20 });
+    await expect(pending).rejects.toBeInstanceOf(DeployError);
+    await expect(pending).rejects.toThrow(
+      /Timed out waiting for the deployments lock/,
+    );
+  });
+
+  it('should leave a lock another waiter took over during the stale break', async () => {
+    const path = lockPath();
+    writeFileSync(path, '999999\n');
+    const aged = (Date.now() - LOCK_STALE_MS * 2) / 1000;
+    utimesSync(path, aged, aged);
+    takeoverOnStat.armed = true;
     await expect(
-      acquireLock(path, { retryMs: 1, maxWaitMs: 20 }),
-    ).rejects.toThrow(/Timed out waiting for the deployments lock/);
+      acquireLock(path, { retryMs: 1, maxWaitMs: 30 }),
+    ).rejects.toBeInstanceOf(DeployError);
+    // The other waiter still holds its own lock, and nothing was parked and
+    // then forgotten under a `.stale-*` name.
+    expect(readFileSync(path, 'utf8')).toBe('111111\n');
+    expect(readdirSync(dirname(path))).toStrictEqual(['head.json.lock']);
   });
 
   it('should rethrow a non-EEXIST failure instead of retrying', async () => {

@@ -1,4 +1,5 @@
-import { stat, unlink, writeFile } from 'node:fs/promises';
+import { rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { DeployError } from '../errors.ts';
 
 /** A lock older than this is treated as abandoned by a crashed process. */
 export const LOCK_STALE_MS = 30_000;
@@ -14,8 +15,9 @@ export interface LockOptions {
 
 /**
  * Take `lockPath` exclusively via `open(O_CREAT|O_EXCL)`. Retries on EEXIST;
- * unlinks and retries once the holder's mtime passes {@link LOCK_STALE_MS}
- * so a killed deploy can't wedge the ledger permanently.
+ * removes the lock and retries once the holder's mtime passes
+ * {@link LOCK_STALE_MS} so a killed deploy can't wedge the ledger
+ * permanently. Throws {@link DeployError} past `maxWaitMs`.
  */
 export async function acquireLock(
   lockPath: string,
@@ -33,7 +35,7 @@ export async function acquireLock(
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
       if (await breakIfStale(lockPath, staleMs)) continue;
       if (Date.now() > deadline) {
-        throw new Error(
+        throw new DeployError(
           `Timed out waiting for the deployments lock at ${lockPath}. Remove it if no deploy is running.`,
         );
       }
@@ -42,20 +44,36 @@ export async function acquireLock(
   }
 }
 
-/** Unlink `lockPath` if its mtime is older than `staleMs`. Reports whether it did. */
+/**
+ * Remove `lockPath` if its mtime is older than `staleMs`. Reports whether it
+ * did. The removal renames the lock aside before unlinking it: `rename` is
+ * atomic, so of several waiters that all saw the same stale lock exactly one
+ * takes it away and the losers go back to waiting.
+ */
 async function breakIfStale(
   lockPath: string,
   staleMs: number,
 ): Promise<boolean> {
+  const staleBefore = Date.now() - staleMs;
+  const parked = `${lockPath}.stale-${process.pid}-${Date.now()}`;
   try {
-    const { mtimeMs } = await stat(lockPath);
-    if (Date.now() - mtimeMs < staleMs) return false;
-    await unlink(lockPath);
+    if ((await stat(lockPath)).mtimeMs > staleBefore) return false;
+    await rename(lockPath, parked);
+    // The stat above and this rename are not one instant: a waiter that won
+    // the break may already have taken the lock, in which case the file just
+    // parked is that waiter's fresh one. Put it back rather than acquire
+    // alongside the holder.
+    if ((await stat(parked)).mtimeMs > staleBefore) {
+      await rename(parked, lockPath);
+      return false;
+    }
+    await unlink(parked);
     return true;
   } catch (e) {
-    // ENOENT: the holder released between our EEXIST and this stat/unlink,
-    // so the next acquire wins the race. Any other fault is not contention,
-    // and retrying it would surface as a misleading lock timeout.
+    // ENOENT: the holder released, or another waiter broke the lock first,
+    // between our EEXIST and this call. Either way the next acquire wins the
+    // race. Any other fault is not contention, and retrying it would surface
+    // as a misleading lock timeout.
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     return false;
   }
