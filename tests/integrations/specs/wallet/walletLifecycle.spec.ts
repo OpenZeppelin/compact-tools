@@ -46,6 +46,7 @@ describe('compact-deploy — injected wallets are not touched by the deployer', 
   it('should not call wallet.stop() when the deployer is disposed', async () => {
     const wallet = await getSharedPool().signerFor('ALICE');
     const stopSpy = vi.spyOn(wallet, 'stop');
+    const startSpy = vi.spyOn(wallet, 'start');
 
     {
       await using deployer = await Deployer.prepare({
@@ -63,6 +64,7 @@ describe('compact-deploy — injected wallets are not touched by the deployer', 
     }
 
     expect(stopSpy).not.toHaveBeenCalled();
+    expect(startSpy).not.toHaveBeenCalled();
   }, 240_000);
 
   it('should leave the injected wallet usable after dispose', async () => {
