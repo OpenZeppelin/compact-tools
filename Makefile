@@ -97,16 +97,15 @@ env-status:
 
 # ── Integration-test fixtures ──────────────────────────────────────────
 #
-# Each fixture has an explicit file dep on its .compact source; Make
-# only re-runs `compact compile` when the source is newer than the
-# emitted index.js. Idempotent across repeated invocations.
+# Each fixture depends on its .compact source and on this Makefile, so a
+# COMPACTC_VERSION bump recompiles instead of reusing old artifacts.
 
 compile: $(COUNTER_OUT) $(PRIVATE_OUT)
 
-$(COUNTER_OUT): $(INTEGRATION_DIR)/fixtures/Counter.compact
+$(COUNTER_OUT): $(INTEGRATION_DIR)/fixtures/Counter.compact Makefile
 	compact compile +$(COMPACTC_VERSION) $< $(INTEGRATION_DIR)/fixtures/artifacts/Counter
 
-$(PRIVATE_OUT): $(INTEGRATION_DIR)/fixtures/PrivateCounter.compact
+$(PRIVATE_OUT): $(INTEGRATION_DIR)/fixtures/PrivateCounter.compact Makefile
 	compact compile +$(COMPACTC_VERSION) $< $(INTEGRATION_DIR)/fixtures/artifacts/PrivateCounter
 
 # ── End-to-end integration test ────────────────────────────────────────
