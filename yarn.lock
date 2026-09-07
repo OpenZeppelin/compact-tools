@@ -1159,7 +1159,7 @@ __metadata:
     "@midnight-ntwrk/midnight-js-level-private-state-provider": "npm:4.1.1"
     "@midnight-ntwrk/midnight-js-network-id": "npm:4.1.1"
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "npm:4.1.1"
-    "@midnight-ntwrk/midnight-js-types": "npm:4.1.1"
+    "@midnight-ntwrk/midnight-js-types": "npm:5.0.0-beta.7"
     "@midnight-ntwrk/testkit-js": "npm:4.1.1"
     "@midnight-ntwrk/wallet-sdk-address-format": "npm:3.1.2"
     "@midnight-ntwrk/wallet-sdk-dust-wallet": "npm:4.1.0"
