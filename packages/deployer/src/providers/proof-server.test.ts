@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
@@ -258,12 +258,21 @@ describe('ProofServer.start — the "auto" compose file', () => {
     vi.mocked(process.cwd).mockRestore();
   });
 
-  // Also guards `files` in package.json: dropping the yaml there would break
-  // `auto` for npm installs only, never in CI, which runs from the worktree.
   it('should boot from the packaged file when the cwd has no compose file', async () => {
     const dir = await composeDirFrom(emptyDir());
 
     expect(existsSync(join(dir, FILE_NAME))).toBe(true);
+  });
+
+  // The checkout always has the file; only `files` decides whether the npm
+  // tarball does, so dropping it there would break `auto` for installs only.
+  it('should publish the compose file with the package', async () => {
+    const dir = await composeDirFrom(emptyDir());
+    const manifest = JSON.parse(
+      readFileSync(join(dir, 'package.json'), 'utf8'),
+    );
+
+    expect(manifest.files).toContain(FILE_NAME);
   });
 
   it('should prefer a compose file in the cwd over the packaged one', async () => {
