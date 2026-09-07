@@ -1,14 +1,35 @@
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NetworkConfig } from '../config/schema.ts';
 import { ConfigError } from '../errors.ts';
 
+/**
+ * Stand-in for testkit's container config. Kept global and mutable like the
+ * real one, so a start observes whatever the last write left behind.
+ */
+let containersConfig = {
+  proofServer: {
+    path: process.cwd(),
+    fileName: 'proof-server.yml',
+    container: { name: 'proof-server', port: 6300, waitStrategy: {} },
+  },
+};
+
+/** Directories `DynamicProofServerContainer.start` was pointed at, in order. */
+const composeDirs: string[] = [];
+
 vi.mock('@midnight-ntwrk/testkit-js', () => ({
   DynamicProofServerContainer: {
-    start: vi.fn(async () => ({
-      getUrl: () => 'http://dynamic-container:6300',
-      stop: vi.fn(async () => undefined),
-    })),
+    start: vi.fn(async () => {
+      composeDirs.push(containersConfig.proofServer.path);
+      return {
+        getUrl: () => 'http://dynamic-container:6300',
+        stop: vi.fn(async () => undefined),
+      };
+    }),
   },
   StaticProofServerContainer: vi.fn(function StaticProofServerContainer(
     this: { getUrl: () => string; stop: () => Promise<void> },
@@ -16,6 +37,10 @@ vi.mock('@midnight-ntwrk/testkit-js', () => ({
   ) {
     this.getUrl = () => `http://127.0.0.1:${port}`;
     this.stop = vi.fn(async () => undefined);
+  }),
+  getContainersConfiguration: vi.fn(() => containersConfig),
+  setContainersConfiguration: vi.fn((next: typeof containersConfig) => {
+    containersConfig = next;
   }),
 }));
 
@@ -203,5 +228,65 @@ describe('ProofServer — disposal', () => {
 
     await expect(ps[Symbol.asyncDispose]()).resolves.toBeUndefined();
     expect(logger.warn).toHaveBeenCalled();
+  });
+});
+
+describe('ProofServer.start — the "auto" compose file', () => {
+  const FILE_NAME = 'proof-server.yml';
+
+  const emptyDir = (): string => mkdtempSync(join(tmpdir(), 'compose-'));
+
+  const dirWithComposeFile = (): string => {
+    const dir = emptyDir();
+    writeFileSync(join(dir, FILE_NAME), 'services: {}\n');
+    return dir;
+  };
+
+  /** Starts `auto` from `cwd`; answers with the directory testkit booted from. */
+  const composeDirFrom = async (cwd: string): Promise<string> => {
+    vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+    composeDirs.length = 0;
+    await ProofServer.start({
+      network: { ...baseNetwork, proof_server: 'auto' },
+      logger: makeLogger(),
+    });
+    expect(composeDirs).toHaveLength(1);
+    return composeDirs[0];
+  };
+
+  afterEach(() => {
+    vi.mocked(process.cwd).mockRestore();
+  });
+
+  it('should boot from the packaged file when the cwd has no compose file', async () => {
+    const dir = await composeDirFrom(emptyDir());
+
+    expect(existsSync(join(dir, FILE_NAME))).toBe(true);
+  });
+
+  // The checkout always has the file; only `files` decides whether the npm
+  // tarball does, so dropping it there would break `auto` for installs only.
+  it('should publish the compose file with the package', async () => {
+    const dir = await composeDirFrom(emptyDir());
+    const manifest = JSON.parse(
+      readFileSync(join(dir, 'package.json'), 'utf8'),
+    );
+
+    expect(manifest.files).toContain(FILE_NAME);
+  });
+
+  it('should prefer a compose file in the cwd over the packaged one', async () => {
+    const cwd = dirWithComposeFile();
+
+    expect(await composeDirFrom(cwd)).toBe(cwd);
+  });
+
+  it('should re-resolve per start rather than reuse the last path', async () => {
+    const overriding = dirWithComposeFile();
+    expect(await composeDirFrom(overriding)).toBe(overriding);
+
+    const packaged = await composeDirFrom(emptyDir());
+    expect(packaged).not.toBe(overriding);
+    expect(existsSync(join(packaged, FILE_NAME))).toBe(true);
   });
 });

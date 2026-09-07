@@ -1,6 +1,11 @@
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   DynamicProofServerContainer,
+  getContainersConfiguration,
   StaticProofServerContainer,
+  setContainersConfiguration,
 } from '@midnight-ntwrk/testkit-js';
 import type { Logger } from 'pino';
 import type { NetworkConfig } from '../config/schema.ts';
@@ -11,6 +16,35 @@ export interface ProofServerOptions {
   cliOverride?: string;
   network: NetworkConfig;
   logger: Logger;
+}
+
+/** Holds the packaged `proof-server.yml`. Two levels up from `providers/` in
+ *  both `src/` and the built `dist/`. */
+const PACKAGE_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+);
+
+/**
+ * Point testkit at a compose file it can read.
+ *
+ * testkit boots the `auto` container from `<proofServer.path>/<fileName>` and
+ * defaults that path to `process.cwd()`. A compose file in the cwd still wins,
+ * as the escape hatch for a different image; otherwise the packaged one. The
+ * choice is remade on every start because testkit's config is global.
+ */
+function useComposeFile(logger: Logger): void {
+  const current = getContainersConfiguration();
+  const { fileName } = current.proofServer;
+  const cwd = process.cwd();
+  const path = existsSync(resolve(cwd, fileName)) ? cwd : PACKAGE_ROOT;
+
+  logger.debug(`Proof-server compose file: ${resolve(path, fileName)}`);
+  setContainersConfiguration({
+    ...current,
+    proofServer: { ...current.proofServer, path },
+  });
 }
 
 /**
@@ -50,6 +84,7 @@ export class ProofServer {
 
     if (explicit === 'auto') {
       logger.info('Starting proof-server container (auto)…');
+      useComposeFile(logger);
       const container = await DynamicProofServerContainer.start(
         logger,
         undefined,
