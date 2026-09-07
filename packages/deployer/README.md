@@ -190,6 +190,8 @@ signing_key_file = "./deploy/Vault.signingkey"
 
 `proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the duration of the deploy; omitting it falls back to the env var `PROOF_SERVER_PORT` then to `http://127.0.0.1:6300`.
 
+`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, which pins `midnightntwrk/proof-server:8.0.3` and publishes port 6300 on a free host port. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; a compose file there wins over the packaged one.
+
 ## Keystore format
 
 `compact-deploy` reads/writes a JSON keystore with the Ethereum V3 shape (scrypt + AES-128-CTR) but with `version: "midnight-1"` so other tooling does not silently mis-read it as an Ethereum key. The encrypted secret is a 32-byte Midnight wallet seed (hex).

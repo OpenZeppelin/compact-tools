@@ -84,6 +84,7 @@
   },
   "files": [
     "dist",
+    "proof-server.yml",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
