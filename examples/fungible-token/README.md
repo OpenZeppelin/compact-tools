@@ -45,7 +45,7 @@ fungible-token/
 ## Prerequisites
 
 - Node 24+
-- Docker (for the local Midnight stack)
+- Docker — for the local Midnight stack, and for `proof_server = "auto"` on the testnets
 - The `compact` toolchain with compiler 0.31.1 available (`compact list`). The deployer pins compact-runtime 0.16.0; an artifact from the default compactc fails at submit with a `Version mismatch`.
 - A one-time root setup: `yarn install && yarn build` from the repo root. This is a yarn workspace, so binaries like `compact-compiler` and `compact-deploy` resolve automatically inside this folder.
 
@@ -152,7 +152,7 @@ args             = { module = "./deploy/TokenExample.args.mjs", export = "args" 
 
 ## Public testnets (preview, preprod)
 
-Both testnet blocks in `compact.toml` point `proof_server` at `http://127.0.0.1:6300`, so start one before deploying: `make env-up` from the repo root, or `docker run -p 6300:6300 midnightntwrk/proof-server:8.0.3`. `proof_server = "auto"` is not usable here — it boots a container from a `proof-server.yml` in the working directory, which this repo does not ship.
+Both testnet blocks in `compact.toml` set `proof_server = "auto"`, so there is nothing to start first: the deployer boots a proof-server container from a compose file it ships and stops it after the deploy. Docker has to be running. To reuse a server you already have, replace `"auto"` with its URL.
 
 ```bash
 yarn deploy:preview   # or yarn cli:preview

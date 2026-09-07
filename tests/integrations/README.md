@@ -79,8 +79,8 @@ make env-down                                             # when you're done ite
 - **dry-run** — loads + validates the config without submitting a tx.
 - **deploy** — deploys Counter to the local stack; asserts the exact `DeployResult` shape and the exact `status: "confirmed"` record persisted at `deployments/compact/local.json`.
 - **history rotation** — redeploying rotates the previous head into `local.history.json`.
-- **proof_server auto** (skipped) — `proof_server = "auto"` boots a `DynamicProofServerContainer` for the duration of the deploy and disposes it on exit. Skipped: testkit-js boots that container from `<cwd>/proof-server.yml`, which the repo does not ship.
-- **async-dispose cleanup** (skipped) — a failure mid-prepare (after the proof server starts) is unwound via `AsyncDisposableStack`; the next deploy still works. Skipped for the same reason.
+- **proof_server auto** — `proof_server = "auto"` boots a `DynamicProofServerContainer` from the `proof-server.yml` packaged in `@openzeppelin/compact-deployer`, deploys through it, and leaves none running afterwards. Needs Docker.
+- **async-dispose cleanup** — a failure mid-prepare, after the proof server has started, unwinds the `AsyncDisposableStack`, leaving no container running. Needs Docker, same as above.
 - **wallet lifecycle** — `Deployer.prepare` doesn't call `wallet.stop()` on dispose when `walletProvider` is injected (caller-owned).
 - **history isolation** — Counter and SecondaryCounter share an artifact but maintain independent head/history slots per contract name.
 - **keystore + passphrase** — `[wallet].keystore` configured in `compact.toml` resolves the seed via the `promptPassphrase` callback; wrong/missing passphrase fails with `WalletError`.

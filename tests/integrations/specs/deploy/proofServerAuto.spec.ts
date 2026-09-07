@@ -1,24 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { deployFixture } from '../../_harness/deployer.ts';
+import { runningAutoProofServers } from '../../_harness/docker.ts';
 import { requireArtifact, wipeDeployments } from '../../_harness/paths.ts';
 
 /**
- * Spec: `proof_server = "auto"` (or CLI `--proof-server auto`) boots a
- * `DynamicProofServerContainer` for the duration of the deploy and
- * disposes it on `Deployer[Symbol.asyncDispose]`.
+ * `proof_server = "auto"` (or CLI `--proof-server auto`) boots a
+ * `DynamicProofServerContainer` for the duration of the deploy and disposes
+ * it on `Deployer[Symbol.asyncDispose]`. The container comes from the
+ * `proof-server.yml` packaged in `@openzeppelin/compact-deployer`.
  *
- * The deploy succeeding end-to-end is sufficient proof: prepare boots
- * the container, the deploy submits through it, then `await using`
- * stops it. A leaked container would surface in a later run as a
- * port collision.
- *
- * TODO: un-skip once the `auto` path has a compose file to boot from.
- * `DynamicProofServerContainer.start` builds a `DockerComposeEnvironment`
- * over `<cwd>/proof-server.yml`, which this repo does not ship, so every
- * `auto` deploy fails with `open <cwd>/proof-server.yml: no such file or
- * directory`.
+ * Requires Docker.
  */
-describe.skip('compact-deploy — proof_server = "auto" boots and disposes a container', () => {
+describe('compact-deploy — proof_server = "auto" boots and disposes a container', () => {
   beforeAll(() => {
     requireArtifact('Counter');
     wipeDeployments();
@@ -28,7 +21,7 @@ describe.skip('compact-deploy — proof_server = "auto" boots and disposes a con
     wipeDeployments();
   });
 
-  it('should boot a dynamic proof-server container and deploy successfully', async () => {
+  it('should deploy through a container it boots and then stops', async () => {
     const result = await deployFixture('Counter', 'CHARLIE', {
       proofServer: 'auto',
     });
@@ -37,12 +30,15 @@ describe.skip('compact-deploy — proof_server = "auto" boots and disposes a con
     expect(result.address).toMatch(/^[0-9a-f]+$/i);
     expect(result.txHash).toMatch(/^[0-9a-f]+$/i);
     expect(result.blockHeight).toBeGreaterThan(0);
+    expect(runningAutoProofServers()).toStrictEqual([]);
   }, 240_000);
 
-  it('should leave no zombie container — a subsequent "auto" deploy still works', async () => {
+  it('should boot a fresh container for a second "auto" deploy', async () => {
     const result = await deployFixture('Counter', 'CHARLIE', {
       proofServer: 'auto',
     });
+
     expect(result.address).toMatch(/^[0-9a-f]+$/i);
+    expect(runningAutoProofServers()).toStrictEqual([]);
   }, 240_000);
 });
