@@ -72,5 +72,5 @@ export async function deployFixture(
     privateStateProvider:
       overrides.privateStateProvider ?? harnessPrivateStateProvider(),
   });
-  return overrides.dryRun ? deployer.dryRun() : deployer.deploy();
+  return overrides.dryRun ? await deployer.dryRun() : await deployer.deploy();
 }
