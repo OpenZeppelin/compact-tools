@@ -451,10 +451,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/ledger-v8@npm:8.1.2":
-  version: 8.1.2
-  resolution: "@midnight-ntwrk/ledger-v8@npm:8.1.2"
-  checksum: 10/f27243ebce72d2e8177245ee0aade6430fdb2bdfd51c4f43394e174f935c655efc4850c76bf1eb015303f366257c0c902da58a94621fde04109e6d03a84970d2
+"@midnight-ntwrk/ledger-v8@npm:8.1.0":
+  version: 8.1.0
+  resolution: "@midnight-ntwrk/ledger-v8@npm:8.1.0"
+  checksum: 10/10d56076b0333a502f157c816f8cfebefc8d50221cb20c6db15abcbf2d0092bdaf7e9bc1bd19a6d9f51455547c713c916cb16d4a7d18e83cba0e172ad6e2a507
   languageName: node
   linkType: hard
 
@@ -1152,7 +1152,7 @@ __metadata:
   dependencies:
     "@midnight-ntwrk/compact-js": "npm:2.5.1"
     "@midnight-ntwrk/compact-runtime": "npm:0.16.0"
-    "@midnight-ntwrk/ledger-v8": "npm:8.1.2"
+    "@midnight-ntwrk/ledger-v8": "npm:8.1.0"
     "@midnight-ntwrk/midnight-js-contracts": "npm:4.1.1"
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "npm:4.1.1"
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "npm:4.1.1"
