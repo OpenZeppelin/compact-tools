@@ -68,6 +68,7 @@ lint-fix:
 
 clean:
 	yarn clean
+	rm -rf $(INTEGRATION_DIR)/fixtures/artifacts logs
 
 # ── Integration-test docker stack ──────────────────────────────────────
 
