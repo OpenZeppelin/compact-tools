@@ -42,11 +42,26 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 | Component | Version |
 |---|---|
 | `@midnight-ntwrk/compact-runtime` | 0.16.0 |
-| `@midnight-ntwrk/ledger-v8` | 8.1.2 |
+| `@midnight-ntwrk/ledger-v8` | 8.1.0 |
 | `@midnight-ntwrk/midnight-js-*` | 4.1.1 |
 | `@midnight-ntwrk/testkit-js` | 4.1.1 |
 | `@midnight-ntwrk/wallet-sdk-facade` | 4.0.1 |
 | Compact compiler | 0.31.1 |
+
+`ledger-v8` is pinned to 8.1.0 because `midnight-js-protocol` 4.1.1 requires exactly that version. A second copy of the ledger WASM in the tree fails a deploy with `expected instance of DustParameters`. npm dedupes to the single pinned copy on its own. yarn and pnpm resolve each range to the newest version, so a project using them adds the same pins as this repo's root `package.json`:
+
+```json
+"resolutions": {
+  "@midnight-ntwrk/ledger-v8": "8.1.0",
+  "@midnight-ntwrk/wallet-sdk-address-format": "3.1.2",
+  "@midnight-ntwrk/wallet-sdk-dust-wallet": "4.1.0",
+  "@midnight-ntwrk/wallet-sdk-facade": "4.0.1",
+  "@midnight-ntwrk/wallet-sdk-shielded": "3.0.1",
+  "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "3.1.0"
+}
+```
+
+(`pnpm.overrides` for pnpm.)
 
 Compile with the pinned compiler: `compact compile +0.31.1`. The current default compactc (0.34.x) emits code for compact-runtime 0.19.0, and the deploy then fails with a `Version mismatch` runtime error.
 
