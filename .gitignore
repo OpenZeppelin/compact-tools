@@ -33,6 +33,9 @@ managed/
 # never gets committed — including under examples/, where the walkthrough
 # expects you to compile the contract yourself before deploying.
 artifacts/
+# compact-compiler's per-source circuit-info cache, written next to the
+# .compact sources it measures.
+.circuit-info.json
 midnight-level-db
 compactc
 
