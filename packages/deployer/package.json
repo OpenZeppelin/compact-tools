@@ -1,7 +1,7 @@
 {
   "name": "@openzeppelin/compact-deployer",
   "description": "Forge-style deployer library for Midnight Compact contracts",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "keywords": [
     "compact",
     "midnight",
