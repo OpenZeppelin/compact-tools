@@ -348,3 +348,48 @@ describe('Artifact.load — default export Contract', () => {
     expect(art.artifactPath).toBe(join(root, 'Default'));
   });
 });
+
+describe('Artifact.verifierKeys', () => {
+  function zkConfigProvider(keys: Record<string, number[]>) {
+    return {
+      getVerifierKeys: vi.fn(async (ids: string[]) =>
+        ids
+          .filter((id) => keys[id] !== undefined)
+          .map((id) => [id, new Uint8Array(keys[id] as number[])] as const),
+      ),
+    } as never;
+  }
+
+  async function loaded(root: string) {
+    makeArtifactDir(root, 'Counter', { circuits: ['dec', 'inc'] });
+    return Artifact.load({
+      rootDir: root,
+      artifactsDir: '.',
+      artifact: 'Counter',
+      contractName: 'Counter',
+    });
+  }
+
+  // INV-11
+  it('returns the bytes the zk-config provider serves, keyed by circuit', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'artifact-keys-'));
+    const artifact = await loaded(root);
+
+    const keys = await artifact.verifierKeys(
+      zkConfigProvider({ inc: [1, 2], dec: [3, 4] }),
+    );
+
+    expect([...keys.keys()].sort()).toStrictEqual(['dec', 'inc']);
+    expect(keys.get('inc')).toStrictEqual(new Uint8Array([1, 2]));
+  });
+
+  // INV-11
+  it('rejects a bundle with no key for a declared circuit', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'artifact-keys-'));
+    const artifact = await loaded(root);
+
+    await expect(
+      artifact.verifierKeys(zkConfigProvider({ inc: [1, 2] })),
+    ).rejects.toThrow(/no verifier key for: dec/);
+  });
+});

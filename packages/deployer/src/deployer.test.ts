@@ -1,28 +1,12 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createUnprovenDeployTx,
   submitTxAsync,
 } from '@midnight-ntwrk/midnight-js-contracts';
-import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
 import pino, { type Logger } from 'pino';
 import * as Rx from 'rxjs';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  type Mock,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Deployer } from './deployer.ts';
 import {
   DeploymentsFileError,
@@ -31,6 +15,9 @@ import {
 } from './errors.ts';
 import { buildProviders } from './providers/build.ts';
 import { WalletHandler } from './wallet/handler.ts';
+
+/** Any bytes: the single-tx path never hands these to the ledger. */
+const KEY_BYTES = new Uint8Array([1, 2, 3]);
 
 /** Lets one test make the deployments lock unobtainable. */
 const lock = vi.hoisted(() => ({ failure: undefined as Error | undefined }));
@@ -42,6 +29,7 @@ vi.mock('./loaders/artifact.ts', () => ({
       zkConfigPath: '/fake/artifact',
       compiledContract: { fake: 'compiled' },
       circuitNames: ['increment'],
+      verifierKeys: vi.fn(async () => new Map([['increment', KEY_BYTES]])),
     })),
   },
 }));
@@ -68,7 +56,20 @@ vi.mock('./wallet/handler.ts', () => ({
 vi.mock('@midnight-ntwrk/midnight-js-contracts', () => ({
   createUnprovenDeployTx: vi.fn(),
   submitTxAsync: vi.fn(),
+  verifierKeysEqual: (a: Uint8Array, b: Uint8Array) =>
+    a.length === b.length && a.every((byte, i) => byte === b[i]),
 }));
+
+// Real implementations throughout; the spy is only so a test can read the
+// signed `MaintenanceUpdate` the loop built.
+// Fragment 0's tx assembly is covered in services/deploy-tx.test.ts; here the
+// spy is what lets a test count deploy submissions and force a block-limit
+// refusal. Everything else in the module stays real.
+vi.mock('./services/deploy-tx.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./services/deploy-tx.ts')>();
+  return { ...actual, submitDeploy: vi.fn(actual.submitDeploy) };
+});
 
 // Real lock everywhere except the one test that needs a timeout: the wait is
 // 10 s in production, too long to spend proving that deploy() reports it.
@@ -105,9 +106,9 @@ vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
     >();
   return {
     ...actual,
-    // logWalletAddresses passes whatever this returns to the codec
-    // mock which ignores the arg. Opaque value is fine.
-    getNetworkId: vi.fn(() => 0),
+    // Read by `buildInsertTx` for `Transaction.fromParts`, and by
+    // `logWalletAddresses` whose codec mock ignores it.
+    getNetworkId: vi.fn(() => 'undeployed'),
   };
 });
 
@@ -124,260 +125,23 @@ vi.mock('@midnight-ntwrk/wallet-sdk-address-format', () => {
   };
 });
 
-const silentLogger = pino({ level: 'silent' });
-
-interface FakeProvider {
-  getCoinPublicKey: () => string;
-  start: Mock;
-  stop: Mock;
-  wallet: {
-    state: () => Rx.Observable<unknown>;
-    shielded: { tag: string; state?: Rx.Observable<unknown> };
-    unshielded?: { state: Rx.Observable<unknown> };
-    dust?: { state: Rx.Observable<unknown> };
-  };
-}
-
-function fakeSubWalletStates() {
-  const addr = { address: 'addr-bytes' };
-  return {
-    shielded: Rx.of(addr),
-    unshielded: Rx.of(addr),
-    dust: Rx.of(addr),
-  };
-}
-
-/**
- * Emits one already-synced `FacadeState` with a `Proxy` balance map that
- * returns `1n` for any token key, so `syncAndVerifyFunds` passes through
- * without a real Rx pipeline (we don't mock ledger-v8 in this file).
- */
-function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
-  const anyKeyHasBalance = new Proxy({} as Record<string, bigint>, {
-    get: () => 1n,
-  });
-  const syncedState = {
-    isSynced: true,
-    shielded: {
-      balances: anyKeyHasBalance,
-      state: {
-        progress: {
-          isStrictlyComplete: () => true,
-          isCompleteWithin: () => true,
-          appliedIndex: 0n,
-          highestIndex: 0n,
-          isConnected: true,
-        },
-      },
-    },
-    unshielded: {
-      balances: anyKeyHasBalance,
-      // Id-shaped, unlike the index-shaped shielded and dust progress.
-      progress: {
-        isStrictlyComplete: () => true,
-        isCompleteWithin: () => true,
-        appliedId: 0n,
-        highestTransactionId: 0n,
-        isConnected: true,
-      },
-    },
-    dust: {
-      state: {
-        progress: {
-          isStrictlyComplete: () => true,
-          isCompleteWithin: () => true,
-          appliedIndex: 0n,
-          highestIndex: 0n,
-          isConnected: true,
-        },
-      },
-      balance: () => 1n,
-    },
-  };
-  const sub = fakeSubWalletStates();
-  return {
-    getCoinPublicKey: () => coinKey,
-    start: vi.fn(async () => undefined),
-    stop: vi.fn(async () => undefined),
-    wallet: {
-      state: () => Rx.of(syncedState as unknown),
-      shielded: { tag: 'shielded', state: sub.shielded },
-      unshielded: { state: sub.unshielded },
-      dust: { state: sub.dust },
-    },
-  };
-}
-
-function asInjected(p: FakeProvider): MidnightWalletProvider {
-  return p as unknown as MidnightWalletProvider;
-}
-
-interface FakeOwned {
-  owned: WalletHandler;
-  provider: FakeProvider;
-  dispose: Mock;
-  saveCache: Mock;
-}
-
-function fakeOwnedWallet(coinKey = '0xCOIN'): FakeOwned {
-  return fakeOwnedFromProvider(fakeProvider(coinKey));
-}
-
-function fakeOwnedFromProvider(provider: FakeProvider): FakeOwned {
-  const dispose = vi.fn(async () => {
-    await provider.stop();
-  });
-  const saveCache = vi.fn(async () => undefined);
-  const owned = {
-    provider,
-    saveCache,
-    [Symbol.asyncDispose]: dispose,
-  } as unknown as WalletHandler;
-  return { owned, provider, dispose, saveCache };
-}
-
-/**
- * Provider whose `wallet.state()` is fully caller-controlled. Used to drive
- * timeout / unfunded / mixed-funds branches of `syncAndVerifyFunds`.
- */
-function fakeProviderWithState(
-  state$: Rx.Observable<unknown>,
-  coinKey = '0xCOIN',
-): FakeProvider {
-  const sub = fakeSubWalletStates();
-  return {
-    getCoinPublicKey: () => coinKey,
-    start: vi.fn(async () => undefined),
-    stop: vi.fn(async () => undefined),
-    wallet: {
-      state: () => state$,
-      shielded: { tag: 'shielded', state: sub.shielded },
-      unshielded: { state: sub.unshielded },
-      dust: { state: sub.dust },
-    },
-  };
-}
-
-function fakeUnsubmittedDeploy(address = '0xCONTRACT') {
-  return {
-    public: { contractAddress: address },
-    private: {
-      unprovenTx: { tag: 'unproven' },
-      signingKey: 'contract-maintenance-key',
-      initialPrivateState: { seeded: true },
-    },
-  };
-}
-
-function fakeFinalized(overrides: Record<string, unknown> = {}) {
-  return {
-    status: 'SucceedEntirely',
-    txId: '0xTX',
-    txHash: '0xHASH',
-    blockHeight: 1234,
-    ...overrides,
-  };
-}
-
-interface FakeProviders {
-  publicDataProvider: { watchForTxData: Mock };
-  privateStateProvider: {
-    setContractAddress: Mock;
-    set: Mock;
-    setSigningKey: Mock;
-  };
-}
-
-function fakeProviders(): FakeProviders {
-  return {
-    publicDataProvider: {
-      watchForTxData: vi.fn(async () => fakeFinalized()),
-    },
-    privateStateProvider: {
-      setContractAddress: vi.fn(),
-      set: vi.fn(async () => undefined),
-      setSigningKey: vi.fn(async () => undefined),
-    },
-  };
-}
-
-/** Pino stubbed down to the four levels the deploy path uses. */
-function recordingLogger(): { logger: Logger; info: Mock } {
-  const info = vi.fn();
-  return {
-    logger: {
-      info,
-      debug: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    } as unknown as Logger,
-    info,
-  };
-}
-
-/** The head ledger file for the fixture's only network. */
-function headPath(rootDir: string): string {
-  return join(rootDir, 'deployments', 'local.json');
-}
-
-function readHead(rootDir: string): Record<string, Record<string, unknown>> {
-  return JSON.parse(readFileSync(headPath(rootDir), 'utf8'));
-}
-
-interface Fixture {
-  rootDir: string;
-  configPath: string;
-  cleanup: () => void;
-}
-
-function writeFixture(
-  opts: {
-    explorer?: string;
-    syncTimeout?: number;
-    syncBatchSize?: number;
-    initPrivateState?: string;
-  } = {},
-): Fixture {
-  const rootDir = mkdtempSync(join(tmpdir(), 'deployer-test-'));
-  const explorerLine = opts.explorer ? `explorer = "${opts.explorer}"\n` : '';
-  const syncTimeoutLine =
-    opts.syncTimeout !== undefined
-      ? `sync_timeout = ${opts.syncTimeout}\n`
-      : '';
-  const syncBatchLine =
-    opts.syncBatchSize !== undefined
-      ? `sync_batch_size = ${opts.syncBatchSize}\n`
-      : '';
-  const initStateLine =
-    opts.initPrivateState !== undefined
-      ? `init_private_state = { file = "${opts.initPrivateState}" }\n`
-      : '';
-  const toml = `
-[profile]
-artifacts_dir = "artifacts"
-deployments_dir = "deployments"
-
-[networks.local]
-network_id = "undeployed"
-indexer = "http://localhost:8088/api/v1/graphql"
-indexer_ws = "ws://localhost:8088/api/v1/graphql/ws"
-node = "http://localhost:9944"
-node_ws = "ws://localhost:9944"
-proof_server = "http://localhost:6300"
-wallet = { source = "local", index = 0 }
-${explorerLine}${syncTimeoutLine}${syncBatchLine}
-[contracts.Counter]
-artifact = "Counter"
-signing_key_file = "signing-key.hex"
-${initStateLine}`;
-  writeFileSync(join(rootDir, 'compact.toml'), toml);
-  writeFileSync(join(rootDir, 'signing-key.hex'), `${'aa'.repeat(32)}\n`);
-  return {
-    rootDir,
-    configPath: join(rootDir, 'compact.toml'),
-    cleanup: () => rmSync(rootDir, { recursive: true, force: true }),
-  };
-}
+import {
+  asInjected,
+  type FakeProviders,
+  type Fixture,
+  fakeFinalized,
+  fakeOwnedFromProvider,
+  fakeOwnedWallet,
+  fakeProvider,
+  fakeProviders,
+  fakeProviderWithState,
+  fakeUnsubmittedDeploy,
+  headPath,
+  readHead,
+  recordingLogger,
+  silentLogger,
+  writeFixture,
+} from './deployer.testkit.ts';
 
 describe('Deployer', () => {
   let fx: Fixture;

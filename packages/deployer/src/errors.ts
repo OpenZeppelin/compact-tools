@@ -43,6 +43,20 @@ export class PendingDeployExistsError extends ConfigError {
   }
 }
 
+/**
+ * A prior fragmented deploy of the same contract is unfinished on this network
+ * and the caller asked for a fresh deploy anyway. Exit code `2`.
+ */
+export class PartialDeployExistsError extends ConfigError {
+  constructor(contractName: string, address: string, options?: ErrorOptions) {
+    super(
+      `"${contractName}" has an unfinished fragmented deploy at ${address}. Re-run without --force to resume it, or keep --force to abandon it and deploy a new contract.`,
+      options,
+    );
+    this.name = 'PartialDeployExistsError';
+  }
+}
+
 /** Deployer wallet has zero balance. Exit code `3`. */
 export class UnfundedWalletError extends DeployError {
   constructor(address: string, options?: ErrorOptions) {
@@ -69,6 +83,74 @@ export class DeployTxFailedError extends DeployError {
     super(message, 5, options);
     this.name = 'DeployTxFailedError';
   }
+}
+
+/**
+ * The node's tx pool refused a transaction as too large at the configured or
+ * minimum fragment size. Exit code `7`: the tx was never admitted, so no fee
+ * was charged, which is what separates it from a plain
+ * {@link DeployTxFailedError}.
+ *
+ * Refused on the deploy tx, nothing is written at all. Refused on an insert,
+ * the contract is already deployed, so the caller wraps this in a
+ * {@link FragmentDeployError} and the `partial` record survives.
+ */
+export class BlockLimitError extends DeployTxFailedError {
+  override readonly exitCode = 7;
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'BlockLimitError';
+  }
+}
+
+export interface FragmentDeployErrorFields {
+  address: string;
+  /** Read from chain, not from the plan. */
+  circuitsOnChain: readonly string[];
+  circuitsPending: readonly string[];
+  reason: string;
+  /** The failed insert, when one was submitted. */
+  txId?: string;
+  /**
+   * The wait hit its ceiling rather than the node ruling on the transaction,
+   * so `txId` may still land.
+   */
+  timedOut?: boolean;
+}
+
+/**
+ * A fragmented deploy stopped after the deploy tx landed. Exit code `8`.
+ *
+ * The contract exists and is callable with a subset of its circuits. The fields
+ * are the whole reconciliation surface, and re-running the same deploy command
+ * resumes from chain state. Carries no signing key.
+ */
+export class FragmentDeployError extends DeployError {
+  readonly address: string;
+  readonly circuitsOnChain: readonly string[];
+  readonly circuitsPending: readonly string[];
+  readonly txId: string | undefined;
+  readonly timedOut: boolean;
+
+  constructor(fields: FragmentDeployErrorFields, options?: ErrorOptions) {
+    const { address, circuitsOnChain, circuitsPending, reason, txId } = fields;
+    super(
+      `Fragmented deploy of ${address} is incomplete: ${reason}. On chain: ${list(circuitsOnChain)}. Pending: ${list(circuitsPending)}.${txId ? ` Failed insert txId ${txId}.` : ''} The partial record is left in place; re-run the same deploy to resume.`,
+      8,
+      options,
+    );
+    this.name = 'FragmentDeployError';
+    this.address = address;
+    this.circuitsOnChain = circuitsOnChain;
+    this.circuitsPending = circuitsPending;
+    this.txId = txId;
+    this.timedOut = fields.timedOut === true;
+  }
+}
+
+function list(circuits: readonly string[]): string {
+  return circuits.length > 0 ? circuits.join(', ') : '(none)';
 }
 
 /**

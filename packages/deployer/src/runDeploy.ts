@@ -1,7 +1,7 @@
 import pino, { type Logger } from 'pino';
 import { CompactConfig } from './config/compact-config.ts';
 import { Deployer, type DeployResult } from './deployer.ts';
-import { DeployError } from './errors.ts';
+import { DeployError, FragmentDeployError } from './errors.ts';
 import { parseDeployArgv } from './loaders/argv.ts';
 import { resolveContractName } from './loaders/contract-resolve.ts';
 import { formatError } from './services/error-format.ts';
@@ -119,6 +119,11 @@ export interface RunDeployOptions<
   force?: boolean;
   /** Dust/shielded sync batch size. Argv: `--sync-batch-size`. Default 5000. */
   syncBatchSize?: number;
+  /**
+   * Verifier keys per transaction, for a contract too large to deploy in one
+   * tx. Argv: `--circuits-per-tx`, TOML: `[contracts.X].circuits_per_tx`.
+   */
+  circuitsPerTx?: number;
   /** Skip the on-disk wallet-state cache. Argv: `--no-cache`. */
   skipWalletCache?: boolean;
   /**
@@ -168,7 +173,7 @@ export interface RunDeployOptions<
  *    ```
  *
  * Parses `--network`, `--dry-run`, `--sync-timeout`, `--tx-timeout`,
- * `--sync-batch-size`, `--no-cache`, `--force`, `--seed-cache-from-dust`,
+ * `--sync-batch-size`, `--circuits-per-tx`, `--no-cache`, `--force`, `--seed-cache-from-dust`,
  * `--seed-cache-from-shielded`, `--seed-cache-from-unshielded`,
  * `--seed-file`, `--proof-server`,
  * `--config`, `--json`, `-v` / `--verbose` from `process.argv` as defaults. Explicit options win
@@ -254,6 +259,7 @@ async function runDeployImpl(
       txTimeoutMs: txTimeoutSec !== undefined ? txTimeoutSec * 1000 : undefined,
       force: opts.force ?? argv.force,
       syncBatchSize: opts.syncBatchSize ?? argv.syncBatchSize,
+      circuitsPerTx: opts.circuitsPerTx ?? argv.circuitsPerTx,
       skipWalletCache: opts.skipWalletCache ?? argv.noCache,
       seedCacheDust: opts.seedCacheFromDust ?? argv.seedCacheFromDust,
       seedCacheShielded:
@@ -321,6 +327,20 @@ function printResult(
  * catches and lets the process end normally; an uncaught rethrow takes
  * Node's unhandled-rejection path and exits 1.
  */
+/**
+ * A stopped fragmented deploy is resumable, so a `--json` consumer needs the
+ * address and both circuit lists as data rather than parsed out of the message.
+ */
+function fragmentFields(e: unknown): Record<string, unknown> {
+  if (!(e instanceof FragmentDeployError)) return {};
+  return {
+    address: e.address,
+    circuitsOnChain: e.circuitsOnChain,
+    circuitsPending: e.circuitsPending,
+    ...(e.txId !== undefined ? { txId: e.txId } : {}),
+  };
+}
+
 function handleError(
   e: unknown,
   opts: { json: boolean; verbose: boolean; logger: Logger },
@@ -333,7 +353,7 @@ function handleError(
   const message = e instanceof Error ? e.message : formatError(e);
   if (opts.json) {
     process.stdout.write(
-      `${JSON.stringify({ error: name, message, exitCode: code })}\n`,
+      `${JSON.stringify({ error: name, message, exitCode: code, ...fragmentFields(e) })}\n`,
     );
   } else {
     opts.logger.error({ err: message }, `Deploy failed: ${name}`);

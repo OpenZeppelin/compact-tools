@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as compactConfigModule from './config/compact-config.ts';
 import * as deployerModule from './deployer.ts';
-import { DeployError } from './errors.ts';
+import { DeployError, FragmentDeployError } from './errors.ts';
 import * as contractResolveModule from './loaders/contract-resolve.ts';
 import { constructorArgs, runDeploy } from './runDeploy.ts';
 
@@ -297,6 +297,58 @@ describe('runDeploy', () => {
     expect(parsed.error).toBe('DeployError');
     expect(parsed.message).toBe('boom');
     expect(parsed.exitCode).toBe(3);
+  });
+
+  // INV-30
+  it('emits the fragmented-deploy fields as structured JSON', async () => {
+    process.argv = ['node', 'script.ts', '--json'];
+    const err = new FragmentDeployError({
+      address: '0xADDR',
+      circuitsOnChain: ['approve', 'burn'],
+      circuitsPending: ['evict'],
+      reason: 'insert timed out',
+      txId: '0xINSERT',
+    });
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(err);
+
+    await expect(runDeploy({ contract: 'X' })).rejects.toBe(err);
+
+    const parsed = JSON.parse(writeSpy.mock.calls[0]?.[0] as string);
+    expect(parsed.exitCode).toBe(8);
+    expect(parsed.address).toBe('0xADDR');
+    expect(parsed.circuitsOnChain).toStrictEqual(['approve', 'burn']);
+    expect(parsed.circuitsPending).toStrictEqual(['evict']);
+    expect(parsed.txId).toBe('0xINSERT');
+  });
+
+  it('omits the fragmented-deploy fields for any other error', async () => {
+    process.argv = ['node', 'script.ts', '--json'];
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(
+      new DeployError('boom', 3),
+    );
+
+    await expect(runDeploy({ contract: 'X' })).rejects.toThrow('boom');
+
+    const parsed = JSON.parse(writeSpy.mock.calls[0]?.[0] as string);
+    expect(parsed).not.toHaveProperty('address');
+    expect(parsed).not.toHaveProperty('circuitsPending');
+  });
+
+  it('omits txId when the fragmented deploy failed before any insert', async () => {
+    process.argv = ['node', 'script.ts', '--json'];
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(
+      new FragmentDeployError({
+        address: '0xADDR',
+        circuitsOnChain: [],
+        circuitsPending: ['approve'],
+        reason: 'chain state never caught up',
+      }),
+    );
+
+    await expect(runDeploy({ contract: 'X' })).rejects.toThrow('0xADDR');
+
+    const parsed = JSON.parse(writeSpy.mock.calls[0]?.[0] as string);
+    expect(parsed).not.toHaveProperty('txId');
   });
 
   it('should set exitCode 1 and rethrow on a non-DeployError', async () => {

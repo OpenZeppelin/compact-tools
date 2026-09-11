@@ -6,6 +6,7 @@ import {
   ShieldedAddress,
   UnshieldedAddress,
 } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { PendingTransactions } from '@midnight-ntwrk/wallet-sdk-capabilities';
 import type { FacadeState } from '@midnight-ntwrk/wallet-sdk-facade';
 import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
@@ -110,6 +111,71 @@ export function describeProgress(p: SubWalletSyncProgress): string {
   }
   const pct = Number((applied * 100n) / highest);
   return `${applied}/${highest} (${pct}%) connected=${connected} complete=${complete}`;
+}
+
+/**
+ * The dust index the wallet must pass before its view can include a spend
+ * submitted now. Read immediately before submitting.
+ */
+export async function readDustTip(
+  wallet: MidnightWalletProvider,
+): Promise<bigint> {
+  const state = await Rx.firstValueFrom(wallet.wallet.state());
+  return state.dust.state.progress.highestRelevantWalletIndex;
+}
+
+export interface AwaitDustSettledArgs {
+  wallet: MidnightWalletProvider;
+  /** From {@link readDustTip}, taken before the transaction was submitted. */
+  appliedBeyond: bigint;
+  timeoutMs: number;
+}
+
+/**
+ * Whether the wallet has caught up with a spend submitted at `appliedBeyond`.
+ *
+ * Two conditions, because neither alone is enough. The dust index is a global
+ * event id, so on a busy chain an unrelated event can carry it past the mark
+ * before our own spend applies. The facade's pending set names the
+ * transactions it is still waiting on, which is exactly our spend, but a
+ * facade that never tracked it reports an empty set from the start.
+ */
+function dustCaughtUp(state: FacadeState, appliedBeyond: bigint): boolean {
+  if (state.dust.state.progress.appliedIndex <= appliedBeyond) return false;
+  const pending = state.pending;
+  return (
+    pending === undefined ||
+    PendingTransactions.allPending(pending).length === 0
+  );
+}
+
+/**
+ * Wait for the wallet to have applied dust events past `appliedBeyond` and to
+ * hold no transaction of its own still pending.
+ *
+ * Two fragments balanced against the same dust UTXO make the second a
+ * double-spend. `isCompleteWithin` is not enough: it passes a wallet sitting a
+ * few events behind the tip, which is exactly the window where the spend is
+ * still unseen.
+ */
+export async function awaitDustSettled({
+  wallet,
+  appliedBeyond,
+  timeoutMs,
+}: AwaitDustSettledArgs): Promise<void> {
+  try {
+    await Rx.firstValueFrom(
+      wallet.wallet.state().pipe(
+        Rx.filter((s: FacadeState) => dustCaughtUp(s, appliedBeyond)),
+        Rx.timeout({ each: timeoutMs }),
+      ),
+    );
+  } catch (e) {
+    throw new WalletError(
+      `The wallet did not apply dust events past index ${appliedBeyond} within ${timeoutMs} ms, so the next transaction could double-spend`,
+      { cause: e },
+    );
+  }
 }
 
 export interface SyncAndVerifyFundsArgs {

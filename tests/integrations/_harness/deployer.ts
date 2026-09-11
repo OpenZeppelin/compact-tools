@@ -13,7 +13,12 @@ import { CONFIG_PATH } from './paths.ts';
 import { getSharedPool, type PoolAlias } from './walletPool.ts';
 
 /** Contracts registered in `tests/integrations/compact.toml`. */
-export type FixtureContract = 'Counter' | 'SecondaryCounter' | 'PrivateCounter';
+export type FixtureContract =
+  | 'Counter'
+  | 'SecondaryCounter'
+  | 'PrivateCounter'
+  | 'Fragmented'
+  | 'FragmentedNoBudget';
 
 /**
  * Fresh `inMemoryPrivateStateProvider` per call so each integration

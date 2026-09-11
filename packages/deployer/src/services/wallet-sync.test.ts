@@ -4,8 +4,10 @@ import * as Rx from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { UnfundedWalletError, WalletError } from '../errors.ts';
 import {
+  awaitDustSettled,
   describeProgress,
   logWalletAddresses,
+  readDustTip,
   syncAndVerifyFunds,
 } from './wallet-sync.ts';
 
@@ -400,5 +402,93 @@ describe('syncAndVerifyFunds', () => {
     expect(state$.observers).toHaveLength(3);
     state$.next(facadeState());
     await pending;
+  });
+});
+
+describe('readDustTip', () => {
+  // INV-19
+  it('returns the highest relevant dust index', async () => {
+    const wallet = {
+      wallet: {
+        state: () =>
+          Rx.of({
+            dust: {
+              state: { progress: { highestRelevantWalletIndex: 41n } },
+            },
+          }),
+      },
+    } as unknown as MidnightWalletProvider;
+
+    expect(await readDustTip(wallet)).toBe(41n);
+  });
+});
+
+describe('awaitDustSettled', () => {
+  /** Emits one state per entry, so a test can hold the wallet behind the mark. */
+  function walletApplying(
+    indices: bigint[],
+    pending?: { all: unknown[] },
+  ): MidnightWalletProvider {
+    return {
+      wallet: {
+        state: () =>
+          Rx.from(
+            indices.map((appliedIndex) => ({
+              dust: { state: { progress: { appliedIndex } } },
+              pending,
+            })),
+          ),
+      },
+    } as unknown as MidnightWalletProvider;
+  }
+
+  // INV-19
+  it('waits past a wallet that is only near the tip, then returns', async () => {
+    await expect(
+      awaitDustSettled({
+        wallet: walletApplying([40n, 41n, 42n]),
+        appliedBeyond: 41n,
+        timeoutMs: 1000,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  // INV-19
+  it('waits while the wallet still holds a transaction of its own pending', async () => {
+    const thrown = await awaitDustSettled({
+      // The index is past the mark, but the wallet has not resolved its own
+      // transaction, which is the spend we care about.
+      wallet: walletApplying([42n], { all: [{ tx: 'ours' }] }),
+      appliedBeyond: 41n,
+      timeoutMs: 5,
+    }).catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(WalletError);
+  });
+
+  // INV-19
+  it('returns once the wallet has resolved its own transaction', async () => {
+    await expect(
+      awaitDustSettled({
+        wallet: walletApplying([42n], {
+          all: [{ tx: 'ours', result: { status: 'SUCCESS', segments: [] } }],
+        }),
+        appliedBeyond: 41n,
+        timeoutMs: 1000,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  // INV-19
+  it('fails rather than balancing against a wallet still short of the mark', async () => {
+    const thrown = await awaitDustSettled({
+      wallet: walletApplying([40n, 41n]),
+      appliedBeyond: 41n,
+      timeoutMs: 5,
+    }).catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(WalletError);
+    expect((thrown as Error).message).toContain('past index 41');
+    expect((thrown as WalletError).exitCode).toBe(3);
   });
 });

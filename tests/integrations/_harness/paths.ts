@@ -17,7 +17,7 @@ export const ARTIFACTS_DIR = resolve(ROOT_DIR, 'fixtures/artifacts');
 export const DEPLOYMENTS_DIR = resolve(ROOT_DIR, 'deployments/compact');
 
 /** Fixtures `make compile` emits an artifact tree for. */
-export type FixtureArtifact = 'Counter' | 'PrivateCounter';
+export type FixtureArtifact = 'Counter' | 'PrivateCounter' | 'Fragmented';
 
 /** Throw with the compile hint when `name`'s artifact is not on disk yet. */
 export function requireArtifact(name: FixtureArtifact): void {

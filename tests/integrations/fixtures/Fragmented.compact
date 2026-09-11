@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: Apache-2.0
+// Integration-test fixture for @openzeppelin/compact-deploy.
+//
+// Twenty circuits: above the ~15-circuit ceiling where a single-tx deploy is
+// refused with `1010 ... block limits` on midnight-node 0.22.2. Fixture for the
+// Tests stage. Constructor creates no Zswap coin, so the split path accepts it.
+
+pragma language_version >= 0.21.0;
+
+import CompactStandardLibrary;
+
+export ledger slot01: Counter;
+export ledger slot02: Counter;
+export ledger slot03: Counter;
+export ledger slot04: Counter;
+export ledger slot05: Counter;
+export ledger slot06: Counter;
+export ledger slot07: Counter;
+export ledger slot08: Counter;
+export ledger slot09: Counter;
+export ledger slot10: Counter;
+export ledger slot11: Counter;
+export ledger slot12: Counter;
+export ledger slot13: Counter;
+export ledger slot14: Counter;
+export ledger slot15: Counter;
+export ledger slot16: Counter;
+export ledger slot17: Counter;
+export ledger slot18: Counter;
+export ledger slot19: Counter;
+export ledger slot20: Counter;
+
+export circuit step01(delta: Uint<16>): [] {
+  slot01.increment(disclose(delta));
+}
+
+export circuit step02(delta: Uint<16>): [] {
+  slot02.increment(disclose(delta));
+}
+
+export circuit step03(delta: Uint<16>): [] {
+  slot03.increment(disclose(delta));
+}
+
+export circuit step04(delta: Uint<16>): [] {
+  slot04.increment(disclose(delta));
+}
+
+export circuit step05(delta: Uint<16>): [] {
+  slot05.increment(disclose(delta));
+}
+
+export circuit step06(delta: Uint<16>): [] {
+  slot06.increment(disclose(delta));
+}
+
+export circuit step07(delta: Uint<16>): [] {
+  slot07.increment(disclose(delta));
+}
+
+export circuit step08(delta: Uint<16>): [] {
+  slot08.increment(disclose(delta));
+}
+
+export circuit step09(delta: Uint<16>): [] {
+  slot09.increment(disclose(delta));
+}
+
+export circuit step10(delta: Uint<16>): [] {
+  slot10.increment(disclose(delta));
+}
+
+export circuit step11(delta: Uint<16>): [] {
+  slot11.increment(disclose(delta));
+}
+
+export circuit step12(delta: Uint<16>): [] {
+  slot12.increment(disclose(delta));
+}
+
+export circuit step13(delta: Uint<16>): [] {
+  slot13.increment(disclose(delta));
+}
+
+export circuit step14(delta: Uint<16>): [] {
+  slot14.increment(disclose(delta));
+}
+
+export circuit step15(delta: Uint<16>): [] {
+  slot15.increment(disclose(delta));
+}
+
+export circuit step16(delta: Uint<16>): [] {
+  slot16.increment(disclose(delta));
+}
+
+export circuit step17(delta: Uint<16>): [] {
+  slot17.increment(disclose(delta));
+}
+
+export circuit step18(delta: Uint<16>): [] {
+  slot18.increment(disclose(delta));
+}
+
+export circuit step19(delta: Uint<16>): [] {
+  slot19.increment(disclose(delta));
+}
+
+export circuit step20(delta: Uint<16>): [] {
+  slot20.increment(disclose(delta));
+}

@@ -6,6 +6,19 @@ file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Fragmented deploy for contracts too large for one block, driven by `--circuits-per-tx` / `[contracts.X].circuits_per_tx`, with resume from chain state and a strict verify before `confirmed`. See the README's "Large contracts" section
+- `DeployResult` gains `fragments` and `circuits`; both appear in `--json`, alongside a failed fragmented deploy's `address`, `circuitsOnChain`, `circuitsPending`, and `txId`
+- Exit codes `7` (`BlockLimitError`: the deploy tx was refused as too large at the configured or minimum fragment size) and `8` (`FragmentDeployError`: fragmented deploy incomplete and resumable)
+
+### Changed
+
+- `DeploymentRecord` gains a `partial` member. A single-tx deploy still writes only `pending` then `confirmed`, so an exhaustive `switch` on `status` needs a new arm only if it reads records from a split deploy
+- A deploy that fits one transaction is unchanged: same transaction, same `pending` then `confirmed` records, no chain read and no maintenance transaction
+
 ## 0.1.0 (2026-09-09)
 
 ### Fixed
