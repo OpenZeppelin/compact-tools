@@ -42,6 +42,9 @@ describe('compact-deploy — Counter deploys to local stack', () => {
       dryRun: false,
       // `[networks.local]` configures no explorer.
       explorerUrl: '',
+      // INV-20: one circuit fits one transaction, so nothing is fragmented.
+      fragments: 1,
+      circuits: 1,
     });
     expect(result.blockHeight).toBeGreaterThan(0);
   });
