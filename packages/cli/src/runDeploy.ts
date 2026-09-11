@@ -92,6 +92,7 @@ async function main(): Promise<void> {
       seedCacheShielded: args.seedCacheFromShielded,
       seedCacheUnshielded: args.seedCacheFromUnshielded,
       syncBatchSize: args.syncBatchSize,
+      circuitsPerTx: args.circuitsPerTx,
       logger,
       promptPassphrase: async (path) => {
         if (spinner) spinner.stop();
@@ -184,12 +185,17 @@ function showUsage(): void {
   );
   console.log(
     chalk.yellow(
-      '  --tx-timeout <s>      Max seconds to wait for tx finalization (default 600)',
+      '  --tx-timeout <s>      Max seconds per tx finalization, indexer catch-up, and dust settle (default 600)',
     ),
   );
   console.log(
     chalk.yellow(
       '  --sync-batch-size <n> Dust/shielded sync batch size (default 5000)',
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      '  --circuits-per-tx <n> Verifier keys per tx; splits a large deploy (default: one tx)',
     ),
   );
   console.log(
@@ -214,7 +220,7 @@ function showUsage(): void {
   );
   console.log(
     chalk.yellow(
-      '  --force               Replace a pending deploy record for this contract',
+      '  --force               Replace a pending or partial deploy record for this contract',
     ),
   );
   console.log(

@@ -11,6 +11,7 @@ Releases before this file see the `compact-cli/v*` tags.
 
 ### Added
 
+- `compact-deploy --circuits-per-tx <n>` forwards the fragment budget to the deployer, splitting a contract too large for one deploy transaction
 - `compact-deploy` bin, a wrapper around [`@openzeppelin/compact-deployer`](../deployer) that deploys a compiled contract to a Midnight network (#86)
 
 ### Changed
