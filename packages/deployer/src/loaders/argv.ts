@@ -12,6 +12,7 @@ export interface ParsedDeployArgv {
   syncTimeoutSec?: number;
   txTimeoutSec?: number;
   syncBatchSize?: number;
+  circuitsPerTx?: number;
   seedCacheFromDust?: string;
   seedCacheFromShielded?: string;
   seedCacheFromUnshielded?: string;
@@ -128,6 +129,12 @@ export function parseDeployArgv(
           '--sync-batch-size',
         );
         break;
+      case '--circuits-per-tx':
+        out.circuitsPerTx = expectPositiveInt(
+          expectValue(argv, ++i, '--circuits-per-tx'),
+          '--circuits-per-tx',
+        );
+        break;
       default:
         if (opts.rejectUnknownFlags === true && arg.startsWith('--')) {
           throw new Error(`Unknown flag: ${arg}`);
@@ -147,8 +154,10 @@ function expectValue(argv: string[], i: number, flag: string): string {
 }
 
 function expectPositiveInt(raw: string, flag: string, unit = ''): number {
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n <= 0) {
+  const n = Number(raw);
+  // `parseInt` would read "1.5" as 1 and "3abc" as 3, both of which the user
+  // did not ask for.
+  if (!Number.isInteger(n) || n <= 0) {
     throw new Error(`${flag} requires a positive integer${unit}; got "${raw}"`);
   }
   return n;

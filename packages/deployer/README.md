@@ -77,10 +77,11 @@ compact-deploy <Contract>
   --seed-file <path>        seed override (raw hex or BIP39 mnemonic, one line)
   --proof-server <url>      override [networks.X].proof_server
   --sync-timeout <seconds>  max wait for wallet to reach chain tip (default 600)
-  --tx-timeout <seconds>    max wait for deploy-tx finalization (default 600)
+  --tx-timeout <seconds>    max wait per tx finalization, indexer catch-up, and dust settle (default 600)
   --sync-batch-size <n>     dust/shielded sync batch size (default 5000)
+  --circuits-per-tx <n>     verifier keys per tx; splits a large deploy (default: one tx)
   --no-cache                ignore on-disk wallet-state cache; force fresh sync
-  --force                   replace a pending deploy record for this contract
+  --force                   replace a pending or partial deploy record for this contract
   --seed-cache-from-dust <path>      import a pre-warmed dust state file into .states/
   --seed-cache-from-shielded <path>  import a pre-warmed shielded state file into .states/
   --seed-cache-from-unshielded <path> import a pre-warmed unshielded state file into .states/
@@ -90,9 +91,32 @@ compact-deploy <Contract>
   -h, --help                --version
 ```
 
-Exit codes: `0` ok · `2` config error (includes a pending deploy record without `--force`) · `3` wallet error · `5` deploy tx failed or not confirmed · `6` deployments ledger unreadable or unwritable · `1` unexpected.
+Exit codes: `0` ok · `2` config error (includes a pending or partial deploy record without `--force`) · `3` wallet error · `5` deploy tx failed or not confirmed · `6` deployments ledger unreadable or unwritable · `7` the deploy tx was refused as too large at the configured or minimum fragment size · `8` fragmented deploy incomplete · `1` unexpected.
 
 A deploy writes a `status: "pending"` record (address, txId) to `deployments/<network>.json` as soon as the node accepts the tx, then promotes it to `status: "confirmed"` (txHash, blockHeight) on finalization. A dropped connection or `--tx-timeout` leaves the pending record in place and names the address and txId in the error; the next deploy of that contract refuses until you check the tx on chain and pass `--force`.
+
+## Large contracts
+
+The node rejects a deploy tx above the per-block extrinsic limit with `1010: Invalid Transaction: Transaction would exhaust the block limits`. Weight grows with circuit count, so past roughly 15 circuits a single-tx deploy stops landing on the local stack.
+
+- `--circuits-per-tx <n>` (or `[contracts.X].circuits_per_tx`) splits the deploy: fragment 0's verifier keys ride the deploy tx, each further fragment is one `MaintenanceUpdate` batching `VerifierKeyInsert`s.
+- Left unset, the deployer submits the largest batch it can and halves on a refusal, down to a single circuit. There is no pre-flight weight check.
+- One `deploy()` call does the deploy, every insert, and a byte-for-byte check of every on-chain verifier key against the artifact. Only that check writes `confirmed`.
+- Fragments are ordered by sorted circuit name, so a rerun rebuilds the same plan.
+- Between fragment 0 landing and the last insert the contract is live with a subset of its circuits.
+- Each fragment waits for the wallet to apply the previous spend before the next tx is balanced.
+- A constructor that creates or spends a Zswap coin cannot be split: exit 2.
+- A maintenance committee with a threshold above 1 is refused: the deployer holds one key. Exit 2.
+
+A split deploy writes `status: "partial"` (address, txId, `circuitsOnChain`, `circuitsPending`) instead of `pending`. Re-running the same deploy command resumes it: the remaining circuits come from chain state, not from the record. Resume is refused with exit 2 unless the recorded address exists, its maintenance committee holds this signing key, and every on-chain key matches the artifact. `--force` on a `partial` head abandons it (rotated into history) and deploys a new contract at a new address.
+
+A resume stores the signing key for the address if the private-state store lacks it. It does not restore `initialPrivateState`: that value only exists inside the constructor run the original deploy did, so a dApp that needs it must seed the store itself.
+
+`--json` results carry `fragments` (transactions the address has taken, counting an interrupted run's inserts) and `circuits` (keys verified on chain). A `--json` failure of a fragmented deploy also carries `address`, `circuitsOnChain`, `circuitsPending`, and the failed insert's `txId`.
+
+**Resume guard limit.** The guard proves the recorded address holds a contract this signing key maintains whose on-chain keys match this artifact; it cannot tell two deploys of the same artifact with the same key apart. Do not hand-edit a `partial` record's `address`, or a sibling deploy will receive this run's remaining keys.
+
+The `// INV-N` tags in `src/` refer to [docs/invariants.md](./docs/invariants.md).
 
 ## Deploying to real networks (preprod, preview, testnet)
 
@@ -201,6 +225,8 @@ signing_key_file   = "./deploy/Token.signingkey"
 artifact         = "src/artifacts/Vault/Vault"
 args             = []
 signing_key_file = "./deploy/Vault.signingkey"
+# Split this deploy into fragments of 8 verifier keys. See "Large contracts".
+circuits_per_tx  = 8
 ```
 
 `proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the duration of the deploy; omitting it falls back to the env var `PROOF_SERVER_PORT` then to `http://127.0.0.1:6300`.

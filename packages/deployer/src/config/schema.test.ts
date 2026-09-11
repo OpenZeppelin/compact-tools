@@ -311,3 +311,32 @@ describe('isFileRef / isModuleRef', () => {
     expect(isModuleRef(null)).toBe(false);
   });
 });
+
+describe('circuits_per_tx', () => {
+  // INV-6
+  it('accepts a positive integer', () => {
+    const parsed = configSchema.parse({
+      ...baseConfig,
+      contracts: { Counter: { ...validContract, circuits_per_tx: 8 } },
+    });
+
+    expect(parsed.contracts.Counter?.circuits_per_tx).toBe(8);
+  });
+
+  // INV-6
+  it('is optional', () => {
+    const parsed = configSchema.parse(baseConfig);
+
+    expect(parsed.contracts.Counter?.circuits_per_tx).toBeUndefined();
+  });
+
+  // INV-6
+  it.each([0, -1, 1.5, '8', Number.NaN])('rejects %s', (value) => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        contracts: { Counter: { ...validContract, circuits_per_tx: value } },
+      }),
+    ).toThrow();
+  });
+});

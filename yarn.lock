@@ -725,7 +725,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/wallet-sdk-capabilities@npm:^3.3.1":
+"@midnight-ntwrk/wallet-sdk-capabilities@npm:3.3.1, @midnight-ntwrk/wallet-sdk-capabilities@npm:^3.3.1":
   version: 3.3.1
   resolution: "@midnight-ntwrk/wallet-sdk-capabilities@npm:3.3.1"
   dependencies:
@@ -1160,8 +1160,10 @@ __metadata:
     "@midnight-ntwrk/midnight-js-network-id": "npm:4.1.1"
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "npm:4.1.1"
     "@midnight-ntwrk/midnight-js-types": "npm:4.1.1"
+    "@midnight-ntwrk/midnight-js-utils": "npm:4.1.1"
     "@midnight-ntwrk/testkit-js": "npm:4.1.1"
     "@midnight-ntwrk/wallet-sdk-address-format": "npm:3.1.2"
+    "@midnight-ntwrk/wallet-sdk-capabilities": "npm:3.3.1"
     "@midnight-ntwrk/wallet-sdk-dust-wallet": "npm:4.1.0"
     "@midnight-ntwrk/wallet-sdk-facade": "npm:4.0.1"
     "@midnight-ntwrk/wallet-sdk-shielded": "npm:3.0.1"

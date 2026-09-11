@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { CompiledContract, type Contract } from '@midnight-ntwrk/compact-js';
+import type { ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
 import type { Types } from 'effect';
 import {
   type FileOrModuleRef,
@@ -21,11 +22,12 @@ import { LoaderContext } from './context.ts';
 
 type AnyContract = Contract.Any;
 type AnyWitnesses = Contract.Witnesses<AnyContract>;
-type AnyCompiledContract = CompiledContract.CompiledContract<
-  AnyContract,
-  unknown,
-  never
->;
+/**
+ * `unknown` private state would not satisfy either SDK entry point that takes
+ * this value, and the artifact's real private-state type is only known to the
+ * dApp. `any` is the one place that gap is bridged, so no consumer casts.
+ */
+type AnyCompiledContract = CompiledContract.CompiledContract<AnyContract, any>;
 
 export interface LoadArtifactOptions {
   rootDir: string;
@@ -34,6 +36,9 @@ export interface LoadArtifactOptions {
   contractName: string;
   witnesses?: FileOrModuleRef;
 }
+
+/** Verifier key bytes per circuit, as read from `keys/<circuit>.verifier`. */
+export type ArtifactKeys = ReadonlyMap<string, Uint8Array>;
 
 export class Artifact {
   readonly compiledContract: AnyCompiledContract;
@@ -51,6 +56,28 @@ export class Artifact {
     this.artifactPath = input.artifactPath;
     this.zkConfigPath = input.zkConfigPath;
     this.circuitNames = input.circuitNames;
+  }
+
+  /**
+   * Verifier key bytes for every circuit this artifact declares.
+   *
+   * INV-11: read before fragment 0, so a bundle missing a key fails before any
+   * transaction rather than mid-way through the inserts.
+   */
+  async verifierKeys(
+    zkConfigProvider: ZKConfigProvider<string>,
+  ): Promise<ArtifactKeys> {
+    const pairs = await zkConfigProvider.getVerifierKeys([
+      ...this.circuitNames,
+    ]);
+    const keys = new Map(pairs);
+    const missing = this.circuitNames.filter((name) => !keys.has(name));
+    if (missing.length > 0) {
+      throw new ConfigError(
+        `Artifact at ${this.artifactPath} has no verifier key for: ${missing.join(', ')}.`,
+      );
+    }
+    return keys;
   }
 
   /** Resolve, validate, and import the bundle. Throws {@link ArtifactNotFoundError} on missing dir/entry/keys/zkir. */
