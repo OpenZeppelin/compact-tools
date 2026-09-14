@@ -30,7 +30,7 @@ function constructorState(
 }
 
 describe('operationNames', () => {
-  it('decodes a byte-encoded entry point name', () => {
+  it('should decode a byte-encoded entry point name', () => {
     const stub = {
       operations: () => [new TextEncoder().encode('approve')],
     } as unknown as LedgerContractState;
@@ -40,8 +40,7 @@ describe('operationNames', () => {
 });
 
 describe('toLedgerContractState', () => {
-  // INV-5
-  it('produces a ledger state, not the runtime one', () => {
+  it('should produce a ledger state, not the runtime one', () => {
     const converted = toLedgerContractState(constructorState());
 
     expect(converted).toBeInstanceOf(LedgerContractState);
@@ -50,8 +49,7 @@ describe('toLedgerContractState', () => {
 });
 
 describe('pruneState', () => {
-  // INV-7
-  it('keeps only the named operations', () => {
+  it('should keep only the named operations', () => {
     const pruned = pruneState({
       state: constructorState(),
       keep: ['approve', 'burn'],
@@ -60,8 +58,7 @@ describe('pruneState', () => {
     expect(operationNames(pruned).sort()).toStrictEqual(['approve', 'burn']);
   });
 
-  // INV-7
-  it('carries data, maintenance authority and balance across unchanged', () => {
+  it('should carry data, maintenance authority and balance across unchanged', () => {
     const state = constructorState();
     const full = toLedgerContractState(state);
     const pruned = pruneState({ state, keep: ['approve'] });
@@ -79,8 +76,7 @@ describe('pruneState', () => {
     expect(pruned.balance).toStrictEqual(full.balance);
   });
 
-  // INV-7
-  it('keeps a non-default maintenance authority', () => {
+  it('should keep a non-default maintenance authority', () => {
     const state = constructorState();
     const committee = [signatureVerifyingKey('aa'.repeat(32))];
     const full = toLedgerContractState(state);
@@ -98,8 +94,7 @@ describe('pruneState', () => {
     expect(pruned.maintenanceAuthority.committee).toStrictEqual(committee);
   });
 
-  // INV-7
-  it('yields the address the same pruned state deploys to', () => {
+  it('should yield the address the same pruned state deploys to', () => {
     const state = constructorState();
     const manual = toLedgerContractState(state);
     const fresh = new LedgerContractState();
@@ -119,28 +114,25 @@ describe('pruneState', () => {
     );
   });
 
-  // INV-7
-  it('rejects a fragment naming a circuit the constructor never produced', () => {
+  it('should reject a fragment naming a circuit the constructor never produced', () => {
     expect(() =>
       pruneState({ state: constructorState(), keep: ['approve', 'nope'] }),
     ).toThrow(DeployError);
   });
 
-  // INV-7
-  it('rejects a duplicated circuit in the kept list', () => {
+  it('should reject a duplicated circuit in the kept list', () => {
     expect(() =>
       pruneState({ state: constructorState(), keep: ['approve', 'approve'] }),
     ).toThrow(/Pruned state holds 1 operations, expected 2/);
   });
 
-  // INV-7
-  it('names the empty operation set when the constructor produced none', () => {
+  it('should name the empty operation set when the constructor produced none', () => {
     expect(() =>
       pruneState({ state: new RuntimeContractState(), keep: ['approve'] }),
     ).toThrow('it carries (none)');
   });
 
-  it('prunes to nothing when the kept list is empty', () => {
+  it('should prune to nothing when the kept list is empty', () => {
     expect(
       operationNames(pruneState({ state: constructorState(), keep: [] })),
     ).toStrictEqual([]);

@@ -370,8 +370,7 @@ describe('Artifact.verifierKeys', () => {
     });
   }
 
-  // INV-11
-  it('returns the bytes the zk-config provider serves, keyed by circuit', async () => {
+  it('should return the bytes the zk-config provider serves, keyed by circuit', async () => {
     const root = mkdtempSync(join(tmpdir(), 'artifact-keys-'));
     const artifact = await loaded(root);
 
@@ -383,8 +382,7 @@ describe('Artifact.verifierKeys', () => {
     expect(keys.get('inc')).toStrictEqual(new Uint8Array([1, 2]));
   });
 
-  // INV-11
-  it('rejects a bundle with no key for a declared circuit', async () => {
+  it('should reject a bundle with no key for a declared circuit', async () => {
     const root = mkdtempSync(join(tmpdir(), 'artifact-keys-'));
     const artifact = await loaded(root);
 

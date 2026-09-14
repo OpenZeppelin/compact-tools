@@ -58,7 +58,7 @@ export interface AwaitCircuitsArgs {
 }
 
 /**
- * INV-13: poll until every circuit of the landed fragment is visible, then
+ * Poll until every circuit of the landed fragment is visible, then
  * return that snapshot.
  *
  * The indexer trails the node, so the read taken right after finalization can
@@ -96,12 +96,12 @@ export interface VerifyStateArgs {
   address: string;
   artifactKeys: ArtifactKeys;
   snapshot: ChainSnapshot;
-  /** The authority read before the first insert. INV-15: it must not move. */
+  /** The authority read before the first insert. It must not move. */
   authority: Pick<ChainSnapshot, 'committee' | 'threshold'>;
 }
 
 /**
- * INV-11: every artifact circuit present on chain with identical key bytes,
+ * Every artifact circuit present on chain with identical key bytes,
  * and no extra on-chain circuit. A count check would pass a state that has the
  * right number of operations under the wrong names.
  */
@@ -111,7 +111,7 @@ export function verifyState({
   snapshot,
   authority,
 }: VerifyStateArgs): void {
-  // INV-15: inserts are additive and never touch the authority, so a committee
+  // Inserts are additive and never touch the authority, so a committee
   // or threshold that moved means someone else maintained this contract
   // mid-run.
   if (
@@ -134,7 +134,7 @@ export function verifyState({
 }
 
 /**
- * INV-25: this signing key's slot in the on-chain committee.
+ * This signing key's slot in the on-chain committee.
  *
  * Rejects a committee this deployer cannot satisfy alone: it holds one key, so
  * a threshold above 1 makes every update unsignable here.
@@ -172,7 +172,7 @@ export interface AssertResumableArgs {
 }
 
 /**
- * INV-27: gate a resume on the recorded address really being our partially
+ * Gate a resume on the recorded address really being our partially
  * deployed contract. An edited or copied deployments file must not make the deployer
  * append this artifact's keys to someone else's contract, or to a stale build
  * of our own.
@@ -211,7 +211,7 @@ function compare(
   for (const name of snapshot.circuits) {
     const expected = artifactKeys.get(name);
     if (expected === undefined) {
-      // INV-27(c): renaming a circuit between runs needs --force, not a
+      // Renaming a circuit between runs needs --force, not a
       // silent append onto a state the artifact can no longer describe.
       problems.push(`"${name}" is on chain but not in the artifact`);
       continue;

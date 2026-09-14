@@ -300,8 +300,7 @@ describe('Deployer fragmented deploy', () => {
     };
   }
 
-  // INV-16, INV-29
-  it('lands one deploy tx plus one insert per further fragment', async () => {
+  it('should land one deploy tx plus one insert per further fragment', async () => {
     await using d = await splitDeployer({ circuitsPerTx: 2 });
     const result = await d.deploy();
 
@@ -318,8 +317,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('confirmed');
   });
 
-  // INV-14, INV-25, INV-28
-  it('signs each insert for the recorded address at the on-chain counter and slot', async () => {
+  it('should sign each insert for the recorded address at the on-chain counter and slot', async () => {
     await using d = await splitDeployer({ circuitsPerTx: 2 });
     await d.deploy();
 
@@ -335,8 +333,7 @@ describe('Deployer fragmented deploy', () => {
     }
   });
 
-  // INV-25
-  it('refuses to insert when the committee needs more than one signature', async () => {
+  it('should refuse to insert when the committee needs more than one signature', async () => {
     providers.publicDataProvider.queryContractState = vi.fn(async () => ({
       ...chainState(onChain, BigInt(landedInserts)),
       maintenanceAuthority: {
@@ -356,8 +353,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-25
-  it('signs at this key slot when the committee is ordered differently', async () => {
+  it('should sign at this key slot when the committee is ordered differently', async () => {
     providers.publicDataProvider.queryContractState = vi.fn(async () => ({
       ...chainState(onChain, BigInt(landedInserts)),
       maintenanceAuthority: {
@@ -373,8 +369,7 @@ describe('Deployer fragmented deploy', () => {
     expect(insertedUpdate(0).signatures[0]?.[0]).toBe(1n);
   });
 
-  // INV-17
-  it('records progress from the chain read, never from the plan', async () => {
+  it('should record progress from the chain read, never from the plan', async () => {
     const observed: { onChain: unknown; pending: unknown }[] = [];
     const submit = vi.mocked(submitTxAsync).getMockImplementation();
     vi.mocked(submitTxAsync).mockImplementation(async (...callArgs) => {
@@ -395,8 +390,7 @@ describe('Deployer fragmented deploy', () => {
     ]);
   });
 
-  // INV-20
-  it('leaves the single-fragment path without a chain read or an insert', async () => {
+  it('should leave the single-fragment path without a chain read or an insert', async () => {
     await using d = await splitDeployer(undefined, ['approve']);
     const result = await d.deploy();
 
@@ -409,8 +403,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('confirmed');
   });
 
-  // INV-9
-  it('halves fragment 0 on a block-limit refusal and retries', async () => {
+  it('should halve fragment 0 on a block-limit refusal and retry', async () => {
     const sizes: number[] = [];
     vi.mocked(submitDeploy).mockImplementation(async ({ circuits }) => {
       sizes.push(circuits.length);
@@ -437,8 +430,7 @@ describe('Deployer fragmented deploy', () => {
     expect(sizes).toStrictEqual([4, 2, 1]);
   });
 
-  // INV-9
-  it('halves an insert batch on a block-limit refusal and retries', async () => {
+  it('should halve an insert batch on a block-limit refusal and retry', async () => {
     onChain = ['approve', 'burn'];
     seedHead(partialHead(['approve', 'burn'], ['charge', 'deposit', 'evict']));
     const sizes: number[] = [];
@@ -458,8 +450,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('confirmed');
   });
 
-  // INV-9, INV-30
-  it('reports an insert refused at one circuit as a resumable failure', async () => {
+  it('should report an insert refused at one circuit as a resumable failure', async () => {
     onChain = ['approve', 'burn', 'charge', 'deposit'];
     seedHead(partialHead(['approve', 'burn', 'charge', 'deposit'], ['evict']));
     vi.mocked(submitTxAsync).mockRejectedValue(new Error(BLOCK_LIMIT_TEXT));
@@ -484,8 +475,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('partial');
   });
 
-  // INV-9
-  it('does not halve when a budget was set explicitly', async () => {
+  it('should not halve when a budget was set explicitly', async () => {
     vi.mocked(submitDeploy).mockRejectedValue(
       new BlockLimitError(BLOCK_LIMIT_TEXT),
     );
@@ -496,8 +486,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitDeploy).toHaveBeenCalledTimes(1);
   });
 
-  // INV-21
-  it('leaves no record and no private state when even one circuit is too large', async () => {
+  it('should leave no record and no private state when even one circuit is too large', async () => {
     vi.mocked(submitDeploy).mockRejectedValue(
       new BlockLimitError(BLOCK_LIMIT_TEXT),
     );
@@ -512,8 +501,7 @@ describe('Deployer fragmented deploy', () => {
     expect(providers.publicDataProvider.watchForTxData).not.toHaveBeenCalled();
   });
 
-  // INV-9
-  it('leaves a non-limit failure unretried', async () => {
+  it('should leave a non-limit failure unretried', async () => {
     vi.mocked(submitDeploy).mockRejectedValue(
       new DeployTxFailedError('1010: Invalid Transaction: Custom error 103'),
     );
@@ -524,8 +512,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitDeploy).toHaveBeenCalledTimes(1);
   });
 
-  // INV-18
-  it('persists private state once on a split deploy', async () => {
+  it('should persist private state once on a split deploy', async () => {
     await using d = await splitDeployer({ circuitsPerTx: 2 });
     await d.deploy();
 
@@ -534,8 +521,7 @@ describe('Deployer fragmented deploy', () => {
     );
   });
 
-  // INV-19
-  it('waits for the wallet to apply the deploy spend before the first insert', async () => {
+  it('should wait for the wallet to apply the deploy spend before the first insert', async () => {
     // The wallet stays at the mark taken before the deploy tx, so nothing may
     // be balanced against the same UTXO set.
     const deployed = vi.mocked(submitDeploy).getMockImplementation();
@@ -554,8 +540,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('partial');
   });
 
-  // INV-19
-  it('waits for the wallet to apply each insert spend before the next', async () => {
+  it('should wait for the wallet to apply each insert spend before the next', async () => {
     const land = vi.mocked(submitTxAsync).getMockImplementation();
     vi.mocked(submitTxAsync).mockImplementation(async (...callArgs) => {
       const txId = (await land?.(...callArgs)) as string;
@@ -571,8 +556,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('partial');
   });
 
-  // INV-19
-  it('does not wait on the wallet after the last insert', async () => {
+  it('should not wait on the wallet after the last insert', async () => {
     const land = vi.mocked(submitTxAsync).getMockImplementation();
     vi.mocked(submitTxAsync).mockImplementation(async (...callArgs) => {
       const txId = (await land?.(...callArgs)) as string;
@@ -590,8 +574,7 @@ describe('Deployer fragmented deploy', () => {
     expect(result.circuits).toBe(5);
   });
 
-  // INV-30
-  it('records the insert txId when it never sees the tx land', async () => {
+  it('should record the insert txId when it never sees the tx land', async () => {
     // Only the insert's watch hangs; the deploy tx still lands.
     const watch = providers.publicDataProvider.watchForTxData;
     providers.publicDataProvider.watchForTxData = vi.fn((txId: string) =>
@@ -608,8 +591,7 @@ describe('Deployer fragmented deploy', () => {
     expect(written?.pendingTxId).toBe('0xINSERT1');
   });
 
-  // INV-29
-  it('settles an insert the previous run left in flight before planning', async () => {
+  it('should settle an insert the previous run left in flight before planning', async () => {
     onChain = ['approve', 'burn', 'charge', 'deposit'];
     landedInserts = 1;
     seedHead({
@@ -629,8 +611,7 @@ describe('Deployer fragmented deploy', () => {
     expect(result.circuits).toBe(5);
   });
 
-  // INV-29
-  it('carries on when the insert left in flight never landed', async () => {
+  it('should carry on when the insert left in flight never landed', async () => {
     onChain = ['approve', 'burn'];
     seedHead({
       ...partialHead(['approve', 'burn'], ['charge', 'deposit', 'evict']),
@@ -651,8 +632,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('confirmed');
   });
 
-  // INV-18
-  it('stores the signing key on a resume when the private state has none', async () => {
+  it('should store the signing key on a resume when the private state has none', async () => {
     onChain = [...SPLIT_CIRCUITS];
     seedHead(partialHead(SPLIT_CIRCUITS, []));
     providers.privateStateProvider.getSigningKey = vi.fn(async () => null);
@@ -666,8 +646,7 @@ describe('Deployer fragmented deploy', () => {
     );
   });
 
-  // INV-6
-  it('takes the budget from [contracts.X].circuits_per_tx', async () => {
+  it('should take the budget from [contracts.X].circuits_per_tx', async () => {
     fx.cleanup();
     fx = writeFixture({ circuitsPerTx: 2 });
 
@@ -682,8 +661,7 @@ describe('Deployer fragmented deploy', () => {
     expect(result.fragments).toBe(3);
   });
 
-  // INV-6
-  it('lets the programmatic budget beat the TOML one', async () => {
+  it('should let the programmatic budget beat the TOML one', async () => {
     fx.cleanup();
     fx = writeFixture({ circuitsPerTx: 2 });
 
@@ -693,8 +671,7 @@ describe('Deployer fragmented deploy', () => {
     expect(vi.mocked(submitDeploy).mock.calls[0]?.[0].circuits).toHaveLength(4);
   });
 
-  // INV-2
-  it('refuses a resume whose record names a txHash the chain disagrees with', async () => {
+  it('should refuse a resume whose record names a txHash the chain disagrees with', async () => {
     onChain = ['approve', 'burn'];
     seedHead({
       ...partialHead(['approve', 'burn'], ['charge', 'deposit', 'evict']),
@@ -709,8 +686,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-30
-  it('reports a deploy tx the chain says did not succeed', async () => {
+  it('should report a deploy tx the chain says did not succeed', async () => {
     seedHead(partialHead(['approve'], ['burn']));
     providers.publicDataProvider.watchForDeployTxData = vi.fn(async () => ({
       status: 'FailEntirely',
@@ -726,8 +702,7 @@ describe('Deployer fragmented deploy', () => {
     expect((thrown as Error).message).toContain('did not succeed');
   });
 
-  // INV-30
-  it('reports an unreadable chain state as the resumable error', async () => {
+  it('should report an unreadable chain state as the resumable error', async () => {
     seedHead(partialHead(['approve'], ['burn']));
     providers.publicDataProvider.queryContractState = vi.fn(async () => {
       throw new Error('indexer said no');
@@ -740,8 +715,7 @@ describe('Deployer fragmented deploy', () => {
     expect((thrown as Error).message).toContain('could not be read');
   });
 
-  // INV-27
-  it('still reports a missing contract when the deploy tx never lands', async () => {
+  it('should still report a missing contract when the deploy tx never lands', async () => {
     seedHead(partialHead(['approve'], ['burn']));
     // Nothing at the address: no state to read and no deploy tx to settle.
     providers.publicDataProvider.queryContractState = vi.fn(async () => null);
@@ -756,8 +730,7 @@ describe('Deployer fragmented deploy', () => {
     expect((thrown as Error).message).toContain('no contract exists there');
   });
 
-  // INV-29
-  it('clears the pending insert when the node ruled the tx failed', async () => {
+  it('should clear the pending insert when the node ruled the tx failed', async () => {
     const watch = providers.publicDataProvider.watchForTxData;
     providers.publicDataProvider.watchForTxData = vi.fn(async (txId: string) =>
       txId === '0xTX'
@@ -773,8 +746,7 @@ describe('Deployer fragmented deploy', () => {
     expect(written).not.toHaveProperty('pendingTxId');
   });
 
-  // INV-30
-  it('reports a deploy tx it can neither settle nor read from the record', async () => {
+  it('should report a deploy tx it can neither settle nor read from the record', async () => {
     onChain = ['approve', 'burn'];
     const legacy = partialHead(['approve', 'burn'], ['charge']);
     delete legacy.txHash;
@@ -794,8 +766,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-30
-  it('keeps the insert failure when the progress write also fails', async () => {
+  it('should keep the insert failure when the progress write also fails', async () => {
     const watch = providers.publicDataProvider.watchForTxData;
     providers.publicDataProvider.watchForTxData = vi.fn((txId: string) =>
       txId === '0xTX' ? watch(txId) : new Promise(() => {}),
@@ -816,8 +787,7 @@ describe('Deployer fragmented deploy', () => {
     expect(lines()).toContain('Could not record progress');
   });
 
-  // INV-22
-  it('keeps the signing key out of a failed deploy and its --json output', async () => {
+  it('should keep the signing key out of a failed deploy and its --json output', async () => {
     vi.mocked(submitTxAsync).mockRejectedValue(new Error('out of dust'));
     const { logger, lines } = recordingLogger();
 
@@ -835,8 +805,7 @@ describe('Deployer fragmented deploy', () => {
     );
   });
 
-  // INV-26, INV-29
-  it('resumes a partial head without a second deploy tx', async () => {
+  it('should resume a partial head without a second deploy tx', async () => {
     onChain = ['approve', 'burn'];
     landedInserts = 0;
     seedHead(partialHead(['approve', 'burn'], ['charge', 'deposit', 'evict']));
@@ -856,8 +825,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('confirmed');
   });
 
-  // INV-16
-  it('resolves the deploy tx identifiers from chain when the record lacks them', async () => {
+  it('should resolve the deploy tx identifiers from chain when the record lacks them', async () => {
     onChain = [...SPLIT_CIRCUITS];
     const legacy = partialHead(SPLIT_CIRCUITS, []);
     delete legacy.txHash;
@@ -875,8 +843,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('confirmed');
   });
 
-  // INV-29
-  it('counts inserts from the interrupted run in the fragment total', async () => {
+  it('should count inserts from the interrupted run in the fragment total', async () => {
     onChain = ['approve', 'burn', 'charge', 'deposit'];
     // Two updates already landed before the interruption.
     landedInserts = 2;
@@ -889,8 +856,7 @@ describe('Deployer fragmented deploy', () => {
     expect(result.fragments).toBe(4);
   });
 
-  // INV-18
-  it('does not rewrite private state on a resume', async () => {
+  it('should not rewrite private state on a resume', async () => {
     onChain = [...SPLIT_CIRCUITS];
     seedHead(partialHead(SPLIT_CIRCUITS, []));
 
@@ -900,8 +866,7 @@ describe('Deployer fragmented deploy', () => {
     expect(providers.privateStateProvider.setSigningKey).not.toHaveBeenCalled();
   });
 
-  // INV-10
-  it('submits no insert when the chain already holds every circuit', async () => {
+  it('should submit no insert when the chain already holds every circuit', async () => {
     onChain = [...SPLIT_CIRCUITS];
     seedHead(partialHead(SPLIT_CIRCUITS, []));
 
@@ -911,8 +876,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-27(a)
-  it('refuses to resume against an address with no contract', async () => {
+  it('should refuse to resume against an address with no contract', async () => {
     seedHead(partialHead(['approve'], ['burn']));
     providers.publicDataProvider.queryContractState = vi.fn(async () => null);
 
@@ -924,8 +888,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-27(b)
-  it('refuses to resume a contract maintained by a foreign committee', async () => {
+  it('should refuse to resume a contract maintained by a foreign committee', async () => {
     onChain = ['approve'];
     seedHead(partialHead(['approve'], ['burn']));
     providers.publicDataProvider.queryContractState = vi.fn(async () => ({
@@ -943,8 +906,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-27(c)
-  it('refuses to resume a contract carrying a foreign verifier key', async () => {
+  it('should refuse to resume a contract carrying a foreign verifier key', async () => {
     onChain = ['approve'];
     seedHead(partialHead(['approve'], ['burn']));
     providers.publicDataProvider.queryContractState = vi.fn(async () => ({
@@ -958,8 +920,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-26
-  it('rotates a partial head into history and redeploys under --force', async () => {
+  it('should rotate a partial head into history and redeploy under --force', async () => {
     seedHead(partialHead(['approve'], ['burn']));
 
     await using d = await splitDeployer({ circuitsPerTx: 2, force: true });
@@ -975,8 +936,7 @@ describe('Deployer fragmented deploy', () => {
     expect(history.Counter[0]).toMatchObject({ status: 'partial' });
   });
 
-  // INV-26
-  it('refuses a fresh deploy over a partial head, keeping its exit code', async () => {
+  it('should refuse a fresh deploy over a partial head, keeping its exit code', async () => {
     seedHead(partialHead(['approve'], ['burn']));
     // A chain read that would fail the resume guard, so the refusal has to
     // come from the record check rather than from a later gate.
@@ -989,8 +949,7 @@ describe('Deployer fragmented deploy', () => {
     expect(submitDeploy).not.toHaveBeenCalled();
   });
 
-  // INV-30
-  it('reports a failed insert as FragmentDeployError and keeps the head partial', async () => {
+  it('should report a failed insert as FragmentDeployError and keep the head partial', async () => {
     vi.mocked(submitTxAsync).mockRejectedValue(new Error('out of dust'));
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
@@ -1005,8 +964,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('partial');
   });
 
-  // INV-11, INV-30
-  it('refuses to confirm when a landed key does not match the artifact', async () => {
+  it('should refuse to confirm when a landed key does not match the artifact', async () => {
     // Chain reports a different key for the last circuit than the artifact has.
     const genuine = providers.publicDataProvider.queryContractState;
     providers.publicDataProvider.queryContractState = vi.fn(async () => {
@@ -1028,8 +986,7 @@ describe('Deployer fragmented deploy', () => {
     expect(readHead(fx.rootDir).Counter?.status).toBe('partial');
   });
 
-  // INV-10
-  it('skips a fragment whose circuits already landed with an earlier insert', async () => {
+  it('should skip a fragment whose circuits already landed with an earlier insert', async () => {
     // The first insert lands its own batch plus everything after it, so the
     // next fragment has nothing left to insert.
     vi.mocked(submitTxAsync).mockImplementation(async () => {
@@ -1046,8 +1003,7 @@ describe('Deployer fragmented deploy', () => {
     expect(result.circuits).toBe(5);
   });
 
-  // INV-6
-  it('inserts every remaining circuit in one batch on a resume with no budget', async () => {
+  it('should insert every remaining circuit in one batch on a resume with no budget', async () => {
     onChain = ['approve', 'burn'];
     seedHead(partialHead(['approve', 'burn'], ['charge', 'deposit', 'evict']));
 
@@ -1058,8 +1014,7 @@ describe('Deployer fragmented deploy', () => {
     expect(insertedCircuits(0)).toStrictEqual(['charge', 'deposit', 'evict']);
   });
 
-  // INV-16
-  it('keeps a ledger-write failure inside the fragment loop as a ledger error', async () => {
+  it('should keep a ledger-write failure inside the fragment loop as a ledger error', async () => {
     const land = vi.mocked(submitTxAsync).getMockImplementation();
     vi.mocked(submitTxAsync).mockImplementation(async (...callArgs) => {
       const txId = (await land?.(...callArgs)) as string;
@@ -1078,8 +1033,7 @@ describe('Deployer fragmented deploy', () => {
     expect(thrown).not.toBeInstanceOf(FragmentDeployError);
   });
 
-  // INV-22
-  it('logs no signing-key hex on a split deploy', async () => {
+  it('should log no signing-key hex on a split deploy', async () => {
     const { logger, lines } = recordingLogger();
 
     await using d = await splitDeployer({ circuitsPerTx: 2, logger });
@@ -1089,8 +1043,7 @@ describe('Deployer fragmented deploy', () => {
     expect(lines()).not.toContain(FIXTURE_SIGNING_KEY);
   });
 
-  // INV-22
-  it('logs no signing-key hex on a resume', async () => {
+  it('should log no signing-key hex on a resume', async () => {
     onChain = ['approve', 'burn'];
     seedHead(partialHead(['approve', 'burn'], ['charge', 'deposit', 'evict']));
     const { logger, lines } = recordingLogger();
@@ -1102,9 +1055,8 @@ describe('Deployer fragmented deploy', () => {
     expect(lines()).not.toContain(FIXTURE_SIGNING_KEY);
   });
 
-  // INV-6
   it.each([0, -1, 1.5])(
-    'rejects a budget of %s before starting the proof server',
+    'should reject a budget of %s before starting the proof server',
     async (circuitsPerTx) => {
       await expect(splitDeployer({ circuitsPerTx })).rejects.toThrow(
         ConfigError,

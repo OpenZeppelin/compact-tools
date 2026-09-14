@@ -23,7 +23,7 @@ import { DeployError } from '../errors.ts';
 const VK_VERSION = 'v3' as const;
 
 /**
- * INV-4: one circuit's key. The absence of any other update shape is what
+ * One circuit's key. The absence of any other update shape is what
  * makes removal, replacement, and authority rotation unconstructible here.
  */
 export interface KeyInsert {
@@ -32,15 +32,15 @@ export interface KeyInsert {
 }
 
 export interface BuildInsertUpdateArgs {
-  /** INV-14: taken from the fragment-0 result or the record, never recomputed. */
+  /** Taken from the fragment-0 result or the record, never recomputed. */
   address: string;
   inserts: readonly KeyInsert[];
-  /** INV-28: read from chain immediately before this call; never tracked locally. */
+  /** Read from chain immediately before this call; never tracked locally. */
   counter: bigint;
-  /** INV-22: hex signing key. Reaches `signData` and nothing else. */
+  /** Hex signing key. Reaches `signData` and nothing else. */
   signingKey: string;
   /**
-   * INV-25: this key's slot in the on-chain committee, from the same chain read
+   * This key's slot in the on-chain committee, from the same chain read
    * as `counter`. The ledger checks the signature against that slot, so a
    * hardcoded 0 would fail on any contract whose committee is ordered
    * differently.
@@ -67,7 +67,7 @@ export function buildInsertUpdate({
   signerIndex,
 }: BuildInsertUpdateArgs): MaintenanceUpdate {
   if (inserts.length === 0) {
-    // INV-10: an empty update would spend dust and change nothing.
+    // An empty update would spend dust and change nothing.
     throw new DeployError('Refusing to build an empty maintenance update.');
   }
   const updates = inserts.map(
@@ -77,7 +77,7 @@ export function buildInsertUpdate({
         new ContractOperationVersionedVerifierKey(VK_VERSION, verifierKey),
       ),
   );
-  // INV-25: sign the built update, then attach; `addSignature` returns the
+  // Sign the built update, then attach; `addSignature` returns the
   // signed value rather than mutating in place.
   const update = new MaintenanceUpdate(address, updates, counter);
   return update.addSignature(

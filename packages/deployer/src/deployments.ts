@@ -16,7 +16,7 @@ import { acquireLock, releaseLock } from './services/file-lock.ts';
  */
 
 /**
- * Fields known before the deploy tx is submitted. INV-22: never carries the
+ * Fields known before the deploy tx is submitted. Never carries the
  * contract-maintenance signing key: midnight-js persists it via
  * `privateStateProvider.setSigningKey`, and this file is world-readable and
  * routinely committed.
@@ -73,7 +73,7 @@ export interface ConfirmedDeploymentRecord extends DeploymentRecordBase {
   timestamp: string;
 }
 
-/** INV-3: a single deploy, in one of its three persisted states. */
+/** A single deploy, in one of its three persisted states. */
 export type DeploymentRecord =
   | PendingDeploymentRecord
   | PartialDeploymentRecord
@@ -249,17 +249,17 @@ function checkRecordable(
     throw new PendingDeployExistsError(contractName, previous.txId);
   }
   if (previous.status === 'partial') {
-    // INV-26: without --force a partial head resumes, and the caller takes
+    // Without --force a partial head resumes, and the caller takes
     // that branch before ever asking to record, so reaching here means it was
     // about to deploy a second address.
     throw new PartialDeployExistsError(contractName, previous.address);
   }
-  // INV-3: a new union member fails to compile here until it is handled above.
+  // A new union member fails to compile here until it is handled above.
   previous.status satisfies 'confirmed';
 }
 
 /**
- * INV-16: a promotion must land on the head it was derived from. Anything else means a
+ * A promotion must land on the head it was derived from. Anything else means a
  * concurrent deploy replaced the head, and overwriting it would drop the only
  * local trace of that contract.
  */

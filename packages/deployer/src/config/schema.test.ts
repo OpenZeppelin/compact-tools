@@ -313,8 +313,7 @@ describe('isFileRef / isModuleRef', () => {
 });
 
 describe('circuits_per_tx', () => {
-  // INV-6
-  it('accepts a positive integer', () => {
+  it('should accept a positive integer', () => {
     const parsed = configSchema.parse({
       ...baseConfig,
       contracts: { Counter: { ...validContract, circuits_per_tx: 8 } },
@@ -323,15 +322,13 @@ describe('circuits_per_tx', () => {
     expect(parsed.contracts.Counter?.circuits_per_tx).toBe(8);
   });
 
-  // INV-6
-  it('is optional', () => {
+  it('should be optional', () => {
     const parsed = configSchema.parse(baseConfig);
 
     expect(parsed.contracts.Counter?.circuits_per_tx).toBeUndefined();
   });
 
-  // INV-6
-  it.each([0, -1, 1.5, '8', Number.NaN])('rejects %s', (value) => {
+  it.each([0, -1, 1.5, '8', Number.NaN])('should reject %s', (value) => {
     expect(() =>
       configSchema.parse({
         ...baseConfig,

@@ -261,8 +261,7 @@ function describeRecord(record: DeploymentRecord): string {
 }
 
 describe('DeploymentRecord union', () => {
-  // INV-3
-  it('narrows to exactly three members', () => {
+  it('should narrow to exactly three members', () => {
     expect(describeRecord(pending('0xa'))).toBe('pending');
     expect(describeRecord(partial('0xa'))).toBe('partial:1');
     expect(describeRecord(confirmed('0xa'))).toBe('confirmed');
@@ -270,8 +269,7 @@ describe('DeploymentRecord union', () => {
 });
 
 describe('Deployments partial records', () => {
-  // INV-16
-  it('records a partial head and rotates the prior head into history', async () => {
+  it('should record a partial head and rotates the prior head into history', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', confirmed('0xold'));
@@ -288,8 +286,7 @@ describe('Deployments partial records', () => {
     );
   });
 
-  // INV-26
-  it('refuses a fresh deploy over a partial head without force', async () => {
+  it('should refuse a fresh deploy over a partial head without force', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', partial('0xpart'));
@@ -302,8 +299,7 @@ describe('Deployments partial records', () => {
     );
   });
 
-  // INV-26
-  it('rotates the partial head into history under force', async () => {
+  it('should rotate the partial head into history under force', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', partial('0xpart'));
@@ -320,8 +316,7 @@ describe('Deployments partial records', () => {
     });
   });
 
-  // INV-16
-  it('overwrites a partial head with fresher progress, no rotation', async () => {
+  it('should overwrite a partial head with fresher progress, no rotation', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', partial('0xpart', [], ['approve', 'burn']));
@@ -336,8 +331,7 @@ describe('Deployments partial records', () => {
     expect(existsSync(history)).toBe(false);
   });
 
-  // INV-16
-  it('promotes a partial head to confirmed', async () => {
+  it('should promote a partial head to confirmed', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', partial('0xpart'));
@@ -348,8 +342,7 @@ describe('Deployments partial records', () => {
     );
   });
 
-  // INV-16
-  it('refuses to promote onto a head for a different address', async () => {
+  it('should refuse to promote onto a head for a different address', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', partial('0xpart'));
@@ -362,8 +355,7 @@ describe('Deployments partial records', () => {
     );
   });
 
-  // INV-16
-  it('refuses to overwrite a head that is already confirmed', async () => {
+  it('should refuse to overwrite a head that is already confirmed', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const d = make(root);
     await d.record('Token', confirmed('0xpart'));
@@ -376,8 +368,7 @@ describe('Deployments partial records', () => {
     );
   });
 
-  // INV-16
-  it('refuses to promote when the head record is gone', async () => {
+  it('should refuse to promote when the head record is gone', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
 
     await expect(
@@ -385,8 +376,7 @@ describe('Deployments partial records', () => {
     ).rejects.toThrow(DeploymentsFileError);
   });
 
-  // INV-22
-  it('keeps the signing key out of a partial record', async () => {
+  it('should keep the signing key out of a partial record', async () => {
     const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
     const { head } = await make(root).record('Token', partial('0xpart'));
 

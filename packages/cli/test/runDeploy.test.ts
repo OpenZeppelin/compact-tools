@@ -342,19 +342,19 @@ describe('runDeploy CLI', () => {
       expect(opts.syncBatchSize).toBeUndefined();
     });
 
-    it('forwards --circuits-per-tx to the prepare options', async () => {
+    it('should forward --circuits-per-tx to the prepare options', async () => {
       await runMain(['Token', '--circuits-per-tx', '5']);
       const opts = mockPrepare.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(opts.circuitsPerTx).toBe(5);
     });
 
-    it('leaves circuitsPerTx undefined when --circuits-per-tx is omitted', async () => {
+    it('should leave circuitsPerTx undefined when --circuits-per-tx is omitted', async () => {
       await runMain(['Token']);
       const opts = mockPrepare.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(opts.circuitsPerTx).toBeUndefined();
     });
 
-    it('rejects a non-positive --circuits-per-tx', async () => {
+    it('should reject a non-positive --circuits-per-tx', async () => {
       await runMain(['Token', '--circuits-per-tx', '0']);
       expect(mockConsoleError).toHaveBeenCalledWith(
         expect.stringContaining(

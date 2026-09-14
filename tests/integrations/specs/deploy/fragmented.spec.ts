@@ -206,8 +206,7 @@ describe('compact-deploy — Fragmented splits across transactions', () => {
     wipeDeployments();
   });
 
-  // INV-1, INV-14, INV-16, INV-25, INV-28
-  it('lands the deploy plus one insert per further fragment and confirms', async () => {
+  it('should land the deploy plus one insert per further fragment and confirm', async () => {
     expect(result.fragments).toBe(4);
     expect(result.circuits).toBe(20);
 
@@ -224,8 +223,7 @@ describe('compact-deploy — Fragmented splits across transactions', () => {
     });
   });
 
-  // INV-11, INV-15
-  it('holds exactly the artifact circuits with byte-equal verifier keys', async () => {
+  it('should hold exactly the artifact circuits with byte-equal verifier keys', async () => {
     expect(landed.circuits).toStrictEqual(CIRCUITS);
     for (const name of CIRCUITS) {
       expect(landed.verifierKeys.get(name)).toStrictEqual(
@@ -234,8 +232,7 @@ describe('compact-deploy — Fragmented splits across transactions', () => {
     }
   });
 
-  // INV-15, INV-28
-  it('advances the maintenance counter once per insert and leaves the authority alone', () => {
+  it('should advance the maintenance counter once per insert and leave the authority alone', () => {
     // The counter is 0 at deploy and rises by one per landed update, so a
     // four-transaction deploy ends at 3.
     expect(landed.counter).toBe(3n);
@@ -243,8 +240,7 @@ describe('compact-deploy — Fragmented splits across transactions', () => {
     expect(landed.committee).toHaveLength(1);
   });
 
-  // INV-19
-  it('clears the dust gate between inserts without approaching the ceiling', () => {
+  it('should clear the dust gate between inserts without approaching the ceiling', () => {
     // Each gap covers one insert: build, prove, submit, finalize, indexer
     // catch-up and the dust wait. The claim is only that it is nowhere near
     // the 600 s transaction ceiling.
@@ -252,8 +248,7 @@ describe('compact-deploy — Fragmented splits across transactions', () => {
     for (const gap of gaps) expect(gap).toBeLessThan(120_000);
   });
 
-  // INV-22
-  it('writes no signing-key hex into the deployments ledger', async () => {
+  it('should write no signing-key hex into the deployments ledger', async () => {
     const signingKey = await signingKeyOf('Fragmented');
 
     expect(signingKey).toMatch(/^[0-9a-f]{64}$/i);
@@ -287,8 +282,7 @@ describe('compact-deploy — Fragmented resumes an interrupted split', () => {
     wipeDeployments();
   });
 
-  // INV-17, INV-30
-  it('stops with a resumable error and a partial record naming fragment 0', () => {
+  it('should stop with a resumable error and a partial record naming fragment 0', () => {
     expect(stopped).toBeInstanceOf(FragmentDeployError);
     expect(stopped.exitCode).toBe(8);
     // The deploy tx landed; the first insert never reached the node.
@@ -299,8 +293,7 @@ describe('compact-deploy — Fragmented resumes an interrupted split', () => {
     expect(partial.circuitsPending).toStrictEqual(CIRCUITS.slice(5));
   });
 
-  // INV-26, INV-29
-  it('finishes at the same address without a second deploy transaction', async () => {
+  it('should finish at the same address without a second deploy transaction', async () => {
     expect(resumed.address).toBe(partial.address);
     expect(resumed.txId).toBe(partial.txId);
     expect(resumed.txHash).toBe(partial.txHash);

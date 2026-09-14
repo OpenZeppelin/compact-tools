@@ -128,31 +128,27 @@ describe('parseDeployArgv', () => {
 });
 
 describe('parseDeployArgv — --circuits-per-tx', () => {
-  // INV-6
-  it('parses a positive integer', () => {
+  it('should parse a positive integer', () => {
     expect(parseDeployArgv(['--circuits-per-tx', '8']).circuitsPerTx).toBe(8);
   });
 
-  // INV-6
-  it('is undefined when the flag is absent', () => {
+  it('should be undefined when the flag is absent', () => {
     expect(parseDeployArgv([]).circuitsPerTx).toBeUndefined();
   });
 
-  // INV-6
-  it.each(['0', 'abc', '1.5', '3abc'])('rejects %s', (value) => {
+  it.each(['0', 'abc', '1.5', '3abc'])('should reject %s', (value) => {
     expect(() => parseDeployArgv(['--circuits-per-tx', value])).toThrow(
       '--circuits-per-tx requires a positive integer',
     );
   });
 
-  // INV-6
-  it.each([[], ['-1']])('rejects a missing value (%s)', (...rest) => {
+  it.each([[], ['-1']])('should reject a missing value (%s)', (...rest) => {
     expect(() =>
       parseDeployArgv(['--circuits-per-tx', ...rest.flat()]),
     ).toThrow('--circuits-per-tx requires a value');
   });
 
-  it('is accepted by the CLI unknown-flag guard', () => {
+  it('should be accepted by the CLI unknown-flag guard', () => {
     expect(
       parseDeployArgv(['Token', '--circuits-per-tx', '4'], {
         rejectUnknownFlags: true,

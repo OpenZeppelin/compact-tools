@@ -116,7 +116,7 @@ A resume stores the signing key for the address if the private-state store lacks
 
 **Resume guard limit.** The guard proves the recorded address holds a contract this signing key maintains whose on-chain keys match this artifact; it cannot tell two deploys of the same artifact with the same key apart. Do not hand-edit a `partial` record's `address`, or a sibling deploy will receive this run's remaining keys.
 
-The `// INV-N` tags in `src/` refer to [docs/invariants.md](./docs/invariants.md).
+The properties this path has to hold are listed in [docs/invariants.md](./docs/invariants.md).
 
 ## Deploying to real networks (preprod, preview, testnet)
 

@@ -299,8 +299,7 @@ describe('runDeploy', () => {
     expect(parsed.exitCode).toBe(3);
   });
 
-  // INV-30
-  it('emits the fragmented-deploy fields as structured JSON', async () => {
+  it('should emit the fragmented-deploy fields as structured JSON', async () => {
     process.argv = ['node', 'script.ts', '--json'];
     const err = new FragmentDeployError({
       address: '0xADDR',
@@ -321,7 +320,7 @@ describe('runDeploy', () => {
     expect(parsed.txId).toBe('0xINSERT');
   });
 
-  it('omits the fragmented-deploy fields for any other error', async () => {
+  it('should omit the fragmented-deploy fields for any other error', async () => {
     process.argv = ['node', 'script.ts', '--json'];
     vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(
       new DeployError('boom', 3),
@@ -334,7 +333,7 @@ describe('runDeploy', () => {
     expect(parsed).not.toHaveProperty('circuitsPending');
   });
 
-  it('omits txId when the fragmented deploy failed before any insert', async () => {
+  it('should omit txId when the fragmented deploy failed before any insert', async () => {
     process.argv = ['node', 'script.ts', '--json'];
     vi.spyOn(deployerModule.Deployer, 'prepare').mockRejectedValue(
       new FragmentDeployError({

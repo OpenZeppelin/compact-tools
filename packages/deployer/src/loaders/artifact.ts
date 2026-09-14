@@ -61,7 +61,7 @@ export class Artifact {
   /**
    * Verifier key bytes for every circuit this artifact declares.
    *
-   * INV-11: read before fragment 0, so a bundle missing a key fails before any
+   * Read before fragment 0, so a bundle missing a key fails before any
    * transaction rather than mid-way through the inserts.
    */
   async verifierKeys(

@@ -460,8 +460,7 @@ function splitArgs(
 }
 
 describe('submitDeploy on a pruned fragment', () => {
-  // INV-7, INV-14
-  it('deploys the pruned state and returns its address', async () => {
+  it('should deploy the pruned state and return its address', async () => {
     stubConstructor();
     vi.mocked(submitTxAsync).mockResolvedValue('0xTX');
 
@@ -475,7 +474,7 @@ describe('submitDeploy on a pruned fragment', () => {
     );
     expect(rendered).toContain('Deploy ContractState');
     expect(rendered).not.toContain('MaintenanceUpdate');
-    // INV-7: the deploy tx carries fragment 0's operations and no others.
+    // The deploy tx carries fragment 0's operations and no others.
     expect(rendered).toContain('approve:');
     expect(rendered).toContain('burn:');
     for (const dropped of ['charge', 'deposit', 'evict']) {
@@ -483,8 +482,7 @@ describe('submitDeploy on a pruned fragment', () => {
     }
   });
 
-  // INV-8
-  it('refuses a constructor that creates a Zswap coin', async () => {
+  it('should refuse a constructor that creates a Zswap coin', async () => {
     stubConstructor(
       constructorResult({ inputs: [], outputs: [{ coinInfo: {} }] }),
     );
@@ -496,8 +494,7 @@ describe('submitDeploy on a pruned fragment', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  // INV-8
-  it('refuses a constructor that spends a Zswap coin', async () => {
+  it('should refuse a constructor that spends a Zswap coin', async () => {
     stubConstructor(
       constructorResult({ inputs: [{ nonce: '0x' }], outputs: [] }),
     );
@@ -505,8 +502,7 @@ describe('submitDeploy on a pruned fragment', () => {
     await expect(submitDeploy(splitArgs())).rejects.toThrow(ConfigError);
   });
 
-  // INV-7
-  it('surfaces a fragment naming an unknown circuit as a bug, not a tx failure', async () => {
+  it('should surface a fragment naming an unknown circuit as a bug, not a tx failure', async () => {
     stubConstructor();
 
     const thrown = await submitDeploy(splitArgs(['nope'])).catch(
@@ -517,7 +513,7 @@ describe('submitDeploy on a pruned fragment', () => {
     expect(thrown).not.toBeInstanceOf(DeployTxFailedError);
   });
 
-  it('passes the initial private state only when configured', async () => {
+  it('should pass the initial private state only when configured', async () => {
     stubConstructor();
     vi.mocked(submitTxAsync).mockResolvedValue('0xTX');
 
@@ -546,8 +542,7 @@ describe('submitDeploy block-limit classification', () => {
   const BLOCK_LIMIT_TEXT =
     '1010: Invalid Transaction: Transaction would exhaust the block limits';
 
-  // INV-9
-  it('raises BlockLimitError naming the fragment size', async () => {
+  it('should raise BlockLimitError naming the fragment size', async () => {
     vi.mocked(createUnprovenDeployTx).mockResolvedValue(
       fakeUnsubmitted() as never,
     );
@@ -560,8 +555,7 @@ describe('submitDeploy block-limit classification', () => {
     expect((thrown as BlockLimitError).exitCode).toBe(7);
   });
 
-  // INV-9
-  it('leaves any other 1010 as a plain tx failure', async () => {
+  it('should leave any other 1010 as a plain tx failure', async () => {
     vi.mocked(createUnprovenDeployTx).mockResolvedValue(
       fakeUnsubmitted() as never,
     );
@@ -584,8 +578,7 @@ describe('awaitFragmentFinalization', () => {
     circuitsPending: ['burn'],
   };
 
-  // INV-12
-  it('returns the finalization data on SucceedEntirely', async () => {
+  it('should return the finalization data on SucceedEntirely', async () => {
     const finalized = await awaitFragmentFinalization({
       providers: watchProviders(async () => fakeFinalized()),
       ...fragmentArgs,
@@ -595,8 +588,7 @@ describe('awaitFragmentFinalization', () => {
     expect(finalized.blockHeight).toBe(1234);
   });
 
-  // INV-12
-  it('fails a partially applied update rather than treating it as landed', async () => {
+  it('should fail a partially applied update rather than treating it as landed', async () => {
     const thrown = await awaitFragmentFinalization({
       providers: watchProviders(async () =>
         fakeFinalized({ status: 'SucceedPartially' }),
@@ -610,8 +602,7 @@ describe('awaitFragmentFinalization', () => {
     expect((thrown as FragmentDeployError).txId).toBe('0xINSERT');
   });
 
-  // INV-12
-  it('gives up once txTimeoutMs passes', async () => {
+  it('should give up once txTimeoutMs passes', async () => {
     const thrown = await awaitFragmentFinalization({
       providers: watchProviders(() => new Promise(() => {})),
       ...fragmentArgs,
@@ -622,8 +613,7 @@ describe('awaitFragmentFinalization', () => {
     expect((thrown as Error).message).toContain('no finalization within 5 ms');
   });
 
-  // INV-12
-  it('wraps a rejecting watch, keeping the cause', async () => {
+  it('should wrap a rejecting watch, keeping the cause', async () => {
     const cause = new Error('socket closed');
     const thrown = await awaitFragmentFinalization({
       providers: watchProviders(async () => {
@@ -647,8 +637,7 @@ describe('toPartialRecord', () => {
     circuits: ['charge', 'approve', 'burn'],
   };
 
-  // INV-17
-  it('partitions the artifact circuits into landed and pending, both sorted', () => {
+  it('should partition the artifact circuits into landed and pending, both sorted', () => {
     const record = toPartialRecord({ ...base, circuitsOnChain: ['burn'] });
 
     expect(record.status).toBe('partial');
@@ -659,8 +648,7 @@ describe('toPartialRecord', () => {
     ).toStrictEqual(['approve', 'burn', 'charge']);
   });
 
-  // INV-17
-  it('records nothing pending once every circuit is on chain', () => {
+  it('should record nothing pending once every circuit is on chain', () => {
     const record = toPartialRecord({
       ...base,
       circuitsOnChain: ['approve', 'burn', 'charge'],
@@ -669,14 +657,13 @@ describe('toPartialRecord', () => {
     expect(record.circuitsPending).toStrictEqual([]);
   });
 
-  // INV-17
-  it('rejects a chain read naming a circuit the artifact does not have', () => {
+  it('should reject a chain read naming a circuit the artifact does not have', () => {
     expect(() =>
       toPartialRecord({ ...base, circuitsOnChain: ['stranger'] }),
     ).toThrow(DeployError);
   });
 
-  it('records an insert left in flight so a resume can settle it', () => {
+  it('should record an insert left in flight so a resume can settle it', () => {
     const record = toPartialRecord({
       ...base,
       circuitsOnChain: ['burn'],
@@ -689,7 +676,7 @@ describe('toPartialRecord', () => {
     ).not.toHaveProperty('pendingTxId');
   });
 
-  it('keeps the caller submittedAt across progress rewrites', () => {
+  it('should keep the caller submittedAt across progress rewrites', () => {
     const submittedAt = '2026-05-15T00:00:00.000Z';
 
     expect(
@@ -698,8 +685,7 @@ describe('toPartialRecord', () => {
     ).toBe(submittedAt);
   });
 
-  // INV-22
-  it('carries no signing key', () => {
+  it('should carry no signing key', () => {
     const record = toPartialRecord({ ...base, circuitsOnChain: [] });
 
     expect(JSON.stringify(record)).not.toContain('aa'.repeat(32));
@@ -707,8 +693,7 @@ describe('toPartialRecord', () => {
 });
 
 describe('toConfirmedRecord from a partial head', () => {
-  // INV-16
-  it('promotes a partial record, keeping the address and deploy txId', () => {
+  it('should promote a partial record, keeping the address and deploy txId', () => {
     const partial = toPartialRecord({
       address: '0xCONTRACT',
       txId: '0xTX',

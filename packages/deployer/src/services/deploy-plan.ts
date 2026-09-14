@@ -31,7 +31,7 @@ export function sortCircuits(circuits: readonly string[]): string[] {
 }
 
 /**
- * INV-1, INV-2: split sorted `circuits` into fragments of at most `budget`
+ * Split sorted `circuits` into fragments of at most `budget`
  * each. Validated at the edges (TOML schema, argv, `Deployer.prepare`), so
  * `budget` is trusted to be an integer of at least one.
  */
@@ -50,7 +50,7 @@ export function planFragments(
   return { circuits: sorted, fragments };
 }
 
-/** INV-10: artifact circuits absent from `onChain`, sorted. */
+/** Artifact circuits absent from `onChain`, sorted. */
 export function remaining(
   circuits: readonly string[],
   onChain: readonly string[],

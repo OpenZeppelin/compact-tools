@@ -406,8 +406,7 @@ describe('syncAndVerifyFunds', () => {
 });
 
 describe('readDustTip', () => {
-  // INV-19
-  it('returns the highest relevant dust index', async () => {
+  it('should return the highest relevant dust index', async () => {
     const wallet = {
       wallet: {
         state: () =>
@@ -442,8 +441,7 @@ describe('awaitDustSettled', () => {
     } as unknown as MidnightWalletProvider;
   }
 
-  // INV-19
-  it('waits past a wallet that is only near the tip, then returns', async () => {
+  it('should wait past a wallet that is only near the tip, then returns', async () => {
     await expect(
       awaitDustSettled({
         wallet: walletApplying([40n, 41n, 42n]),
@@ -453,8 +451,7 @@ describe('awaitDustSettled', () => {
     ).resolves.toBeUndefined();
   });
 
-  // INV-19
-  it('waits while the wallet still holds a transaction of its own pending', async () => {
+  it('should wait while the wallet still holds a transaction of its own pending', async () => {
     const thrown = await awaitDustSettled({
       // The index is past the mark, but the wallet has not resolved its own
       // transaction, which is the spend we care about.
@@ -466,8 +463,7 @@ describe('awaitDustSettled', () => {
     expect(thrown).toBeInstanceOf(WalletError);
   });
 
-  // INV-19
-  it('returns once the wallet has resolved its own transaction', async () => {
+  it('should return once the wallet has resolved its own transaction', async () => {
     await expect(
       awaitDustSettled({
         wallet: walletApplying([42n], {
@@ -479,8 +475,7 @@ describe('awaitDustSettled', () => {
     ).resolves.toBeUndefined();
   });
 
-  // INV-19
-  it('fails rather than balancing against a wallet still short of the mark', async () => {
+  it('should fail rather than balancing against a wallet still short of the mark', async () => {
     const thrown = await awaitDustSettled({
       wallet: walletApplying([40n, 41n]),
       appliedBeyond: 41n,

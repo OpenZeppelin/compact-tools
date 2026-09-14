@@ -290,7 +290,7 @@ export class Deployer implements AsyncDisposable {
     const config = await CompactConfig.load(opts.configPath);
     const { rootDir } = config;
     const { networkName, network, contract } = resolveTargets(opts, config);
-    // INV-6: checked here so a bad budget fails before the wallet sync, which
+    // Checked here so a bad budget fails before the wallet sync, which
     // on a real network is tens of minutes.
     assertBudget(opts.circuitsPerTx);
     const budget = opts.circuitsPerTx ?? contract.circuits_per_tx;
@@ -465,7 +465,7 @@ export class Deployer implements AsyncDisposable {
    * written after submission is what makes either path recoverable: every
    * later failure leaves the address on disk and names it in the error.
    *
-   * INV-29: a `partial` head record resumes from chain state unless `--force`
+   * A `partial` head record resumes from chain state unless `--force`
    * is set, in which case it is rotated into history and a new contract is
    * deployed. Resuming is idempotent: only the circuits still missing on chain
    * are inserted.
@@ -491,10 +491,10 @@ export class Deployer implements AsyncDisposable {
       privateStateSecret: s.privateStateSecret,
     });
     const txTimeoutMs = s.opts.txTimeoutMs ?? DEFAULT_TX_TIMEOUT_MS;
-    // INV-11: a bundle missing a key fails here, before any transaction.
+    // A bundle missing a key fails here, before any transaction.
     const keys = await s.artifact.verifierKeys(providers.zkConfigProvider);
 
-    // INV-26: a partial head resumes; only --force starts a second contract.
+    // A partial head resumes; only --force starts a second contract.
     const started =
       head?.status === 'partial' && !force
         ? await this.#resumeAt({ head, providers, keys, txTimeoutMs })
@@ -554,7 +554,7 @@ export class Deployer implements AsyncDisposable {
     txTimeoutMs: number;
   }): Promise<{ fragments: number; circuits: number }> {
     const progress = await this.#insertRemaining(args);
-    // INV-11, INV-15: strict verify gates the promotion to `confirmed`.
+    // Strict verify gates the promotion to `confirmed`.
     verifyState({
       address: args.started.address,
       artifactKeys: args.keys,
@@ -605,7 +605,7 @@ export class Deployer implements AsyncDisposable {
     const fragments = planFragments(circuits, attempt.cap).fragments;
     const split = fragments.length > 1;
 
-    // INV-21: nothing is written until the node has accepted the tx.
+    // Nothing is written until the node has accepted the tx.
     const record: PendingDeploymentRecord | PartialDeploymentRecord = split
       ? toPartialRecord({
           address: submitted.address,
@@ -632,7 +632,7 @@ export class Deployer implements AsyncDisposable {
       recovery: record.status === 'partial' ? 'partial' : 'pending',
     });
     // Order copied from midnight-js's own post-success path, and reached only
-    // on `SucceedEntirely`. INV-18: the signing key and the initial private
+    // on `SucceedEntirely`. The signing key and the initial private
     // state are stored once, for an address that now exists.
     await persistDeployPrivateState({
       providers,
@@ -675,7 +675,7 @@ export class Deployer implements AsyncDisposable {
   }): Promise<StartedDeploy> {
     const { head, providers, keys, txTimeoutMs } = args;
     const s = this.#state;
-    // INV-24: only the public half of the loaded key is compared or logged.
+    // Only the public half of the loaded key is compared or logged.
     const verifyingKey = verifyingKeyOf(s.signingKey.hex);
     s.logger.debug(
       `Resuming ${head.address}; maintenance verifying key ${verifyingKey}`,
@@ -696,7 +696,7 @@ export class Deployer implements AsyncDisposable {
             circuits: head.pendingCircuits ?? [],
             txTimeoutMs,
           });
-    // INV-13: a pending insert that turns out to have landed still has to be
+    // A pending insert that turns out to have landed still has to be
     // visible before the plan is built from chain state.
     if (settledInsert !== undefined) {
       await awaitCircuitsOnChain({
@@ -706,7 +706,7 @@ export class Deployer implements AsyncDisposable {
         timeoutMs: txTimeoutMs,
       });
     }
-    // INV-27: address exists, committee is ours, on-chain keys match the
+    // Address exists, committee is ours, on-chain keys match the
     // artifact. The record's own circuit lists are never consulted.
     const snapshot = assertResumable({
       address: head.address,
@@ -718,7 +718,7 @@ export class Deployer implements AsyncDisposable {
     s.logger.info(
       `Resuming fragmented deploy of ${head.address}: ${snapshot.circuits.length}/${keys.size} circuits on chain`,
     );
-    // INV-18: a resume of a deploy started on another machine, or after the
+    // A resume of a deploy started on another machine, or after the
     // private-state store was cleared, has no key for this address.
     await this.#ensureSigningKeyStored({ providers, address: head.address });
     // Chain state exists, so the deploy landed. Prefer what the indexer just
@@ -752,7 +752,7 @@ export class Deployer implements AsyncDisposable {
   /**
    * Wait for the recorded address to have a landed deploy transaction.
    *
-   * INV-2: `undefined` on timeout, which lets the resume guard report "no
+   * `undefined` on timeout, which lets the resume guard report "no
    * contract there" rather than this wait masking it. A recorded `txHash` that
    * disagrees with the chain means the record points at someone else's deploy.
    */
@@ -874,8 +874,8 @@ export class Deployer implements AsyncDisposable {
   /**
    * Submit the largest batch the node will take, halving on its refusal.
    *
-   * INV-9: the only halving site. Strictly decreasing, floor one circuit, and
-   * only when no explicit budget was given. INV-19: each attempt records the
+   * The only halving site. Strictly decreasing, floor one circuit, and
+   * only when no explicit budget was given. Each attempt records the
    * dust index the wallet must pass before it can have seen that spend.
    */
   async #submitHalving<T>(args: {
@@ -918,7 +918,7 @@ export class Deployer implements AsyncDisposable {
    * Insert the verifier keys that are still missing, one batched maintenance
    * update per fragment, strictly sequentially.
    *
-   * INV-30: every failure inside the loop leaves the `partial` record on disk
+   * Every failure inside the loop leaves the `partial` record on disk
    * and names the address and both circuit lists, so a re-run resumes.
    */
   async #insertRemaining(args: {
@@ -938,7 +938,7 @@ export class Deployer implements AsyncDisposable {
     const { address, record } = started;
     const all = [...keys.keys()];
 
-    // INV-13: the next fragment is built from a read that already shows
+    // The next fragment is built from a read that already shows
     // fragment 0, never from a state the indexer has not caught up to. This
     // read raises the resumable error itself, so it sits outside the catch.
     let snapshot =
@@ -957,7 +957,7 @@ export class Deployer implements AsyncDisposable {
     let size = started.size;
 
     try {
-      // INV-19: the wallet has to have applied the deploy tx's dust spend
+      // The wallet has to have applied the deploy tx's dust spend
       // before the first insert is balanced against the same UTXO set. A
       // resume has no spend of its own in flight.
       await (started.kind === 'fresh'
@@ -967,7 +967,7 @@ export class Deployer implements AsyncDisposable {
             timeoutMs: txTimeoutMs,
           })
         : Promise.resolve());
-      // INV-25: the ledger checks each signature against a committee slot, so
+      // The ledger checks each signature against a committee slot, so
       // the slot comes from the same chain read as the counter.
       const signer = signerIndex({
         address,
@@ -983,7 +983,7 @@ export class Deployer implements AsyncDisposable {
       });
 
       for (const fragment of started.inserts) {
-        // INV-10: chain-derived, so an insert never names a key already there.
+        // Chain-derived, so an insert never names a key already there.
         let pending = fragmentRemainder(fragment, snapshot.circuits);
         while (pending.length > 0) {
           const landed = await this.#insertBatch({
@@ -1065,7 +1065,7 @@ export class Deployer implements AsyncDisposable {
           providers,
           contractName: s.opts.contract,
           circuits: batch,
-          // INV-28: counter read fresh from the snapshot above.
+          // Counter read fresh from the snapshot above.
           unprovenTx: buildInsertTx({
             update: buildInsertUpdate({
               address,
@@ -1092,7 +1092,7 @@ export class Deployer implements AsyncDisposable {
         circuitsPending: remaining(all, snapshot.circuits),
       });
     } catch (e) {
-      // INV-29: only a tx still in flight is worth settling on the next run.
+      // Only a tx still in flight is worth settling on the next run.
       // One the node ruled on is cleared, so a resume does not wait on it.
       const stillInFlight = e instanceof FragmentDeployError && e.timedOut;
       try {
@@ -1124,7 +1124,7 @@ export class Deployer implements AsyncDisposable {
       timeoutMs: txTimeoutMs,
     });
     const left = remaining(all, snapshot.circuits);
-    // INV-19: only when another insert follows; nothing is balanced after the
+    // Only when another insert follows; nothing is balanced after the
     // last one.
     if (left.length > 0) {
       await awaitDustSettled({

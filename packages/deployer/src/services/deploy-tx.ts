@@ -150,7 +150,7 @@ export async function submitDeploy(
  * Run `submit`, turning the pool's refusal of an over-large extrinsic into a
  * {@link BlockLimitError} the caller can halve on.
  *
- * INV-9: this is the only place a refusal becomes halvable, so the deploy tx
+ * This is the only place a refusal becomes halvable, so the deploy tx
  * and every insert classify it identically.
  */
 async function submitClassified(
@@ -171,7 +171,7 @@ async function submitClassified(
   }
 }
 
-/** INV-20: today's path, one tx carrying the constructor state and every verifier key. */
+/** Today's path, one tx carrying the constructor state and every verifier key. */
 function buildFullDeploy({
   providers,
   contract,
@@ -233,7 +233,7 @@ async function buildPrunedDeploy({
   const coinCount =
     zswapLocalState.inputs.length + zswapLocalState.outputs.length;
   if (coinCount > 0) {
-    // INV-8: the split tx has no Zswap offer, so the constructor's coins would
+    // The split tx has no Zswap offer, so the constructor's coins would
     // be lost. Deploy this contract in one tx or shrink it.
     throw new ConfigError(
       `Constructor of "${contractName}" creates or spends ${coinCount} Zswap coin(s), which a fragmented deploy cannot carry. Remove circuits_per_tx, or deploy a contract small enough for a single tx.`,
@@ -269,7 +269,7 @@ export interface AwaitDeployFinalizationArgs {
 }
 
 /**
- * INV-12: wait for one transaction to land, capped at `txTimeoutMs`, rejecting
+ * Wait for one transaction to land, capped at `txTimeoutMs`, rejecting
  * any status other than `SucceedEntirely`.
  *
  * `fail` supplies the caller's error type, so the deploy tx and a fragment
@@ -319,7 +319,7 @@ export async function awaitDeployTxData({
 }
 
 /**
- * INV-12: one wait, one ceiling, one `SucceedEntirely` rule. `fail` supplies
+ * One wait, one ceiling, one `SucceedEntirely` rule. `fail` supplies
  * the caller's error type and learns whether the ceiling was what stopped it,
  * which is the difference between a transaction still in flight and one the
  * node has ruled on.
@@ -407,7 +407,7 @@ export interface AwaitFragmentFinalizationArgs {
 }
 
 /**
- * INV-12: wait for one transaction of a fragmented deploy to land, under the
+ * Wait for one transaction of a fragmented deploy to land, under the
  * same ceiling and the same `SucceedEntirely` rule as the deploy tx. A partially
  * applied update must not be treated as landed: verify would then be skipped
  * for those circuits.
@@ -446,7 +446,7 @@ export interface PersistDeployPrivateStateArgs {
 }
 
 /**
- * INV-18: store the signing key and initial private state for the deployed
+ * Store the signing key and initial private state for the deployed
  * address. Call only after a `SucceedEntirely` status: a rejected tx must not leave
  * local state behind for a contract that does not exist.
  */
@@ -519,7 +519,7 @@ export interface ToPartialRecordArgs {
 }
 
 /**
- * INV-17: progress record for a fragmented deploy.
+ * Progress record for a fragmented deploy.
  *
  * `circuitsOnChain` must come from a chain read: a record built from the plan
  * would claim circuits landed whose insert actually failed.
@@ -539,7 +539,7 @@ export function toPartialRecord({
 }: ToPartialRecordArgs): PartialDeploymentRecord {
   const all = sortCircuits(circuits);
   const onChain = sortCircuits(circuitsOnChain);
-  // INV-17: the two lists partition the artifact's circuits, so a chain read
+  // The two lists partition the artifact's circuits, so a chain read
   // naming something the artifact does not have is a bug, not a user error.
   const foreign = remaining(onChain, all);
   if (foreign.length > 0) {

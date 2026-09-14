@@ -107,7 +107,7 @@ describe('instanceof chain', () => {
 });
 
 describe('BlockLimitError', () => {
-  it('pins the exit code to 7 and stays a tx failure', () => {
+  it('should pin the exit code to 7 and stays a tx failure', () => {
     const e = new BlockLimitError('too big');
 
     expect(e.exitCode).toBe(7);
@@ -115,7 +115,7 @@ describe('BlockLimitError', () => {
     expect(e).toBeInstanceOf(DeployTxFailedError);
   });
 
-  it('preserves the cause', () => {
+  it('should preserve the cause', () => {
     const cause = new Error('1010 block limits');
 
     expect(new BlockLimitError('too big', { cause }).cause).toBe(cause);
@@ -130,7 +130,7 @@ describe('FragmentDeployError', () => {
     reason: 'insert timed out',
   };
 
-  it('pins the exit code to 8', () => {
+  it('should pin the exit code to 8', () => {
     const e = new FragmentDeployError(fields);
 
     expect(e.exitCode).toBe(8);
@@ -138,8 +138,7 @@ describe('FragmentDeployError', () => {
     expect(e).toBeInstanceOf(DeployError);
   });
 
-  // INV-30
-  it('names the address, both circuit lists and the resume hint', () => {
+  it('should name the address, both circuit lists and the resume hint', () => {
     const { message } = new FragmentDeployError(fields);
 
     expect(message).toContain('0xADDR');
@@ -148,8 +147,7 @@ describe('FragmentDeployError', () => {
     expect(message).toContain('re-run the same deploy to resume');
   });
 
-  // INV-30
-  it('exposes the fields for --json consumers', () => {
+  it('should expose the fields for --json consumers', () => {
     const e = new FragmentDeployError({ ...fields, txId: '0xTX' });
 
     expect(e.address).toBe('0xADDR');
@@ -159,7 +157,7 @@ describe('FragmentDeployError', () => {
     expect(e.message).toContain('Failed insert txId 0xTX');
   });
 
-  it('renders empty circuit lists readably and omits an absent txId', () => {
+  it('should render empty circuit lists readably and omits an absent txId', () => {
     const e = new FragmentDeployError({
       ...fields,
       circuitsOnChain: [],
@@ -172,8 +170,7 @@ describe('FragmentDeployError', () => {
     expect(e.txId).toBeUndefined();
   });
 
-  // INV-22
-  it('keeps the signing key out of the message and the fields', () => {
+  it('should keep the signing key out of the message and the fields', () => {
     const e = new FragmentDeployError({
       ...fields,
       reason: 'insert signed and rejected',
@@ -187,7 +184,7 @@ describe('FragmentDeployError', () => {
 });
 
 describe('PartialDeployExistsError', () => {
-  it('pins the exit code to 2 and explains both routes', () => {
+  it('should pin the exit code to 2 and explains both routes', () => {
     const e = new PartialDeployExistsError('Token', '0xADDR');
 
     expect(e.exitCode).toBe(2);

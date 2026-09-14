@@ -46,8 +46,7 @@ function inserts(...circuitIds: string[]) {
 }
 
 describe('verifyingKeyOf', () => {
-  // INV-24
-  it('returns the public half of the signing key', () => {
+  it('should return the public half of the signing key', () => {
     const verifying = verifyingKeyOf(SIGNING_KEY);
 
     expect(verifying).toBe(signatureVerifyingKey(SIGNING_KEY));
@@ -56,8 +55,7 @@ describe('verifyingKeyOf', () => {
 });
 
 describe('buildInsertUpdate', () => {
-  // INV-4
-  it('emits one VerifierKeyInsert per circuit and nothing else', () => {
+  it('should emit one VerifierKeyInsert per circuit and nothing else', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment', 'reset'),
@@ -77,8 +75,7 @@ describe('buildInsertUpdate', () => {
     ).toStrictEqual(['increment', 'reset']);
   });
 
-  // INV-14
-  it('targets the address it was given', () => {
+  it('should target the address it was given', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -90,8 +87,7 @@ describe('buildInsertUpdate', () => {
     expect(update.address).toBe(ADDRESS);
   });
 
-  // INV-28
-  it('uses the counter it was given verbatim', () => {
+  it('should use the counter it was given verbatim', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -103,8 +99,7 @@ describe('buildInsertUpdate', () => {
     expect(update.counter).toBe(7n);
   });
 
-  // INV-25
-  it('signs with committee member 0 and the signature verifies', () => {
+  it('should sign with committee member 0 and the signature verifies', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -125,8 +120,7 @@ describe('buildInsertUpdate', () => {
     ).toBe(true);
   });
 
-  // INV-25
-  it('produces a signature no other key validates', () => {
+  it('should produce a signature no other key validates', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -145,8 +139,7 @@ describe('buildInsertUpdate', () => {
     ).toBe(false);
   });
 
-  // INV-25
-  it('produces a signature that does not carry to a different insert list', () => {
+  it('should produce a signature that does not carry to a different insert list', () => {
     const one = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -173,8 +166,7 @@ describe('buildInsertUpdate', () => {
     ).toBe(false);
   });
 
-  // INV-22
-  it('keeps the signing key out of the rendered update', () => {
+  it('should keep the signing key out of the rendered update', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -186,8 +178,7 @@ describe('buildInsertUpdate', () => {
     expect(update.toString(false)).not.toContain(SIGNING_KEY);
   });
 
-  // INV-10
-  it('refuses an empty insert list', () => {
+  it('should refuse an empty insert list', () => {
     expect(() =>
       buildInsertUpdate({
         address: ADDRESS,
@@ -201,8 +192,7 @@ describe('buildInsertUpdate', () => {
 });
 
 describe('buildInsertTx', () => {
-  // INV-4
-  it('wraps the update in an intent with no calls and no offers', () => {
+  it('should wrap the update in an intent with no calls and no offers', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -219,8 +209,7 @@ describe('buildInsertTx', () => {
     expect(rendered).not.toContain('ContractCall');
   });
 
-  // INV-22
-  it('keeps the signing key out of the rendered tx', () => {
+  it('should keep the signing key out of the rendered tx', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),
@@ -236,8 +225,7 @@ describe('buildInsertTx', () => {
 });
 
 describe('buildInsertUpdate committee slot', () => {
-  // INV-25
-  it('signs at the slot it was given, not slot 0', () => {
+  it('should sign at the slot it was given, not slot 0', () => {
     const update = buildInsertUpdate({
       address: ADDRESS,
       inserts: inserts('increment'),

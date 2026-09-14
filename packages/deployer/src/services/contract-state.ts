@@ -11,7 +11,7 @@ import type { ContractState as RuntimeContractState } from '@midnight-ntwrk/comp
 import { ContractState as LedgerContractState } from '@midnight-ntwrk/ledger-v8';
 import { DeployError } from '../errors.ts';
 
-/** INV-5: serialize-round-trip a runtime state into its ledger counterpart. */
+/** Serialize-round-trip a runtime state into its ledger counterpart. */
 export function toLedgerContractState(
   state: RuntimeContractState,
 ): LedgerContractState {
@@ -52,7 +52,7 @@ export function pruneState({
   for (const name of keep) {
     const op = full.operation(name);
     if (op === undefined) {
-      // INV-7: a fragment naming a circuit the constructor never produced
+      // A fragment naming a circuit the constructor never produced
       // would deploy a state the artifact cannot describe.
       throw new DeployError(
         `Constructor state has no operation "${name}"; it carries ${[...available].sort().join(', ') || '(none)'}.`,
@@ -61,7 +61,7 @@ export function pruneState({
     pruned.setOperation(name, op);
   }
 
-  // INV-7: pruning must lose the later fragments and nothing else.
+  // Pruning must lose the later fragments and nothing else.
   const kept = operationNames(pruned);
   if (kept.length !== keep.length) {
     throw new DeployError(

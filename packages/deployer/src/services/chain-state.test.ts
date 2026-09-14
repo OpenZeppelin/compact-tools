@@ -58,7 +58,7 @@ function provider(queryContractState: Mock): PublicDataProvider {
 }
 
 describe('readSnapshot', () => {
-  it('reads operations, keys, counter and committee', async () => {
+  it('should read operations, keys, counter and committee', async () => {
     const read = await readSnapshot(
       provider(vi.fn(async () => stateStub({ burn: [4], approve: [1] }))),
       ADDRESS,
@@ -71,14 +71,13 @@ describe('readSnapshot', () => {
     expect(read?.threshold).toBe(1);
   });
 
-  // INV-27(a)
-  it('returns undefined when no contract exists at the address', async () => {
+  it('should return undefined when no contract exists at the address', async () => {
     expect(
       await readSnapshot(provider(vi.fn(async () => null)), ADDRESS),
     ).toBeUndefined();
   });
 
-  it('skips an operation the state cannot return', async () => {
+  it('should skip an operation the state cannot return', async () => {
     const stub = stateStub({ approve: [1] });
     const read = await readSnapshot(
       provider(
@@ -96,8 +95,7 @@ describe('readSnapshot', () => {
 });
 
 describe('awaitCircuitsOnChain', () => {
-  // INV-13
-  it('re-reads until the landed fragment is visible', async () => {
+  it('should re-read until the landed fragment is visible', async () => {
     const queryContractState = vi
       .fn()
       .mockResolvedValueOnce(stateStub({ approve: [1] }))
@@ -115,8 +113,7 @@ describe('awaitCircuitsOnChain', () => {
     expect(read.circuits).toStrictEqual(['approve', 'burn']);
   });
 
-  // INV-13
-  it('fails with the pending circuits when the state never catches up', async () => {
+  it('should fail with the pending circuits when the state never catches up', async () => {
     const thrown = await awaitCircuitsOnChain({
       publicDataProvider: provider(
         vi.fn(async () => stateStub({ approve: [1] })),
@@ -136,8 +133,7 @@ describe('awaitCircuitsOnChain', () => {
     ]);
   });
 
-  // INV-13
-  it('reports every expected circuit as pending when the address is empty', async () => {
+  it('should report every expected circuit as pending when the address is empty', async () => {
     const thrown = await awaitCircuitsOnChain({
       publicDataProvider: provider(vi.fn(async () => null)),
       address: ADDRESS,
@@ -157,8 +153,7 @@ describe('awaitCircuitsOnChain', () => {
 const AUTHORITY = { committee: [OUR_KEY], threshold: 1 };
 
 describe('verifyState', () => {
-  // INV-11
-  it('passes on an exact match', () => {
+  it('should pass on an exact match', () => {
     expect(() =>
       verifyState({
         address: ADDRESS,
@@ -169,8 +164,7 @@ describe('verifyState', () => {
     ).not.toThrow();
   });
 
-  // INV-11
-  it('fails on a single flipped verifier-key byte', () => {
+  it('should fail on a single flipped verifier-key byte', () => {
     const thrown = catchThrown(() =>
       verifyState({
         address: ADDRESS,
@@ -188,8 +182,7 @@ describe('verifyState', () => {
     );
   });
 
-  // INV-11
-  it('fails on a missing circuit', () => {
+  it('should fail on a missing circuit', () => {
     const thrown = catchThrown(() =>
       verifyState({
         address: ADDRESS,
@@ -208,8 +201,7 @@ describe('verifyState', () => {
     ]);
   });
 
-  // INV-11
-  it('fails on an on-chain circuit the artifact does not have', () => {
+  it('should fail on an on-chain circuit the artifact does not have', () => {
     const thrown = catchThrown(() =>
       verifyState({
         address: ADDRESS,
@@ -231,8 +223,7 @@ describe('verifyState', () => {
     );
   });
 
-  // INV-11
-  it('fails when the chain reports a circuit with no key bytes', () => {
+  it('should fail when the chain reports a circuit with no key bytes', () => {
     const thrown = catchThrown(() =>
       verifyState({
         address: ADDRESS,
@@ -247,12 +238,11 @@ describe('verifyState', () => {
     );
   });
 
-  // INV-15
   it.each([
     ['committee', snapshot({ committee: [OUR_KEY, 'newcomer'] })],
     ['threshold', snapshot({ threshold: 2 })],
     ['membership', snapshot({ committee: ['someone-else'] })],
-  ])('refuses a %s that moved during the deploy', (_label, chain) => {
+  ])('should refuse a %s that moved during the deploy', (_label, chain) => {
     const thrown = catchThrown(() =>
       verifyState({
         address: ADDRESS,
@@ -268,8 +258,7 @@ describe('verifyState', () => {
 });
 
 describe('signerIndex', () => {
-  // INV-25
-  it('returns this key slot in the committee', () => {
+  it('should return this key slot in the committee', () => {
     const chain = snapshot({ committee: ['someone-else', OUR_KEY] });
 
     expect(
@@ -277,8 +266,7 @@ describe('signerIndex', () => {
     ).toBe(1);
   });
 
-  // INV-25
-  it('refuses a committee that needs more than one signature', () => {
+  it('should refuse a committee that needs more than one signature', () => {
     const thrown = catchThrown(() =>
       signerIndex({
         address: ADDRESS,
@@ -293,8 +281,7 @@ describe('signerIndex', () => {
     );
   });
 
-  // INV-25
-  it('refuses a committee this key is not in', () => {
+  it('should refuse a committee this key is not in', () => {
     const thrown = catchThrown(() =>
       signerIndex({
         address: ADDRESS,
@@ -311,8 +298,7 @@ describe('signerIndex', () => {
 });
 
 describe('assertResumable', () => {
-  // INV-27
-  it('returns the snapshot when address, committee and keys all check out', () => {
+  it('should return the snapshot when address, committee and keys all check out', () => {
     const chain = snapshot({
       circuits: ['approve'],
       verifierKeys: keys({ approve: [1, 2, 3] }),
@@ -328,8 +314,7 @@ describe('assertResumable', () => {
     ).toBe(chain);
   });
 
-  // INV-27(a)
-  it('refuses a record pointing at an address with no contract', () => {
+  it('should refuse a record pointing at an address with no contract', () => {
     const thrown = catchThrown(() =>
       assertResumable({
         address: ADDRESS,
@@ -343,8 +328,7 @@ describe('assertResumable', () => {
     expect((thrown as Error).message).toContain('no contract exists there');
   });
 
-  // INV-25
-  it('refuses a resume onto a multi-signer committee', () => {
+  it('should refuse a resume onto a multi-signer committee', () => {
     const thrown = catchThrown(() =>
       assertResumable({
         address: ADDRESS,
@@ -360,8 +344,7 @@ describe('assertResumable', () => {
     );
   });
 
-  // INV-27(b)
-  it('refuses a contract maintained by someone else', () => {
+  it('should refuse a contract maintained by someone else', () => {
     const thrown = catchThrown(() =>
       assertResumable({
         address: ADDRESS,
@@ -377,8 +360,7 @@ describe('assertResumable', () => {
     );
   });
 
-  // INV-27(c)
-  it('refuses a contract carrying a key from a different build', () => {
+  it('should refuse a contract carrying a key from a different build', () => {
     const thrown = catchThrown(() =>
       assertResumable({
         address: ADDRESS,
@@ -395,8 +377,7 @@ describe('assertResumable', () => {
     expect((thrown as Error).message).toContain('a different build');
   });
 
-  // INV-27(c)
-  it('refuses a contract with a circuit the artifact no longer has', () => {
+  it('should refuse a contract with a circuit the artifact no longer has', () => {
     const thrown = catchThrown(() =>
       assertResumable({
         address: ADDRESS,
@@ -414,8 +395,7 @@ describe('assertResumable', () => {
     );
   });
 
-  // INV-27
-  it('accepts a partial deploy without demanding the pending circuits', () => {
+  it('should accept a partial deploy without demanding the pending circuits', () => {
     expect(() =>
       assertResumable({
         address: ADDRESS,
