@@ -137,16 +137,15 @@ export interface AwaitDustSettledArgs {
  * Two conditions, because neither alone is enough. The dust index is a global
  * event id, so on a busy chain an unrelated event can carry it past the mark
  * before our own spend applies. The facade's pending set names the
- * transactions it is still waiting on, which is exactly our spend, but a
- * facade that never tracked it reports an empty set from the start.
+ * transactions it is still waiting on, which is exactly our spend. A state
+ * without a pending set is unsettled: the index alone cannot prove the spend
+ * applied.
  */
 function dustCaughtUp(state: FacadeState, appliedBeyond: bigint): boolean {
   if (state.dust.state.progress.appliedIndex <= appliedBeyond) return false;
   const pending = state.pending;
-  return (
-    pending === undefined ||
-    PendingTransactions.allPending(pending).length === 0
-  );
+  if (pending === undefined) return false;
+  return PendingTransactions.allPending(pending).length === 0;
 }
 
 /**

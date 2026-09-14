@@ -423,10 +423,13 @@ describe('readDustTip', () => {
 });
 
 describe('awaitDustSettled', () => {
-  /** Emits one state per entry, so a test can hold the wallet behind the mark. */
+  /**
+   * Emits one state per entry, so a test can hold the wallet behind the mark.
+   * `null` stands for a facade that exposes no pending set.
+   */
   function walletApplying(
     indices: bigint[],
-    pending?: { all: unknown[] },
+    pending: { all: unknown[] } | null = { all: [] },
   ): MidnightWalletProvider {
     return {
       wallet: {
@@ -434,7 +437,7 @@ describe('awaitDustSettled', () => {
           Rx.from(
             indices.map((appliedIndex) => ({
               dust: { state: { progress: { appliedIndex } } },
-              pending,
+              pending: pending ?? undefined,
             })),
           ),
       },
@@ -473,6 +476,16 @@ describe('awaitDustSettled', () => {
         timeoutMs: 1000,
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it('should wait while the wallet exposes no pending set at all', async () => {
+    const thrown = await awaitDustSettled({
+      wallet: walletApplying([42n], null),
+      appliedBeyond: 41n,
+      timeoutMs: 5,
+    }).catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(WalletError);
   });
 
   it('should fail rather than balancing against a wallet still short of the mark', async () => {
