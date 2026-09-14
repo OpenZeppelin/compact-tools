@@ -80,9 +80,22 @@ export interface CompilerOptions {
    *
    * Default: `undefined` (no excludes for the compiler). The builder
    * substitutes its own default ({@link DEFAULT_EXCLUDE_PATTERNS}) when
-   * undefined; pass an explicit `[]` to disable that too.
+   * undefined; pass an explicit `[]` — or a non-empty {@link CompilerOptions.only}
+   * list — to disable that too.
    */
   exclude?: string[];
+  /**
+   * Glob-style patterns restricting the run to the `.compact` files that match
+   * at least one of them. Same matching rules as {@link CompilerOptions.exclude}
+   * and applied to the same two stages (compiler discovery, builder copy).
+   *
+   * A file is kept when it matches `only` (or `only` is empty) AND matches no
+   * `exclude` pattern, so the two flags compose. When `only` matches nothing,
+   * the run is a no-op with the usual "no .compact files found" warning.
+   *
+   * Default: `undefined` (keep everything discovered).
+   */
+  only?: string[];
 }
 
 /**
@@ -107,6 +120,9 @@ export type CompilerServiceOptions = Pick<
  *   When `exclude` is undefined, the builder substitutes its own default
  *   ({@link DEFAULT_EXCLUDE_PATTERNS}) so mocks are stripped from the dist
  *   even when the compiler is told to consume them.
+ * - `only`        — same two stages. A non-empty `only` also suppresses the
+ *   default exclude substitution, so `only: ['Mock*']` can ship mocks instead
+ *   of silently copying nothing.
  */
 export interface BuilderOnlyOptions {
   /**
