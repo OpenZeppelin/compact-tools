@@ -414,7 +414,7 @@ describe('runDeploy CLI', () => {
 
   // ------------------------------------------------------------------ //
   describe('successful deploy (text output)', () => {
-    it('should succeed-spin and log the four metadata lines', async () => {
+    it('should succeed-spin and log the metadata lines', async () => {
       mockPrepare.mockResolvedValue(fakeDeployer());
       await runMain(['Token', '--network', 'local']);
 
@@ -429,6 +429,12 @@ describe('runDeploy CLI', () => {
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('blockHeight:'),
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('fragments:'),
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('circuits:'),
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('saved to:'),

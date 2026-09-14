@@ -131,6 +131,8 @@ async function main(): Promise<void> {
     console.log(chalk.gray(`  txId:        ${result.txId}`));
     console.log(chalk.gray(`  txHash:      ${result.txHash}`));
     console.log(chalk.gray(`  blockHeight: ${result.blockHeight}`));
+    console.log(chalk.gray(`  fragments:   ${result.fragments}`));
+    console.log(chalk.gray(`  circuits:    ${result.circuits}`));
     console.log(chalk.gray(`  saved to:    ${result.deploymentsFile}`));
     if (result.explorerUrl) {
       console.log(chalk.gray(`  explorer:    ${result.explorerUrl}`));
