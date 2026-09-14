@@ -1,7 +1,6 @@
 # compact-deployer invariants
 
-What the fragmented-deploy path must always hold. The `// INV-N` tags in `src/`
-point here.
+What the fragmented-deploy path must always hold.
 
 "Enforced in" is the code that makes the statement true. "Pinned by" is the test
 that fails if it stops being true. Numbering is stable: an invariant is never
