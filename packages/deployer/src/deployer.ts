@@ -743,7 +743,7 @@ export class Deployer implements AsyncDisposable {
         address: head.address,
         circuitsOnChain: snapshot.circuits,
         circuitsPending: left,
-        reason: `the deploy transaction of ${head.address} could not be identified, so the deploy cannot be confirmed`,
+        reason: `the deploy transaction of ${head.address} could not be identified, so the deploy cannot be confirmed; copy its txHash and blockHeight from an explorer into the partial record and re-run`,
       });
     }
     const budget = s.budget ?? Math.max(left.length, 1);

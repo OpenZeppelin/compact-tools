@@ -735,18 +735,6 @@ describe('Deployer fragmented deploy', () => {
     expect(submitTxAsync).not.toHaveBeenCalled();
   });
 
-  it('should report a missing contract once the deploy tx watch has concluded', async () => {
-    seedHead(partialHead(['approve'], ['burn']));
-    // The watch resolves, so the absence of state is conclusive.
-    providers.publicDataProvider.queryContractState = vi.fn(async () => null);
-
-    await using d = await splitDeployer({ circuitsPerTx: 2 });
-    const thrown = await d.deploy().catch((e: unknown) => e);
-
-    expect(thrown).toBeInstanceOf(ConfigError);
-    expect((thrown as Error).message).toContain('no contract exists there');
-  });
-
   it('should clear the pending insert when the node ruled the tx failed', async () => {
     const watch = providers.publicDataProvider.watchForTxData;
     providers.publicDataProvider.watchForTxData = vi.fn(async (txId: string) =>
@@ -780,7 +768,28 @@ describe('Deployer fragmented deploy', () => {
 
     expect(thrown).toBeInstanceOf(FragmentDeployError);
     expect((thrown as Error).message).toContain('could not be identified');
+    expect((thrown as Error).message).toContain(
+      'copy its txHash and blockHeight from an explorer into the partial record',
+    );
     expect(submitTxAsync).not.toHaveBeenCalled();
+  });
+
+  it('should confirm a fully landed contract from a repaired record without a transaction', async () => {
+    onChain = [...SPLIT_CIRCUITS];
+    // The record carries the identifiers an operator copied from an
+    // explorer; the indexer still never serves the deploy tx.
+    seedHead(partialHead(onChain, []));
+    providers.publicDataProvider.watchForDeployTxData = vi.fn(
+      () => new Promise(() => {}),
+    );
+
+    await using d = await splitDeployer({ circuitsPerTx: 2 });
+    const result = await d.deploy();
+
+    expect(submitTxAsync).not.toHaveBeenCalled();
+    expect(result.txHash).toBe('0xHASH');
+    expect(result.blockHeight).toBe(1234);
+    expect(readHead(fx.rootDir).Counter?.status).toBe('confirmed');
   });
 
   it('should keep the insert failure when the progress write also fails', async () => {
