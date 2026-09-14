@@ -262,7 +262,7 @@ The package has no barrel entrypoint: each module is its own subpath export, so 
 |---|---|
 | `/run-deploy` | `runDeploy`, `constructorArgs`, `ConstructorArgsOf`, `RunDeployOptions` |
 | `/deployer` | `Deployer`, `DeployerOptions`, `DeployResult` |
-| `/deployments` | `Deployments`, `DeploymentRecord` (`PendingDeploymentRecord` \| `ConfirmedDeploymentRecord`, discriminated on `status`), `DeploymentsFile`, `DeploymentsHistory` |
+| `/deployments` | `Deployments`, `DeploymentRecord` (`PendingDeploymentRecord` \| `PartialDeploymentRecord` \| `ConfirmedDeploymentRecord`, discriminated on `status`), `DeploymentsFile`, `DeploymentsHistory` |
 | `/errors` | `DeployError` and every typed subclass |
 | `/config/compact-config` | `CompactConfig` |
 | `/config/schema` | `ContractConfig`, `NetworkConfig`, `Profile`, `WalletConfig` |
