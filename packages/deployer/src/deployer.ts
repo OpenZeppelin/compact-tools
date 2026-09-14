@@ -177,7 +177,7 @@ export interface DeployResult {
    * `1` for a single-tx deploy. For a split, the deploy tx plus every
    * maintenance update the address has ever taken, read off the on-chain CMA
    * counter, so it includes inserts from an interrupted run and any made out
-   * of band.
+   * of band. `0` on a dry-run, which submits nothing.
    */
   fragments: number;
   /** Artifact circuit count on a single-tx deploy; chain-verified on a split. */

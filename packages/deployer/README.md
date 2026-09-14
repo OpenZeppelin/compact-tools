@@ -101,9 +101,10 @@ The node rejects a deploy tx above the per-block extrinsic limit with `1010: Inv
 
 - `--circuits-per-tx <n>` (or `[contracts.X].circuits_per_tx`) splits the deploy: fragment 0's verifier keys ride the deploy tx, each further fragment is one `MaintenanceUpdate` batching `VerifierKeyInsert`s.
 - Left unset, the deployer submits the largest batch it can and halves on a refusal, down to a single circuit. There is no pre-flight weight check.
+- Set at or above the circuit count, it pins a single-tx deploy and disables halving: a refusal is exit 7, never a split. Use it as the never-fragment switch.
 - One `deploy()` call does the deploy, every insert, and a byte-for-byte check of every on-chain verifier key against the artifact. Only that check writes `confirmed`.
 - Fragments are ordered by sorted circuit name, so a rerun rebuilds the same plan.
-- Between fragment 0 landing and the last insert the contract is live with a subset of its circuits.
+- Between fragment 0 landing and the last insert the contract is live with a subset of its circuits, chosen by sorted name rather than by dependency. Keep every circuit safe to call on its own, or hold traffic until the deploy confirms.
 - Each fragment waits for the wallet to apply the previous spend before the next tx is balanced.
 - A constructor that creates or spends a Zswap coin cannot be split: exit 2.
 - A maintenance committee with a threshold above 1 is refused: the deployer holds one key. Exit 2.
@@ -114,7 +115,7 @@ A resume confirms only once it knows the deploy tx's `txHash` and `blockHeight`,
 
 A resume stores the signing key for the address if the private-state store lacks it. It does not restore `initialPrivateState`: that value only exists inside the constructor run the original deploy did, so a dApp that needs it must seed the store itself.
 
-`--json` results carry `fragments` (transactions the address has taken, counting an interrupted run's inserts) and `circuits` (keys verified on chain). A `--json` failure of a fragmented deploy also carries `address`, `circuitsOnChain`, `circuitsPending`, and the failed insert's `txId`.
+Results carry `fragments` (transactions the address has taken, counting an interrupted run's inserts; `0` on a dry-run) and `circuits` (keys verified on chain), printed by the CLI and included in `--json`. A `--json` failure of a fragmented deploy also carries `address`, `circuitsOnChain`, `circuitsPending`, and the failed insert's `txId`.
 
 **Resume guard limit.** The guard proves the recorded address holds a contract this signing key maintains whose on-chain keys match this artifact; it cannot tell two deploys of the same artifact with the same key apart. Do not hand-edit a `partial` record's `address`, or a sibling deploy will receive this run's remaining keys.
 
