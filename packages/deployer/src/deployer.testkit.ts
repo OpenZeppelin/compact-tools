@@ -82,6 +82,7 @@ export function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
       },
       balance: () => 1n,
     },
+    pending: { all: [] },
   };
   const sub = fakeSubWalletStates();
   return {

@@ -163,6 +163,7 @@ function fragmentWallet(dust: DustView): MidnightWalletProvider {
               },
             },
           },
+          pending: { all: [] },
         }),
     },
   } as unknown as MidnightWalletProvider;
