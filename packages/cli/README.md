@@ -29,6 +29,7 @@ toolchain release you want to pin, e.g. `+0.29.0`):
   "scripts": {
     "compact": "compact-compiler +<version> --exclude '*/archive/*'",
     "compact:access": "compact-compiler +<version> --dir access",
+    "compact:mocks": "compact-compiler +<version> --dir crypto/test/mocks --only 'MockEcdsa.compact'",
     "build": "compact-builder +<version> --clean-dist --hierarchical --copy package.json --copy ../README.md",
     "test": "compact-compiler +<version> --skip-zk && vitest run"
   }
@@ -59,6 +60,7 @@ library); `compact-builder` additionally accepts dist-layout options:
 | `--out <directory>` | both | Output directory for compiled artifacts (default: `artifacts`). |
 | `--hierarchical` | both | Preserve source directory structure in artifacts AND in the builder's `.compact` copy. |
 | `--exclude <pattern>` | both | Skip `.compact` files matching the glob (repeatable). Default for the builder: `Mock*`, `*.mock.compact`. |
+| `--only <pattern>` | both | Keep only `.compact` files matching the glob (repeatable). Applied before `--exclude`; a non-empty `--only` also drops the builder's default excludes. No match compiles nothing and warns. |
 | `--skip-zk` | compiler | Skip zero-knowledge proof generation (also via `SKIP_ZK=true` env var). |
 | `+<version>` | both | Pin the Compact toolchain version (e.g `+0.29.0`). |
 | `--clean-dist` | builder | `rm -rf dist` before building. |

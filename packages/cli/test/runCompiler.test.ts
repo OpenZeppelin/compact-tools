@@ -227,6 +227,23 @@ describe('runCompiler CLI', () => {
       expect(mockExit).toHaveBeenCalledWith(1);
     });
 
+    it('recognizes the --only parser error as an argument parsing error', async () => {
+      const error = new Error('--only flag requires a pattern');
+      mockFromArgs.mockImplementation(() => {
+        throw error;
+      });
+
+      await import('../src/runCompiler.js');
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith(
+        '[COMPILE] Error: --only flag requires a pattern',
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        '\nUsage: compact-compiler [options]',
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
     it('should handle unexpected errors', async () => {
       const msg = 'Something unexpected happened';
       const error = new Error(msg);
@@ -336,6 +353,9 @@ describe('runCompiler CLI', () => {
         '  --exclude <glob>  Skip .compact files matching the glob (repeatable)',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
+        '  --only <glob>     Compile only .compact files matching the glob (repeatable)',
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
         '  --skip-zk         Skip zero-knowledge proof generation',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
@@ -365,6 +385,9 @@ describe('runCompiler CLI', () => {
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         '  compact-compiler --src contracts --out build  # Custom directories',
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        "  compact-compiler --dir crypto --only 'MockEcdsa.compact'  # Single file",
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         '  SKIP_ZK=true compact-compiler --dir token   # Use environment variable',

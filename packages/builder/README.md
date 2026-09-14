@@ -23,6 +23,13 @@ import { CompactCompiler, CompactBuilder } from '@openzeppelin/compact-builder';
 // Compile all .compact files in src/ to artifacts/
 await new CompactCompiler({ flags: '--skip-zk' }).compile();
 
+// Narrow the run: `only` keeps matching files, `exclude` then drops from those
+await new CompactCompiler({
+  targetDir: 'crypto/test/mocks',
+  only: ['Mock*'],
+  exclude: ['MockElGamal.compact'],
+}).compile();
+
 // Or run the full build pipeline (compile + dist assembly)
 const builder = new CompactBuilder({
   cleanDist: true,
@@ -47,7 +54,7 @@ export class CompilerService      { /* … */ }
 export const UIService = { /* … */ };
 
 // Option types
-export interface CompilerOptions { /* flags, targetDir, version, hierarchical, srcDir, outDir, exclude */ }
+export interface CompilerOptions { /* flags, targetDir, version, hierarchical, srcDir, outDir, exclude, only */ }
 export type BuilderOptions = CompilerOptions & {
   cleanDist?: boolean;
   copyToDist?: string[];

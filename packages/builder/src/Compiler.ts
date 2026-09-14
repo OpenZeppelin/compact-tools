@@ -39,7 +39,7 @@ export type { CompilerOptions, CompilerServiceOptions, ExecFunction };
 type ResolvedCompilerOptions = Required<
   Pick<
     CompilerOptions,
-    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'exclude'
+    'flags' | 'hierarchical' | 'srcDir' | 'outDir' | 'exclude' | 'only'
   >
 > &
   Pick<CompilerOptions, 'targetDir' | 'version'>;
@@ -106,11 +106,13 @@ export class CompactCompiler {
       srcDir: options.srcDir ?? DEFAULT_SRC_DIR,
       outDir: options.outDir ?? DEFAULT_OUT_DIR,
       exclude: options.exclude ?? [],
+      only: options.only ?? [],
     };
     this.environmentValidator = new EnvironmentValidator(execFn);
     this.fileDiscovery = new FileDiscovery(
       this.options.srcDir,
       this.options.exclude,
+      this.options.only,
     );
     this.compilerService = new CompilerService(execFn, {
       hierarchical: this.options.hierarchical,
@@ -128,6 +130,7 @@ export class CompactCompiler {
    * - `--out <directory>` - Output directory for artifacts (default: 'artifacts')
    * - `--hierarchical` - Preserve source directory structure in artifacts output
    * - `--exclude <pattern>` - Skip `.compact` files matching the glob pattern (repeatable)
+   * - `--only <pattern>` - Keep only `.compact` files matching the glob pattern (repeatable)
    * - `+<version>` - Use specific toolchain version
    * - Other arguments - Treated as compiler flags
    * - `SKIP_ZK=true` environment variable - Adds --skip-zk flag
@@ -135,7 +138,7 @@ export class CompactCompiler {
    * @param args - Array of command-line arguments
    * @param env  - Environment variables (defaults to process.env)
    * @returns Parsed CompilerOptions object
-   * @throws {Error} If --dir, --src, --out, or --exclude is provided without a value
+   * @throws {Error} If --dir, --src, --out, --exclude, or --only is provided without a value
    */
   static parseArgs(
     args: string[],
@@ -190,6 +193,16 @@ export class CompactCompiler {
         } else {
           throw new Error('--exclude flag requires a pattern');
         }
+      } else if (args[i] === '--only') {
+        const valueExists =
+          i + 1 < args.length && !args[i + 1].startsWith('--');
+        if (valueExists) {
+          options.only ??= [];
+          options.only.push(args[i + 1]);
+          i++;
+        } else {
+          throw new Error('--only flag requires a pattern');
+        }
       } else if (args[i].startsWith('+')) {
         options.version = args[i].slice(1);
       } else {
@@ -210,7 +223,7 @@ export class CompactCompiler {
    * @param args - Array of command-line arguments
    * @param env  - Environment variables (defaults to process.env)
    * @returns New CompactCompiler instance configured from arguments
-   * @throws {Error} If --dir, --src, --out, or --exclude is provided without a value
+   * @throws {Error} If --dir, --src, --out, --exclude, or --only is provided without a value
    */
   static fromArgs(
     args: string[],

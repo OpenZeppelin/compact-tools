@@ -1,11 +1,12 @@
 /**
  * Internal helpers for the Compact CLI tools.
  *
- * - **Glob matching** ({@link globToRegex}, {@link isExcluded}) — used by
- *   `FileDiscovery` to skip `.compact` files matching user-supplied patterns.
- * - **Shell quoting** ({@link shellQuote}, {@link buildFindExcludes}) — used by
- *   `CompactBuilder` to interpolate user-supplied values into bash commands
- *   safely.
+ * - **Glob matching** ({@link globToRegex}, {@link matchesAnyPattern}) — used
+ *   by `FileDiscovery` to apply the user-supplied include/exclude patterns to
+ *   `.compact` files.
+ * - **Shell quoting** ({@link shellQuote}, {@link buildFindExcludes},
+ *   {@link buildFindIncludes}) — used by `CompactBuilder` to interpolate
+ *   user-supplied values into bash commands safely.
  * - **Output cleaning** ({@link cleanCompileOutput}, {@link cleanForDisplay},
  *   {@link parseCircuitConstraints}) — strips ANSI codes, spinner artifacts,
  *   and cursor-movement sequences from `compact compile` PTY output and
@@ -35,8 +36,10 @@ export function globToRegex(glob: string): RegExp {
  * - Patterns without `/` are matched against `filename` only.
  *
  * This mirrors the semantic of `find -name <pattern>` vs `find -path <pattern>`.
+ * Both the exclude list and the include (`only`) list are resolved through it,
+ * so the two flags accept identical patterns.
  */
-export function isExcluded(
+export function matchesAnyPattern(
   filename: string,
   fullPath: string,
   patterns: readonly string[],
@@ -75,6 +78,28 @@ export function buildFindExcludes(patterns: readonly string[]): string {
         : `! -name ${shellQuote(pattern)}`,
     )
     .join(' ');
+}
+
+/**
+ * Builds the `find`-compatible inclusion fragment for the given patterns.
+ * The tests are OR-ed inside a `\( … \)` group so `find`'s implicit AND with
+ * the surrounding tests keeps its meaning. Returns `''` for an empty list,
+ * which leaves the `find` invocation unfiltered.
+ *
+ * @example
+ * buildFindIncludes(['MockEcdsa.compact', '*\/legacy\/*'])
+ * // "\\( -name 'MockEcdsa.compact' -o -path '*\/legacy\/*' \\)"
+ */
+export function buildFindIncludes(patterns: readonly string[]): string {
+  if (patterns.length === 0) return '';
+  const tests = patterns
+    .map((pattern) =>
+      pattern.includes('/')
+        ? `-path ${shellQuote(pattern)}`
+        : `-name ${shellQuote(pattern)}`,
+    )
+    .join(' -o ');
+  return `\\( ${tests} \\)`;
 }
 
 // ─── Compile output cleaning ────────────────────────────────────────────

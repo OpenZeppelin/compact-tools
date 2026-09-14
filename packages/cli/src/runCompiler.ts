@@ -90,6 +90,7 @@ function handleError(error: unknown, spinner: Ora): void {
     '--src flag requires a directory path',
     '--out flag requires a directory path',
     '--exclude flag requires a pattern',
+    '--only flag requires a pattern',
   ];
   if (parserErrors.some((msg) => errorMessage.includes(msg))) {
     spinner.fail(chalk.red(`[COMPILE] Error: ${errorMessage}`));
@@ -142,6 +143,11 @@ function showUsageHelp(): void {
     ),
   );
   console.log(
+    chalk.yellow(
+      '  --only <glob>     Compile only .compact files matching the glob (repeatable)',
+    ),
+  );
+  console.log(
     chalk.yellow('  --skip-zk         Skip zero-knowledge proof generation'),
   );
   console.log(
@@ -176,6 +182,11 @@ function showUsageHelp(): void {
   console.log(
     chalk.yellow(
       '  compact-compiler --src contracts --out build  # Custom directories',
+    ),
+  );
+  console.log(
+    chalk.yellow(
+      "  compact-compiler --dir crypto --only 'MockEcdsa.compact'  # Single file",
     ),
   );
   console.log(
