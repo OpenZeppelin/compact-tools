@@ -9,10 +9,7 @@ import {
   Deployer,
   type DeployResult,
 } from '@openzeppelin/compact-deployer/deployer';
-import {
-  BlockLimitError,
-  FragmentDeployError,
-} from '@openzeppelin/compact-deployer/errors';
+import { FragmentDeployError } from '@openzeppelin/compact-deployer/errors';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   type FixtureContract,
@@ -310,23 +307,18 @@ describe('compact-deploy — Fragmented resumes an interrupted split', () => {
 });
 
 describe('compact-deploy — Fragmented with no configured budget', () => {
-  let outcome: DeployResult | Error;
+  const provider = publicProvider();
+  let result: DeployResult;
   let submissions = 0;
 
   beforeAll(async () => {
     requireArtifact('Fragmented');
     wipeDeployments();
     const tap = tapSubmissions(await fragmentWallet());
-    outcome = await deploy('FragmentedNoBudget', tap.wallet).catch(
-      (e: unknown) => e as Error,
-    );
+    result = await deploy('FragmentedNoBudget', tap.wallet);
     submissions = tap.submitted;
     testLogger().warn(
-      {
-        submissions,
-        fragments: outcome instanceof Error ? undefined : outcome.fragments,
-        error: outcome instanceof Error ? outcome.name : undefined,
-      },
+      { submissions, fragments: result.fragments },
       'no-budget deploy: submissions and the split the node forced',
     );
   }, DEPLOY_BUDGET_MS);
@@ -335,16 +327,18 @@ describe('compact-deploy — Fragmented with no configured budget', () => {
     wipeDeployments();
   });
 
-  // INV-9, INV-21
-  it('either lands the whole contract in one transaction or halves into it', async () => {
-    if (outcome instanceof Error) {
-      // A single circuit was still refused, so nothing may have been written.
-      expect(outcome).toBeInstanceOf(BlockLimitError);
-      expect((outcome as BlockLimitError).exitCode).toBe(7);
-      return;
-    }
-    expect(outcome.circuits).toBe(20);
+  it('should halve the deploy tx the pool refuses and land the rest as one insert', async () => {
+    // The pool refuses all 20 circuits in one deploy tx, halving takes it to
+    // 10, and the remaining 10 go in a single insert. Three submissions: the
+    // refused attempt plus the two that landed.
+    expect(submissions).toBe(3);
+    expect(result.fragments).toBe(2);
+    expect(result.circuits).toBe(20);
+
     const head = await readHead();
     expect(head.FragmentedNoBudget?.status).toBe('confirmed');
+    expect((await snapshotOf(provider, result.address)).circuits).toStrictEqual(
+      CIRCUITS,
+    );
   });
 });
