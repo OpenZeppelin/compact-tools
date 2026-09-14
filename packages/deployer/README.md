@@ -108,7 +108,7 @@ The node rejects a deploy tx above the per-block extrinsic limit with `1010: Inv
 - A constructor that creates or spends a Zswap coin cannot be split: exit 2.
 - A maintenance committee with a threshold above 1 is refused: the deployer holds one key. Exit 2.
 
-A split deploy writes `status: "partial"` (address, txId, `circuitsOnChain`, `circuitsPending`) instead of `pending`. Re-running the same deploy command resumes it: the remaining circuits come from chain state, not from the record. Resume is refused with exit 2 unless the recorded address exists, its maintenance committee holds this signing key, and every on-chain key matches the artifact. `--force` on a `partial` head abandons it (rotated into history) and deploys a new contract at a new address.
+A split deploy writes `status: "partial"` (address, txId, `circuitsOnChain`, `circuitsPending`) instead of `pending`. Re-running the same deploy command resumes it: the remaining circuits come from chain state, not from the record. Resume is refused with exit 2 unless the recorded address exists, its maintenance committee holds this signing key, and every on-chain key matches the artifact. If the deploy tx is not seen within `--tx-timeout` and no state is readable yet, the run exits 8 instead: the tx may still be landing, so check the address on an explorer before reaching for `--force`. `--force` on a `partial` head abandons it (rotated into history) and deploys a new contract at a new address.
 
 A resume stores the signing key for the address if the private-state store lacks it. It does not restore `initialPrivateState`: that value only exists inside the constructor run the original deploy did, so a dApp that needs it must seed the store itself.
 

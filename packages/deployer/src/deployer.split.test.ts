@@ -716,13 +716,29 @@ describe('Deployer fragmented deploy', () => {
     expect((thrown as Error).message).toContain('could not be read');
   });
 
-  it('should still report a missing contract when the deploy tx never lands', async () => {
+  it('should withhold the --force hint when the deploy tx watch times out with no state', async () => {
     seedHead(partialHead(['approve'], ['burn']));
-    // Nothing at the address: no state to read and no deploy tx to settle.
     providers.publicDataProvider.queryContractState = vi.fn(async () => null);
     providers.publicDataProvider.watchForDeployTxData = vi.fn(
       () => new Promise(() => {}),
     );
+
+    await using d = await splitDeployer({ circuitsPerTx: 2 });
+    const thrown = await d.deploy().catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(FragmentDeployError);
+    expect((thrown as FragmentDeployError).timedOut).toBe(true);
+    expect((thrown as Error).message).toContain(
+      'check the address on an explorer before re-running with --force',
+    );
+    expect((thrown as Error).message).not.toContain('no contract exists there');
+    expect(submitTxAsync).not.toHaveBeenCalled();
+  });
+
+  it('should report a missing contract once the deploy tx watch has concluded', async () => {
+    seedHead(partialHead(['approve'], ['burn']));
+    // The watch resolves, so the absence of state is conclusive.
+    providers.publicDataProvider.queryContractState = vi.fn(async () => null);
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
     const thrown = await d.deploy().catch((e: unknown) => e);

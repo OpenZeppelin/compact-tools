@@ -706,12 +706,24 @@ export class Deployer implements AsyncDisposable {
         timeoutMs: txTimeoutMs,
       });
     }
+    const read = await this.#readSnapshotOrFail(head, providers);
+    // No state and a timed-out watch is inconclusive: the deploy tx may still
+    // be landing. The --force hint is reserved for a watch that concluded.
+    if (read === undefined && landed === undefined) {
+      throw new FragmentDeployError({
+        address: head.address,
+        circuitsOnChain: head.circuitsOnChain,
+        circuitsPending: head.circuitsPending,
+        reason: `the deploy transaction of ${head.address} was not seen within ${txTimeoutMs} ms and no contract state is readable yet; check the address on an explorer before re-running with --force`,
+        timedOut: true,
+      });
+    }
     // Address exists, committee is ours, on-chain keys match the
     // artifact. The record's own circuit lists are never consulted.
     const snapshot = assertResumable({
       address: head.address,
       artifactKeys: keys,
-      snapshot: await this.#readSnapshotOrFail(head, providers),
+      snapshot: read,
       verifyingKey,
     });
     const left = remaining([...keys.keys()], snapshot.circuits);
@@ -752,9 +764,9 @@ export class Deployer implements AsyncDisposable {
   /**
    * Wait for the recorded address to have a landed deploy transaction.
    *
-   * `undefined` on timeout, which lets the resume guard report "no
-   * contract there" rather than this wait masking it. A recorded `txHash` that
-   * disagrees with the chain means the record points at someone else's deploy.
+   * `undefined` on timeout, so the caller can tell an inconclusive watch from
+   * a contract that is really absent. A recorded `txHash` that disagrees with
+   * the chain means the record points at someone else's deploy.
    */
   async #settleDeployTx(args: {
     head: PartialDeploymentRecord;
