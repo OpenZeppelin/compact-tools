@@ -1,0 +1,2 @@
+Malformed.compact:8:6: constraints-format: @constraints value `k=10 rows=626` is not `k=<n>, rows=<n>`
+Malformed.compact:14:6: constraints-format: @constraints value `rows=626, k=10` is not `k=<n>, rows=<n>`

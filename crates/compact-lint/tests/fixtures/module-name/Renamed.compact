@@ -1,0 +1,6 @@
+/**
+ * @module Stale
+ * @description The tag still names the module's old name.
+ */
+export module Renamed {
+}

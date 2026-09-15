@@ -1,0 +1,2 @@
+Returns.compact:9:6: forbidden-tag: forbidden tag @return
+Returns.compact:15:6: forbidden-tag: forbidden tag @return
