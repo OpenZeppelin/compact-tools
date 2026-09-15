@@ -10,7 +10,11 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::diagnostic::Span;
+use crate::doc::{Tag, TagSpec};
 use crate::report::RuleId;
+
+/// The tag the constraints annotation anchors itself on.
+const DESCRIPTION_TAG: &str = "@description";
 
 /// One repair, carrying the rule it answers and the span its diagnostic underlines.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,11 +56,12 @@ impl EditKind {
 /// One change to the lines of a doc comment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DocOp {
-    /// A `@tag value` line added after the last of `after` present, else at the top of the body.
+    /// A tag block added after the last of `after` present, else at the top of the body.
     InsertTag {
-        line: String,
-        /// Tags that precede this one in config order.
-        after: Vec<String>,
+        /// The block's lines: a `@tag value` line, plus a placeholder line for a section.
+        lines: Vec<String>,
+        /// Entries that precede this one in config order.
+        after: Vec<TagSpec>,
         /// Untagged prose opening the body becomes this tag's value instead of the placeholder.
         adopts_prose: bool,
     },
@@ -82,6 +87,12 @@ pub enum DocOp {
         tag: String,
         value: String,
     },
+    /// The tag blocks that match a listed entry, written back into their slots in config
+    /// order.
+    ReorderBlocks {
+        /// The template, required entries first, in the order it lists them.
+        entries: Vec<TagSpec>,
+    },
 }
 
 impl DocOp {
@@ -89,7 +100,10 @@ impl DocOp {
     #[must_use]
     pub const fn is_safe(&self) -> bool {
         match self {
-            Self::RenameTag { .. } | Self::SetModuleName { .. } | Self::SetTagValue { .. } => true,
+            Self::RenameTag { .. }
+            | Self::SetModuleName { .. }
+            | Self::SetTagValue { .. }
+            | Self::ReorderBlocks { .. } => true,
             Self::InsertTag { .. } | Self::InsertConstraints(_) => false,
         }
     }
@@ -234,18 +248,26 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
 
     for op in ops {
         if let DocOp::InsertTag {
-            line,
+            lines: inserted,
             after,
             adopts_prose,
         } = op
         {
-            insert_tag(&mut lines, &gutter, line, after, *adopts_prose);
+            insert_tag(&mut lines, &gutter, inserted, after, *adopts_prose);
         }
     }
 
     for op in ops {
         if let DocOp::InsertConstraints(body) = op {
             insert_constraints(&mut lines, &margin, &gutter, body);
+        }
+    }
+
+    // The order the template wants is decided on the finished comment, so a reorder runs
+    // over the lines every other op already wrote.
+    for op in ops {
+        if let DocOp::ReorderBlocks { entries } = op {
+            reorder_blocks(&mut lines, entries);
         }
     }
 
@@ -267,14 +289,14 @@ fn expand(single: &str, margin: &str, gutter: &str) -> Vec<String> {
     ]
 }
 
-/// A tag line lands after the block of the last tag in `after` that is present, else at
+/// A tag block lands after the block of the last entry in `after` that is present, else at
 /// the top of the body. With `adopts_prose`, untagged prose opening the body takes the
 /// tag instead of a new line going in.
 fn insert_tag(
     lines: &mut Vec<String>,
     gutter: &str,
-    line: &str,
-    after: &[String],
+    inserted: &[String],
+    after: &[TagSpec],
     adopts_prose: bool,
 ) {
     let closer = lines.len().saturating_sub(1);
@@ -282,14 +304,77 @@ fn insert_tag(
     if adopts_prose
         && let Some(first) = (1..closer).find(|index| !is_blank(&lines[*index]))
         && !starts_tag(content(&lines[first]))
-        && let Some((tag, _)) = line.split_once(' ')
+        && let Some((tag, _)) = inserted.first().and_then(|line| line.split_once(' '))
     {
         lines[first] = format!("{gutter}{tag} {}", content(&lines[first]));
         return;
     }
 
     let at = tag_block_end(lines, closer, after).map_or(1.min(closer), |end| end + 1);
-    lines.insert(at, format!("{gutter}{line}"));
+    for (offset, line) in inserted.iter().enumerate() {
+        lines.insert(at + offset, format!("{gutter}{line}"));
+    }
+}
+
+/// Blocks matching a listed entry are written back into their slots in config order.
+/// Prose before the first tag, blocks no entry lists, and the blank lines separating the
+/// slots all stay where they are.
+fn reorder_blocks(lines: &mut Vec<String>, entries: &[TagSpec]) {
+    let closer = lines.len().saturating_sub(1);
+    if closer < 2 {
+        return;
+    }
+
+    let prose_end = (1..closer)
+        .find(|index| starts_tag(content(&lines[*index])))
+        .unwrap_or(closer);
+
+    // A block runs from its tag line over its continuations; the blank lines under it
+    // separate slots rather than belonging to what fills one.
+    let mut blocks: Vec<Vec<String>> = Vec::new();
+    let mut separators: Vec<Vec<String>> = Vec::new();
+    for line in lines.iter().take(closer).skip(prose_end) {
+        if starts_tag(content(line)) {
+            blocks.push(Vec::new());
+            separators.push(Vec::new());
+        }
+        match separators.last_mut() {
+            Some(separator) if is_blank(line) => separator.push(line.clone()),
+            _ => {
+                if let (Some(block), Some(separator)) = (blocks.last_mut(), separators.last_mut()) {
+                    block.append(separator);
+                    block.push(line.clone());
+                }
+            }
+        }
+    }
+
+    let mut slots: Vec<usize> = Vec::new();
+    let mut listed: Vec<(usize, Vec<String>)> = Vec::new();
+    for (slot, block) in blocks.iter().enumerate() {
+        let position = block.first().and_then(|line| {
+            entries
+                .iter()
+                .position(|entry| entry.matches_line(content(line)))
+        });
+        if let Some(position) = position {
+            slots.push(slot);
+            listed.push((position, block.clone()));
+        }
+    }
+    listed.sort_by_key(|(position, _)| *position);
+
+    for (slot, (_, block)) in slots.iter().zip(listed) {
+        blocks[*slot] = block;
+    }
+
+    let mut rebuilt: Vec<String> = lines[..prose_end].to_vec();
+    for (block, separator) in blocks.into_iter().zip(separators) {
+        rebuilt.extend(block);
+        rebuilt.extend(separator);
+    }
+    rebuilt.extend_from_slice(&lines[closer..]);
+    *lines = rebuilt;
 }
 
 /// The constraints line follows the `@description` block, or opens the body without one.
@@ -315,17 +400,14 @@ fn insert_constraints(lines: &mut Vec<String>, margin: &str, gutter: &str, body:
 
 /// The last line of the `@description` block: its tag line plus every continuation.
 fn description_end(lines: &[String], closer: usize) -> Option<usize> {
-    tag_block_end(lines, closer, &["@description".to_owned()])
+    tag_block_end(lines, closer, &[TagSpec::bare(Tag::new(DESCRIPTION_TAG))])
 }
 
-/// The last line of the block opened by the last occurrence of any tag in `tags`.
-fn tag_block_end(lines: &[String], closer: usize, tags: &[String]) -> Option<usize> {
+/// The last line of the block opened by the last occurrence of any entry in `entries`.
+fn tag_block_end(lines: &[String], closer: usize, entries: &[TagSpec]) -> Option<usize> {
     let start = (1..closer).rev().find(|index| {
         let text = content(&lines[*index]);
-        tags.iter().any(|tag| {
-            text.strip_prefix(tag.as_str())
-                .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
-        })
+        entries.iter().any(|entry| entry.matches_line(text))
     })?;
 
     let mut end = start;
@@ -422,6 +504,7 @@ mod tests {
         set_tag_value,
     };
     use crate::diagnostic::Span;
+    use crate::doc::TagSpec;
     use crate::report::{Position, RuleId};
 
     fn doc_edit(range: std::ops::Range<usize>, indent: usize, op: DocOp) -> Edit {
@@ -435,9 +518,23 @@ mod tests {
 
     fn tag(line: &str, after: &[&str]) -> DocOp {
         DocOp::InsertTag {
-            line: line.to_owned(),
-            after: after.iter().map(ToString::to_string).collect(),
+            lines: vec![line.to_owned()],
+            after: after.iter().map(|entry| TagSpec::parse(entry)).collect(),
             adopts_prose: line.starts_with("@description"),
+        }
+    }
+
+    fn section(heading: &str, after: &[&str]) -> DocOp {
+        DocOp::InsertTag {
+            lines: vec![format!("{heading}:"), "TODO".to_owned()],
+            after: after.iter().map(|entry| TagSpec::parse(entry)).collect(),
+            adopts_prose: false,
+        }
+    }
+
+    fn reorder(entries: &[&str]) -> DocOp {
+        DocOp::ReorderBlocks {
+            entries: entries.iter().map(|entry| TagSpec::parse(entry)).collect(),
         }
     }
 
@@ -532,6 +629,55 @@ mod tests {
                 &[tag("@description TODO", &[])]
             ),
             "/**\n   * @description Approved accounts.\n   */"
+        );
+    }
+
+    #[test]
+    fn a_section_goes_in_as_a_heading_line_and_a_placeholder_under_it() {
+        let doc = "/**\n * @notice Privacy:\n * - Amounts stay private.\n * @dev Notation:\n * - `H(...)`: the digest.\n */";
+
+        assert_eq!(
+            rendered(doc, 0, &[section("@notice Security", &["@notice Privacy"])]),
+            "/**\n * @notice Privacy:\n * - Amounts stay private.\n * @notice Security:\n * TODO\n * @dev Notation:\n * - `H(...)`: the digest.\n */"
+        );
+    }
+
+    #[test]
+    fn a_section_lands_after_the_block_its_heading_names_not_the_last_of_its_tag() {
+        let doc =
+            "/**\n * @notice Privacy:\n * - Amounts.\n * @notice Scope:\n * - Notes only.\n */";
+
+        assert_eq!(
+            rendered(doc, 0, &[section("@notice Security", &["@notice Privacy"])]),
+            "/**\n * @notice Privacy:\n * - Amounts.\n * @notice Security:\n * TODO\n * @notice Scope:\n * - Notes only.\n */"
+        );
+    }
+
+    #[test]
+    fn listed_blocks_move_into_config_order_and_unlisted_ones_hold_their_slot() {
+        let doc = "/**\n * Prose first.\n * @notice Security:\n * - Nonces.\n *\n * @param {T} a - A.\n * @module Token\n * @notice Privacy:\n * - Amounts.\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[reorder(&["@module", "@notice Privacy", "@notice Security"])]
+            ),
+            "/**\n * Prose first.\n * @module Token\n *\n * @param {T} a - A.\n * @notice Privacy:\n * - Amounts.\n * @notice Security:\n * - Nonces.\n */"
+        );
+    }
+
+    #[test]
+    fn a_comment_already_in_order_comes_back_unchanged() {
+        let doc = "/**\n * @module Token\n * @notice Privacy:\n * - Amounts.\n * @notice Security:\n * - Nonces.\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[reorder(&["@module", "@notice Privacy", "@notice Security"])]
+            ),
+            doc
         );
     }
 

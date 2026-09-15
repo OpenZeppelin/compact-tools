@@ -154,6 +154,11 @@ fn a_required_tag_goes_into_the_comment_that_lacks_it() {
 }
 
 #[test]
+fn sections_are_inserted_by_heading_and_the_blocks_come_back_in_template_order() {
+    assert_case("sections");
+}
+
+#[test]
 fn the_constraints_annotation_follows_the_description_block() {
     assert_case("constraints");
 }
@@ -171,6 +176,22 @@ fn a_stale_module_tag_takes_the_module_name() {
 #[test]
 fn a_crlf_source_keeps_its_line_endings() {
     assert_case("crlf");
+}
+
+#[test]
+fn a_second_fix_leaves_the_reordered_sections_byte_for_byte() {
+    let directory = work("sections");
+    let root = directory.path();
+
+    let (_, _) = run(root, &["fix"]);
+    let once = sources(root);
+
+    let (code, stdout) = run(root, &["fix"]);
+
+    assert_eq!(stdout, "");
+    assert_eq!(code, 0);
+    assert_eq!(sources(root), once);
+    assert_eq!(once, sources(&case("sections").join("after")));
 }
 
 #[test]

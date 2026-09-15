@@ -9,6 +9,8 @@ pub struct RuleId(&'static str);
 impl RuleId {
     pub const MISSING_DOC: Self = Self("missing-doc");
     pub const MISSING_TAG: Self = Self("missing-tag");
+    pub const UNKNOWN_SECTION: Self = Self("unknown-section");
+    pub const TAG_ORDER: Self = Self("tag-order");
     pub const FORBIDDEN_TAG: Self = Self("forbidden-tag");
     pub const MODULE_NAME: Self = Self("module-name");
     pub const MISSING_CONSTRAINTS: Self = Self("missing-constraints");
@@ -23,9 +25,11 @@ impl RuleId {
     pub const FILL: Self = Self("fill");
 
     /// Every rule a `[rules]` table can set a level for, in the order the README lists them.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 13] = [
         Self::MISSING_DOC,
         Self::MISSING_TAG,
+        Self::UNKNOWN_SECTION,
+        Self::TAG_ORDER,
         Self::FORBIDDEN_TAG,
         Self::MODULE_NAME,
         Self::MISSING_CONSTRAINTS,

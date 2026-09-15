@@ -11,7 +11,7 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::diagnostic::Level;
-use crate::doc::Tag;
+use crate::doc::{Tag, TagSpec};
 use crate::model::DeclKind;
 use crate::report::RuleId;
 
@@ -38,6 +38,26 @@ pub enum ConfigError {
         "config {path} lists tag {tag:?}; tags are spelled with their `@`, like `@description`"
     )]
     Tag { path: PathBuf, tag: String },
+    #[error("config {path}: kinds.{kind}.tags lists {entry}, but kinds.{kind}.sections does not")]
+    NotInSections {
+        path: PathBuf,
+        kind: &'static str,
+        entry: String,
+    },
+    #[error(
+        "config {path} lists {entry:?} under kinds.{kind}; a heading is non-empty and carries no `:`"
+    )]
+    Heading {
+        path: PathBuf,
+        kind: &'static str,
+        entry: String,
+    },
+    #[error("config {path} lists {entry:?} twice under kinds.{kind}")]
+    DuplicateEntry {
+        path: PathBuf,
+        kind: &'static str,
+        entry: String,
+    },
     #[error("config {path} has an invalid glob {pattern:?}")]
     Glob {
         path: PathBuf,
@@ -65,7 +85,21 @@ pub enum DocsPolicy {
 #[serde(deny_unknown_fields, default)]
 pub struct KindConfig {
     pub docs: DocsPolicy,
-    pub tags: Vec<Tag>,
+    /// Entries every doc comment of the kind carries; each one also appears in `sections`.
+    pub tags: Vec<TagSpec>,
+    /// Every section the template allows, in template order; empty leaves `tags` the order.
+    pub sections: Vec<TagSpec>,
+}
+
+impl KindConfig {
+    /// The ordered template: `sections` where the kind has one, else the required entries.
+    pub fn entries(&self) -> impl Iterator<Item = &TagSpec> {
+        if self.sections.is_empty() {
+            self.tags.iter()
+        } else {
+            self.sections.iter()
+        }
+    }
 }
 
 /// One table per checked declaration kind.
@@ -87,6 +121,22 @@ pub struct KindsConfig {
 }
 
 impl KindsConfig {
+    /// Every kind table, keyed by the name its config section uses.
+    #[must_use]
+    pub fn all(&self) -> [(&'static str, &KindConfig); 9] {
+        [
+            ("module", &self.module),
+            ("circuit", &self.circuit),
+            ("ledger", &self.ledger),
+            ("witness", &self.witness),
+            ("constructor", &self.constructor),
+            ("struct", &self.struct_),
+            ("enum", &self.enum_),
+            ("contract", &self.contract),
+            ("type", &self.type_),
+        ]
+    }
+
     #[must_use]
     pub fn get(&self, kind: DeclKind) -> &KindConfig {
         match kind {
@@ -151,6 +201,10 @@ pub struct RulesConfig {
     pub missing_doc: Level,
     #[serde(rename = "missing-tag")]
     pub missing_tag: Level,
+    #[serde(rename = "unknown-section")]
+    pub unknown_section: Level,
+    #[serde(rename = "tag-order")]
+    pub tag_order: Level,
     #[serde(rename = "forbidden-tag")]
     pub forbidden_tag: Level,
     #[serde(rename = "module-name")]
@@ -174,6 +228,9 @@ impl Default for RulesConfig {
         Self {
             missing_doc: Level::Error,
             missing_tag: Level::Error,
+            // A heading the template does not list is a candidate for it, not a defect.
+            unknown_section: Level::Warn,
+            tag_order: Level::Error,
             forbidden_tag: Level::Error,
             module_name: Level::Error,
             missing_constraints: Level::Error,
@@ -195,6 +252,8 @@ impl RulesConfig {
         match rule {
             RuleId::MISSING_DOC => self.missing_doc,
             RuleId::MISSING_TAG => self.missing_tag,
+            RuleId::UNKNOWN_SECTION => self.unknown_section,
+            RuleId::TAG_ORDER => self.tag_order,
             RuleId::FORBIDDEN_TAG => self.forbidden_tag,
             RuleId::MODULE_NAME => self.module_name,
             RuleId::MISSING_CONSTRAINTS => self.missing_constraints,
@@ -294,25 +353,64 @@ impl Config {
                 tag: tag.to_string(),
             });
         }
+        config.validate_entries(path)?;
 
         Ok(config)
     }
 
-    /// Every tag the config mentions: required per kind, forbidden, and the constraints tag.
+    /// A heading is well formed, no list repeats an entry, and a required entry takes its
+    /// place in the section order.
+    fn validate_entries(&self, path: &Path) -> Result<(), ConfigError> {
+        for (kind, config) in self.kinds.all() {
+            for list in [&config.tags, &config.sections] {
+                let mut seen: Vec<String> = Vec::new();
+                for entry in list {
+                    if !entry.has_well_formed_heading() {
+                        return Err(ConfigError::Heading {
+                            path: path.to_owned(),
+                            kind,
+                            entry: entry.to_string(),
+                        });
+                    }
+                    let spelling = entry.to_string();
+                    if seen.contains(&spelling) {
+                        return Err(ConfigError::DuplicateEntry {
+                            path: path.to_owned(),
+                            kind,
+                            entry: spelling,
+                        });
+                    }
+                    seen.push(spelling);
+                }
+            }
+
+            if config.sections.is_empty() {
+                continue;
+            }
+            if let Some(entry) = config
+                .tags
+                .iter()
+                .find(|required| !config.sections.contains(required))
+            {
+                return Err(ConfigError::NotInSections {
+                    path: path.to_owned(),
+                    kind,
+                    entry: entry.to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Every tag the config mentions: the kind templates, the forbidden set, and the
+    /// constraints tag.
     fn tags(&self) -> impl Iterator<Item = &Tag> {
-        let per_kind = [
-            &self.kinds.module,
-            &self.kinds.circuit,
-            &self.kinds.ledger,
-            &self.kinds.witness,
-            &self.kinds.constructor,
-            &self.kinds.struct_,
-            &self.kinds.enum_,
-            &self.kinds.contract,
-            &self.kinds.type_,
-        ]
-        .into_iter()
-        .flat_map(|kind| kind.tags.iter());
+        let per_kind = self.kinds.all().into_iter().flat_map(|(_, kind)| {
+            kind.tags
+                .iter()
+                .chain(kind.sections.iter())
+                .map(|entry| &entry.tag)
+        });
 
         per_kind
             .chain(self.tags.forbid.iter())
@@ -382,7 +480,7 @@ pub fn discover(start: &Path) -> Option<PathBuf> {
 mod tests {
     use super::{Config, DocsPolicy};
     use crate::diagnostic::Level;
-    use crate::doc::Tag;
+    use crate::doc::{Tag, TagSpec};
     use crate::model::DeclKind;
     use crate::report::RuleId;
 
@@ -393,6 +491,8 @@ mod tests {
         assert_eq!(rules.get(RuleId::MISSING_DOC), Level::Error);
         assert_eq!(rules.get(RuleId::PARSE), Level::Error);
         assert_eq!(rules.get(RuleId::FORMAT), Level::Error);
+        assert_eq!(rules.get(RuleId::TAG_ORDER), Level::Error);
+        assert_eq!(rules.get(RuleId::UNKNOWN_SECTION), Level::Warn);
         assert_eq!(rules.get(RuleId::CONSTRAINTS_PLACEHOLDER), Level::Warn);
         assert_eq!(rules.get(RuleId::CONSTRAINTS_UNMEASURED), Level::Warn);
         assert_eq!(rules.get(RuleId::CONSTRAINTS_UNMEASURABLE), Level::Warn);
@@ -456,6 +556,86 @@ mod tests {
 
         assert!(error.to_string().contains("\"description\""), "{error}");
         std::fs::remove_dir_all(&dir).expect("the temp dir is removable");
+    }
+
+    #[test]
+    fn a_tag_entry_keeps_the_heading_after_its_tag() {
+        let config: Config = toml::from_str(
+            "[kinds.module]\ntags = [\"@module\", \"@notice Privacy\"]\nsections = [\"@dev Notation\"]\n",
+        )
+        .expect("the snippet is valid config");
+
+        assert_eq!(config.kinds.module.tags[0], TagSpec::parse("@module"));
+        assert_eq!(
+            config.kinds.module.tags[1].heading.as_deref(),
+            Some("Privacy")
+        );
+        assert_eq!(config.kinds.module.sections[0].tag, Tag::new("@dev"));
+        assert!(config.kinds.circuit.sections.is_empty());
+    }
+
+    #[test]
+    fn a_required_entry_missing_from_the_section_order_is_rejected() {
+        let error = load_document(
+            "not-in-sections",
+            "[lint.kinds.module]\ntags = [\"@module\", \"@notice Privacy\"]\nsections = [\"@module\", \"@dev Notation\"]\n",
+        )
+        .expect_err("a required entry takes its place in the section order");
+
+        assert!(
+            error.to_string().contains(
+                "kinds.module.tags lists @notice Privacy, but kinds.module.sections does not"
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn the_section_order_replaces_the_tag_order_where_the_kind_has_one() {
+        let bare: Config =
+            toml::from_str("[kinds.module]\ntags = [\"@module\", \"@description\"]\n")
+                .expect("the snippet is valid config");
+        let ordered: Config = toml::from_str(
+            "[kinds.module]\ntags = [\"@module\", \"@notice Privacy\"]\nsections = [\"@module\", \"@dev Notation\", \"@notice Privacy\"]\n",
+        )
+        .expect("the snippet is valid config");
+
+        let spelled = |config: &Config| -> Vec<String> {
+            config
+                .kinds
+                .module
+                .entries()
+                .map(ToString::to_string)
+                .collect()
+        };
+
+        assert_eq!(spelled(&bare), ["@module", "@description"]);
+        assert_eq!(
+            spelled(&ordered),
+            ["@module", "@dev Notation", "@notice Privacy"]
+        );
+    }
+
+    #[test]
+    fn a_heading_carrying_a_colon_is_rejected() {
+        let error = load_document(
+            "colon-heading",
+            "[lint.kinds.module]\ntags = [\"@notice Privacy:\"]\n",
+        )
+        .expect_err("the occurrence writes the colon, not the config");
+
+        assert!(error.to_string().contains("@notice Privacy:"), "{error}");
+    }
+
+    #[test]
+    fn an_entry_listed_twice_in_one_list_is_rejected() {
+        let error = load_document(
+            "duplicate-entry",
+            "[lint.kinds.module]\nsections = [\"@notice Privacy\", \"@notice Privacy\"]\n",
+        )
+        .expect_err("a list names an entry once");
+
+        assert!(error.to_string().contains("twice"), "{error}");
     }
 
     #[test]

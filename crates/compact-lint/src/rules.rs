@@ -11,7 +11,7 @@ use tree_sitter::{Node, Parser};
 
 use crate::config::{Config, DocsPolicy};
 use crate::diagnostic::{Diagnostic, Level, Span, sentence};
-use crate::doc::Tag;
+use crate::doc::{Tag, TagSpec};
 use crate::model::{DeclKind, Declaration, declarations};
 use crate::report::{Position, RuleId};
 
@@ -79,9 +79,24 @@ pub enum Issue {
         end: Position,
         subject: String,
         kind: DeclKind,
-        tag: Tag,
+        entry: TagSpec,
         /// The declaration's name, which `@module` takes as its value.
         name: Option<String>,
+        doc: DocRef,
+    },
+    UnknownSection {
+        position: Position,
+        kind: DeclKind,
+        tag: Tag,
+        heading: String,
+    },
+    TagOrder {
+        position: Position,
+        kind: DeclKind,
+        /// The entry at the occurrence that breaks the order.
+        entry: TagSpec,
+        /// The entry the template orders after it, seen earlier in the comment.
+        previous: TagSpec,
         doc: DocRef,
     },
     ForbiddenTag {
@@ -125,6 +140,8 @@ impl Issue {
             Self::Parse { position, .. }
             | Self::MissingDoc { position, .. }
             | Self::MissingTag { position, .. }
+            | Self::UnknownSection { position, .. }
+            | Self::TagOrder { position, .. }
             | Self::ForbiddenTag { position, .. }
             | Self::ModuleName { position, .. }
             | Self::MissingConstraints { position, .. }
@@ -139,6 +156,8 @@ impl Issue {
             Self::Parse { .. } => RuleId::PARSE,
             Self::MissingDoc { .. } => RuleId::MISSING_DOC,
             Self::MissingTag { .. } => RuleId::MISSING_TAG,
+            Self::UnknownSection { .. } => RuleId::UNKNOWN_SECTION,
+            Self::TagOrder { .. } => RuleId::TAG_ORDER,
             Self::ForbiddenTag { .. } => RuleId::FORBIDDEN_TAG,
             Self::ModuleName { .. } => RuleId::MODULE_NAME,
             Self::MissingConstraints { .. } => RuleId::MISSING_CONSTRAINTS,
@@ -161,10 +180,22 @@ impl Issue {
                 }
             }
             Self::MissingDoc { subject, .. } => format!("{subject} has no doc comment"),
-            Self::MissingTag { subject, tag, .. }
-            | Self::MissingConstraints { subject, tag, .. } => {
+            Self::MissingTag { subject, entry, .. } => match entry.heading {
+                Some(_) => format!("{subject} doc comment has no `{entry}` section"),
+                None => format!("{subject} doc comment has no {entry}"),
+            },
+            Self::MissingConstraints { subject, tag, .. } => {
                 format!("{subject} doc comment has no {tag}")
             }
+            Self::UnknownSection { tag, heading, .. } => {
+                format!("`{tag} {heading}` is not a section the template lists")
+            }
+            Self::TagOrder {
+                entry, previous, ..
+            } => format!(
+                "`{previous}` comes before `{entry}`; the template orders {} first",
+                entry.label()
+            ),
             Self::ForbiddenTag { tag, .. } => format!("forbidden tag {tag}"),
             Self::ModuleName {
                 documented, name, ..
@@ -189,9 +220,17 @@ impl Issue {
             Self::MissingDoc { .. } => {
                 "Add a doc comment above it, or run compact-lint fix.".to_owned()
             }
-            Self::MissingTag { tag, .. } => {
-                format!("Add {tag} to the doc comment, or run compact-lint fix.")
+            Self::MissingTag { entry, .. } => match &entry.heading {
+                Some(heading) => format!(
+                    "Add a {} {heading}: section, or run compact-lint fix.",
+                    entry.tag
+                ),
+                None => format!("Add {entry} to the doc comment, or run compact-lint fix."),
+            },
+            Self::UnknownSection { kind, .. } => {
+                format!("Add it to kinds.{kind}.sections, or fold it into a listed section.")
             }
+            Self::TagOrder { .. } => "Run compact-lint fix to reorder the blocks.".to_owned(),
             Self::ForbiddenTag { tag, .. } => match config.rename_of(tag) {
                 Some(replacement) => format!("Rename it to {replacement}."),
                 None => "Remove it from the doc comment.".to_owned(),
@@ -222,6 +261,18 @@ impl Issue {
             | Self::ConstraintsPlaceholder { position, tag, .. } => {
                 Span::columns(*position, tag.as_str().len())
             }
+            Self::UnknownSection {
+                position,
+                tag,
+                heading,
+                ..
+            } => Span::columns(*position, heading_width(tag, Some(heading))),
+            Self::TagOrder {
+                position, entry, ..
+            } => Span::columns(
+                *position,
+                heading_width(&entry.tag, entry.heading.as_deref()),
+            ),
             Self::ModuleName { position, .. } => Span::columns(*position, MODULE_TAG.len()),
         }
     }
@@ -232,6 +283,14 @@ impl Issue {
         Diagnostic::new(display, self.rule(), level, self.message())
             .at(self.span())
             .advise(self.advice(config))
+    }
+}
+
+/// The tag token, and for a section the heading and the colon closing it.
+fn heading_width(tag: &Tag, heading: Option<&str>) -> usize {
+    match heading {
+        Some(heading) => tag.as_str().len() + " ".len() + heading.len() + ":".len(),
+        None => tag.as_str().len(),
     }
 }
 
@@ -388,20 +447,90 @@ fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Ve
     }
 
     for required in &kind_config.tags {
-        if !attached.comment.has(required) {
+        if !attached
+            .comment
+            .tags()
+            .iter()
+            .any(|occurrence| required.matches(occurrence))
+        {
             issues.push(Issue::MissingTag {
                 position: declaration.position,
                 end: declaration.end,
                 subject: subject(declaration),
                 kind: declaration.kind,
-                tag: required.clone(),
+                entry: required.clone(),
                 name: declaration.name.clone(),
                 doc: doc.clone(),
             });
         }
     }
 
+    check_sections(declaration, &doc, config, issues);
     check_constraints(declaration, &doc, config, issues);
+}
+
+/// Headings the template does not list, and the order the listed entries appear in.
+fn check_sections(
+    declaration: &Declaration,
+    doc: &DocRef,
+    config: &Config,
+    issues: &mut Vec<Issue>,
+) {
+    let Some(attached) = declaration.doc.as_ref() else {
+        return;
+    };
+    let kind_config = config.kinds.get(declaration.kind);
+    let template: Vec<&TagSpec> = kind_config.entries().collect();
+
+    for occurrence in attached.comment.tags() {
+        let Some(heading) = occurrence.heading() else {
+            continue;
+        };
+        // The rule is gated per tag: a tag the config heads nowhere is left alone.
+        let mut headed = kind_config
+            .tags
+            .iter()
+            .chain(kind_config.sections.iter())
+            .filter(|entry| entry.tag == occurrence.tag && entry.heading.is_some())
+            .peekable();
+        if headed.peek().is_none() || headed.any(|entry| entry.label() == heading) {
+            continue;
+        }
+
+        issues.push(Issue::UnknownSection {
+            position: attached.tag_position(occurrence),
+            kind: declaration.kind,
+            tag: occurrence.tag.clone(),
+            heading: heading.to_owned(),
+        });
+    }
+
+    let mut highest: Option<(usize, &TagSpec)> = None;
+    for occurrence in attached.comment.tags() {
+        let Some((index, entry)) = template
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, entry)| entry.matches(occurrence))
+        else {
+            continue;
+        };
+
+        match highest {
+            Some((top, previous)) if index < top => {
+                issues.push(Issue::TagOrder {
+                    position: attached.tag_position(occurrence),
+                    kind: declaration.kind,
+                    entry: entry.clone(),
+                    previous: previous.clone(),
+                    doc: doc.clone(),
+                });
+                return;
+            }
+            Some((top, _)) if index == top => {}
+            _ => highest = Some((index, entry)),
+        }
+    }
 }
 
 /// `@module <Name>` must name the module it documents.
@@ -546,7 +675,7 @@ mod tests {
     use crate::config::{Config, DocsPolicy};
     use crate::diagnostic::Level;
     use crate::diagnostic::sentence;
-    use crate::doc::Tag;
+    use crate::doc::{Tag, TagSpec};
     use crate::report::RuleId;
     use std::path::Path;
 
@@ -572,7 +701,25 @@ mod tests {
 
     fn circuit_config() -> Config {
         let mut config = Config::default();
-        config.kinds.circuit.tags = vec![Tag::new("@description")];
+        config.kinds.circuit.tags = vec![TagSpec::parse("@description")];
+        config
+    }
+
+    /// A module template of two required sections, with an optional one between them.
+    fn template_config() -> Config {
+        let mut config = Config::default();
+        config.kinds.module.docs = DocsPolicy::All;
+        config.kinds.module.tags = vec![
+            TagSpec::parse("@module"),
+            TagSpec::parse("@notice Privacy"),
+            TagSpec::parse("@notice Security"),
+        ];
+        config.kinds.module.sections = vec![
+            TagSpec::parse("@module"),
+            TagSpec::parse("@notice Privacy"),
+            TagSpec::parse("@dev Notation"),
+            TagSpec::parse("@notice Security"),
+        ];
         config
     }
 
@@ -619,6 +766,56 @@ mod tests {
             reported(source, &circuit_config()),
             ["2:1 missing-constraints Circuit `bump` doc comment has no @constraints."]
         );
+    }
+
+    #[test]
+    fn a_headed_entry_absent_from_the_comment_reports_the_section() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * - Amounts.\n */\nmodule M {\n}\n";
+
+        assert_eq!(
+            reported(source, &template_config()),
+            ["6:1 missing-tag Module `M` doc comment has no `@notice Security` section."]
+        );
+    }
+
+    #[test]
+    fn a_heading_the_template_does_not_list_reports_unknown_section() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * - Amounts.\n * @notice Security:\n * - Nonces.\n * @notice Gotchas:\n * - None.\n */\nmodule M {\n}\n";
+
+        assert_eq!(
+            reported(source, &template_config()),
+            ["7:4 unknown-section `@notice Gotchas` is not a section the template lists."]
+        );
+    }
+
+    #[test]
+    fn a_heading_on_a_tag_the_template_heads_nowhere_is_left_alone() {
+        let mut config = template_config();
+        config.kinds.module.tags = vec![TagSpec::parse("@description")];
+        config.kinds.module.sections = Vec::new();
+        let source =
+            "/**\n * @description A note-based token: amounts stay private.\n */\nmodule M {\n}\n";
+
+        assert!(reported(source, &config).is_empty());
+    }
+
+    #[test]
+    fn listed_entries_out_of_config_order_report_tag_order_once() {
+        let source = "/**\n * @module M\n * @notice Security:\n * - Nonces.\n * @notice Privacy:\n * - Amounts.\n * @dev Notation:\n * - `H`.\n */\nmodule M {\n}\n";
+
+        assert_eq!(
+            reported(source, &template_config()),
+            [
+                "5:4 tag-order `@notice Security` comes before `@notice Privacy`; the template orders Privacy first."
+            ]
+        );
+    }
+
+    #[test]
+    fn a_tag_no_entry_lists_is_ignored_by_the_order_check() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * - Amounts.\n * @param {T} a - A.\n * @notice Security:\n * - Nonces.\n */\nmodule M {\n}\n";
+
+        assert!(reported(source, &template_config()).is_empty());
     }
 
     #[test]

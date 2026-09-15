@@ -1,0 +1,61 @@
+Missing.compact:13:1 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Missing` doc comment has no `@notice Security` section.
+
+    11 │  * - `H(...)`: a `Bytes<32>` digest.
+    12 │  */
+  > 13 │ export module Missing {
+       │ ^^^^^^^^^^^^^^^^^^^^^
+    14 │ }
+
+  i Unsafe fix: Insert @notice Security
+
+      12 │ + ·*·@notice·Security:
+      13 │ + ·*·TODO
+
+Order.compact:12:4 lint/tag-order  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i `@notice Security` comes before `@notice Privacy`; the template orders Privacy first.
+
+    10 │  * @see The compatibility suite pins the wire format.
+    11 │  *
+  > 12 │  * @notice Privacy:
+       │    ^^^^^^^^^^^^^^^^
+    13 │  * - Amounts stay private.
+    14 │  */
+
+  i Safe fix: Reorder the doc comment blocks
+
+     7    │ - ·*·@notice·Security:
+     8    │ - ·*·-·Nonces·are·spend-critical.
+        7 │ + ·*·@notice·Privacy:
+        8 │ + ·*·-·Amounts·stay·private.
+     9  9 │    *
+    10 10 │    * @see The compatibility suite pins the wire format.
+    11 11 │    *
+    12    │ - ·*·@notice·Privacy:
+    13    │ - ·*·-·Amounts·stay·private.
+       12 │ + ·*·@notice·Security:
+       13 │ + ·*·-·Nonces·are·spend-critical.
+
+Skeleton.compact:3:1 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Skeleton` has no doc comment.
+
+    1 │ pragma language_version >= 0.23.0;
+    2 │ 
+  > 3 │ export module Skeleton {
+      │ ^^^^^^^^^^^^^^^^^^^^^^
+    4 │ }
+
+  i Unsafe fix: Insert a doc skeleton for module `Skeleton`
+
+       3 │ + /**
+       4 │ + ·*·@module·Skeleton
+       5 │ + ·*·@description·TODO
+       6 │ + ·*·@notice·Privacy:
+       7 │ + ·*·TODO
+       8 │ + ·*·@notice·Security:
+       9 │ + ·*·TODO
+      10 │ + ·*/
+

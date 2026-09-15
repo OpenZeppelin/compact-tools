@@ -102,6 +102,30 @@ fn a_doc_comment_without_a_required_tag_reports_missing_tag() {
 }
 
 #[test]
+fn a_doc_comment_without_a_required_section_names_it_in_the_finding() {
+    assert_case("sections-missing", &[], EXIT_FINDINGS);
+}
+
+#[test]
+fn a_heading_the_template_does_not_list_warns_only_where_the_tag_has_headings() {
+    assert_case("unknown-section", &[], 0);
+
+    let (_, stdout, stderr) = run("unknown-section", &[]);
+    assert!(!stdout.contains("@description"), "{stdout}");
+    assert!(stderr.ends_with("Found 1 warning.\n"), "{stderr}");
+}
+
+#[test]
+fn listed_entries_out_of_template_order_report_tag_order() {
+    assert_case("tag-order", &[], EXIT_FINDINGS);
+}
+
+#[test]
+fn a_module_following_the_example_template_reports_nothing() {
+    assert_case("template-clean", &[], 0);
+}
+
+#[test]
 fn a_forbidden_tag_reports_wherever_it_appears() {
     assert_case("forbidden-tag", &[], EXIT_FINDINGS);
 }

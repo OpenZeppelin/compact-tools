@@ -103,8 +103,10 @@ Defaults:
 | Rule | Level |
 | --- | --- |
 | `missing-doc`, `missing-tag`, `forbidden-tag`, `module-name` | `error` |
+| `tag-order` | `error` |
 | `missing-constraints`, `constraints-format` | `error` |
 | `parse`, `format` | `error` |
+| `unknown-section` | `warn` |
 | `constraints-placeholder` | `warn` |
 | `constraints-unmeasured`, `constraints-unmeasurable` | `warn` |
 
@@ -151,14 +153,17 @@ What each rule's fix does:
 
 | Rule | Fix |
 | --- | --- |
-| `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
-| `missing-tag` | Inserts each missing tag after the block of the last tag that precedes it in `kinds.<kind>.tags`, else at the top of the body. A missing `@description` adopts untagged prose that opens the body instead of writing a placeholder. A `/** … */` one-liner expands to the multi-line form first. |
+| `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, a headed entry becomes a `@tag Heading:` line with `fix.placeholder` under it, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
+| `missing-tag` | Inserts each missing entry after the block of the last entry that precedes it in the template order, optional ones included, else at the top of the body. A headed entry goes in as a two-line section block; the predecessor's block is found by heading, not by bare tag. A missing bare `@description` adopts untagged prose that opens the body instead of writing a placeholder. A `/** … */` one-liner expands to the multi-line form first. |
+| `tag-order` | Splits the comment body into one block per tag, sorts the blocks matching a listed entry into config order, and writes them back into the same slots. Prose before the first tag, unlisted blocks and the blank lines separating slots stay put, so a second run reports nothing. |
 | `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. |
 | `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
 | `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. |
 
 Not fixed:
 
+- `unknown-section` — the heading is either a section the config should list or prose to
+  fold into one, and only a human picks.
 - `constraints-format` — a human wrote a measurement the rule cannot parse; guessing at
   it would lose the value.
 - `constraints-placeholder` — filling `k=?` needs a real measurement.
@@ -166,7 +171,8 @@ Not fixed:
 - `format` — that is `compact format`'s job.
 - A forbidden tag with no `tags.rename` entry stays a `check` finding.
 
-Existing lines are never reordered or reflowed. Edits are computed against the original
+Lines are never reflowed, and only `tag-order` moves them, whole blocks at a time. Edits
+are computed against the original
 text and applied from the highest offset down; several edits on one comment merge into a
 single replacement of it. Files are rewritten through a sibling `.tmp` file and renamed
 into place, keeping the file's line ending and its trailing newline, or lack of one.
@@ -271,7 +277,9 @@ the line ending, and only the annotation's own line changes.
 | Rule | Meaning |
 | --- | --- |
 | `missing-doc` | The declaration needs docs per `kinds.<kind>.docs` and has no doc comment attached. |
-| `missing-tag` | A tag listed in `kinds.<kind>.tags` is absent from the doc comment. |
+| `missing-tag` | An entry listed in `kinds.<kind>.tags` is absent from the doc comment. |
+| `unknown-section` | A section heading neither `kinds.<kind>.tags` nor `kinds.<kind>.sections` lists for that tag. |
+| `tag-order` | Listed entries appear in an order the template order does not have. |
 | `forbidden-tag` | A tag listed in `tags.forbid` is present. |
 | `module-name` | `@module <Name>` does not name the module it documents. |
 | `missing-constraints` | An exported non-pure circuit has no constraints tag. |
@@ -297,6 +305,11 @@ Rule detail:
   `module Signer` and `@module Utils.` matches `module Utils`.
 - **`forbidden-tag`.** It fires on any doc comment attached to a checked declaration,
   including declarations whose docs are optional.
+- **`unknown-section`.** Gated per tag: a kind that lists no headed entry for `@description`
+  never gets the rule on `@description`. It is not fixable.
+- **`tag-order`.** The order is `kinds.<kind>.sections` where the kind has one, else
+  `kinds.<kind>.tags`. Occurrences of tags no entry lists are ignored, and one doc comment
+  yields one finding, at the first occurrence that breaks the order.
 
 ## Config
 
@@ -340,7 +353,8 @@ constraints-placeholder = "warn"
 
 [lint.kinds.module]
 docs = "exported"
-tags = ["@module", "@description"]
+tags = ["@module", "@description", "@notice Privacy", "@notice Security"]
+sections = ["@module", "@description", "@dev Notation", "@notice Privacy", "@notice Security"]
 ```
 
 Defaults when no config file is found:
@@ -360,11 +374,26 @@ Defaults when no config file is found:
 | `rules.<rule>` | `"error"`, except the four listed under Diagnostic levels |
 | `kinds.<kind>.docs` | `"exported"` |
 | `kinds.<kind>.tags` | `[]` |
+| `kinds.<kind>.sections` | `[]` |
 
 - `kinds` takes one table per kind: `module`, `circuit`, `ledger`, `witness`,
   `constructor`, `struct`, `enum`, `contract`, `type`. `pragma`, `import`, `include`,
   `export { … }` and `contract implements` are never checked.
 - `docs` is `"all"`, `"exported"` or `"none"`.
+- A `tags` or `sections` entry is `"@tag"` or `"@tag Heading"`, split at the first space.
+- `tags` is what every doc comment of the kind must carry.
+- `sections`, when non-empty, is the kind's complete template: every allowed section, in
+  the order a header writes them, required and optional alike.
+- A required entry must also appear in `sections`; a `tags` entry missing from a non-empty
+  `sections` is a config error.
+- `tag-order` and the `fix` insert point read `sections` where the kind has one, else
+  `tags`.
+- A headed entry matches the occurrence of its tag whose value opens `Heading:`, matched
+  exactly and case-sensitively; what follows the colon is free. A bare entry matches any
+  occurrence of its tag.
+- A heading is non-empty, carries no `:`, and appears once per list.
+- The linter ships no section list of its own; a kind with no headed entry never reports
+  `unknown-section` or orders sections.
 - `constructor` carries no `export` token, so `"exported"` means "never" for it. Use
   `"all"` or `"none"` there.
 - `exclude` filters files found by walking a directory. A file named on the command
@@ -389,6 +418,8 @@ Defaults when no config file is found:
 - A tag's value is the rest of its line plus every following line until the next tag or
   a blank line.
 - Repeated tags are kept in source order; `@param` normally repeats.
+- A value whose first line reads `Heading:` opens a section; the heading is letters,
+  digits, spaces and hyphens, and anything else reads as prose.
 - `@param {Type} name - text` is not parsed further.
 
 ## Tests

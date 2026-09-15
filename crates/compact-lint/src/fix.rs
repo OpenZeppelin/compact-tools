@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::config::Config;
-use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level, capitalise};
-use crate::doc::Tag;
+use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level, Span, capitalise};
+use crate::doc::TagSpec;
 use crate::edit::{DocOp, Edit, EditKind, WriteError, apply, newline_of, write_atomically};
 use crate::model::DeclKind;
 use crate::report::RuleId;
-use crate::rules::{Issue, LintError, Linter};
+use crate::rules::{DocRef, Issue, LintError, Linter};
 use crate::target::{self, TargetError};
 
 /// The value written into an inserted constraints annotation.
@@ -180,31 +180,35 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
 
         Issue::MissingTag {
             kind,
-            tag,
+            entry,
             name,
             doc,
             ..
-        } => Some(Edit {
+        } => Some(doc_edit(
             span,
-            rule: RuleId::MISSING_TAG,
-            message: format!("insert {tag}"),
-            kind: EditKind::Doc {
-                range: doc.range.clone(),
-                indent: doc.indent,
-                op: missing_tag_op(*kind, tag, name.as_deref(), config),
-            },
-        }),
+            RuleId::MISSING_TAG,
+            format!("insert {entry}"),
+            doc,
+            missing_tag_op(*kind, entry, name.as_deref(), config),
+        )),
 
-        Issue::MissingConstraints { tag, doc, .. } => Some(Edit {
+        Issue::TagOrder { kind, doc, .. } => Some(doc_edit(
             span,
-            rule: RuleId::MISSING_CONSTRAINTS,
-            message: format!("insert {tag} {UNMEASURED}"),
-            kind: EditKind::Doc {
-                range: doc.range.clone(),
-                indent: doc.indent,
-                op: DocOp::InsertConstraints(format!("{tag} {UNMEASURED}")),
+            RuleId::TAG_ORDER,
+            "reorder the doc comment blocks".to_owned(),
+            doc,
+            DocOp::ReorderBlocks {
+                entries: config.kinds.get(*kind).entries().cloned().collect(),
             },
-        }),
+        )),
+
+        Issue::MissingConstraints { tag, doc, .. } => Some(doc_edit(
+            span,
+            RuleId::MISSING_CONSTRAINTS,
+            format!("insert {tag} {UNMEASURED}"),
+            doc,
+            DocOp::InsertConstraints(format!("{tag} {UNMEASURED}")),
+        )),
 
         Issue::ForbiddenTag {
             tag,
@@ -213,20 +217,17 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
             ..
         } => {
             let replacement = config.rename_of(tag)?;
-            Some(Edit {
+            Some(doc_edit(
                 span,
-                rule: RuleId::FORBIDDEN_TAG,
-                message: format!("rename {tag} to {replacement}"),
-                kind: EditKind::Doc {
-                    range: doc.range.clone(),
-                    indent: doc.indent,
-                    op: DocOp::RenameTag {
-                        line: *line_offset,
-                        from: tag.to_string(),
-                        to: replacement.to_string(),
-                    },
+                RuleId::FORBIDDEN_TAG,
+                format!("rename {tag} to {replacement}"),
+                doc,
+                DocOp::RenameTag {
+                    line: *line_offset,
+                    from: tag.to_string(),
+                    to: replacement.to_string(),
                 },
-            })
+            ))
         }
 
         Issue::ModuleName {
@@ -234,48 +235,67 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
             line_offset,
             doc,
             ..
-        } => Some(Edit {
+        } => Some(doc_edit(
             span,
-            rule: RuleId::MODULE_NAME,
-            message: format!("set {MODULE_TAG} to `{name}`"),
-            kind: EditKind::Doc {
-                range: doc.range.clone(),
-                indent: doc.indent,
-                op: DocOp::SetModuleName {
-                    line: *line_offset,
-                    name: name.clone(),
-                },
+            RuleId::MODULE_NAME,
+            format!("set {MODULE_TAG} to `{name}`"),
+            doc,
+            DocOp::SetModuleName {
+                line: *line_offset,
+                name: name.clone(),
             },
-        }),
+        )),
 
         Issue::Parse { .. }
+        | Issue::UnknownSection { .. }
         | Issue::ConstraintsFormat { .. }
         | Issue::ConstraintsPlaceholder { .. } => None,
     }
 }
 
-/// The tag line lands after the tags that precede it in config order; `@description`
-/// adopts prose that opens the body.
-fn missing_tag_op(kind: DeclKind, tag: &Tag, name: Option<&str>, config: &Config) -> DocOp {
-    DocOp::InsertTag {
-        line: tag_line(tag, name, config),
-        after: config
-            .kinds
-            .get(kind)
-            .tags
-            .iter()
-            .take_while(|required| *required != tag)
-            .map(ToString::to_string)
-            .collect(),
-        adopts_prose: tag.as_str() == DESCRIPTION_TAG,
+/// One rewrite of the doc comment the issue points at.
+fn doc_edit(span: Span, rule: RuleId, message: String, doc: &DocRef, op: DocOp) -> Edit {
+    Edit {
+        span,
+        rule,
+        message,
+        kind: EditKind::Doc {
+            range: doc.range.clone(),
+            indent: doc.indent,
+            op,
+        },
     }
 }
 
+/// The block lands after the entries that precede it in template order, optional ones
+/// included, so it follows whichever neighbour the comment carries; a bare `@description`
+/// adopts prose that opens the body.
+fn missing_tag_op(kind: DeclKind, entry: &TagSpec, name: Option<&str>, config: &Config) -> DocOp {
+    DocOp::InsertTag {
+        lines: entry_lines(entry, name, config),
+        after: config
+            .kinds
+            .get(kind)
+            .entries()
+            .take_while(|listed| *listed != entry)
+            .cloned()
+            .collect(),
+        adopts_prose: entry.heading.is_none() && entry.tag.as_str() == DESCRIPTION_TAG,
+    }
+}
+
+/// A section opens its own block, with the placeholder on the line under its heading.
 /// `@module` takes the declaration's own name; every other tag takes the placeholder.
-fn tag_line(tag: &Tag, name: Option<&str>, config: &Config) -> String {
-    match name {
-        Some(name) if tag.as_str() == MODULE_TAG => format!("{tag} {name}"),
-        _ => format!("{tag} {}", config.fix.placeholder),
+fn entry_lines(entry: &TagSpec, name: Option<&str>, config: &Config) -> Vec<String> {
+    match (&entry.heading, name) {
+        (Some(heading), _) => vec![
+            format!("{} {heading}:", entry.tag),
+            config.fix.placeholder.clone(),
+        ],
+        (None, Some(name)) if entry.tag.as_str() == MODULE_TAG => {
+            vec![format!("{} {name}", entry.tag)]
+        }
+        (None, _) => vec![format!("{} {}", entry.tag, config.fix.placeholder)],
     }
 }
 
@@ -296,7 +316,7 @@ fn skeleton(
         .get(kind)
         .tags
         .iter()
-        .map(|tag| tag_line(tag, name, config))
+        .flat_map(|entry| entry_lines(entry, name, config))
         .collect();
 
     if constraints {
@@ -328,13 +348,13 @@ fn skeleton(
 mod tests {
     use super::skeleton;
     use crate::config::Config;
-    use crate::doc::Tag;
+    use crate::doc::TagSpec;
     use crate::model::DeclKind;
 
     fn config() -> Config {
         let mut config = Config::default();
-        config.kinds.module.tags = vec![Tag::new("@module"), Tag::new("@description")];
-        config.kinds.circuit.tags = vec![Tag::new("@description")];
+        config.kinds.module.tags = vec![TagSpec::parse("@module"), TagSpec::parse("@description")];
+        config.kinds.circuit.tags = vec![TagSpec::parse("@description")];
         config
     }
 
@@ -343,6 +363,21 @@ mod tests {
         assert_eq!(
             skeleton(DeclKind::Module, Some("Ownable"), false, &config(), 0, "\n"),
             "/**\n * @module Ownable\n * @description TODO\n */\n"
+        );
+    }
+
+    #[test]
+    fn a_skeleton_gives_every_section_a_heading_line_and_a_placeholder_under_it() {
+        let mut config = config();
+        config
+            .kinds
+            .module
+            .tags
+            .push(TagSpec::parse("@notice Privacy"));
+
+        assert_eq!(
+            skeleton(DeclKind::Module, Some("Token"), false, &config, 0, "\n"),
+            "/**\n * @module Token\n * @description TODO\n * @notice Privacy:\n * TODO\n */\n"
         );
     }
 

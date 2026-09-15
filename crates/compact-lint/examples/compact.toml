@@ -26,6 +26,8 @@ rename = { "@return" = "@returns" }
 # [lint.rules]
 # missing-doc = "error"
 # missing-tag = "error"
+# unknown-section = "warn"
+# tag-order = "error"
 # forbidden-tag = "error"
 # module-name = "error"
 # missing-constraints = "error"
@@ -36,9 +38,37 @@ rename = { "@return" = "@returns" }
 # parse = "error"
 # format = "error"
 
+# The module header template. `tags` is what every header must carry, `sections` is every
+# allowed section in template order, and a required entry also appears in `sections`. Both
+# lists are a starting point: moving an entry into `tags` makes it required, and a heading
+# `sections` does not name is reported as unknown-section.
 [lint.kinds.module]
-docs = "exported"
-tags = ["@module", "@description"]
+docs = "all"
+tags = [
+  "@module",
+  "@description",
+  "@notice Privacy",
+  "@notice Security",
+  "@notice Concurrency",
+  "@notice Scope",
+  "@dev Performance",
+]
+sections = [
+  "@module",
+  "@description",
+  "@dev Notation",
+  "@dev Derivations",
+  "@dev Parameterization",
+  "@dev Compatibility",
+  "@notice Privacy",
+  "@notice Security",
+  "@notice Concurrency",
+  "@notice Scope",
+  "@notice Client-side duties",
+  "@notice Scalability",
+  "@dev Performance",
+  "@dev Composition",
+]
 
 [lint.kinds.circuit]
 tags = ["@description"]
