@@ -31,6 +31,23 @@ pub struct DocRef {
     pub indent: usize,
 }
 
+/// A constraints annotation already present on an exported non-pure circuit.
+///
+/// `check` only reports the annotations it faults; `fill-constraints` rewrites every one
+/// of them, so it reads the sites directly.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConstraintSite {
+    /// The circuit's name, which is the name its measurement carries.
+    pub circuit: String,
+    /// Position of the tag's `@`.
+    pub position: Position,
+    /// 0-based line index of the tag inside the doc comment.
+    pub line_offset: usize,
+    /// The annotation's value, first line only.
+    pub value: String,
+    pub doc: DocRef,
+}
+
 /// One rule violation, carrying what `check` prints and what `fix` needs to repair it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Issue {
@@ -205,6 +222,34 @@ impl Linter {
         Ok(issues)
     }
 
+    /// Every constraints annotation in one file, in source order.
+    ///
+    /// A file holding a parse defect yields none, because its declarations are not
+    /// trustworthy enough to rewrite.
+    /// # Errors
+    /// Returns an error when tree-sitter produces no tree for `source`.
+    pub fn constraint_sites(
+        &mut self,
+        display: &Path,
+        source: &str,
+        config: &Config,
+    ) -> Result<Vec<ConstraintSite>, LintError> {
+        let tree = self
+            .parser
+            .parse(source, None)
+            .ok_or_else(|| LintError::NoTree(display.to_owned()))?;
+        let root = tree.root_node();
+
+        if first_defect(root).is_some() {
+            return Ok(Vec::new());
+        }
+
+        Ok(declarations(root, source)
+            .iter()
+            .filter_map(|declaration| constraint_site(declaration, &config.constraints.tag))
+            .collect())
+    }
+
     /// Checks one file. `display` is the path printed in findings.
     /// # Errors
     /// Returns an error when tree-sitter produces no tree for `source`.
@@ -348,6 +393,26 @@ const fn takes_constraints(declaration: &Declaration) -> bool {
     matches!(declaration.kind, DeclKind::Circuit) && declaration.exported && !declaration.pure
 }
 
+/// The annotation on one declaration, where it is a named circuit that takes one.
+fn constraint_site(declaration: &Declaration, tag: &Tag) -> Option<ConstraintSite> {
+    if !takes_constraints(declaration) {
+        return None;
+    }
+    let attached = declaration.doc.as_ref()?;
+    let occurrence = attached.comment.first(tag)?;
+
+    Some(ConstraintSite {
+        circuit: declaration.name.clone()?,
+        position: attached.tag_position(occurrence),
+        line_offset: occurrence.line_offset,
+        value: value_of(occurrence).to_owned(),
+        doc: DocRef {
+            range: attached.range.clone(),
+            indent: attached.start_column,
+        },
+    })
+}
+
 fn check_constraints(
     declaration: &Declaration,
     doc: &DocRef,
@@ -373,8 +438,7 @@ fn check_constraints(
         return;
     };
 
-    // The annotation is one line; anything below it is prose, not part of the value.
-    let value = occurrence.value.lines().next().unwrap_or_default().trim();
+    let value = value_of(occurrence);
     let position = attached.tag_position(occurrence);
 
     let Some(placeholders) = parse_constraints(value) else {
@@ -393,6 +457,11 @@ fn check_constraints(
             value: value.to_owned(),
         });
     }
+}
+
+/// The annotation is one line; anything below it is prose, not part of the value.
+fn value_of(occurrence: &crate::doc::TagOccurrence) -> &str {
+    occurrence.value.lines().next().unwrap_or_default().trim()
 }
 
 /// Matches `k=<n|?>,<space>*rows=<n|?>`; returns whether either field is a `?` placeholder.

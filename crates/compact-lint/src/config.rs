@@ -103,17 +103,42 @@ impl KindsConfig {
     }
 }
 
-/// The circuit constraints annotation.
+/// Where `fill-constraints` looks for the contract that measures a file, tried in order.
+///
+/// `{dir}` is the file's directory, `{parent}` its parent, `{stem}` its name without
+/// the extension.
+pub const DEFAULT_SOURCES: [&str; 2] = [
+    "{dir}/test/mocks/Mock{stem}.compact",
+    "{parent}/test/mocks/Mock{stem}.compact",
+];
+
+/// The circuit constraints annotation, and how `fill-constraints` measures it.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
 pub struct ConstraintsConfig {
     pub tag: Tag,
+    /// Toolchain version passed as `+<version>`; none leaves `compact` on its default.
+    pub compiler: Option<String>,
+    /// Measurement-source templates, first existing file wins.
+    pub sources: Vec<String>,
+    /// Globs for files that are contracts and compile themselves.
+    #[serde(rename = "self")]
+    pub own: Vec<String>,
+    /// File to its measurement source, both relative to the config's directory.
+    pub overrides: BTreeMap<String, String>,
 }
 
 impl Default for ConstraintsConfig {
     fn default() -> Self {
         Self {
             tag: Tag::new("@constraints"),
+            compiler: None,
+            sources: DEFAULT_SOURCES
+                .iter()
+                .map(|&template| template.to_owned())
+                .collect(),
+            own: Vec::new(),
+            overrides: BTreeMap::new(),
         }
     }
 }
@@ -243,6 +268,13 @@ impl Config {
     pub fn exclude_set(&self, path: &Path) -> Result<GlobSet, ConfigError> {
         glob_set(&self.exclude, path)
     }
+
+    /// Compiles the `constraints.self` globs; an empty set matches nothing.
+    /// # Errors
+    /// Returns an error when a pattern is not a valid glob.
+    pub fn own_set(&self, path: &Path) -> Result<GlobSet, ConfigError> {
+        glob_set(&self.constraints.own, path)
+    }
 }
 
 fn glob_set(patterns: &[String], path: &Path) -> Result<GlobSet, ConfigError> {
@@ -358,6 +390,44 @@ mod tests {
         let config: Config = toml::from_str("[fix]\nplaceholder = \"FIXME\"\n")
             .expect("the snippet is valid config");
         assert_eq!(config.fix.placeholder, "FIXME");
+    }
+
+    #[test]
+    fn constraints_default_to_the_mock_templates_and_no_compiler_pin() {
+        let constraints = Config::default().constraints;
+
+        assert_eq!(constraints.compiler, None);
+        assert_eq!(constraints.sources, super::DEFAULT_SOURCES);
+        assert!(constraints.own.is_empty());
+        assert!(constraints.overrides.is_empty());
+    }
+
+    #[test]
+    fn a_constraints_table_keeps_the_templates_it_does_not_name() {
+        let config: Config = toml::from_str(
+            "[constraints]\ncompiler = \"0.34.0\"\nself = [\"**/presets/**\"]\n[constraints.overrides]\n\"a.compact\" = \"b.compact\"\n",
+        )
+        .expect("the snippet is valid config");
+
+        assert_eq!(config.constraints.compiler.as_deref(), Some("0.34.0"));
+        assert_eq!(config.constraints.own, ["**/presets/**"]);
+        assert_eq!(config.constraints.sources, super::DEFAULT_SOURCES);
+        assert_eq!(
+            config
+                .constraints
+                .overrides
+                .get("a.compact")
+                .map(String::as_str),
+            Some("b.compact")
+        );
+    }
+
+    #[test]
+    fn an_unknown_constraints_key_is_rejected() {
+        let error = toml::from_str::<Config>("[constraints]\nsorces = []\n")
+            .expect_err("the key is misspelled");
+
+        assert!(error.to_string().contains("sorces"), "{error}");
     }
 
     #[test]

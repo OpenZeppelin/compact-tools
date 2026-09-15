@@ -1,0 +1,12 @@
+/**
+ * @module Orphan
+ * @description Test fixture.
+ */
+export module Orphan {
+  /**
+   * @description Runs.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit run(): [] { }
+}

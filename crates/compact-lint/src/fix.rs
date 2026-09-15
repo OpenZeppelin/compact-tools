@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::config::Config;
 use crate::doc::Tag;
-use crate::edit::{DocOp, Edit, EditKind, apply, newline_of};
+use crate::edit::{DocOp, Edit, EditKind, WriteError, apply, newline_of, write_atomically};
 use crate::model::DeclKind;
 use crate::report::Position;
 use crate::rules::{Issue, LintError, Linter};
@@ -33,12 +33,8 @@ pub enum FixError {
         #[source]
         source: std::io::Error,
     },
-    #[error("cannot write {path}")]
-    Write {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    Write(#[from] WriteError),
 }
 
 /// Everything the `fix` subcommand needs, already resolved from flags.
@@ -284,30 +280,6 @@ fn skeleton(
 
     // The declaration follows on its own line, back at its original indentation.
     format!("{}{newline}{margin}", lines.join(newline))
-}
-
-/// Writes through a sibling temporary file, so a failed write never truncates the source.
-fn write_atomically(path: &Path, text: &str) -> Result<(), FixError> {
-    let temporary = path.with_extension("compact.tmp");
-
-    std::fs::write(&temporary, text).map_err(|source| FixError::Write {
-        path: temporary.clone(),
-        source,
-    })?;
-    let permissions = std::fs::metadata(path)
-        .map_err(|source| FixError::Read {
-            path: path.to_owned(),
-            source,
-        })?
-        .permissions();
-    std::fs::set_permissions(&temporary, permissions).map_err(|source| FixError::Write {
-        path: temporary.clone(),
-        source,
-    })?;
-    std::fs::rename(&temporary, path).map_err(|source| FixError::Write {
-        path: path.to_owned(),
-        source,
-    })
 }
 
 /// The line `fix` prints for one edit.

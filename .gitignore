@@ -36,6 +36,8 @@ artifacts/
 # compact-compiler's per-source circuit-info cache, written next to the
 # .compact sources it measures.
 .circuit-info.json
+# Except the seeded cache the fill-constraints tests read.
+!crates/compact-lint/tests/fixtures/**/.circuit-info.json
 midnight-level-db
 compactc
 

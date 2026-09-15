@@ -1,0 +1,8 @@
+version = 1
+exclude = ["**/test/mocks/**"]
+
+[kinds.module]
+tags = ["@module", "@description"]
+
+[kinds.circuit]
+tags = ["@description"]
