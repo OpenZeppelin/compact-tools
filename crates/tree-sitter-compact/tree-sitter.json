@@ -1,0 +1,37 @@
+{
+  "grammars": [
+    {
+      "name": "compact",
+      "camelcase": "Compact",
+      "scope": "source.compact",
+      "path": ".",
+      "file-types": ["compact"],
+      "highlights": ["queries/highlights.scm"],
+      "injection-regex": "^compact$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Declaration-level Compact grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "OpenZeppelin"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/OpenZeppelin/compact-tools"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": false,
+    "java": false,
+    "kotlin": false,
+    "node": false,
+    "python": false,
+    "rust": true,
+    "swift": false,
+    "zig": false
+  }
+}

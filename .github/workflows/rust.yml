@@ -1,0 +1,46 @@
+name: Rust
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - beta
+
+jobs:
+  rust:
+    name: Run Rust Checks
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install 1.96 --profile minimal --component rustfmt --component clippy
+          rustup show active-toolchain
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Check the generated parser is up to date
+        working-directory: crates/tree-sitter-compact
+        run: npx -y tree-sitter-cli@0.25.8 generate
+
+      - name: Fail if regeneration changed the parser
+        run: git diff --exit-code -- crates/tree-sitter-compact/src
