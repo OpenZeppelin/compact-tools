@@ -1,7 +1,7 @@
 {
   "name": "@openzeppelin/compact-cli",
   "description": "CLI for compiling, building, and deploying Compact smart contracts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "keywords": [
     "compact",
     "cli",
