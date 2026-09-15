@@ -1,5 +1,9 @@
 //! The doc-comment rules, run over one parsed file at a time.
+//!
+//! Detection yields [`Issue`]s. `check` renders them as [`Finding`]s and `fix` renders
+//! the fixable ones as edits, so both subcommands read the same detection pass.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -18,6 +22,142 @@ pub enum LintError {
     NoTree(PathBuf),
 }
 
+/// Where a doc comment sits in the file, for the rules that rewrite one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DocRef {
+    /// Byte range of the `/** … */` node.
+    pub range: Range<usize>,
+    /// Column the `/**` starts on, reused as the rewritten comment's indentation.
+    pub indent: usize,
+}
+
+/// One rule violation, carrying what `check` prints and what `fix` needs to repair it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Issue {
+    Parse {
+        position: Position,
+        node_kind: String,
+        missing: bool,
+    },
+    MissingDoc {
+        position: Position,
+        subject: String,
+        kind: DeclKind,
+        name: Option<String>,
+        /// Byte offset of the declaration's first token.
+        offset: usize,
+        /// The declaration's start column, reused as the skeleton's indentation.
+        indent: usize,
+        /// The declaration also carries the constraints annotation.
+        constraints: bool,
+    },
+    MissingTag {
+        position: Position,
+        subject: String,
+        kind: DeclKind,
+        tag: Tag,
+        /// The declaration's name, which `@module` takes as its value.
+        name: Option<String>,
+        doc: DocRef,
+    },
+    ForbiddenTag {
+        position: Position,
+        tag: Tag,
+        /// 0-based line index of the tag inside the doc comment.
+        line_offset: usize,
+        doc: DocRef,
+    },
+    ModuleName {
+        position: Position,
+        documented: String,
+        name: String,
+        /// 0-based line index of `@module` inside the doc comment.
+        line_offset: usize,
+        doc: DocRef,
+    },
+    MissingConstraints {
+        position: Position,
+        subject: String,
+        tag: Tag,
+        doc: DocRef,
+    },
+    ConstraintsFormat {
+        position: Position,
+        tag: Tag,
+        value: String,
+    },
+    ConstraintsPlaceholder {
+        position: Position,
+        tag: Tag,
+        value: String,
+    },
+}
+
+impl Issue {
+    #[must_use]
+    pub const fn position(&self) -> Position {
+        match self {
+            Self::Parse { position, .. }
+            | Self::MissingDoc { position, .. }
+            | Self::MissingTag { position, .. }
+            | Self::ForbiddenTag { position, .. }
+            | Self::ModuleName { position, .. }
+            | Self::MissingConstraints { position, .. }
+            | Self::ConstraintsFormat { position, .. }
+            | Self::ConstraintsPlaceholder { position, .. } => *position,
+        }
+    }
+
+    #[must_use]
+    pub const fn rule(&self) -> RuleId {
+        match self {
+            Self::Parse { .. } => RuleId::PARSE,
+            Self::MissingDoc { .. } => RuleId::MISSING_DOC,
+            Self::MissingTag { .. } => RuleId::MISSING_TAG,
+            Self::ForbiddenTag { .. } => RuleId::FORBIDDEN_TAG,
+            Self::ModuleName { .. } => RuleId::MODULE_NAME,
+            Self::MissingConstraints { .. } => RuleId::MISSING_CONSTRAINTS,
+            Self::ConstraintsFormat { .. } => RuleId::CONSTRAINTS_FORMAT,
+            Self::ConstraintsPlaceholder { .. } => RuleId::CONSTRAINTS_PLACEHOLDER,
+        }
+    }
+
+    #[must_use]
+    pub fn message(&self) -> String {
+        match self {
+            Self::Parse {
+                node_kind, missing, ..
+            } => {
+                if *missing {
+                    format!("parse error: missing {node_kind}")
+                } else {
+                    format!("parse error: unexpected {node_kind}")
+                }
+            }
+            Self::MissingDoc { subject, .. } => format!("{subject} has no doc comment"),
+            Self::MissingTag { subject, tag, .. }
+            | Self::MissingConstraints { subject, tag, .. } => {
+                format!("{subject} doc comment has no {tag}")
+            }
+            Self::ForbiddenTag { tag, .. } => format!("forbidden tag {tag}"),
+            Self::ModuleName {
+                documented, name, ..
+            } => format!("@module names `{documented}`, but the module is `{name}`"),
+            Self::ConstraintsFormat { tag, value, .. } => {
+                format!("{tag} value `{value}` is not `k=<n>, rows=<n>`")
+            }
+            Self::ConstraintsPlaceholder { tag, value, .. } => {
+                format!("{tag} value `{value}` still holds a placeholder")
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn finding(&self, display: &Path) -> Finding {
+        Finding::new(display, self.position(), self.rule(), self.message())
+    }
+}
+
 /// A reusable parser plus the rules that run over its trees.
 pub struct Linter {
     parser: Parser,
@@ -34,10 +174,38 @@ impl Linter {
         Ok(Self { parser })
     }
 
-    /// Checks one file. `display` is the path printed in findings.
+    /// Runs every rule over one file, in source order.
     ///
-    /// A tree holding an `ERROR` or `MISSING` node yields a single `parse` finding and
-    /// no doc findings, because declarations around the defect are not trustworthy.
+    /// A tree holding an `ERROR` or `MISSING` node yields a single `parse` issue and no
+    /// doc issues, because declarations around the defect are not trustworthy.
+    /// # Errors
+    /// Returns an error when tree-sitter produces no tree for `source`.
+    pub fn issues(
+        &mut self,
+        display: &Path,
+        source: &str,
+        config: &Config,
+        strict: bool,
+    ) -> Result<Vec<Issue>, LintError> {
+        let tree = self
+            .parser
+            .parse(source, None)
+            .ok_or_else(|| LintError::NoTree(display.to_owned()))?;
+        let root = tree.root_node();
+
+        if let Some(defect) = first_defect(root) {
+            return Ok(vec![defect]);
+        }
+
+        let mut issues = Vec::new();
+        for declaration in declarations(root, source) {
+            check_declaration(&declaration, config, strict, &mut issues);
+        }
+        issues.sort_by_key(|issue| (issue.position(), issue.rule()));
+        Ok(issues)
+    }
+
+    /// Checks one file. `display` is the path printed in findings.
     /// # Errors
     /// Returns an error when tree-sitter produces no tree for `source`.
     pub fn check(
@@ -47,49 +215,21 @@ impl Linter {
         config: &Config,
         strict: bool,
     ) -> Result<Vec<Finding>, LintError> {
-        let tree = self
-            .parser
-            .parse(source, None)
-            .ok_or_else(|| LintError::NoTree(display.to_owned()))?;
-        let root = tree.root_node();
-
-        if let Some(defect) = first_defect(root) {
-            return Ok(vec![defect.finding(display)]);
-        }
-
-        let mut findings = Vec::new();
-        for declaration in declarations(root, source) {
-            check_declaration(&declaration, display, config, strict, &mut findings);
-        }
-        findings.sort_by(|left, right| left.sort_key().cmp(&right.sort_key()));
-        Ok(findings)
-    }
-}
-
-struct Defect {
-    position: Position,
-    kind: String,
-    missing: bool,
-}
-
-impl Defect {
-    fn finding(&self, display: &Path) -> Finding {
-        let message = if self.missing {
-            format!("parse error: missing {}", self.kind)
-        } else {
-            format!("parse error: unexpected {}", self.kind)
-        };
-        Finding::new(display, self.position, RuleId::PARSE, message)
+        Ok(self
+            .issues(display, source, config, strict)?
+            .iter()
+            .map(|issue| issue.finding(display))
+            .collect())
     }
 }
 
 /// The first `ERROR` or `MISSING` node in document order.
-fn first_defect(node: Node<'_>) -> Option<Defect> {
+fn first_defect(node: Node<'_>) -> Option<Issue> {
     if node.is_error() || node.is_missing() {
         let start = node.start_position();
-        return Some(Defect {
+        return Some(Issue::Parse {
             position: Position::from_zero_based(start.row, start.column),
-            kind: node.kind().to_owned(),
+            node_kind: node.kind().to_owned(),
             missing: node.is_missing(),
         });
     }
@@ -104,10 +244,9 @@ fn first_defect(node: Node<'_>) -> Option<Defect> {
 
 fn check_declaration(
     declaration: &Declaration,
-    display: &Path,
     config: &Config,
     strict: bool,
-    findings: &mut Vec<Finding>,
+    issues: &mut Vec<Issue>,
 ) {
     let kind_config = config.kinds.get(declaration.kind);
     let requires_docs = match kind_config.docs {
@@ -118,32 +257,40 @@ fn check_declaration(
 
     let Some(attached) = declaration.doc.as_ref() else {
         if requires_docs {
-            findings.push(Finding::new(
-                display,
-                declaration.position,
-                RuleId::MISSING_DOC,
-                format!("{} has no doc comment", subject(declaration)),
-            ));
+            issues.push(Issue::MissingDoc {
+                position: declaration.position,
+                subject: subject(declaration),
+                kind: declaration.kind,
+                name: declaration.name.clone(),
+                offset: declaration.offset,
+                indent: declaration.position.column - 1,
+                constraints: takes_constraints(declaration),
+            });
         }
         return;
     };
 
-    // A forbidden tag is a finding wherever it appears, documented or not.
+    let doc = DocRef {
+        range: attached.range.clone(),
+        indent: attached.start_column,
+    };
+
+    // A forbidden tag is an issue wherever it appears, documented or not.
     for forbidden in &config.tags.forbid {
         for occurrence in attached.comment.tags() {
             if &occurrence.tag == forbidden {
-                findings.push(Finding::new(
-                    display,
-                    attached.tag_position(occurrence),
-                    RuleId::FORBIDDEN_TAG,
-                    format!("forbidden tag {forbidden}"),
-                ));
+                issues.push(Issue::ForbiddenTag {
+                    position: attached.tag_position(occurrence),
+                    tag: forbidden.clone(),
+                    line_offset: occurrence.line_offset,
+                    doc: doc.clone(),
+                });
             }
         }
     }
 
     if declaration.kind == DeclKind::Module {
-        check_module_name(declaration, display, findings);
+        check_module_name(declaration, &doc, issues);
     }
 
     if !requires_docs {
@@ -152,20 +299,22 @@ fn check_declaration(
 
     for required in &kind_config.tags {
         if !attached.comment.has(required) {
-            findings.push(Finding::new(
-                display,
-                declaration.position,
-                RuleId::MISSING_TAG,
-                format!("{} doc comment has no {required}", subject(declaration)),
-            ));
+            issues.push(Issue::MissingTag {
+                position: declaration.position,
+                subject: subject(declaration),
+                kind: declaration.kind,
+                tag: required.clone(),
+                name: declaration.name.clone(),
+                doc: doc.clone(),
+            });
         }
     }
 
-    check_constraints(declaration, display, config, strict, findings);
+    check_constraints(declaration, &doc, config, strict, issues);
 }
 
 /// `@module <Name>` must name the module it documents.
-fn check_module_name(declaration: &Declaration, display: &Path, findings: &mut Vec<Finding>) {
+fn check_module_name(declaration: &Declaration, doc: &DocRef, issues: &mut Vec<Issue>) {
     let tag = Tag::new("@module");
     let (Some(attached), Some(name)) = (declaration.doc.as_ref(), declaration.name.as_deref())
     else {
@@ -177,12 +326,13 @@ fn check_module_name(declaration: &Declaration, display: &Path, findings: &mut V
 
     let documented = module_name(&occurrence.value);
     if documented != name {
-        findings.push(Finding::new(
-            display,
-            attached.tag_position(occurrence),
-            RuleId::MODULE_NAME,
-            format!("@module names `{documented}`, but the module is `{name}`"),
-        ));
+        issues.push(Issue::ModuleName {
+            position: attached.tag_position(occurrence),
+            documented: documented.to_owned(),
+            name: name.to_owned(),
+            line_offset: occurrence.line_offset,
+            doc: doc.clone(),
+        });
     }
 }
 
@@ -194,14 +344,18 @@ fn module_name(value: &str) -> &str {
 }
 
 /// Exported non-pure circuits carry the constraints annotation.
+const fn takes_constraints(declaration: &Declaration) -> bool {
+    matches!(declaration.kind, DeclKind::Circuit) && declaration.exported && !declaration.pure
+}
+
 fn check_constraints(
     declaration: &Declaration,
-    display: &Path,
+    doc: &DocRef,
     config: &Config,
     strict: bool,
-    findings: &mut Vec<Finding>,
+    issues: &mut Vec<Issue>,
 ) {
-    if declaration.kind != DeclKind::Circuit || !declaration.exported || declaration.pure {
+    if !takes_constraints(declaration) {
         return;
     }
     let Some(attached) = declaration.doc.as_ref() else {
@@ -210,12 +364,12 @@ fn check_constraints(
     let tag = &config.constraints.tag;
 
     let Some(occurrence) = attached.comment.first(tag) else {
-        findings.push(Finding::new(
-            display,
-            declaration.position,
-            RuleId::MISSING_CONSTRAINTS,
-            format!("{} doc comment has no {tag}", subject(declaration)),
-        ));
+        issues.push(Issue::MissingConstraints {
+            position: declaration.position,
+            subject: subject(declaration),
+            tag: tag.clone(),
+            doc: doc.clone(),
+        });
         return;
     };
 
@@ -224,22 +378,20 @@ fn check_constraints(
     let position = attached.tag_position(occurrence);
 
     let Some(placeholders) = parse_constraints(value) else {
-        findings.push(Finding::new(
-            display,
+        issues.push(Issue::ConstraintsFormat {
             position,
-            RuleId::CONSTRAINTS_FORMAT,
-            format!("{tag} value `{value}` is not `k=<n>, rows=<n>`"),
-        ));
+            tag: tag.clone(),
+            value: value.to_owned(),
+        });
         return;
     };
 
     if strict && placeholders {
-        findings.push(Finding::new(
-            display,
+        issues.push(Issue::ConstraintsPlaceholder {
             position,
-            RuleId::CONSTRAINTS_PLACEHOLDER,
-            format!("{tag} value `{value}` still holds a placeholder"),
-        ));
+            tag: tag.clone(),
+            value: value.to_owned(),
+        });
     }
 }
 
