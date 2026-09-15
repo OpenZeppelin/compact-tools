@@ -1,0 +1,18 @@
+[lint]
+include = ["**/*.compact"]
+
+[lint.tags]
+forbid = ["@return"]
+rename = { "@return" = "@returns" }
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.circuit]
+tags = ["@description"]
+
+[lint.kinds.ledger]
+tags = ["@description"]
+
+[lint.kinds.constructor]
+docs = "none"

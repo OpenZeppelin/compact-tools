@@ -1,0 +1,17 @@
+Sections.compact:13:1 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Module `Sections` doc comment has no `@notice Security` section.
+
+    11 │  * - `H(...)`: a `Bytes<32>` digest.
+    12 │  */
+  > 13 │ export module Sections {
+       │ ^^^^^^^^^^^^^^^^^^^^^^
+    14 │ }
+
+  i Add a @notice Security: section, or run compact-lint fix.
+
+  i Unsafe fix: Insert @notice Security
+
+      12 │ + ·*·@notice·Security:
+      13 │ + ·*·TODO
+

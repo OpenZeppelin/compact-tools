@@ -1,0 +1,49 @@
+Windows.compact:6:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `_count` has no doc comment.
+
+    4 │  */
+    5 │ export module Windows {
+  > 6 │   export ledger _count: Counter;
+      │   ^^^^^^^^^^^^^^^^^^^^
+    7 │ 
+    8 │   /**
+
+  i Unsafe fix: Insert a doc skeleton for ledger `_count`
+
+      6 │ + ··/**
+      7 │ + ···*·@description·TODO
+      8 │ + ···*/
+
+Windows.compact:10:6 lint/forbidden-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Forbidden tag @return.
+
+     8 │   /**
+     9 │    * @description Bumps the counter.
+  > 10 │    * @return {[]} - Empty tuple.
+       │      ^^^^^^^
+    11 │    */
+    12 │   export circuit bump(): [] { }
+
+  i Safe fix: Rename @return to @returns
+
+    10    │ - ···*·@return·{[]}·-·Empty·tuple.
+       10 │ + ···*·@returns·{[]}·-·Empty·tuple.
+
+Windows.compact:12:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` doc comment has no @constraints.
+
+    10 │    * @return {[]} - Empty tuple.
+    11 │    */
+  > 12 │   export circuit bump(): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^
+    13 │ }
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      10 │ + ···*
+      11 │ + ···*·@constraints·k=?,·rows=?
+      12 │ + ···*
+

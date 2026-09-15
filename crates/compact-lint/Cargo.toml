@@ -19,12 +19,14 @@ name = "compact-lint"
 path = "src/main.rs"
 
 [dependencies]
+anstyle.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 globset.workspace = true
 portable-pty.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+similar.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 toml.workspace = true

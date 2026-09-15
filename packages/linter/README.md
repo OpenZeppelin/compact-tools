@@ -16,8 +16,9 @@ yarn compact-linter check contracts/src
 yarn compact-linter fix --dry-run
 ```
 
-Commands, flags, exit codes and `compact-lint.toml` are documented in the
-[crate README](../../crates/compact-lint/README.md).
+Commands, flags, exit codes and the `[lint]` table of `compact.toml` are documented in
+the [crate README](../../crates/compact-lint/README.md). `compact.toml` is the project's
+one config file, shared with `compact-deploy`.
 
 ## Where the binary comes from
 

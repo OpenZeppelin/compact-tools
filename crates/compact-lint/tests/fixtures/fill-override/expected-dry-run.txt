@@ -1,0 +1,16 @@
+src/utils/Utils.compact:9:6 fill  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `hash` measures k=9, rows=310.
+
+     7 │    * @description Hashes a value.
+     8 │    *
+  >  9 │    * @constraints k=?, rows=?
+       │      ^^^^^^^^^^^^
+    10 │    */
+    11 │   export circuit hash(): [] { }
+
+  i Safe fix: Set @constraints to k=9, rows=310
+
+    9   │ - ···*·@constraints·k=?,·rows=?
+      9 │ + ···*·@constraints·k=9,·rows=310
+

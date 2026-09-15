@@ -1,0 +1,8 @@
+[lint]
+exclude = ["**/test/mocks/**"]
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.circuit]
+tags = ["@description"]

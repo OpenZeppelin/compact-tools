@@ -1,0 +1,24 @@
+Ordered.compact:10:4 lint/tag-order  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × `@notice Security` comes before `@notice Privacy`; the template orders Privacy first.
+
+     8 │  * - Nonces are spend-critical.
+     9 │  *
+  > 10 │  * @notice Privacy:
+       │    ^^^^^^^^^^^^^^^^
+    11 │  * - Amounts stay private.
+    12 │  */
+
+  i Run compact-lint fix to reorder the blocks.
+
+  i Safe fix: Reorder the doc comment blocks
+
+        7 │ + ·*·@notice·Privacy:
+        8 │ + ·*·-·Amounts·stay·private.
+        9 │ + ·*
+     7 10 │    * @notice Security:
+     8 11 │    * - Nonces are spend-critical.
+     9    │ - ·*
+    10    │ - ·*·@notice·Privacy:
+    11    │ - ·*·-·Amounts·stay·private.
+

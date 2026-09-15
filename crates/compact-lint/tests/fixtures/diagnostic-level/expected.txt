@@ -1,0 +1,17 @@
+Mixed.compact:15:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Circuit `bump` doc comment has no @constraints.
+
+    13 │    * @description Unannotated.
+    14 │    */
+  > 15 │   export circuit bump(): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^
+    16 │ }
+
+  i Run compact-lint fill-constraints after adding the tag, or add it as @constraints k=?, rows=? to fill later.
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      14 │ + ···*
+      15 │ + ···*·@constraints·k=?,·rows=?
+

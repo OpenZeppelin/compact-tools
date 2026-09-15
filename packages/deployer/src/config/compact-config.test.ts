@@ -38,6 +38,24 @@ describe('CompactConfig', () => {
     expect(config.contract('Token').artifact).toBe('src/artifacts/Token/Token');
   });
 
+  it('ignores the [lint] table that compact-lint owns', async () => {
+    const dir = tmpRepo(`${MIN_VALID}
+[lint]
+include = ["contracts/src/**/*.compact"]
+
+[lint.rules]
+missing-doc = "error"
+
+[lint.kinds.module]
+docs = "exported"
+tags = ["@module", "@description"]
+`);
+    const config = await CompactConfig.load(undefined, dir);
+    expect(config.defaultNetwork).toBe('local');
+    expect(config.network('local').network_id).toBe('undeployed');
+    expect(config.contract('Token').artifact).toBe('src/artifacts/Token/Token');
+  });
+
   it('should throw with the available set when a lookup misses', async () => {
     const dir = tmpRepo(MIN_VALID);
     const config = await CompactConfig.load(undefined, dir);

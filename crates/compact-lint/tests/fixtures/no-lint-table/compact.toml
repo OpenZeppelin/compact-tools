@@ -1,0 +1,14 @@
+# compact-deploy's tables only: the file exists, the linter's table does not.
+[profile]
+default_network = "local"
+
+[networks.local]
+network_id = "undeployed"
+indexer    = "http://127.0.0.1:8088/api/v4/graphql"
+indexer_ws = "ws://127.0.0.1:8088/api/v4/graphql/ws"
+node       = "http://127.0.0.1:9944"
+node_ws    = "ws://127.0.0.1:9944"
+
+[contracts.Token]
+artifact         = "Token"
+signing_key_file = "deploy/Token.signingkey"

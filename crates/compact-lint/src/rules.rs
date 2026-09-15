@@ -1,6 +1,6 @@
 //! The doc-comment rules, run over one parsed file at a time.
 //!
-//! Detection yields [`Issue`]s. `check` renders them as [`Finding`]s and `fix` renders
+//! Detection yields [`Issue`]s. `check` renders them as [`Diagnostic`]s and `fix` renders
 //! the fixable ones as edits, so both subcommands read the same detection pass.
 
 use std::ops::Range;
@@ -10,9 +10,13 @@ use thiserror::Error;
 use tree_sitter::{Node, Parser};
 
 use crate::config::{Config, DocsPolicy};
-use crate::doc::Tag;
+use crate::diagnostic::{Diagnostic, Level, Span, sentence};
+use crate::doc::{Tag, TagSpec};
 use crate::model::{DeclKind, Declaration, declarations};
-use crate::report::{Finding, Position, RuleId};
+use crate::report::{Position, RuleId};
+
+/// The tag whose value must name the module it documents.
+const MODULE_TAG: &str = "@module";
 
 #[derive(Debug, Error)]
 pub enum LintError {
@@ -53,11 +57,13 @@ pub struct ConstraintSite {
 pub enum Issue {
     Parse {
         position: Position,
+        end: Position,
         node_kind: String,
         missing: bool,
     },
     MissingDoc {
         position: Position,
+        end: Position,
         subject: String,
         kind: DeclKind,
         name: Option<String>,
@@ -70,11 +76,27 @@ pub enum Issue {
     },
     MissingTag {
         position: Position,
+        end: Position,
         subject: String,
         kind: DeclKind,
-        tag: Tag,
+        entry: TagSpec,
         /// The declaration's name, which `@module` takes as its value.
         name: Option<String>,
+        doc: DocRef,
+    },
+    UnknownSection {
+        position: Position,
+        kind: DeclKind,
+        tag: Tag,
+        heading: String,
+    },
+    TagOrder {
+        position: Position,
+        kind: DeclKind,
+        /// The entry at the occurrence that breaks the order.
+        entry: TagSpec,
+        /// The entry the template orders after it, seen earlier in the comment.
+        previous: TagSpec,
         doc: DocRef,
     },
     ForbiddenTag {
@@ -94,6 +116,7 @@ pub enum Issue {
     },
     MissingConstraints {
         position: Position,
+        end: Position,
         subject: String,
         tag: Tag,
         doc: DocRef,
@@ -117,6 +140,8 @@ impl Issue {
             Self::Parse { position, .. }
             | Self::MissingDoc { position, .. }
             | Self::MissingTag { position, .. }
+            | Self::UnknownSection { position, .. }
+            | Self::TagOrder { position, .. }
             | Self::ForbiddenTag { position, .. }
             | Self::ModuleName { position, .. }
             | Self::MissingConstraints { position, .. }
@@ -131,6 +156,8 @@ impl Issue {
             Self::Parse { .. } => RuleId::PARSE,
             Self::MissingDoc { .. } => RuleId::MISSING_DOC,
             Self::MissingTag { .. } => RuleId::MISSING_TAG,
+            Self::UnknownSection { .. } => RuleId::UNKNOWN_SECTION,
+            Self::TagOrder { .. } => RuleId::TAG_ORDER,
             Self::ForbiddenTag { .. } => RuleId::FORBIDDEN_TAG,
             Self::ModuleName { .. } => RuleId::MODULE_NAME,
             Self::MissingConstraints { .. } => RuleId::MISSING_CONSTRAINTS,
@@ -139,9 +166,10 @@ impl Issue {
         }
     }
 
+    /// The sentence a reporter prints, capitalised and closed like Biome's.
     #[must_use]
     pub fn message(&self) -> String {
-        match self {
+        let body = match self {
             Self::Parse {
                 node_kind, missing, ..
             } => {
@@ -152,26 +180,117 @@ impl Issue {
                 }
             }
             Self::MissingDoc { subject, .. } => format!("{subject} has no doc comment"),
-            Self::MissingTag { subject, tag, .. }
-            | Self::MissingConstraints { subject, tag, .. } => {
+            Self::MissingTag { subject, entry, .. } => match entry.heading {
+                Some(_) => format!("{subject} doc comment has no `{entry}` section"),
+                None => format!("{subject} doc comment has no {entry}"),
+            },
+            Self::MissingConstraints { subject, tag, .. } => {
                 format!("{subject} doc comment has no {tag}")
             }
+            Self::UnknownSection { tag, heading, .. } => {
+                format!("`{tag} {heading}` is not a section the template lists")
+            }
+            Self::TagOrder {
+                entry, previous, ..
+            } => format!(
+                "`{previous}` comes before `{entry}`; the template orders {} first",
+                entry.label()
+            ),
             Self::ForbiddenTag { tag, .. } => format!("forbidden tag {tag}"),
             Self::ModuleName {
                 documented, name, ..
-            } => format!("@module names `{documented}`, but the module is `{name}`"),
+            } => format!("{MODULE_TAG} names `{documented}`, but the module is `{name}`"),
             Self::ConstraintsFormat { tag, value, .. } => {
                 format!("{tag} value `{value}` is not `k=<n>, rows=<n>`")
             }
             Self::ConstraintsPlaceholder { tag, value, .. } => {
                 format!("{tag} value `{value}` still holds a placeholder")
             }
+        };
+        sentence(&body)
+    }
+
+    /// The one-sentence `i` line telling the reader what to do about it.
+    #[must_use]
+    pub fn advice(&self, config: &Config) -> String {
+        match self {
+            Self::Parse { .. } => {
+                "Fix the syntax error; the doc rules are skipped for this file.".to_owned()
+            }
+            Self::MissingDoc { .. } => {
+                "Add a doc comment above it, or run compact-lint fix.".to_owned()
+            }
+            Self::MissingTag { entry, .. } => match &entry.heading {
+                Some(heading) => format!(
+                    "Add a {} {heading}: section, or run compact-lint fix.",
+                    entry.tag
+                ),
+                None => format!("Add {entry} to the doc comment, or run compact-lint fix."),
+            },
+            Self::UnknownSection { kind, .. } => {
+                format!("Add it to kinds.{kind}.sections, or fold it into a listed section.")
+            }
+            Self::TagOrder { .. } => "Run compact-lint fix to reorder the blocks.".to_owned(),
+            Self::ForbiddenTag { tag, .. } => match config.rename_of(tag) {
+                Some(replacement) => format!("Rename it to {replacement}."),
+                None => "Remove it from the doc comment.".to_owned(),
+            },
+            Self::ModuleName { name, .. } => {
+                format!("Set the tag to {name}, or run compact-lint fix.")
+            }
+            Self::MissingConstraints { tag, .. } => format!(
+                "Run compact-lint fill-constraints after adding the tag, or add it as {tag} k=?, rows=? to fill later."
+            ),
+            Self::ConstraintsFormat { .. } => "Write the value as k=<n>, rows=<n>.".to_owned(),
+            Self::ConstraintsPlaceholder { .. } => {
+                "Run compact-lint fill-constraints to measure it.".to_owned()
+            }
         }
     }
 
+    /// What a reporter underlines: the declaration head, or the tag token itself.
     #[must_use]
-    pub fn finding(&self, display: &Path) -> Finding {
-        Finding::new(display, self.position(), self.rule(), self.message())
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Parse { position, end, .. }
+            | Self::MissingDoc { position, end, .. }
+            | Self::MissingTag { position, end, .. }
+            | Self::MissingConstraints { position, end, .. } => Span::new(*position, *end),
+            Self::ForbiddenTag { position, tag, .. }
+            | Self::ConstraintsFormat { position, tag, .. }
+            | Self::ConstraintsPlaceholder { position, tag, .. } => {
+                Span::columns(*position, tag.as_str().len())
+            }
+            Self::UnknownSection {
+                position,
+                tag,
+                heading,
+                ..
+            } => Span::columns(*position, heading_width(tag, Some(heading))),
+            Self::TagOrder {
+                position, entry, ..
+            } => Span::columns(
+                *position,
+                heading_width(&entry.tag, entry.heading.as_deref()),
+            ),
+            Self::ModuleName { position, .. } => Span::columns(*position, MODULE_TAG.len()),
+        }
+    }
+
+    /// The diagnostic for this issue, without the fix preview the caller attaches.
+    #[must_use]
+    pub fn diagnostic(&self, display: &Path, level: Level, config: &Config) -> Diagnostic {
+        Diagnostic::new(display, self.rule(), level, self.message())
+            .at(self.span())
+            .advise(self.advice(config))
+    }
+}
+
+/// The tag token, and for a section the heading and the colon closing it.
+fn heading_width(tag: &Tag, heading: Option<&str>) -> usize {
+    match heading {
+        Some(heading) => tag.as_str().len() + " ".len() + heading.len() + ":".len(),
+        None => tag.as_str().len(),
     }
 }
 
@@ -202,7 +321,6 @@ impl Linter {
         display: &Path,
         source: &str,
         config: &Config,
-        strict: bool,
     ) -> Result<Vec<Issue>, LintError> {
         let tree = self
             .parser
@@ -211,13 +329,18 @@ impl Linter {
         let root = tree.root_node();
 
         if let Some(defect) = first_defect(root) {
-            return Ok(vec![defect]);
+            return Ok(if config.rules.get(RuleId::PARSE) == Level::Off {
+                Vec::new()
+            } else {
+                vec![defect]
+            });
         }
 
         let mut issues = Vec::new();
         for declaration in declarations(root, source) {
-            check_declaration(&declaration, config, strict, &mut issues);
+            check_declaration(&declaration, config, &mut issues);
         }
+        issues.retain(|issue| config.rules.get(issue.rule()) != Level::Off);
         issues.sort_by_key(|issue| (issue.position(), issue.rule()));
         Ok(issues)
     }
@@ -249,31 +372,16 @@ impl Linter {
             .filter_map(|declaration| constraint_site(declaration, &config.constraints.tag))
             .collect())
     }
-
-    /// Checks one file. `display` is the path printed in findings.
-    /// # Errors
-    /// Returns an error when tree-sitter produces no tree for `source`.
-    pub fn check(
-        &mut self,
-        display: &Path,
-        source: &str,
-        config: &Config,
-        strict: bool,
-    ) -> Result<Vec<Finding>, LintError> {
-        Ok(self
-            .issues(display, source, config, strict)?
-            .iter()
-            .map(|issue| issue.finding(display))
-            .collect())
-    }
 }
 
 /// The first `ERROR` or `MISSING` node in document order.
 fn first_defect(node: Node<'_>) -> Option<Issue> {
     if node.is_error() || node.is_missing() {
         let start = node.start_position();
+        let end = node.end_position();
         return Some(Issue::Parse {
             position: Position::from_zero_based(start.row, start.column),
+            end: Position::from_zero_based(end.row, end.column),
             node_kind: node.kind().to_owned(),
             missing: node.is_missing(),
         });
@@ -287,12 +395,7 @@ fn first_defect(node: Node<'_>) -> Option<Issue> {
     node.children(&mut cursor).find_map(first_defect)
 }
 
-fn check_declaration(
-    declaration: &Declaration,
-    config: &Config,
-    strict: bool,
-    issues: &mut Vec<Issue>,
-) {
+fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Vec<Issue>) {
     let kind_config = config.kinds.get(declaration.kind);
     let requires_docs = match kind_config.docs {
         DocsPolicy::All => true,
@@ -304,6 +407,7 @@ fn check_declaration(
         if requires_docs {
             issues.push(Issue::MissingDoc {
                 position: declaration.position,
+                end: declaration.end,
                 subject: subject(declaration),
                 kind: declaration.kind,
                 name: declaration.name.clone(),
@@ -343,24 +447,95 @@ fn check_declaration(
     }
 
     for required in &kind_config.tags {
-        if !attached.comment.has(required) {
+        if !attached
+            .comment
+            .tags()
+            .iter()
+            .any(|occurrence| required.matches(occurrence))
+        {
             issues.push(Issue::MissingTag {
                 position: declaration.position,
+                end: declaration.end,
                 subject: subject(declaration),
                 kind: declaration.kind,
-                tag: required.clone(),
+                entry: required.clone(),
                 name: declaration.name.clone(),
                 doc: doc.clone(),
             });
         }
     }
 
-    check_constraints(declaration, &doc, config, strict, issues);
+    check_sections(declaration, &doc, config, issues);
+    check_constraints(declaration, &doc, config, issues);
+}
+
+/// Headings the template does not list, and the order the listed entries appear in.
+fn check_sections(
+    declaration: &Declaration,
+    doc: &DocRef,
+    config: &Config,
+    issues: &mut Vec<Issue>,
+) {
+    let Some(attached) = declaration.doc.as_ref() else {
+        return;
+    };
+    let kind_config = config.kinds.get(declaration.kind);
+    let template: Vec<&TagSpec> = kind_config.entries().collect();
+
+    for occurrence in attached.comment.tags() {
+        let Some(heading) = occurrence.heading() else {
+            continue;
+        };
+        // The rule is gated per tag: a tag the config heads nowhere is left alone.
+        let mut headed = kind_config
+            .tags
+            .iter()
+            .chain(kind_config.sections.iter())
+            .filter(|entry| entry.tag == occurrence.tag && entry.heading.is_some())
+            .peekable();
+        if headed.peek().is_none() || headed.any(|entry| entry.label() == heading) {
+            continue;
+        }
+
+        issues.push(Issue::UnknownSection {
+            position: attached.tag_position(occurrence),
+            kind: declaration.kind,
+            tag: occurrence.tag.clone(),
+            heading: heading.to_owned(),
+        });
+    }
+
+    let mut highest: Option<(usize, &TagSpec)> = None;
+    for occurrence in attached.comment.tags() {
+        let Some((index, entry)) = template
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, entry)| entry.matches(occurrence))
+        else {
+            continue;
+        };
+
+        match highest {
+            Some((top, previous)) if index < top => {
+                issues.push(Issue::TagOrder {
+                    position: attached.tag_position(occurrence),
+                    kind: declaration.kind,
+                    entry: entry.clone(),
+                    previous: previous.clone(),
+                    doc: doc.clone(),
+                });
+                return;
+            }
+            Some((top, _)) if index == top => {}
+            _ => highest = Some((index, entry)),
+        }
+    }
 }
 
 /// `@module <Name>` must name the module it documents.
 fn check_module_name(declaration: &Declaration, doc: &DocRef, issues: &mut Vec<Issue>) {
-    let tag = Tag::new("@module");
+    let tag = Tag::new(MODULE_TAG);
     let (Some(attached), Some(name)) = (declaration.doc.as_ref(), declaration.name.as_deref())
     else {
         return;
@@ -417,7 +592,6 @@ fn check_constraints(
     declaration: &Declaration,
     doc: &DocRef,
     config: &Config,
-    strict: bool,
     issues: &mut Vec<Issue>,
 ) {
     if !takes_constraints(declaration) {
@@ -431,6 +605,7 @@ fn check_constraints(
     let Some(occurrence) = attached.comment.first(tag) else {
         issues.push(Issue::MissingConstraints {
             position: declaration.position,
+            end: declaration.end,
             subject: subject(declaration),
             tag: tag.clone(),
             doc: doc.clone(),
@@ -450,7 +625,7 @@ fn check_constraints(
         return;
     };
 
-    if strict && placeholders {
+    if placeholders {
         issues.push(Issue::ConstraintsPlaceholder {
             position,
             tag: tag.clone(),
@@ -498,22 +673,53 @@ fn subject(declaration: &Declaration) -> String {
 mod tests {
     use super::{Linter, module_name, parse_constraints};
     use crate::config::{Config, DocsPolicy};
-    use crate::doc::Tag;
+    use crate::diagnostic::Level;
+    use crate::diagnostic::sentence;
+    use crate::doc::{Tag, TagSpec};
+    use crate::report::RuleId;
     use std::path::Path;
 
-    fn findings(source: &str, config: &Config, strict: bool) -> Vec<String> {
+    /// One `line:col rule message` line per issue, the fields every reporter starts from.
+    fn reported(source: &str, config: &Config) -> Vec<String> {
         Linter::new()
             .expect("the bundled grammar loads")
-            .check(Path::new("a.compact"), source, config, strict)
+            .issues(Path::new("a.compact"), source, config)
             .expect("the source produced a tree")
             .iter()
-            .map(ToString::to_string)
+            .map(|issue| {
+                let span = issue.span();
+                format!(
+                    "{}:{} {} {}",
+                    span.start.line,
+                    span.start.column,
+                    issue.rule(),
+                    issue.message()
+                )
+            })
             .collect()
     }
 
     fn circuit_config() -> Config {
         let mut config = Config::default();
-        config.kinds.circuit.tags = vec![Tag::new("@description")];
+        config.kinds.circuit.tags = vec![TagSpec::parse("@description")];
+        config
+    }
+
+    /// A module template of two required sections, with an optional one between them.
+    fn template_config() -> Config {
+        let mut config = Config::default();
+        config.kinds.module.docs = DocsPolicy::All;
+        config.kinds.module.tags = vec![
+            TagSpec::parse("@module"),
+            TagSpec::parse("@notice Privacy"),
+            TagSpec::parse("@notice Security"),
+        ];
+        config.kinds.module.sections = vec![
+            TagSpec::parse("@module"),
+            TagSpec::parse("@notice Privacy"),
+            TagSpec::parse("@dev Notation"),
+            TagSpec::parse("@notice Security"),
+        ];
         config
     }
 
@@ -521,7 +727,7 @@ mod tests {
     fn a_non_exported_circuit_inside_an_exported_module_needs_no_docs() {
         let source = "/** @description M. */\nexport module M {\n  circuit helper(): [] { }\n}\n";
 
-        assert!(findings(source, &Config::default(), false).is_empty());
+        assert!(reported(source, &Config::default()).is_empty());
     }
 
     #[test]
@@ -529,8 +735,8 @@ mod tests {
         let source = "export module M {\n}\n";
 
         assert_eq!(
-            findings(source, &Config::default(), false),
-            ["a.compact:1:1: missing-doc: module `M` has no doc comment"]
+            reported(source, &Config::default()),
+            ["1:1 missing-doc Module `M` has no doc comment."]
         );
     }
 
@@ -539,8 +745,8 @@ mod tests {
         let source = "/** @description M. */\n// a note\nexport module M {\n}\n";
 
         assert_eq!(
-            findings(source, &Config::default(), false),
-            ["a.compact:3:1: missing-doc: module `M` has no doc comment"]
+            reported(source, &Config::default()),
+            ["3:1 missing-doc Module `M` has no doc comment."]
         );
     }
 
@@ -548,7 +754,7 @@ mod tests {
     fn a_pure_exported_circuit_needs_no_constraints() {
         let source = "/** @description Adds. */\nexport pure circuit add(a: Uint<8>): Uint<8> { return a; }\n";
 
-        assert!(findings(source, &circuit_config(), false).is_empty());
+        assert!(reported(source, &circuit_config()).is_empty());
     }
 
     #[test]
@@ -557,23 +763,107 @@ mod tests {
             "/** @description Bumps. */\nexport circuit bump(): [] { count.increment(1); }\n";
 
         assert_eq!(
-            findings(source, &circuit_config(), false),
-            ["a.compact:2:1: missing-constraints: circuit `bump` doc comment has no @constraints"]
+            reported(source, &circuit_config()),
+            ["2:1 missing-constraints Circuit `bump` doc comment has no @constraints."]
         );
     }
 
     #[test]
-    fn a_placeholder_is_a_finding_only_under_strict() {
-        let source = "/**\n * @description Bumps.\n * @constraints k=?, rows=?\n */\nexport circuit bump(): [] { }\n";
-        let config = circuit_config();
+    fn a_headed_entry_absent_from_the_comment_reports_the_section() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * - Amounts.\n */\nmodule M {\n}\n";
 
-        assert!(findings(source, &config, false).is_empty());
         assert_eq!(
-            findings(source, &config, true),
+            reported(source, &template_config()),
+            ["6:1 missing-tag Module `M` doc comment has no `@notice Security` section."]
+        );
+    }
+
+    #[test]
+    fn a_heading_the_template_does_not_list_reports_unknown_section() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * - Amounts.\n * @notice Security:\n * - Nonces.\n * @notice Gotchas:\n * - None.\n */\nmodule M {\n}\n";
+
+        assert_eq!(
+            reported(source, &template_config()),
+            ["7:4 unknown-section `@notice Gotchas` is not a section the template lists."]
+        );
+    }
+
+    #[test]
+    fn a_heading_on_a_tag_the_template_heads_nowhere_is_left_alone() {
+        let mut config = template_config();
+        config.kinds.module.tags = vec![TagSpec::parse("@description")];
+        config.kinds.module.sections = Vec::new();
+        let source =
+            "/**\n * @description A note-based token: amounts stay private.\n */\nmodule M {\n}\n";
+
+        assert!(reported(source, &config).is_empty());
+    }
+
+    #[test]
+    fn listed_entries_out_of_config_order_report_tag_order_once() {
+        let source = "/**\n * @module M\n * @notice Security:\n * - Nonces.\n * @notice Privacy:\n * - Amounts.\n * @dev Notation:\n * - `H`.\n */\nmodule M {\n}\n";
+
+        assert_eq!(
+            reported(source, &template_config()),
             [
-                "a.compact:3:4: constraints-placeholder: @constraints value `k=?, rows=?` still holds a placeholder"
+                "5:4 tag-order `@notice Security` comes before `@notice Privacy`; the template orders Privacy first."
             ]
         );
+    }
+
+    #[test]
+    fn a_tag_no_entry_lists_is_ignored_by_the_order_check() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * - Amounts.\n * @param {T} a - A.\n * @notice Security:\n * - Nonces.\n */\nmodule M {\n}\n";
+
+        assert!(reported(source, &template_config()).is_empty());
+    }
+
+    #[test]
+    fn a_declaration_span_ends_at_its_name() {
+        let source = "export module M {\n}\n";
+        let issues = Linter::new()
+            .expect("the bundled grammar loads")
+            .issues(Path::new("a.compact"), source, &Config::default())
+            .expect("the source produced a tree");
+
+        assert_eq!(issues[0].span().end.column, "export module M".len() + 1);
+    }
+
+    #[test]
+    fn a_tag_span_covers_the_tag_token() {
+        let source = "/**\n * @return nothing\n */\ncircuit hidden(): [] { }\n";
+        let mut config = Config::default();
+        config.tags.forbid = vec![Tag::new("@return")];
+
+        let issues = Linter::new()
+            .expect("the bundled grammar loads")
+            .issues(Path::new("a.compact"), source, &config)
+            .expect("the source produced a tree");
+        let span = issues[0].span();
+
+        assert_eq!(span.start.column, 4);
+        assert_eq!(span.end.column, 11);
+    }
+
+    #[test]
+    fn a_placeholder_is_reported_without_strict_too() {
+        let source = "/**\n * @description Bumps.\n * @constraints k=?, rows=?\n */\nexport circuit bump(): [] { }\n";
+
+        assert_eq!(
+            reported(source, &circuit_config()),
+            [
+                "3:4 constraints-placeholder @constraints value `k=?, rows=?` still holds a placeholder."
+            ]
+        );
+    }
+
+    #[test]
+    fn a_rule_set_to_off_produces_no_issue() {
+        let source = "export module M {\n}\n";
+        let mut config = Config::default();
+        config.rules.missing_doc = Level::Off;
+
+        assert!(reported(source, &config).is_empty());
     }
 
     #[test]
@@ -583,9 +873,27 @@ mod tests {
         config.tags.forbid = vec![Tag::new("@return")];
 
         assert_eq!(
-            findings(source, &config, false),
-            ["a.compact:2:4: forbidden-tag: forbidden tag @return"]
+            reported(source, &config),
+            ["2:4 forbidden-tag Forbidden tag @return."]
         );
+    }
+
+    #[test]
+    fn a_rename_becomes_the_advice_for_a_forbidden_tag() {
+        let source = "/**\n * @return nothing\n */\ncircuit hidden(): [] { }\n";
+        let mut config = Config::default();
+        config.tags.forbid = vec![Tag::new("@return")];
+        config
+            .tags
+            .rename
+            .insert(Tag::new("@return"), Tag::new("@returns"));
+
+        let issues = Linter::new()
+            .expect("the bundled grammar loads")
+            .issues(Path::new("a.compact"), source, &config)
+            .expect("the source produced a tree");
+
+        assert_eq!(issues[0].advice(&config), "Rename it to @returns.");
     }
 
     #[test]
@@ -595,8 +903,8 @@ mod tests {
         config.kinds.witness.docs = DocsPolicy::All;
 
         assert_eq!(
-            findings(source, &config, false),
-            ["a.compact:1:1: missing-doc: witness `wit_secret` has no doc comment"]
+            reported(source, &config),
+            ["1:1 missing-doc Witness `wit_secret` has no doc comment."]
         );
     }
 
@@ -604,9 +912,18 @@ mod tests {
     fn a_parse_defect_suppresses_the_doc_rules() {
         let source = "export module M {\nexport circuit\n";
 
-        let reported = findings(source, &Config::default(), false);
-        assert_eq!(reported.len(), 1, "{reported:?}");
-        assert!(reported[0].contains("parse error"), "{reported:?}");
+        let issues = reported(source, &Config::default());
+        assert_eq!(issues.len(), 1, "{issues:?}");
+        assert!(issues[0].contains("Parse error"), "{issues:?}");
+    }
+
+    #[test]
+    fn parse_set_to_off_leaves_a_broken_file_silent() {
+        let source = "export module M {\nexport circuit\n";
+        let mut config = Config::default();
+        config.rules.parse = Level::Off;
+
+        assert!(reported(source, &config).is_empty());
     }
 
     #[test]
@@ -615,7 +932,7 @@ mod tests {
         let mut config = circuit_config();
         config.constraints.tag = Tag::new("@circuitInfo");
 
-        assert!(findings(source, &config, false).is_empty());
+        assert!(reported(source, &config).is_empty());
     }
 
     #[test]
@@ -632,5 +949,22 @@ mod tests {
         assert_eq!(module_name("Signer<T>"), "Signer");
         assert_eq!(module_name("Utils."), "Utils");
         assert_eq!(module_name("ShieldedToken (archived)"), "ShieldedToken");
+    }
+
+    #[test]
+    fn a_message_opens_with_a_capital_and_closes_with_one_period() {
+        assert_eq!(sentence("forbidden tag @return"), "Forbidden tag @return.");
+        assert_eq!(sentence("@module names `A`."), "@module names `A`.");
+    }
+
+    #[test]
+    fn every_configurable_rule_has_a_level() {
+        let rules = Config::default().rules;
+
+        assert!(
+            RuleId::ALL
+                .iter()
+                .all(|rule| rules.get(*rule) != Level::Info)
+        );
     }
 }

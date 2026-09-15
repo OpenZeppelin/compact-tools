@@ -1,3 +1,59 @@
-Gaps.compact:6:3: missing-doc: ledger `_owner` has no doc comment
-Gaps.compact:8:3: missing-doc: enum `Kind` has no doc comment
-Gaps.compact:17:3: missing-doc: circuit `run` has no doc comment
+Gaps.compact:6:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Ledger `_owner` has no doc comment.
+
+    4 │  */
+    5 │ export module Gaps {
+  > 6 │   export ledger _owner: Bytes<32>;
+      │   ^^^^^^^^^^^^^^^^^^^^
+    7 │ 
+    8 │   export enum Kind {
+
+  i Add a doc comment above it, or run compact-lint fix.
+
+  i Unsafe fix: Insert a doc skeleton for ledger `_owner`
+
+      6 │ + ··/**
+      7 │ + ···*·@description·TODO
+      8 │ + ···*/
+
+Gaps.compact:8:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Enum `Kind` has no doc comment.
+
+     6 │   export ledger _owner: Bytes<32>;
+     7 │ 
+  >  8 │   export enum Kind {
+       │   ^^^^^^^^^^^^^^^^
+     9 │     One
+    10 │   }
+
+  i Add a doc comment above it, or run compact-lint fix.
+
+  i Unsafe fix: Insert a doc skeleton for enum `Kind`
+
+       8 │ + ··/**
+       9 │ + ···*·@description·TODO
+      10 │ + ···*/
+
+Gaps.compact:17:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Circuit `run` has no doc comment.
+
+    15 │    */
+    16 │   // The comment that breaks the attachment.
+  > 17 │   export circuit run(): [] {
+       │   ^^^^^^^^^^^^^^^^^^
+    18 │     _owner = default<Bytes<32>>;
+    19 │   }
+
+  i Add a doc comment above it, or run compact-lint fix.
+
+  i Unsafe fix: Insert a doc skeleton for circuit `run`
+
+      17 │ + ··/**
+      18 │ + ···*·@description·TODO
+      19 │ + ···*
+      20 │ + ···*·@constraints·k=?,·rows=?
+      21 │ + ···*/
+

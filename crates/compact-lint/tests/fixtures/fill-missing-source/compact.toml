@@ -1,0 +1,7 @@
+[lint]
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.circuit]
+tags = ["@description"]

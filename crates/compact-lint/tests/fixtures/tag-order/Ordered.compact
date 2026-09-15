@@ -1,0 +1,14 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Ordered
+ * @description A module whose security section runs ahead of its privacy one.
+ *
+ * @notice Security:
+ * - Nonces are spend-critical.
+ *
+ * @notice Privacy:
+ * - Amounts stay private.
+ */
+export module Ordered {
+}

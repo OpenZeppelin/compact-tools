@@ -9,19 +9,15 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::config::ConfigError;
+use crate::config::{Config, ConfigError};
+use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level, Span};
 use crate::edit::{DocOp, Edit, EditKind, WriteError, apply, newline_of, write_atomically};
 use crate::measure::{self, Compiler, Constraints, MeasureError};
-use crate::report::Position;
+use crate::report::{Position, RuleId};
 use crate::rules::{ConstraintSite, LintError, Linter};
 use crate::source::{Resolver, Source};
 use crate::target::{self, TargetError};
-
-/// The rule name for a tagged circuit its source does not measure.
-const UNMEASURED: &str = "constraints-unmeasured";
-
-/// The rule name for a file with no measurement source at all.
-const UNMEASURABLE: &str = "constraints-unmeasurable";
+use crate::timing::{Phase, Timings};
 
 #[derive(Debug, Error)]
 pub enum FillError {
@@ -55,23 +51,15 @@ pub struct Options {
     pub artifacts: PathBuf,
 }
 
-/// The report lines and the counts behind the summary.
+/// The diagnostics and the counts behind the summary.
 pub struct Outcome {
-    /// One line per change or gap, in file order.
-    pub lines: Vec<String>,
+    pub diagnostics: Vec<Diagnostic>,
     pub filled: usize,
+    /// Files that took a value.
     pub files: usize,
+    /// Files the run read, changed or not.
+    pub checked: usize,
     pub unmeasured: usize,
-}
-
-impl Outcome {
-    #[must_use]
-    pub fn summary(&self) -> String {
-        format!(
-            "{} values filled in {} files, {} unmeasured",
-            self.filled, self.files, self.unmeasured
-        )
-    }
 }
 
 /// One file's annotations and the contract they are measured through.
@@ -86,11 +74,14 @@ struct Work {
 /// # Errors
 /// Returns an error when the config, the file walk, the parser, the compiler or a write
 /// fails.
-pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FillError> {
+pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outcome, FillError> {
+    let walk = Phase::start("config and walk");
     let target = target::resolve(&options.paths, options.config_path.as_deref(), cwd)?;
     let resolver = Resolver::new(&target.config, &target.base, cwd)?;
+    walk.stop(timings, format!("{} files matched", target.files.len()));
     let tag = target.config.constraints.tag.clone();
 
+    let sources = Phase::start("resolve sources");
     let mut linter = Linter::new()?;
     let mut work = Vec::new();
     for path in &target.files {
@@ -111,22 +102,31 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FillError> {
         });
     }
 
+    sources.stop(timings, format!("{} files with annotations", work.len()));
+
     let measured = measure_sources(
         &work,
         options,
         target.config.constraints.compiler.as_ref(),
         cwd,
+        timings,
     )?;
 
+    let rewrite = Phase::start("parse and rewrite");
     let mut outcome = Outcome {
-        lines: Vec::new(),
+        diagnostics: Vec::new(),
         filled: 0,
         files: 0,
+        checked: target.files.len(),
         unmeasured: 0,
     };
     for file in &work {
-        fill_file(file, &measured, &tag, options, &mut outcome)?;
+        fill_file(file, &measured, &tag, &target.config, options, &mut outcome)?;
     }
+    rewrite.stop(
+        timings,
+        format!("{} values in {} files", outcome.filled, outcome.files),
+    );
     Ok(outcome)
 }
 
@@ -136,6 +136,7 @@ fn measure_sources(
     options: &Options,
     version: Option<&String>,
     cwd: &Path,
+    timings: &mut Timings,
 ) -> Result<BTreeMap<PathBuf, BTreeMap<String, Constraints>>, FillError> {
     let mut sources: Vec<&PathBuf> = work
         .iter()
@@ -156,6 +157,11 @@ fn measure_sources(
 
     let mut measured = BTreeMap::new();
     for source in sources {
+        let phase = Phase::start(if options.no_compile {
+            "read cache"
+        } else {
+            "compile"
+        });
         let list = if options.no_compile {
             measure::read_cache(source)?.ok_or_else(|| MeasureError::CacheMiss {
                 path: measure::cache_path(source),
@@ -169,6 +175,7 @@ fn measure_sources(
             }
             list
         };
+        phase.stop(timings, source.display().to_string());
 
         measured.insert(
             source.clone(),
@@ -185,26 +192,46 @@ fn fill_file(
     file: &Work,
     measured: &BTreeMap<PathBuf, BTreeMap<String, Constraints>>,
     tag: &crate::doc::Tag,
+    config: &Config,
     options: &Options,
     outcome: &mut Outcome,
 ) -> Result<(), FillError> {
+    let badge = if options.dry_run {
+        Badge::Fixable
+    } else {
+        Badge::Fixed
+    };
+    let newline = newline_of(&file.text);
+
     let source = match &file.source {
         Source::Found(source) => source,
         Source::Missing(tried) => {
-            outcome.lines.push(unmeasurable_line(&file.path, tried));
-            outcome.unmeasured += file.sites.len();
+            let level = config.rules.get(RuleId::CONSTRAINTS_UNMEASURABLE);
+            if level != Level::Off {
+                outcome
+                    .diagnostics
+                    .push(unmeasurable(&file.path, tried, level));
+                outcome.unmeasured += file.sites.len();
+            }
             return Ok(());
         }
     };
     let constraints = measured.get(source);
+    let unmeasured_level = config.rules.get(RuleId::CONSTRAINTS_UNMEASURED);
 
     let mut edits = Vec::new();
     for site in &file.sites {
         let Some(measurement) = constraints.and_then(|found| found.get(&site.circuit)) else {
-            outcome
-                .lines
-                .push(unmeasured_line(&file.path, site, source));
-            outcome.unmeasured += 1;
+            if unmeasured_level != Level::Off {
+                outcome.diagnostics.push(unmeasured(
+                    &file.path,
+                    site,
+                    source,
+                    tag,
+                    unmeasured_level,
+                ));
+                outcome.unmeasured += 1;
+            }
             continue;
         };
 
@@ -213,14 +240,10 @@ fn fill_file(
             continue;
         }
 
-        outcome.lines.push(format!(
-            "{}: fill: {tag} {} -> {value}",
-            at(&file.path, site.position),
-            site.value
-        ));
-        edits.push(Edit {
-            position: site.position,
-            message: String::new(),
+        let edit = Edit {
+            span: Span::columns(site.position, tag.as_str().len()),
+            rule: RuleId::FILL,
+            message: format!("set {tag} to {value}"),
             kind: EditKind::Doc {
                 range: site.doc.range.clone(),
                 indent: site.doc.indent,
@@ -230,7 +253,25 @@ fn fill_file(
                     value,
                 },
             },
-        });
+        };
+
+        let after = apply(&file.text, std::slice::from_ref(&edit), newline);
+        let title = crate::fix::title(&edit, badge);
+        outcome.diagnostics.push(
+            Diagnostic::new(
+                file.path.clone(),
+                RuleId::FILL,
+                Level::Info,
+                format!(
+                    "Circuit `{}` measures {}.",
+                    site.circuit,
+                    measurement.value()
+                ),
+            )
+            .at(edit.span)
+            .fixed_by(FixPreview::between(title, &file.text, &after), badge),
+        );
+        edits.push(edit);
     }
 
     if edits.is_empty() {
@@ -240,58 +281,110 @@ fn fill_file(
     outcome.filled += edits.len();
     outcome.files += 1;
     if !options.dry_run {
-        let newline = newline_of(&file.text);
         write_atomically(&file.path, &apply(&file.text, &edits, newline))?;
     }
     Ok(())
 }
 
-fn unmeasured_line(path: &Path, site: &ConstraintSite, source: &Path) -> String {
-    format!(
-        "{}: {UNMEASURED}: circuit `{}` has no measurement in {}",
-        at(path, site.position),
-        site.circuit,
-        source.display()
+/// A tagged circuit whose source compiled but produced no measurement for its name.
+fn unmeasured(
+    path: &Path,
+    site: &ConstraintSite,
+    source: &Path,
+    tag: &crate::doc::Tag,
+    level: Level,
+) -> Diagnostic {
+    Diagnostic::new(
+        path,
+        RuleId::CONSTRAINTS_UNMEASURED,
+        level,
+        format!("Circuit `{}` has no measurement.", site.circuit),
     )
+    .at(Span::columns(site.position, tag.as_str().len()))
+    .advise(format!(
+        "It is measured through {}, which exports no circuit of that name.",
+        source.display()
+    ))
 }
 
-fn unmeasurable_line(path: &Path, tried: &[PathBuf]) -> String {
+/// A file no template, glob or override resolves a measurement source for.
+fn unmeasurable(path: &Path, tried: &[PathBuf], level: Level) -> Diagnostic {
     let tried: Vec<String> = tried
         .iter()
         .map(|path| path.display().to_string())
         .collect();
-    format!(
-        "{}: {UNMEASURABLE}: no measurement source for {}; tried {}",
-        at(path, Position::file_start()),
-        path.display(),
+
+    Diagnostic::new(
+        path,
+        RuleId::CONSTRAINTS_UNMEASURABLE,
+        level,
+        format!("No measurement source for {}.", path.display()),
+    )
+    .at(Span::columns(Position::file_start(), 1))
+    .advise(format!(
+        "Tried {}; add one, or name it in constraints.overrides.",
         if tried.is_empty() {
             "nothing".to_owned()
         } else {
             tried.join(", ")
         }
-    )
-}
-
-fn at(path: &Path, position: Position) -> String {
-    format!("{}:{}:{}", path.display(), position.line, position.column)
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Outcome;
+    use super::{Position, unmeasurable, unmeasured};
+    use crate::diagnostic::Level;
+    use crate::doc::Tag;
+    use crate::rules::{ConstraintSite, DocRef};
+    use std::path::{Path, PathBuf};
 
     #[test]
-    fn the_summary_counts_values_files_and_gaps() {
-        let outcome = Outcome {
-            lines: Vec::new(),
-            filled: 12,
-            files: 4,
-            unmeasured: 1,
+    fn an_unmeasured_circuit_names_the_source_in_its_advice() {
+        let site = ConstraintSite {
+            circuit: "initialize".to_owned(),
+            position: Position {
+                line: 30,
+                column: 6,
+            },
+            line_offset: 2,
+            value: "k=?, rows=?".to_owned(),
+            doc: DocRef {
+                range: 0..1,
+                indent: 2,
+            },
         };
 
+        let diagnostic = unmeasured(
+            Path::new("src/access/Ownable.compact"),
+            &site,
+            Path::new("src/access/test/mocks/MockOwnable.compact"),
+            &Tag::new("@constraints"),
+            Level::Warn,
+        );
+
         assert_eq!(
-            outcome.summary(),
-            "12 values filled in 4 files, 1 unmeasured"
+            diagnostic.message,
+            "Circuit `initialize` has no measurement."
+        );
+        assert!(
+            diagnostic.advice[0].contains("MockOwnable.compact"),
+            "{:?}",
+            diagnostic.advice
+        );
+    }
+
+    #[test]
+    fn an_unmeasurable_file_lists_every_candidate_it_tried() {
+        let diagnostic = unmeasurable(
+            Path::new("src/orphan/Orphan.compact"),
+            &[PathBuf::from("a.compact"), PathBuf::from("b.compact")],
+            Level::Warn,
+        );
+
+        assert_eq!(
+            diagnostic.advice[0],
+            "Tried a.compact, b.compact; add one, or name it in constraints.overrides."
         );
     }
 }

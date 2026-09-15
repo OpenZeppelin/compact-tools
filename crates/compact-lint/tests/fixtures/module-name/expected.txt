@@ -1,1 +1,17 @@
-Renamed.compact:2:4: module-name: @module names `Stale`, but the module is `Renamed`
+Renamed.compact:2:4 lint/module-name  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × @module names `Stale`, but the module is `Renamed`.
+
+    1 │ /**
+  > 2 │  * @module Stale
+      │    ^^^^^^^
+    3 │  * @description The tag still names the module's old name.
+    4 │  */
+
+  i Set the tag to Renamed, or run compact-lint fix.
+
+  i Safe fix: Set @module to `Renamed`
+
+    2   │ - ·*·@module·Stale
+      2 │ + ·*·@module·Renamed
+

@@ -1,1 +1,11 @@
-Broken.compact:2:3: parse: parse error: unexpected ERROR
+Broken.compact:2:3 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Parse error: unexpected ERROR.
+
+    1 │ export module Broken {
+  > 2 │   export circuit
+      │   ^^^^^^^^^^^^^^
+    3 │ }
+
+  i Fix the syntax error; the doc rules are skipped for this file.
+

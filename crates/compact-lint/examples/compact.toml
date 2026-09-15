@@ -1,0 +1,94 @@
+# compact-lint config for OpenZeppelin/compact-contracts.
+# Copy it to the repository root as compact.toml.
+#
+# One project, one config file. compact-deploy's `[profile]`, `[networks.*]`,
+# `[wallet]` and `[contracts.*]` tables live in this same file and the linter
+# ignores them; see examples/fungible-token/compact.toml for their shape.
+
+[lint]
+include = ["contracts/src/**/*.compact"]
+exclude = ["**/test/mocks/**", "**/archive/**"]
+
+# `@constraints` is the default; set `tag` to point the rule at another annotation.
+[lint.constraints]
+tag = "@constraints"
+# Presets are contracts, so fill-constraints compiles them directly. Everything else is
+# measured through the mock beside it or in its parent, the default `sources` templates.
+self = ["**/presets/**"]
+
+[lint.tags]
+forbid = ["@return"]
+rename = { "@return" = "@returns" }
+
+# Every rule's default level, spelled out. Set one to "off" to stop it running, or to
+# "warn" / "info" to keep it out of the exit code. `check --strict` promotes
+# constraints-placeholder to "error" for that run.
+# [lint.rules]
+# missing-doc = "error"
+# missing-tag = "error"
+# unknown-section = "warn"
+# tag-order = "error"
+# forbidden-tag = "error"
+# module-name = "error"
+# missing-constraints = "error"
+# constraints-format = "error"
+# constraints-placeholder = "warn"
+# constraints-unmeasured = "warn"
+# constraints-unmeasurable = "warn"
+# parse = "error"
+# format = "error"
+
+# The module header template. `tags` is what every header must carry, `sections` is every
+# allowed section in template order, and a required entry also appears in `sections`. Both
+# lists are a starting point: moving an entry into `tags` makes it required, and a heading
+# `sections` does not name is reported as unknown-section.
+[lint.kinds.module]
+docs = "all"
+tags = [
+  "@module",
+  "@description",
+  "@notice Privacy",
+  "@notice Security",
+  "@notice Concurrency",
+  "@notice Scope",
+  "@dev Performance",
+]
+sections = [
+  "@module",
+  "@description",
+  "@dev Notation",
+  "@dev Derivations",
+  "@dev Parameterization",
+  "@dev Compatibility",
+  "@notice Privacy",
+  "@notice Security",
+  "@notice Concurrency",
+  "@notice Scope",
+  "@notice Client-side duties",
+  "@notice Scalability",
+  "@dev Performance",
+  "@dev Composition",
+]
+
+[lint.kinds.circuit]
+tags = ["@description"]
+
+[lint.kinds.ledger]
+tags = ["@description"]
+
+[lint.kinds.witness]
+docs = "all"
+tags = ["@description"]
+
+[lint.kinds.struct]
+tags = ["@description"]
+
+[lint.kinds.enum]
+tags = ["@description"]
+
+[lint.kinds.constructor]
+docs = "none"
+
+[lint.kinds.contract]
+
+[lint.kinds.type]

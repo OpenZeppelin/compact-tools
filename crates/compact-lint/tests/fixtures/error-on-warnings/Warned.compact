@@ -1,0 +1,11 @@
+/**
+ * @module Warned
+ * @description A module whose only finding is a warning.
+ */
+export module Warned {
+  /**
+   * @description Not measured yet.
+   * @constraints k=?, rows=?
+   */
+  export circuit run(): [] { }
+}

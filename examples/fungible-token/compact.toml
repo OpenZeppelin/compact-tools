@@ -46,3 +46,5 @@ signing_key_file = "deploy/TokenExample.signingkey"
 # them from here. The programmatic flow (`yarn deploy:*`) overrides
 # them inline via the `args:` field on `runDeploy()`.
 args             = { module = "./deploy/TokenExample.args.mjs", export = "args" }
+
+# compact-lint reads a [lint] table from this same file; see crates/compact-lint/examples/compact.toml.

@@ -3,23 +3,30 @@
 #![forbid(unsafe_code)]
 
 use std::ffi::OsString;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::str::FromStr;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use tempfile::TempDir;
 
-use compact_lint::check::{self, Outcome};
+use compact_lint::check;
+use compact_lint::diagnostic::{Action, Diagnostic, Level, Output, Reporter, Summary, counts};
 use compact_lint::format::{COMPACT_BIN_ENV, DEFAULT_COMPACT_BIN};
-use compact_lint::{fill, fix};
+use compact_lint::timing::{Phase, Timings};
+use compact_lint::{diagnostic, fill, fix};
 
-/// Exit code for a run that produced findings, or a `--dry-run` that would edit.
+/// Exit code for a run that produced errors, or a `--dry-run` that would edit.
 const EXIT_FINDINGS: u8 = 1;
 
 /// Exit code for a usage, config, IO or parser error.
 const EXIT_ERROR: u8 = 2;
+
+/// Shown diagnostics per run, before `--max-diagnostics` changes it.
+const DEFAULT_MAX_DIAGNOSTICS: &str = "20";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -34,7 +41,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Check doc comments against the per-kind templates in compact-lint.toml.
+    /// Check doc comments against the per-kind templates in compact.toml's [lint] table.
     Check(CheckArgs),
     /// Rewrite doc comments so the rules `fix` covers stop reporting.
     Fix(FixArgs),
@@ -42,16 +49,94 @@ enum Command {
     FillConstraints(FillArgs),
 }
 
+/// The flags every subcommand shares for what it prints and how loudly.
+#[derive(Debug, clap::Args)]
+struct OutputArgs {
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Reporter::Default, value_name = "NAME")]
+    reporter: Reporter,
+
+    /// Lowest level shown; the summary still counts what it hides.
+    #[arg(long, value_enum, default_value_t = LevelArg::Info, value_name = "LEVEL")]
+    diagnostic_level: LevelArg,
+
+    /// Exit 1 when the run produced warnings but no errors.
+    #[arg(long)]
+    error_on_warnings: bool,
+
+    /// Diagnostics shown before the rest are counted instead; `none` lifts the cap.
+    #[arg(long, default_value = DEFAULT_MAX_DIAGNOSTICS, value_name = "NONE|N")]
+    max_diagnostics: MaxDiagnostics,
+
+    /// Colour the output; the default colours a TTY with `NO_COLOR` unset.
+    #[arg(long, value_enum, value_name = "WHEN")]
+    colors: Option<ColorsArg>,
+
+    /// Print a per-phase wall-clock breakdown under the summary.
+    #[arg(long)]
+    timings: bool,
+}
+
+/// The levels a reader can ask for; `off` is a rule setting, not a filter.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+enum LevelArg {
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+enum ColorsArg {
+    Off,
+    Force,
+}
+
+/// `--max-diagnostics`, either a cap or `none`.
+#[derive(Clone, Copy, Debug)]
+struct MaxDiagnostics(Option<usize>);
+
+impl FromStr for MaxDiagnostics {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        if text == "none" {
+            return Ok(Self(None));
+        }
+        text.parse()
+            .map(|cap| Self(Some(cap)))
+            .map_err(|_| format!("expected a whole number or `none`, got {text:?}"))
+    }
+}
+
+impl OutputArgs {
+    fn output(&self) -> Output {
+        Output {
+            reporter: self.reporter,
+            level: match self.diagnostic_level {
+                LevelArg::Info => Level::Info,
+                LevelArg::Warn => Level::Warn,
+                LevelArg::Error => Level::Error,
+            },
+            max: self.max_diagnostics.0,
+            colors: match self.colors {
+                Some(ColorsArg::Off) => false,
+                Some(ColorsArg::Force) => true,
+                None => std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, clap::Args)]
 struct CheckArgs {
     /// Files or directories to check; defaults to the config's include globs.
     paths: Vec<PathBuf>,
 
-    /// Config file to use instead of searching upward for compact-lint.toml.
+    /// Config file to use instead of searching upward for compact.toml.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
-    /// Report `k=?` / `rows=?` placeholders in the constraints tag.
+    /// Report `k=?` / `rows=?` placeholders as errors instead of warnings.
     #[arg(long)]
     strict: bool,
 
@@ -62,6 +147,9 @@ struct CheckArgs {
     /// Path to the `compact` binary.
     #[arg(long, value_name = "PATH", env = COMPACT_BIN_ENV)]
     compact_bin: Option<OsString>,
+
+    #[command(flatten)]
+    output: OutputArgs,
 }
 
 #[derive(Debug, clap::Args)]
@@ -69,13 +157,16 @@ struct FixArgs {
     /// Files or directories to fix; defaults to the config's include globs.
     paths: Vec<PathBuf>,
 
-    /// Config file to use instead of searching upward for compact-lint.toml.
+    /// Config file to use instead of searching upward for compact.toml.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
     /// Report the edits without writing them; exits 1 when there are any.
     #[arg(long)]
     dry_run: bool,
+
+    #[command(flatten)]
+    output: OutputArgs,
 }
 
 #[derive(Debug, clap::Args)]
@@ -83,7 +174,7 @@ struct FillArgs {
     /// Files or directories to fill; defaults to the config's include globs.
     paths: Vec<PathBuf>,
 
-    /// Config file to use instead of searching upward for compact-lint.toml.
+    /// Config file to use instead of searching upward for compact.toml.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
@@ -102,6 +193,9 @@ struct FillArgs {
     /// Directory the compiler writes to; kept after the run when given.
     #[arg(long, value_name = "DIR")]
     artifacts: Option<PathBuf>,
+
+    #[command(flatten)]
+    output: OutputArgs,
 }
 
 fn main() -> ExitCode {
@@ -136,14 +230,26 @@ fn run_check(args: CheckArgs, cwd: &std::path::Path) -> Result<ExitCode> {
             .unwrap_or_else(|| OsString::from(DEFAULT_COMPACT_BIN)),
     };
 
-    let outcome = check::run(&options, cwd).context("running the check")?;
-    emit_findings(&outcome).context("writing the report")?;
+    let mut timings = Timings::default();
+    let started = Instant::now();
+    let outcome = check::run(&options, cwd, &mut timings).context("running the check")?;
+    let printed = report(
+        &args.output,
+        &outcome.diagnostics,
+        RunFacts {
+            files: outcome.files_checked,
+            duration: started.elapsed(),
+            action: Action::NoFixes,
+        },
+        &mut timings,
+    )
+    .context("writing the report")?;
 
-    Ok(if outcome.findings.is_empty() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(EXIT_FINDINGS)
-    })
+    Ok(exit_code(
+        printed.errors,
+        printed.warnings,
+        args.output.error_on_warnings,
+    ))
 }
 
 fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
@@ -153,14 +259,34 @@ fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
         dry_run: args.dry_run,
     };
 
-    let outcome = fix::run(&options, cwd).context("running the fix")?;
-    emit_edits(&outcome).context("writing the report")?;
-
-    Ok(if options.dry_run && outcome.edits() > 0 {
-        ExitCode::from(EXIT_FINDINGS)
+    let mut timings = Timings::default();
+    let started = Instant::now();
+    let outcome = fix::run(&options, cwd, &mut timings).context("running the fix")?;
+    let action = if options.dry_run {
+        Action::NoFixes
     } else {
-        ExitCode::SUCCESS
-    })
+        Action::Fixed(outcome.changed)
+    };
+    let printed = report(
+        &args.output,
+        &outcome.diagnostics,
+        RunFacts {
+            files: outcome.checked,
+            duration: started.elapsed(),
+            action,
+        },
+        &mut timings,
+    )
+    .context("writing the report")?;
+
+    if options.dry_run && outcome.edits() > 0 {
+        return Ok(ExitCode::from(EXIT_FINDINGS));
+    }
+    Ok(exit_code(
+        printed.errors,
+        printed.warnings,
+        args.output.error_on_warnings,
+    ))
 }
 
 fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
@@ -177,15 +303,33 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
         artifacts,
     };
 
-    let outcome = fill::run(&options, cwd).context("filling the constraints")?;
-    emit_lines(&outcome.lines, &outcome.summary()).context("writing the report")?;
+    let mut timings = Timings::default();
+    let started = Instant::now();
+    let outcome = fill::run(&options, cwd, &mut timings).context("filling the constraints")?;
+    let printed = report(
+        &args.output,
+        &outcome.diagnostics,
+        RunFacts {
+            files: outcome.checked,
+            duration: started.elapsed(),
+            action: Action::Filled {
+                values: outcome.filled,
+                files: outcome.files,
+            },
+        },
+        &mut timings,
+    )
+    .context("writing the report")?;
 
     drop(temporary);
-    Ok(if outcome.unmeasured == 0 {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(EXIT_FINDINGS)
-    })
+    if outcome.unmeasured > 0 {
+        return Ok(ExitCode::from(EXIT_FINDINGS));
+    }
+    Ok(exit_code(
+        printed.errors,
+        printed.warnings,
+        args.output.error_on_warnings,
+    ))
 }
 
 /// The artifacts directory, plus the temporary one to remove once the run ends.
@@ -198,46 +342,77 @@ fn artifacts_dir(given: Option<PathBuf>) -> Result<(PathBuf, Option<TempDir>)> {
     Ok((directory.path().to_owned(), Some(directory)))
 }
 
-fn emit_lines(lines: &[String], summary: &str) -> std::io::Result<()> {
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    for line in lines {
-        writeln!(out, "{line}")?;
-    }
-    out.flush()?;
-
-    eprintln!("{summary}");
-    Ok(())
+/// What a run did, everything the summary needs that the diagnostics do not carry.
+#[derive(Clone, Copy, Debug)]
+struct RunFacts {
+    files: usize,
+    duration: Duration,
+    action: Action,
 }
 
-fn emit_findings(outcome: &Outcome) -> std::io::Result<()> {
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    for finding in &outcome.findings {
-        writeln!(out, "{finding}")?;
-    }
-    out.flush()?;
-
-    eprintln!("{}", outcome.summary());
-    Ok(())
+/// What the report counted, for the exit code.
+#[derive(Clone, Copy, Debug)]
+struct Printed {
+    errors: usize,
+    warnings: usize,
 }
 
-fn emit_edits(outcome: &fix::Outcome) -> std::io::Result<()> {
+/// Emits the report as its own timed phase, then the breakdown when `--timings` is set.
+fn report(
+    args: &OutputArgs,
+    diagnostics: &[Diagnostic],
+    facts: RunFacts,
+    timings: &mut Timings,
+) -> std::io::Result<Printed> {
+    let phase = Phase::start("render");
+    let (printed, shown) = emit(args, diagnostics, facts)?;
+    phase.stop(timings, format!("{shown} diagnostics shown"));
+
+    if args.timings {
+        writeln!(std::io::stderr().lock(), "{}", timings.render())?;
+    }
+    Ok(printed)
+}
+
+/// Writes the diagnostics to stdout and the truncation notice and summary to stderr.
+fn emit(
+    args: &OutputArgs,
+    diagnostics: &[Diagnostic],
+    facts: RunFacts,
+) -> std::io::Result<(Printed, usize)> {
+    let (errors, warnings) = counts(diagnostics);
+
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    for file in &outcome.files {
-        for edit in &file.edits {
-            writeln!(
-                out,
-                "{}",
-                fix::line(&file.path, edit.position, &edit.message)
-            )?;
+    let rendered = args.output().render(&mut out, diagnostics)?;
+
+    let stderr = std::io::stderr();
+    let mut error_out = stderr.lock();
+    if rendered.hidden > 0 {
+        writeln!(error_out, "{}", diagnostic::truncation(rendered.hidden))?;
+    }
+    writeln!(
+        error_out,
+        "{}",
+        Summary {
+            files: facts.files,
+            duration: facts.duration,
+            action: facts.action,
+            errors,
+            warnings,
         }
-    }
-    out.flush()?;
+        .render()
+    )?;
 
-    eprintln!("{}", outcome.summary());
-    Ok(())
+    Ok((Printed { errors, warnings }, rendered.shown))
+}
+
+fn exit_code(errors: usize, warnings: usize, error_on_warnings: bool) -> ExitCode {
+    if errors > 0 || (error_on_warnings && warnings > 0) {
+        ExitCode::from(EXIT_FINDINGS)
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 /// Prints the error and every source under it, one cause per line.

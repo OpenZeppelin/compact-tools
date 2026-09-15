@@ -76,6 +76,8 @@ pub struct Declaration {
     pub exported: bool,
     pub pure: bool,
     pub position: Position,
+    /// End of the name token, or of the first token where the kind has no name.
+    pub end: Position,
     /// Byte offset of the declaration's first token, where `fix` inserts a skeleton.
     pub offset: usize,
     /// The doc comment immediately preceding the declaration, if one attaches.
@@ -150,6 +152,10 @@ fn declaration(kind: DeclKind, node: Node<'_>, source: &str) -> Declaration {
         .map(str::to_owned);
 
     let start = node.start_position();
+    let end = node
+        .child_by_field_name("name")
+        .or_else(|| node.child(0))
+        .map_or_else(|| node.end_position(), |token| token.end_position());
 
     Declaration {
         kind,
@@ -157,6 +163,7 @@ fn declaration(kind: DeclKind, node: Node<'_>, source: &str) -> Declaration {
         exported,
         pure,
         position: Position::from_zero_based(start.row, start.column),
+        end: Position::from_zero_based(end.row, end.column),
         offset: node.start_byte(),
         doc: attached_doc(node, source),
     }

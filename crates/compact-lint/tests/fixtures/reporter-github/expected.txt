@@ -1,0 +1,2 @@
+::warning title=lint/constraints-placeholder,file=Two.compact,line=8,endLine=8,col=6,endColumn=18::@constraints value `k=?, rows=?` still holds a placeholder.
+::error title=lint/missing-constraints,file=Two.compact,line=15,endLine=15,col=3,endColumn=22::Circuit `bump` doc comment has no @constraints.

@@ -1,0 +1,139 @@
+Bare.compact:3:1 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Bare` has no doc comment.
+
+    1 │ pragma language_version >= 0.23.0;
+    2 │ 
+  > 3 │ export module Bare {
+      │ ^^^^^^^^^^^^^^^^^^
+    4 │   import CompactStandardLibrary;
+    5 │ 
+
+  i Unsafe fix: Insert a doc skeleton for module `Bare`
+
+      3 │ + /**
+      4 │ + ·*·@module·Bare
+      5 │ + ·*·@description·TODO
+      6 │ + ·*/
+
+Bare.compact:6:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `_count` has no doc comment.
+
+    4 │   import CompactStandardLibrary;
+    5 │ 
+  > 6 │   export ledger _count: Counter;
+      │   ^^^^^^^^^^^^^^^^^^^^
+    7 │ 
+    8 │   witness wit_Secret(): Bytes<32>;
+
+  i Unsafe fix: Insert a doc skeleton for ledger `_count`
+
+      6 │ + ··/**
+      7 │ + ···*·@description·TODO
+      8 │ + ···*/
+
+Bare.compact:8:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Witness `wit_Secret` has no doc comment.
+
+     6 │   export ledger _count: Counter;
+     7 │ 
+  >  8 │   witness wit_Secret(): Bytes<32>;
+       │   ^^^^^^^^^^^^^^^^^^
+     9 │ 
+    10 │   export struct Reading {
+
+  i Unsafe fix: Insert a doc skeleton for witness `wit_Secret`
+
+       8 │ + ··/**
+       9 │ + ···*·@description·TODO
+      10 │ + ···*/
+
+Bare.compact:10:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Struct `Reading` has no doc comment.
+
+     8 │   witness wit_Secret(): Bytes<32>;
+     9 │ 
+  > 10 │   export struct Reading {
+       │   ^^^^^^^^^^^^^^^^^^^^^
+    11 │     value: Uint<64>
+    12 │   }
+
+  i Unsafe fix: Insert a doc skeleton for struct `Reading`
+
+      10 │ + ··/**
+      11 │ + ···*·@description·TODO
+      12 │ + ···*/
+
+Bare.compact:14:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Enum `Direction` has no doc comment.
+
+    12 │   }
+    13 │ 
+  > 14 │   export enum Direction {
+       │   ^^^^^^^^^^^^^^^^^^^^^
+    15 │     Up,
+    16 │     Down
+
+  i Unsafe fix: Insert a doc skeleton for enum `Direction`
+
+      14 │ + ··/**
+      15 │ + ···*·@description·TODO
+      16 │ + ···*/
+
+Bare.compact:19:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Type `Alias` has no doc comment.
+
+    17 │   }
+    18 │ 
+  > 19 │   export type Alias = Bytes<32>;
+       │   ^^^^^^^^^^^^^^^^^
+    20 │ 
+    21 │   constructor() {
+
+  i Unsafe fix: Insert a doc skeleton for type `Alias`
+
+      19 │ + ··/**
+      20 │ + ···*·TODO
+      21 │ + ···*/
+
+Bare.compact:25:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `double` has no doc comment.
+
+    23 │   }
+    24 │ 
+  > 25 │   export pure circuit double(value: Uint<8>): Uint<16> {
+       │   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    26 │     return value as Uint<16> * 2;
+    27 │   }
+
+  i Unsafe fix: Insert a doc skeleton for circuit `double`
+
+      25 │ + ··/**
+      26 │ + ···*·@description·TODO
+      27 │ + ···*/
+
+Bare.compact:29:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` has no doc comment.
+
+    27 │   }
+    28 │ 
+  > 29 │   export circuit bump(): [] {
+       │   ^^^^^^^^^^^^^^^^^^^
+    30 │     _count.increment(1);
+    31 │   }
+
+  i Unsafe fix: Insert a doc skeleton for circuit `bump`
+
+      29 │ + ··/**
+      30 │ + ···*·@description·TODO
+      31 │ + ···*
+      32 │ + ···*·@constraints·k=?,·rows=?
+      33 │ + ···*/
+

@@ -1,0 +1,16 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Order
+ * @description A module whose sections run out of template order.
+ *
+ * @notice Privacy:
+ * - Amounts stay private.
+ *
+ * @see The compatibility suite pins the wire format.
+ *
+ * @notice Security:
+ * - Nonces are spend-critical.
+ */
+export module Order {
+}

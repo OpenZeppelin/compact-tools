@@ -1,2 +1,26 @@
-Malformed.compact:8:6: constraints-format: @constraints value `k=10 rows=626` is not `k=<n>, rows=<n>`
-Malformed.compact:14:6: constraints-format: @constraints value `rows=626, k=10` is not `k=<n>, rows=<n>`
+Malformed.compact:8:6 lint/constraints-format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × @constraints value `k=10 rows=626` is not `k=<n>, rows=<n>`.
+
+     6 │   /**
+     7 │    * @description The comma is missing.
+  >  8 │    * @constraints k=10 rows=626
+       │      ^^^^^^^^^^^^
+     9 │    */
+    10 │   export circuit first(): [] { }
+
+  i Write the value as k=<n>, rows=<n>.
+
+Malformed.compact:14:6 lint/constraints-format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × @constraints value `rows=626, k=10` is not `k=<n>, rows=<n>`.
+
+    12 │   /**
+    13 │    * @description The fields are the wrong way round.
+  > 14 │    * @constraints rows=626, k=10
+       │      ^^^^^^^^^^^^
+    15 │    */
+    16 │   export circuit second(): [] { }
+
+  i Write the value as k=<n>, rows=<n>.
+
