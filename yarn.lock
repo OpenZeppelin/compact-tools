@@ -1180,6 +1180,19 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@openzeppelin/compact-lint@workspace:packages/lint":
+  version: 0.0.0-use.local
+  resolution: "@openzeppelin/compact-lint@workspace:packages/lint"
+  dependencies:
+    "@tsconfig/node24": "npm:^24.0.3"
+    "@types/node": "npm:26.1.2"
+    typescript: "npm:^6.0.3"
+    vitest: "npm:^4.1.9"
+  bin:
+    compact-lint: dist/compactLint.js
+  languageName: unknown
+  linkType: soft
+
 "@openzeppelin/compact-simulator@workspace:packages/simulator":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-simulator@workspace:packages/simulator"

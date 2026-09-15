@@ -6,6 +6,13 @@ per-kind template in `compact-lint.toml`, and prints one finding per line. `fix`
 rewrites the comments the repairable rules report. `fill-constraints` compiles the
 contracts and writes the measured `k` and `rows` into the annotations.
 
+## Install
+
+- npm, no Rust toolchain needed: `yarn add -D @openzeppelin/compact-lint`, or
+  `npx @openzeppelin/compact-lint check`. The package downloads the release binary for
+  the host on first use. See [`packages/lint`](../../packages/lint).
+- From source: `cargo install --path crates/compact-lint`.
+
 ## Usage
 
 ```sh
