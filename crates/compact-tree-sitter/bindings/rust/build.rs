@@ -10,7 +10,7 @@ fn main() {
     config.flag_if_supported("-Wno-unused-parameter");
     config.flag_if_supported("-Wno-trigraphs");
 
-    config.compile("tree-sitter-compact");
+    config.compile("compact-tree-sitter");
 
     println!("cargo:rerun-if-changed=src/parser.c");
     println!("cargo:rerun-if-changed=src/grammar.json");

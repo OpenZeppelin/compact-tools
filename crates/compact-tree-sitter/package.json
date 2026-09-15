@@ -1,5 +1,5 @@
 {
-  "name": "tree-sitter-compact",
+  "name": "compact-tree-sitter",
   "version": "0.1.0",
   "private": true,
   "description": "Declaration-level Compact grammar for tree-sitter",

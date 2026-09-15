@@ -22,6 +22,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "compact-tree-sitter"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "tree-sitter",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -185,15 +194,6 @@ dependencies = [
  "regex-syntax",
  "serde_json",
  "streaming-iterator",
- "tree-sitter-language",
-]
-
-[[package]]
-name = "tree-sitter-compact"
-version = "0.1.0"
-dependencies = [
- "cc",
- "tree-sitter",
  "tree-sitter-language",
 ]
 

@@ -13,7 +13,7 @@
       "!**/tsconfig.base.json",
       "!**/tsconfig*.json",
       "!**/*.compact",
-      "!crates/tree-sitter-compact/src/**/*",
+      "!crates/compact-tree-sitter/src/**/*",
       "!**/artifacts/**/*",
       "!**/coverage/**/*",
       "!**/dist/**/*",

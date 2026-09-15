@@ -39,8 +39,8 @@ jobs:
         run: cargo test --workspace
 
       - name: Check the generated parser is up to date
-        working-directory: crates/tree-sitter-compact
+        working-directory: crates/compact-tree-sitter
         run: npx -y tree-sitter-cli@0.25.8 generate
 
       - name: Fail if regeneration changed the parser
-        run: git diff --exit-code -- crates/tree-sitter-compact/src
+        run: git diff --exit-code -- crates/compact-tree-sitter/src

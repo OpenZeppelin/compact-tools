@@ -1,4 +1,4 @@
-# tree-sitter-compact
+# compact-tree-sitter
 
 Declaration-level [tree-sitter](https://tree-sitter.github.io) grammar for the
 Compact smart-contract language (Midnight), tracking language version 0.26.
@@ -68,7 +68,7 @@ are generated and committed. After editing `grammar.js`:
 npx -y tree-sitter-cli@0.25.8 generate
 ```
 
-CI regenerates and fails on any diff under `crates/tree-sitter-compact/src`.
+CI regenerates and fails on any diff under `crates/compact-tree-sitter/src`.
 
 ## Tests
 

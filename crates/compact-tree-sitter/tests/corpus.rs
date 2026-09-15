@@ -10,7 +10,7 @@ const SKIPPED_DIRS: [&str; 5] = ["node_modules", "target", "dist", "build", ".gi
 fn parser() -> Parser {
     let mut parser = Parser::new();
     parser
-        .set_language(&tree_sitter_compact::LANGUAGE.into())
+        .set_language(&compact_tree_sitter::LANGUAGE.into())
         .expect("the generated parser matches the tree-sitter ABI this crate builds against");
     parser
 }
