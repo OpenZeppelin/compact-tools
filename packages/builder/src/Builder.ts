@@ -12,7 +12,7 @@ import {
   type BuildStep,
   DEFAULT_EXCLUDE_PATTERNS,
 } from './types/options.ts';
-import { buildFindExcludes, shellQuote } from './utils.ts';
+import { buildFindExcludes, buildFindIncludes, shellQuote } from './utils.ts';
 
 // Re-export public types so consumers keep importing them from './Builder.js'.
 export type { BuilderOnlyOptions, BuilderOptions };
@@ -36,6 +36,9 @@ const execAsync = promisify(exec);
  * ```typescript
  * // Default: flatten .compact files, exclude Mock*
  * const builder = new CompactBuilder({ flags: '--skip-zk' });
+ *
+ * // Single file: `only` narrows the run, and suppresses the default Mock* exclude.
+ * const builder = new CompactBuilder({ only: ['MockEcdsa.compact'] });
  *
  * // Library publish: clean dist, hierarchical tree, exclude mocks + archive, copy metadata.
  * const builder = new CompactBuilder({
@@ -80,8 +83,8 @@ export class CompactBuilder {
    * Builder-only flags are extracted here; remaining args are forwarded to
    * {@link CompactCompiler.parseArgs} for compiler-side parsing.
    *
-   * Builder-only flags (compiler flags like `--hierarchical` and `--exclude`
-   * are forwarded to {@link CompactCompiler.parseArgs}):
+   * Builder-only flags (compiler flags like `--hierarchical`, `--exclude` and
+   * `--only` are forwarded to {@link CompactCompiler.parseArgs}):
    * - `--clean-dist`            - rm -rf dist before building
    * - `--copy <path>`           - copy an extra file into dist/ (repeatable)
    *
@@ -146,9 +149,14 @@ export class CompactBuilder {
   private buildSteps(): BuildStep[] {
     const srcDir = this.options.srcDir ?? 'src';
     const quotedSrc = shellQuote(srcDir);
+    const only = this.options.only ?? [];
+    // An explicit include list overrides the implicit Mock* default, which
+    // would otherwise veto it and copy nothing.
     const excludes = buildFindExcludes(
-      this.options.exclude ?? DEFAULT_EXCLUDE_PATTERNS,
+      this.options.exclude ?? (only.length > 0 ? [] : DEFAULT_EXCLUDE_PATTERNS),
     );
+    const includes = buildFindIncludes(only);
+    const filters = [includes, excludes].filter(Boolean).join(' ');
     const steps: BuildStep[] = [];
 
     if (this.options.cleanDist) {
@@ -181,7 +189,7 @@ export class CompactBuilder {
         // biome-ignore-start lint/suspicious/noUselessEscapeInString: shell vars must survive JS template-literal interpolation
         cmd: `
           SRC_DIR=${quotedSrc}
-          find "$SRC_DIR" -type f -name '*.compact' ${excludes} | while read -r file; do
+          find "$SRC_DIR" -type f -name '*.compact' ${filters} | while read -r file; do
             rel_path="\${file#$SRC_DIR/}"
             mkdir -p "dist/$(dirname "$rel_path")"
             cp "$file" "dist/$rel_path"
@@ -193,7 +201,7 @@ export class CompactBuilder {
       });
     } else {
       steps.push({
-        cmd: `mkdir -p dist && find ${quotedSrc} -type f -name '*.compact' ${excludes} -exec cp {} dist/ \\; 2>/dev/null || true`,
+        cmd: `mkdir -p dist && find ${quotedSrc} -type f -name '*.compact' ${filters} -exec cp {} dist/ \\; 2>/dev/null || true`,
         msg: 'Copying .compact files',
         shell: '/bin/bash',
       });

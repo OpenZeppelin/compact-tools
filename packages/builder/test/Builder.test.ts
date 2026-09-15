@@ -47,6 +47,17 @@ describe('CompactBuilder.parseArgs', () => {
     expect(options.copyToDist).toEqual(['package.json', '../README.md']);
   });
 
+  it('forwards repeated --only patterns to the compiler parser', () => {
+    const options = CompactBuilder.parseArgs([
+      '--only',
+      'MockEcdsa.compact',
+      '--only',
+      '*/mocks/*',
+    ]);
+
+    expect(options.only).toEqual(['MockEcdsa.compact', '*/mocks/*']);
+  });
+
   it('throws when --exclude is missing a pattern', () => {
     expect(() => CompactBuilder.parseArgs(['--exclude'])).toThrow(
       '--exclude flag requires a pattern',
@@ -192,6 +203,54 @@ describe('CompactBuilder step pipeline', () => {
 
     expect(copyStep?.cmd).toContain("! -name 'Mock*'");
     expect(copyStep?.cmd).toContain("! -path '*/archive/*'");
+  });
+
+  it('groups includes into an OR-ed find test', () => {
+    const builder = new CompactBuilder({
+      only: ['MockEcdsa.compact', '*/mocks/*'],
+    });
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files');
+
+    expect(copyStep?.cmd).toContain(
+      "\\( -name 'MockEcdsa.compact' -o -path '*/mocks/*' \\)",
+    );
+  });
+
+  it('drops the default Mock* exclude when an include list is given', () => {
+    const builder = new CompactBuilder({ only: ['Mock*'] });
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files');
+
+    expect(copyStep?.cmd).toContain("\\( -name 'Mock*' \\)");
+    expect(copyStep?.cmd).not.toContain('! -name');
+  });
+
+  it('applies an explicit exclude on top of the include list', () => {
+    const builder = new CompactBuilder({
+      only: ['Mock*'],
+      exclude: ['MockElGamal.compact'],
+    });
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files');
+
+    expect(copyStep?.cmd).toContain("\\( -name 'Mock*' \\)");
+    expect(copyStep?.cmd).toContain("! -name 'MockElGamal.compact'");
+  });
+
+  it('filters the hierarchical copy step by the include list', () => {
+    const builder = new CompactBuilder({
+      hierarchical: true,
+      only: ['*/mocks/*'],
+    });
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files (preserving structure)');
+
+    expect(copyStep?.cmd).toContain("\\( -path '*/mocks/*' \\)");
   });
 
   it('honours an explicit empty exclude list (disables the default Mock*)', () => {

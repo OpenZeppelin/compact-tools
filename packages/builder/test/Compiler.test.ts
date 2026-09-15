@@ -269,6 +269,123 @@ describe('FileDiscovery', () => {
       expect(files).toEqual(['Token.compact']);
     });
 
+    it('keeps only files matching an include pattern', async () => {
+      const includingDiscovery = new FileDiscovery(
+        'src',
+        [],
+        ['MockEcdsa.compact'],
+      );
+      const mockDirents = [
+        {
+          name: 'MockEcdsa.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'MockElGamal.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await includingDiscovery.getCompactFiles('src');
+
+      expect(files).toEqual(['MockEcdsa.compact']);
+    });
+
+    it('unions repeated include patterns', async () => {
+      const includingDiscovery = new FileDiscovery(
+        'src',
+        [],
+        ['MockEcdsa.compact', '*.mock.compact'],
+      );
+      const mockDirents = [
+        {
+          name: 'MockEcdsa.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'Token.mock.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await includingDiscovery.getCompactFiles('src');
+
+      expect(files).toEqual(['MockEcdsa.compact', 'Token.mock.compact']);
+    });
+
+    it('matches include patterns containing a slash against the full path', async () => {
+      const includingDiscovery = new FileDiscovery('src', [], ['*/mocks/*']);
+      const mockDirents = [
+        { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
+        { name: 'mocks', isFile: () => false, isDirectory: () => true },
+      ];
+      const mockNestedDirents = [
+        {
+          name: 'MockEcdsa.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ];
+
+      mockReaddir
+        .mockResolvedValueOnce(mockDirents as any)
+        .mockResolvedValueOnce(mockNestedDirents as any);
+
+      const files = await includingDiscovery.getCompactFiles('src');
+
+      expect(files).toEqual(['mocks/MockEcdsa.compact']);
+    });
+
+    it('drops a file matching both an include and an exclude pattern', async () => {
+      const discovery = new FileDiscovery(
+        'src',
+        ['MockElGamal.compact'],
+        ['Mock*'],
+      );
+      const mockDirents = [
+        {
+          name: 'MockEcdsa.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        {
+          name: 'MockElGamal.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+        { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await discovery.getCompactFiles('src');
+
+      expect(files).toEqual(['MockEcdsa.compact']);
+    });
+
+    it('returns nothing when no file matches the include patterns', async () => {
+      const includingDiscovery = new FileDiscovery('src', [], ['Nope*']);
+      const mockDirents = [
+        { name: 'Token.compact', isFile: () => true, isDirectory: () => false },
+      ];
+
+      mockReaddir.mockResolvedValue(mockDirents as any);
+
+      const files = await includingDiscovery.getCompactFiles('src');
+
+      expect(files).toEqual([]);
+    });
+
     it('should skip files matching path globs', async () => {
       // Path-style patterns (containing `/`) are matched against the full
       // path as `find srcDir` would emit it, so `*/archive/*` works the same
@@ -924,6 +1041,49 @@ describe('CompactCompiler', () => {
       expect(() =>
         CompactCompiler.fromArgs(['--exclude', '--skip-zk']),
       ).toThrow('--exclude flag requires a pattern');
+    });
+
+    it('accumulates repeated --only patterns', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--only',
+        'MockEcdsa.compact',
+        '--only',
+        '*.mock.compact',
+      ]);
+
+      expect(compiler.testOptions.only).toEqual([
+        'MockEcdsa.compact',
+        '*.mock.compact',
+      ]);
+    });
+
+    it('defaults only to an empty array when not specified', () => {
+      compiler = CompactCompiler.fromArgs([]);
+      expect(compiler.testOptions.only).toEqual([]);
+    });
+
+    it('parses --only alongside --exclude', () => {
+      compiler = CompactCompiler.fromArgs([
+        '--dir',
+        'crypto/test/mocks',
+        '--only',
+        'Mock*',
+        '--exclude',
+        'MockElGamal.compact',
+      ]);
+
+      expect(compiler.testOptions.only).toEqual(['Mock*']);
+      expect(compiler.testOptions.exclude).toEqual(['MockElGamal.compact']);
+      expect(compiler.testOptions.targetDir).toBe('crypto/test/mocks');
+    });
+
+    it('throws for --only without a pattern', () => {
+      expect(() => CompactCompiler.fromArgs(['--only'])).toThrow(
+        '--only flag requires a pattern',
+      );
+      expect(() => CompactCompiler.fromArgs(['--only', '--skip-zk'])).toThrow(
+        '--only flag requires a pattern',
+      );
     });
   });
 

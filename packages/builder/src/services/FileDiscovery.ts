@@ -1,22 +1,26 @@
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { DEFAULT_SRC_DIR } from '../types/options.ts';
-import { isExcluded } from '../utils.ts';
+import { matchesAnyPattern } from '../utils.ts';
 
 /**
  * Service responsible for discovering .compact files in the source directory.
  * Recursively scans directories and filters for .compact file extensions,
- * applying user-supplied exclude patterns.
+ * applying the user-supplied include (`only`) and exclude patterns.
  *
  * @example
  * ```typescript
  * const discovery = new FileDiscovery('src', ['Mock*']);
  * const files = await discovery.getCompactFiles('src/security');
+ *
+ * // Include filter: compile a single mock and nothing else
+ * const one = new FileDiscovery('src', [], ['MockEcdsa.compact']);
  * ```
  */
 export class FileDiscovery {
   private srcDir: string;
   private excludes: readonly string[];
+  private only: readonly string[];
 
   /**
    * Creates a new FileDiscovery instance.
@@ -26,13 +30,19 @@ export class FileDiscovery {
    *                   Patterns containing `/` match against the full path
    *                   (as `find <srcDir>` would emit it); others match against
    *                   the filename only. Default: `[]`.
+   * @param only     - Glob-style patterns of `.compact` files to keep, same
+   *                   matching rules as `excludes`. An empty list keeps
+   *                   everything; a non-empty one drops every file it does
+   *                   not match. Default: `[]`.
    */
   constructor(
     srcDir: string = DEFAULT_SRC_DIR,
     excludes: readonly string[] = [],
+    only: readonly string[] = [],
   ) {
     this.srcDir = srcDir;
     this.excludes = excludes;
+    this.only = only;
   }
 
   /**
@@ -57,7 +67,13 @@ export class FileDiscovery {
             // Match path-style patterns against fullPath (i.e. the path that
             // `find srcDir` would emit) so users can write `*/archive/*` etc.,
             // identical to what they'd pass to `find -path`.
-            if (isExcluded(entry.name, fullPath, this.excludes)) {
+            if (
+              this.only.length > 0 &&
+              !matchesAnyPattern(entry.name, fullPath, this.only)
+            ) {
+              return [];
+            }
+            if (matchesAnyPattern(entry.name, fullPath, this.excludes)) {
               return [];
             }
             return [relPath];
