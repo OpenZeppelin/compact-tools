@@ -103,3 +103,9 @@ each dependent finds its deps already on npm:
 
 After the first release, the four packages version independently — bump any
 one of them in isolation without re-publishing the others.
+
+A package's first publish authenticates with the `NPM_TOKEN` secret from the
+`compact-npm-prod` environment, since a Trusted Publisher can only be
+registered against a package npm already knows. Register it on npmjs.org right
+after that publish; the workflow then takes the OIDC path for every later
+version on its own.

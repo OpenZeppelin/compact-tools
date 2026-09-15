@@ -1,6 +1,11 @@
-# Publishes to npm via OIDC trusted publishing, not a token.
-# Each package must list this repo and this workflow file as a Trusted
-# Publisher on npmjs.org, or the publish step fails to authenticate.
+# Publishes to npm over one of two auth paths, picked per run by probing the
+# registry. A package that already exists publishes via OIDC trusted
+# publishing, and must list this repo and this workflow file as a Trusted
+# Publisher on npmjs.org or the publish step fails to authenticate. A package
+# that does not exist yet publishes with the NPM_TOKEN secret, because a
+# Trusted Publisher can only be registered against a package the registry
+# already knows. Register it right after the first publish; every later
+# version then takes the OIDC path.
 name: Publish Release
 
 on:
@@ -33,7 +38,7 @@ jobs:
 
     permissions:
       contents: write   # push the version tag
-      id-token: write   # mint the npm OIDC credential and the provenance statement
+      id-token: write   # mint the npm OIDC credential (existing packages) and the provenance statement (both paths)
 
     steps:
       - name: Get github app token
@@ -161,7 +166,49 @@ jobs:
             git push origin "$TAG"
           fi
 
-      - name: Publish to npm
+      # Anything but a clean 200 or 404 fails the run, so a flaky registry can
+      # never read as "new package" and quietly downgrade an existing package
+      # from OIDC to token auth.
+      - name: Check whether the package is already on npm
+        id: registry
+        env:
+          PKG: ${{ steps.pkg.outputs.name }}
         run: |
-          cd packages/${{ steps.pkg.outputs.dir }}
-          yarn npm publish --access public --provenance --tag ${{ steps.pkg.outputs.dist_tag }}
+          if ! STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+              --retry 3 --retry-all-errors --max-time 30 \
+              "https://registry.npmjs.org/@openzeppelin%2f$PKG"); then
+            echo "::error::could not reach the npm registry to look up @openzeppelin/$PKG"
+            exit 1
+          fi
+          case "$STATUS" in
+            200) FIRST_PUBLISH=false ;;
+            404) FIRST_PUBLISH=true ;;
+            *)
+              echo "::error::unexpected HTTP $STATUS from the npm registry for @openzeppelin/$PKG"
+              exit 1
+              ;;
+          esac
+          echo "first_publish=$FIRST_PUBLISH" >> $GITHUB_OUTPUT
+
+      # The token is exported into the publish process only, never written to a
+      # .yarnrc.yml or an .npmrc that could be committed or cached.
+      - name: Publish to npm
+        env:
+          PKG: ${{ steps.pkg.outputs.name }}
+          DIR: ${{ steps.pkg.outputs.dir }}
+          DIST_TAG: ${{ steps.pkg.outputs.dist_tag }}
+          FIRST_PUBLISH: ${{ steps.registry.outputs.first_publish }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd "packages/$DIR"
+          if [[ "$FIRST_PUBLISH" == "true" ]]; then
+            if [[ -z "$NPM_TOKEN" ]]; then
+              echo "::error::first publish of @openzeppelin/$PKG needs the NPM_TOKEN secret in the compact-npm-prod environment"
+              exit 1
+            fi
+            echo "first publish of @openzeppelin/$PKG: using NPM_TOKEN"
+            export YARN_NPM_AUTH_TOKEN="$NPM_TOKEN"
+          else
+            echo "existing package @openzeppelin/$PKG: OIDC"
+          fi
+          yarn npm publish --access public --provenance --tag "$DIST_TAG"
