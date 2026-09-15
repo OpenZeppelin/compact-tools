@@ -1,0 +1,6 @@
+/**
+ * @module MockStub
+ * @description Compiled by the fake compiler, never read by it.
+ */
+export module MockStub {
+}

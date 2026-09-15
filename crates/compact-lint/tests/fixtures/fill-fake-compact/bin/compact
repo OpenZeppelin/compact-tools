@@ -1,0 +1,70 @@
+#!/bin/sh
+# Stand-in for `compact compile`, so the fill tests run where the toolchain is absent.
+# It prints the progress lines the real compiler puts on its terminal and writes the
+# matching contract report, for a table keyed by the source file name.
+
+set -e
+
+if [ "$1" != "compile" ]; then
+  echo "fake compact: unsupported command $*" >&2
+  exit 64
+fi
+shift
+
+case "$1" in
+  +*) shift ;;
+esac
+
+source=$1
+output=$2
+name=$(basename "$source")
+
+# name k rows proof
+case "$name" in
+  MockOwnable.compact)
+    table="owner 7 74 true
+transferOwnership 13 4871 true
+renounceOwnership 13 4277 true
+initialize 5 10 false"
+    ;;
+  Vault.compact)
+    table="deposit 12 2048 true
+withdraw 14 8192 true"
+    ;;
+  MockUtilities.compact)
+    table="hash 9 310 true"
+    ;;
+  MockBroken.compact)
+    echo "Compiling 1 circuits:"
+    echo "Exception in thread \"main\" java.lang.RuntimeException"
+    echo "  Error: type mismatch at $source line 12"
+    echo "  Error: compilation aborted" >&2
+    exit 3
+    ;;
+  *)
+    echo "fake compact: no table for $name" >&2
+    exit 65
+    ;;
+esac
+
+count=$(echo "$table" | wc -l | tr -d ' ')
+echo "Compiling $count circuits:"
+
+echo "$table" | while read -r circuit k rows proof; do
+  [ -n "$circuit" ] || continue
+  # The real compiler redraws the line, so the same circuit appears without rows first.
+  printf '  circuit "%s" (k=%s)\n' "$circuit" "$k"
+  printf '  circuit "%s" (k=%s, rows=%s)\n' "$circuit" "$k" "$rows"
+done
+
+mkdir -p "$output/compiler"
+{
+  echo '{'
+  echo '  "compiler-version": "0.0.0-fake",'
+  echo '  "circuits": ['
+  echo "$table" | awk 'NF { if (n++) printf ",\n"; printf "    { \"name\": \"%s\", \"pure\": false, \"proof\": %s }", $1, $4 } END { printf "\n" }'
+  echo '  ]'
+  echo '}'
+} > "$output/compiler/contract-info.json"
+
+echo "Overall progress [====================] $count/$count"

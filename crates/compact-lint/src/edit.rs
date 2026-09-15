@@ -5,6 +5,9 @@
 //! merged into one replacement of that comment.
 
 use std::ops::Range;
+use std::path::{Path, PathBuf};
+
+use thiserror::Error;
 
 use crate::report::Position;
 
@@ -56,6 +59,55 @@ pub enum DocOp {
         line: usize,
         name: String,
     },
+    /// Everything after a tag on one line replaced with a new value.
+    SetTagValue {
+        /// 0-based line index inside the original comment.
+        line: usize,
+        tag: String,
+        value: String,
+    },
+}
+
+#[derive(Debug, Error)]
+pub enum WriteError {
+    #[error("cannot read {path}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("cannot write {path}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+/// Writes through a sibling temporary file, so a failed write never truncates the source.
+/// # Errors
+/// Returns an error when the temporary file, the source's mode, or the rename fails.
+pub fn write_atomically(path: &Path, text: &str) -> Result<(), WriteError> {
+    let temporary = path.with_extension("compact.tmp");
+
+    std::fs::write(&temporary, text).map_err(|source| WriteError::Write {
+        path: temporary.clone(),
+        source,
+    })?;
+    let permissions = std::fs::metadata(path)
+        .map_err(|source| WriteError::Read {
+            path: path.to_owned(),
+            source,
+        })?
+        .permissions();
+    std::fs::set_permissions(&temporary, permissions).map_err(|source| WriteError::Write {
+        path: temporary.clone(),
+        source,
+    })?;
+    std::fs::rename(&temporary, path).map_err(|source| WriteError::Write {
+        path: path.to_owned(),
+        source,
+    })
 }
 
 /// The line ending the file already uses, taken from its first line.
@@ -140,6 +192,13 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
                     && let Some(renamed) = set_module_name(target, name)
                 {
                     *target = renamed;
+                }
+            }
+            DocOp::SetTagValue { line, tag, value } => {
+                if let Some(target) = lines.get_mut(line + shift)
+                    && let Some(rewritten) = set_tag_value(target, tag, value)
+                {
+                    *target = rewritten;
                 }
             }
             _ => {}
@@ -289,6 +348,22 @@ fn rename_tag(line: &str, from: &str, to: &str) -> Option<String> {
     None
 }
 
+/// Replaces everything after the tag, keeping a one-line comment's closing delimiter.
+fn set_tag_value(line: &str, tag: &str, value: &str) -> Option<String> {
+    let start = line.find(tag)?;
+    let rest = line.get(start + tag.len()..)?;
+    if rest.starts_with(|character: char| character.is_ascii_alphabetic()) {
+        return None;
+    }
+
+    let closer = if rest.trim_end().ends_with("*/") {
+        " */"
+    } else {
+        ""
+    };
+    Some(format!("{}{tag} {value}{closer}", &line[..start]))
+}
+
 /// Replaces the first word after `@module`, keeping whatever follows it.
 fn set_module_name(line: &str, name: &str) -> Option<String> {
     let tag = "@module";
@@ -317,6 +392,7 @@ fn set_module_name(line: &str, name: &str) -> Option<String> {
 mod tests {
     use super::{
         DocOp, Edit, EditKind, apply, newline_of, rename_tag, render_doc, set_module_name,
+        set_tag_value,
     };
     use crate::report::Position;
 
@@ -540,6 +616,56 @@ mod tests {
         assert_eq!(
             set_module_name(" * @module Stale", "Renamed"),
             Some(" * @module Renamed".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_constraints_value_is_replaced_where_it_stands() {
+        let doc = "/**\n * @description Bumps.\n *\n * @constraints k=?, rows=?\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::SetTagValue {
+                    line: 3,
+                    tag: "@constraints".to_owned(),
+                    value: "k=13, rows=4273".to_owned(),
+                }]
+            ),
+            "/**\n * @description Bumps.\n *\n * @constraints k=13, rows=4273\n */"
+        );
+    }
+
+    #[test]
+    fn a_value_rewrite_drops_what_trailed_the_old_one() {
+        assert_eq!(
+            set_tag_value(
+                " * @constraints k=1 rows=2 (stale)",
+                "@constraints",
+                "k=3, rows=4"
+            ),
+            Some(" * @constraints k=3, rows=4".to_owned())
+        );
+        assert_eq!(
+            set_tag_value(" * @constraintsX k=1", "@constraints", "k=3"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_one_line_doc_keeps_its_closing_delimiter() {
+        assert_eq!(
+            rendered(
+                "/** @constraints k=?, rows=? */",
+                2,
+                &[DocOp::SetTagValue {
+                    line: 0,
+                    tag: "@constraints".to_owned(),
+                    value: "k=7, rows=74".to_owned(),
+                }]
+            ),
+            "/** @constraints k=7, rows=74 */"
         );
     }
 
