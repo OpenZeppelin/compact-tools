@@ -258,7 +258,7 @@ describe('resolveBinary', () => {
   });
 });
 
-describe('the compact-lint bin', () => {
+describe('the compact-linter bin', () => {
   it('passes its arguments to the binary and forwards the exit code', () => {
     const stub = join(install, 'stub-lint');
     writeFileSync(stub, '#!/bin/sh\necho "args: $*"\nexit 7\n');
@@ -266,7 +266,7 @@ describe('the compact-lint bin', () => {
 
     const run = spawnSync(
       process.execPath,
-      [join(packageDir, 'src', 'compactLint.ts'), 'check', '--strict', 'src'],
+      [join(packageDir, 'src', 'compactLinter.ts'), 'check', '--strict', 'src'],
       { encoding: 'utf8', env: { ...process.env, COMPACT_LINT_BINARY: stub } },
     );
 
@@ -277,7 +277,7 @@ describe('the compact-lint bin', () => {
   it('exits 2 when no binary can be resolved', () => {
     const run = spawnSync(
       process.execPath,
-      [join(packageDir, 'src', 'compactLint.ts'), 'check'],
+      [join(packageDir, 'src', 'compactLinter.ts'), 'check'],
       {
         encoding: 'utf8',
         env: {
@@ -288,6 +288,6 @@ describe('the compact-lint bin', () => {
     );
 
     expect(run.status).toBe(2);
-    expect(run.stderr).toContain('compact-lint: cannot run');
+    expect(run.stderr).toContain('compact-linter: cannot run');
   });
 });

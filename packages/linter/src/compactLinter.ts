@@ -16,7 +16,8 @@ function packageVersion(): string {
 }
 
 function fail(message: string): never {
-  process.stderr.write(`compact-lint: ${message}\n`);
+  process.stderr.write(`compact-linter: ${message}
+`);
   process.exit(2);
 }
 
@@ -29,7 +30,9 @@ async function runLint(): Promise<void> {
       platform: process.platform,
       arch: process.arch,
       env: process.env,
-      notify: (message) => process.stderr.write(`compact-lint: ${message}\n`),
+      notify: (message) =>
+        process.stderr.write(`compact-linter: ${message}
+`),
     });
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
@@ -37,7 +40,7 @@ async function runLint(): Promise<void> {
 
   // argv0 keeps the cache file name out of the linter's own usage output.
   const result = spawnSync(binary, process.argv.slice(2), {
-    argv0: 'compact-lint',
+    argv0: 'compact-linter',
     stdio: 'inherit',
   });
   if (result.error) {

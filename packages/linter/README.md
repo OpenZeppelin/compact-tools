@@ -1,4 +1,4 @@
-# @openzeppelin/compact-lint
+# @openzeppelin/compact-linter
 
 Bin wrapper around the [`compact-lint`](../../crates/compact-lint) Rust crate, the
 doc-comment linter for Compact sources. The package itself is a thin launcher: it
@@ -7,13 +7,13 @@ resolves the native binary for the host and runs it with your arguments.
 ## Install
 
 ```bash
-yarn add --dev @openzeppelin/compact-lint
+yarn add --dev @openzeppelin/compact-linter
 ```
 
 ```bash
-npx @openzeppelin/compact-lint check
-yarn compact-lint check contracts/src
-yarn compact-lint fix --dry-run
+npx @openzeppelin/compact-linter check
+yarn compact-linter check contracts/src
+yarn compact-linter fix --dry-run
 ```
 
 Commands, flags, exit codes and `compact-lint.toml` are documented in the
@@ -21,7 +21,7 @@ Commands, flags, exit codes and `compact-lint.toml` are documented in the
 
 ## Where the binary comes from
 
-- Prebuilt binaries are attached to the `compact-lint/v<version>` GitHub release, one
+- Prebuilt binaries are attached to the `compact-linter/v<version>` GitHub release, one
   per target: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
   `x86_64-apple-darwin`, `aarch64-apple-darwin`.
 - The first run downloads the one matching the host, checks its SHA-256 against the

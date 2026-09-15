@@ -19,7 +19,7 @@ on:
           - compact-builder
           - compact-cli
           - compact-deployer
-          - compact-lint
+          - compact-linter
           - compact-simulator
 
 jobs:
@@ -68,7 +68,7 @@ jobs:
               compact-builder)   DIR="builder" ;;
               compact-cli)       DIR="cli" ;;
               compact-deployer)  DIR="deployer" ;;
-              compact-lint)      DIR="lint" ;;
+              compact-linter)    DIR="linter" ;;
               compact-simulator) DIR="simulator" ;;
               *)
                 echo "::error::unknown package: $PKG"
@@ -88,7 +88,7 @@ jobs:
               builder)   PKG="compact-builder" ;;
               cli)       PKG="compact-cli" ;;
               deployer)  PKG="compact-deployer" ;;
-              lint)      PKG="compact-lint" ;;
+              linter)    PKG="compact-linter" ;;
               simulator) PKG="compact-simulator" ;;
               *)
                 echo "::error::unknown package directory: $DIR"
@@ -136,12 +136,12 @@ jobs:
             echo "- Trigger: $EVENT"
           } >> $GITHUB_STEP_SUMMARY
 
-  # compact-lint ships a native binary per target, built on its own runner. The
+  # compact-linter ships a native binary per target, built on its own runner. The
   # npm package downloads them, so they must reach the GitHub release first.
   binaries:
     name: Build compact-lint for ${{ matrix.target }}
     needs: detect
-    if: needs.detect.outputs.name == 'compact-lint'
+    if: needs.detect.outputs.name == 'compact-linter'
     runs-on: ${{ matrix.runner }}
 
     permissions:
@@ -200,7 +200,7 @@ jobs:
   publish:
     name: Publish merged release
     needs: [detect, binaries]
-    # `binaries` is skipped for every package but compact-lint, and a skipped
+    # `binaries` is skipped for every package but compact-linter, and a skipped
     # dependency must not skip the publish.
     if: >-
       always() &&
@@ -255,7 +255,7 @@ jobs:
           fi
 
       - name: Download the release binaries
-        if: needs.detect.outputs.name == 'compact-lint'
+        if: needs.detect.outputs.name == 'compact-linter'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
@@ -265,7 +265,7 @@ jobs:
       # Asset names only: the installed package looks each digest up by the name
       # it downloads.
       - name: Write the checksums
-        if: needs.detect.outputs.name == 'compact-lint'
+        if: needs.detect.outputs.name == 'compact-linter'
         working-directory: dist
         run: |
           sha256sum compact-lint-* > checksums.txt
@@ -274,7 +274,7 @@ jobs:
       # The npm package downloads these assets on first run, so the release has
       # to carry them before the package reaches npm.
       - name: Create the GitHub release
-        if: needs.detect.outputs.name == 'compact-lint'
+        if: needs.detect.outputs.name == 'compact-linter'
         env:
           GH_TOKEN: ${{ steps.gh-app-token.outputs.token }}
           TAG: ${{ needs.detect.outputs.name }}/v${{ needs.detect.outputs.version }}
@@ -285,7 +285,7 @@ jobs:
             $0 ~ "^## " v "( |$)" { found = 1; next }
             found && /^## / { exit }
             found { print }
-          ' packages/lint/CHANGELOG.md)
+          ' packages/linter/CHANGELOG.md)
           if [[ -z "${NOTES//[[:space:]]/}" ]]; then
             NOTES="$TAG"
           fi
@@ -297,7 +297,7 @@ jobs:
               ARGS+=(--prerelease)
             fi
             gh release create "$TAG" dist/* \
-              --title "compact-lint v$VERSION" \
+              --title "compact-linter v$VERSION" \
               --notes "$NOTES" \
               "${ARGS[@]}"
           fi

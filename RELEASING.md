@@ -49,7 +49,7 @@ release notes agree.
    - Create a git tag.
    - Publish the package to npm under the channel's dist-tag.
 7. Once published, go to "Releases" and create a GitHub release using the
-   generated tag. Mark beta tags as prereleases. `compact-lint` is the
+   generated tag. Mark beta tags as prereleases. `compact-linter` is the
    exception: the workflow creates its release itself (see below).
 
 ## Graduating a beta to stable
@@ -89,7 +89,7 @@ compact-cli (bin wrapper)
   └─ depends on compact-deployer
 compact-builder (library)
 compact-deployer (library)
-compact-lint (bin wrapper around the compact-lint crate)
+compact-linter (bin wrapper around the compact-lint crate)
 compact-simulator (library)
 ```
 
@@ -100,22 +100,22 @@ each dependent finds its deps already on npm:
 1. `compact-builder` (no internal deps)
 2. `compact-simulator` (no internal deps)
 3. `compact-deployer` (no internal deps)
-4. `compact-lint` (no internal deps)
+4. `compact-linter` (no internal deps)
 5. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
    `main` first so both bump commits are present locally before triggering)
 
 After the first release, the five packages version independently — bump any
 one of them in isolation without re-publishing the others.
 
-## compact-lint
+## compact-linter
 
-`compact-lint` is a bin wrapper around the `compact-lint` crate, so its release
+`compact-linter` is a bin wrapper around the `compact-lint` crate, so its release
 carries a native binary as well as an npm package.
 
-- The version lives in two files: `packages/lint/package.json` and
+- The version lives in two files: `packages/linter/package.json` and
   `crates/compact-lint/Cargo.toml`. The release workflow bumps the package, mirrors
   the value into the crate, refreshes `Cargo.lock`, and commits all three. A unit
-  test in `packages/lint` fails when the two drift.
+  test in `packages/linter` fails when the two drift.
 - The publish workflow builds four binaries before publishing, one per target, each
   on its own runner:
 
@@ -126,12 +126,12 @@ carries a native binary as well as an npm package.
   | `x86_64-apple-darwin` | `macos-15-intel` |
   | `aarch64-apple-darwin` | `macos-15` |
 
-- It then creates the GitHub release `compact-lint/v<version>` with the four assets
+- It then creates the GitHub release `compact-linter/v<version>` with the four assets
   and a `checksums.txt`, and only then publishes to npm. The installed package
   downloads its binary from that release, so the assets must be there first. For
   every other package the GitHub release is still created by hand (step 7 above).
-- Release notes come from the `## <version>` section of `packages/lint/CHANGELOG.md`,
+- Release notes come from the `## <version>` section of `packages/linter/CHANGELOG.md`,
   falling back to the tag name. A `beta` dist-tag marks the release a prerelease.
-- Before the first release, add `@openzeppelin/compact-lint` as a Trusted Publisher
+- Before the first release, add `@openzeppelin/compact-linter` as a Trusted Publisher
   on npmjs.org, naming this repo and `.github/workflows/release-publish.yml`. Every
   new npm package needs this once, or the publish step cannot authenticate.

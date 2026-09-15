@@ -1180,16 +1180,16 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@openzeppelin/compact-lint@workspace:packages/lint":
+"@openzeppelin/compact-linter@workspace:packages/linter":
   version: 0.0.0-use.local
-  resolution: "@openzeppelin/compact-lint@workspace:packages/lint"
+  resolution: "@openzeppelin/compact-linter@workspace:packages/linter"
   dependencies:
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:26.1.2"
     typescript: "npm:^6.0.3"
     vitest: "npm:^4.1.9"
   bin:
-    compact-lint: dist/compactLint.js
+    compact-linter: dist/compactLinter.js
   languageName: unknown
   linkType: soft
 

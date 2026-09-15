@@ -1,5 +1,5 @@
 {
-  "name": "@openzeppelin/compact-lint",
+  "name": "@openzeppelin/compact-linter",
   "description": "Doc-comment linter for Compact sources",
   "version": "0.1.0",
   "keywords": [
@@ -14,7 +14,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/OpenZeppelin/compact-tools.git",
-    "directory": "packages/lint"
+    "directory": "packages/linter"
   },
   "type": "module",
   "files": [
@@ -26,7 +26,7 @@
   "engines": {
     "node": ">=24"
   },
-  "bin": "dist/compactLint.js",
+  "bin": "dist/compactLinter.js",
   "scripts": {
     "build": "tsc -p .",
     "types": "tsc -p tsconfig.json --noEmit",

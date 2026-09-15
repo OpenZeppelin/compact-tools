@@ -93,7 +93,7 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
   const asset = assetName(target);
   const base =
     options.env.COMPACT_LINT_DOWNLOAD_BASE ??
-    `${RELEASE_BASE}/compact-lint/v${options.version}`;
+    `${RELEASE_BASE}/compact-linter/v${options.version}`;
   options.notify(`downloading ${asset} (v${options.version})`);
 
   const [binary, checksums] = await Promise.all([

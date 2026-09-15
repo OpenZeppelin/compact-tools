@@ -8,9 +8,9 @@ contracts and writes the measured `k` and `rows` into the annotations.
 
 ## Install
 
-- npm, no Rust toolchain needed: `yarn add -D @openzeppelin/compact-lint`, or
-  `npx @openzeppelin/compact-lint check`. The package downloads the release binary for
-  the host on first use. See [`packages/lint`](../../packages/lint).
+- npm, no Rust toolchain needed: `yarn add -D @openzeppelin/compact-linter`, or
+  `npx @openzeppelin/compact-linter check`. The package downloads the release binary for
+  the host on first use. See [`packages/linter`](../../packages/linter).
 - From source: `cargo install --path crates/compact-lint`.
 
 ## Usage
