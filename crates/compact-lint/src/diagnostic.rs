@@ -292,14 +292,14 @@ impl Default for Output {
 }
 
 impl Output {
-    /// Writes every shown diagnostic and returns how many the cap hid.
+    /// Writes every shown diagnostic and reports what it printed.
     /// # Errors
     /// Returns an error when the writer fails.
     pub fn render(
         &self,
         out: &mut impl Write,
         diagnostics: &[Diagnostic],
-    ) -> std::io::Result<usize> {
+    ) -> std::io::Result<Rendered> {
         let mut sources = Sources::default();
         let mut shown = 0;
         let mut hidden = 0;
@@ -326,8 +326,15 @@ impl Output {
         }
 
         out.flush()?;
-        Ok(hidden)
+        Ok(Rendered { shown, hidden })
     }
+}
+
+/// What one render printed, and what the cap held back.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Rendered {
+    pub shown: usize,
+    pub hidden: usize,
 }
 
 /// The two-line notice printed when the cap hid diagnostics.
@@ -394,7 +401,7 @@ fn plural(count: usize, word: &str) -> String {
 }
 
 /// Sub-millisecond runs keep their microseconds; a run over a second reads in seconds.
-fn duration(elapsed: Duration) -> String {
+pub(crate) fn duration(elapsed: Duration) -> String {
     let micros = elapsed.as_micros();
     if micros < 1_000 {
         format!("{micros}\u{b5}s")
@@ -663,8 +670,8 @@ fn github_property(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        Action, Badge, Diagnostic, FixPreview, Level, Output, Position, Reporter, Span, Summary,
-        diff, duration, frame, header, level_style,
+        Action, Badge, Diagnostic, FixPreview, Level, Output, Position, Rendered, Reporter, Span,
+        Summary, diff, duration, frame, header, level_style,
     };
     use crate::report::RuleId;
     use std::time::Duration;
@@ -821,14 +828,20 @@ mod tests {
         let diagnostics = [diagnostic(), diagnostic(), diagnostic()];
         let mut out = Vec::new();
 
-        let hidden = Output {
+        let rendered = Output {
             max: Some(1),
             ..Output::default()
         }
         .render(&mut out, &diagnostics)
         .expect("the writer accepts the render");
 
-        assert_eq!(hidden, 2);
+        assert_eq!(
+            rendered,
+            Rendered {
+                shown: 1,
+                hidden: 2
+            }
+        );
     }
 
     #[test]

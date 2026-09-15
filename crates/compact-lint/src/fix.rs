@@ -1,6 +1,7 @@
 //! The `fix` subcommand: turn the fixable issues into edits and rewrite the files.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
@@ -12,6 +13,7 @@ use crate::model::DeclKind;
 use crate::report::RuleId;
 use crate::rules::{DocRef, Issue, LintError, Linter};
 use crate::target::{self, TargetError};
+use crate::timing::{Phase, Timings};
 
 /// The value written into an inserted constraints annotation.
 const UNMEASURED: &str = "k=?, rows=?";
@@ -64,8 +66,10 @@ impl Outcome {
 /// Runs the subcommand with `cwd` as the working directory.
 /// # Errors
 /// Returns an error when the config, the file walk, the parser or a write fails.
-pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
+pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outcome, FixError> {
+    let walk = Phase::start("config and walk");
     let target = target::resolve(&options.paths, options.config_path.as_deref(), cwd)?;
+    walk.stop(timings, format!("{} files matched", target.files.len()));
 
     let badge = if options.dry_run {
         Badge::Fixable
@@ -76,8 +80,13 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
     let mut linter = Linter::new()?;
     let mut diagnostics = Vec::new();
     let mut changed = 0;
+    let mut parsing = Duration::ZERO;
+    let mut editing = Duration::ZERO;
+    let mut writing = Duration::ZERO;
+    let mut issue_count = 0;
 
     for path in &target.files {
+        let started = Instant::now();
         let source = std::fs::read_to_string(path).map_err(|source| FixError::Read {
             path: path.clone(),
             source,
@@ -85,12 +94,17 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
 
         let newline = newline_of(&source);
         let issues = linter.issues(path, &source, &target.config)?;
+        parsing += started.elapsed();
+        issue_count += issues.len();
+
+        let started = Instant::now();
         let repairs: Vec<(&Issue, Edit)> = issues
             .iter()
             .filter_map(|issue| edit_for(issue, &target.config, newline).map(|edit| (issue, edit)))
             .collect();
 
         if repairs.is_empty() {
+            editing += started.elapsed();
             continue;
         }
 
@@ -99,10 +113,26 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
         }
 
         let edits: Vec<Edit> = repairs.into_iter().map(|(_, edit)| edit).collect();
+        editing += started.elapsed();
+
+        let started = Instant::now();
         if !options.dry_run {
             write_atomically(path, &apply(&source, &edits, newline))?;
         }
+        writing += started.elapsed();
         changed += 1;
+    }
+
+    timings.record(
+        "parse and rules",
+        parsing,
+        format!("{} files, {issue_count} issues", target.files.len()),
+    );
+    timings.record("edits", editing, format!("{} edits", diagnostics.len()));
+    if options.dry_run {
+        timings.record("dry run", writing, format!("{changed} files would change"));
+    } else {
+        timings.record("write", writing, format!("{changed} files"));
     }
 
     Ok(Outcome {

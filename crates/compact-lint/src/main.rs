@@ -16,6 +16,7 @@ use tempfile::TempDir;
 use compact_lint::check;
 use compact_lint::diagnostic::{Action, Diagnostic, Level, Output, Reporter, Summary, counts};
 use compact_lint::format::{COMPACT_BIN_ENV, DEFAULT_COMPACT_BIN};
+use compact_lint::timing::{Phase, Timings};
 use compact_lint::{diagnostic, fill, fix};
 
 /// Exit code for a run that produced errors, or a `--dry-run` that would edit.
@@ -70,6 +71,10 @@ struct OutputArgs {
     /// Colour the output; the default colours a TTY with `NO_COLOR` unset.
     #[arg(long, value_enum, value_name = "WHEN")]
     colors: Option<ColorsArg>,
+
+    /// Print a per-phase wall-clock breakdown under the summary.
+    #[arg(long)]
+    timings: bool,
 }
 
 /// The levels a reader can ask for; `off` is a rule setting, not a filter.
@@ -225,9 +230,10 @@ fn run_check(args: CheckArgs, cwd: &std::path::Path) -> Result<ExitCode> {
             .unwrap_or_else(|| OsString::from(DEFAULT_COMPACT_BIN)),
     };
 
+    let mut timings = Timings::default();
     let started = Instant::now();
-    let outcome = check::run(&options, cwd).context("running the check")?;
-    let (errors, warnings) = emit(
+    let outcome = check::run(&options, cwd, &mut timings).context("running the check")?;
+    let printed = report(
         &args.output,
         &outcome.diagnostics,
         RunFacts {
@@ -235,10 +241,15 @@ fn run_check(args: CheckArgs, cwd: &std::path::Path) -> Result<ExitCode> {
             duration: started.elapsed(),
             action: Action::NoFixes,
         },
+        &mut timings,
     )
     .context("writing the report")?;
 
-    Ok(exit_code(errors, warnings, args.output.error_on_warnings))
+    Ok(exit_code(
+        printed.errors,
+        printed.warnings,
+        args.output.error_on_warnings,
+    ))
 }
 
 fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
@@ -248,14 +259,15 @@ fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
         dry_run: args.dry_run,
     };
 
+    let mut timings = Timings::default();
     let started = Instant::now();
-    let outcome = fix::run(&options, cwd).context("running the fix")?;
+    let outcome = fix::run(&options, cwd, &mut timings).context("running the fix")?;
     let action = if options.dry_run {
         Action::NoFixes
     } else {
         Action::Fixed(outcome.changed)
     };
-    let (errors, warnings) = emit(
+    let printed = report(
         &args.output,
         &outcome.diagnostics,
         RunFacts {
@@ -263,13 +275,18 @@ fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
             duration: started.elapsed(),
             action,
         },
+        &mut timings,
     )
     .context("writing the report")?;
 
     if options.dry_run && outcome.edits() > 0 {
         return Ok(ExitCode::from(EXIT_FINDINGS));
     }
-    Ok(exit_code(errors, warnings, args.output.error_on_warnings))
+    Ok(exit_code(
+        printed.errors,
+        printed.warnings,
+        args.output.error_on_warnings,
+    ))
 }
 
 fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
@@ -286,9 +303,10 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
         artifacts,
     };
 
+    let mut timings = Timings::default();
     let started = Instant::now();
-    let outcome = fill::run(&options, cwd).context("filling the constraints")?;
-    let (errors, warnings) = emit(
+    let outcome = fill::run(&options, cwd, &mut timings).context("filling the constraints")?;
+    let printed = report(
         &args.output,
         &outcome.diagnostics,
         RunFacts {
@@ -299,6 +317,7 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
                 files: outcome.files,
             },
         },
+        &mut timings,
     )
     .context("writing the report")?;
 
@@ -306,7 +325,11 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
     if outcome.unmeasured > 0 {
         return Ok(ExitCode::from(EXIT_FINDINGS));
     }
-    Ok(exit_code(errors, warnings, args.output.error_on_warnings))
+    Ok(exit_code(
+        printed.errors,
+        printed.warnings,
+        args.output.error_on_warnings,
+    ))
 }
 
 /// The artifacts directory, plus the temporary one to remove once the run ends.
@@ -327,22 +350,46 @@ struct RunFacts {
     action: Action,
 }
 
+/// What the report counted, for the exit code.
+#[derive(Clone, Copy, Debug)]
+struct Printed {
+    errors: usize,
+    warnings: usize,
+}
+
+/// Emits the report as its own timed phase, then the breakdown when `--timings` is set.
+fn report(
+    args: &OutputArgs,
+    diagnostics: &[Diagnostic],
+    facts: RunFacts,
+    timings: &mut Timings,
+) -> std::io::Result<Printed> {
+    let phase = Phase::start("render");
+    let (printed, shown) = emit(args, diagnostics, facts)?;
+    phase.stop(timings, format!("{shown} diagnostics shown"));
+
+    if args.timings {
+        writeln!(std::io::stderr().lock(), "{}", timings.render())?;
+    }
+    Ok(printed)
+}
+
 /// Writes the diagnostics to stdout and the truncation notice and summary to stderr.
 fn emit(
     args: &OutputArgs,
     diagnostics: &[Diagnostic],
     facts: RunFacts,
-) -> std::io::Result<(usize, usize)> {
+) -> std::io::Result<(Printed, usize)> {
     let (errors, warnings) = counts(diagnostics);
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    let hidden = args.output().render(&mut out, diagnostics)?;
+    let rendered = args.output().render(&mut out, diagnostics)?;
 
     let stderr = std::io::stderr();
     let mut error_out = stderr.lock();
-    if hidden > 0 {
-        writeln!(error_out, "{}", diagnostic::truncation(hidden))?;
+    if rendered.hidden > 0 {
+        writeln!(error_out, "{}", diagnostic::truncation(rendered.hidden))?;
     }
     writeln!(
         error_out,
@@ -357,7 +404,7 @@ fn emit(
         .render()
     )?;
 
-    Ok((errors, warnings))
+    Ok((Printed { errors, warnings }, rendered.shown))
 }
 
 fn exit_code(errors: usize, warnings: usize, error_on_warnings: bool) -> ExitCode {

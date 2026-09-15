@@ -42,6 +42,7 @@ compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-com
 - `--max-diagnostics <none|N>` — diagnostics shown before the rest are only counted,
   default `20`.
 - `--colors <off|force>` — default: colour when stdout is a TTY and `NO_COLOR` is unset.
+- `--timings` — print a per-phase wall-clock breakdown under the summary.
 
 ## Output
 
@@ -84,6 +85,28 @@ with this on stderr:
 Checked 1 file in 2ms. No fixes applied.
 Found 3 errors.
 ```
+
+## Performance
+
+- The lint pass is tens of milliseconds for a repo of a few dozen files.
+- `compact format --check` dominates a full run; the cost is the compiler's, not the
+  linter's.
+- `--timings` prints the breakdown that shows it, longest phase first.
+- `--no-format`, or `format = "off"` in `[lint.rules]`, drops that phase.
+
+```
+Timings
+  format check      2.7s   98.4%  compact format --check, 39 files, 1 process
+  fix previews      30ms    1.1%  481 previews
+  parse and rules    9ms    0.4%  39 files, 516 issues
+  config and walk    1ms    0.0%  39 files matched
+  render           518µs    0.0%  20 diagnostics shown
+  total             2.7s
+```
+
+- The total is the sum of the phases, not the run's wall clock.
+- `fix` reports `edits` and `write`, `dry run` for a preview; `fill-constraints` reports
+  one `compile` row per source, named in the detail column.
 
 ## Diagnostic levels
 

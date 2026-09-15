@@ -24,3 +24,4 @@ pub mod report;
 pub mod rules;
 pub mod source;
 pub mod target;
+pub mod timing;

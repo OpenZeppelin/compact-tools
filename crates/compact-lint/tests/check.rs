@@ -214,6 +214,17 @@ fn the_cap_shows_the_first_diagnostics_and_counts_the_rest() {
 }
 
 #[test]
+fn timings_print_a_phase_breakdown_under_the_summary_only_when_asked() {
+    let (_, _, stderr) = run("clean", &["--timings"]);
+    assert!(stderr.contains("\nTimings\n"), "{stderr}");
+    assert!(stderr.contains("parse and rules"), "{stderr}");
+    assert!(stderr.contains("\n  total"), "{stderr}");
+
+    let (_, _, quiet) = run("clean", &[]);
+    assert!(!quiet.contains("Timings"), "{quiet}");
+}
+
+#[test]
 fn error_on_warnings_fails_a_run_that_only_warned() {
     assert_case("error-on-warnings", &["--error-on-warnings"], EXIT_FINDINGS);
     assert_case("error-on-warnings", &[], 0);

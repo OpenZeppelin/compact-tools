@@ -17,6 +17,7 @@ use crate::report::{Position, RuleId};
 use crate::rules::{ConstraintSite, LintError, Linter};
 use crate::source::{Resolver, Source};
 use crate::target::{self, TargetError};
+use crate::timing::{Phase, Timings};
 
 #[derive(Debug, Error)]
 pub enum FillError {
@@ -73,11 +74,14 @@ struct Work {
 /// # Errors
 /// Returns an error when the config, the file walk, the parser, the compiler or a write
 /// fails.
-pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FillError> {
+pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outcome, FillError> {
+    let walk = Phase::start("config and walk");
     let target = target::resolve(&options.paths, options.config_path.as_deref(), cwd)?;
     let resolver = Resolver::new(&target.config, &target.base, cwd)?;
+    walk.stop(timings, format!("{} files matched", target.files.len()));
     let tag = target.config.constraints.tag.clone();
 
+    let sources = Phase::start("resolve sources");
     let mut linter = Linter::new()?;
     let mut work = Vec::new();
     for path in &target.files {
@@ -98,13 +102,17 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FillError> {
         });
     }
 
+    sources.stop(timings, format!("{} files with annotations", work.len()));
+
     let measured = measure_sources(
         &work,
         options,
         target.config.constraints.compiler.as_ref(),
         cwd,
+        timings,
     )?;
 
+    let rewrite = Phase::start("parse and rewrite");
     let mut outcome = Outcome {
         diagnostics: Vec::new(),
         filled: 0,
@@ -115,6 +123,10 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FillError> {
     for file in &work {
         fill_file(file, &measured, &tag, &target.config, options, &mut outcome)?;
     }
+    rewrite.stop(
+        timings,
+        format!("{} values in {} files", outcome.filled, outcome.files),
+    );
     Ok(outcome)
 }
 
@@ -124,6 +136,7 @@ fn measure_sources(
     options: &Options,
     version: Option<&String>,
     cwd: &Path,
+    timings: &mut Timings,
 ) -> Result<BTreeMap<PathBuf, BTreeMap<String, Constraints>>, FillError> {
     let mut sources: Vec<&PathBuf> = work
         .iter()
@@ -144,6 +157,11 @@ fn measure_sources(
 
     let mut measured = BTreeMap::new();
     for source in sources {
+        let phase = Phase::start(if options.no_compile {
+            "read cache"
+        } else {
+            "compile"
+        });
         let list = if options.no_compile {
             measure::read_cache(source)?.ok_or_else(|| MeasureError::CacheMiss {
                 path: measure::cache_path(source),
@@ -157,6 +175,7 @@ fn measure_sources(
             }
             list
         };
+        phase.stop(timings, source.display().to_string());
 
         measured.insert(
             source.clone(),
