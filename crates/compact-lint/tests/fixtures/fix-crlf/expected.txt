@@ -1,0 +1,3 @@
+Windows.compact:6:3: fix: inserted doc skeleton for ledger `_count`
+Windows.compact:10:6: fix: renamed @return to @returns
+Windows.compact:12:3: fix: inserted @constraints k=?, rows=?

@@ -1,5 +1,6 @@
 //! `compact-lint.toml`: discovery, parsing, and the built-in defaults.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -117,11 +118,28 @@ impl Default for ConstraintsConfig {
     }
 }
 
-/// Tags no doc comment may carry.
+/// Tags no doc comment may carry, and the replacements `fix` writes for them.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
 pub struct TagsConfig {
     pub forbid: Vec<Tag>,
+    /// Forbidden tag to its replacement; an unmapped forbidden tag stays a finding.
+    pub rename: BTreeMap<Tag, Tag>,
+}
+
+/// What `fix` writes where it has no value to write.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, default)]
+pub struct FixConfig {
+    pub placeholder: String,
+}
+
+impl Default for FixConfig {
+    fn default() -> Self {
+        Self {
+            placeholder: "TODO".to_owned(),
+        }
+    }
 }
 
 /// A parsed `compact-lint.toml`, or the built-in defaults when no file was found.
@@ -133,6 +151,7 @@ pub struct Config {
     pub exclude: Vec<String>,
     pub constraints: ConstraintsConfig,
     pub tags: TagsConfig,
+    pub fix: FixConfig,
     pub kinds: KindsConfig,
 }
 
@@ -144,6 +163,7 @@ impl Default for Config {
             exclude: Vec::new(),
             constraints: ConstraintsConfig::default(),
             tags: TagsConfig::default(),
+            fix: FixConfig::default(),
             kinds: KindsConfig::default(),
         }
     }
@@ -199,7 +219,15 @@ impl Config {
 
         per_kind
             .chain(self.tags.forbid.iter())
+            .chain(self.tags.rename.keys())
+            .chain(self.tags.rename.values())
             .chain(std::iter::once(&self.constraints.tag))
+    }
+
+    /// The replacement `fix` writes for a forbidden tag, when the config names one.
+    #[must_use]
+    pub fn rename_of(&self, tag: &Tag) -> Option<&Tag> {
+        self.tags.rename.get(tag)
     }
 
     /// Compiles the `include` globs.
@@ -293,6 +321,43 @@ mod tests {
 
         assert!(error.to_string().contains("\"description\""), "{error}");
         std::fs::remove_dir_all(&dir).expect("the temp dir is removable");
+    }
+
+    #[test]
+    fn a_rename_maps_a_forbidden_tag_to_its_replacement() {
+        let config: Config = toml::from_str(
+            "[tags]\nforbid = [\"@return\"]\nrename = { \"@return\" = \"@returns\" }\n",
+        )
+        .expect("the snippet is valid config");
+
+        assert_eq!(
+            config.rename_of(&Tag::new("@return")),
+            Some(&Tag::new("@returns"))
+        );
+        assert_eq!(config.rename_of(&Tag::new("@notice")), None);
+    }
+
+    #[test]
+    fn a_rename_target_without_its_at_sign_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("compact-lint-rename-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("the temp dir is writable");
+        let path = dir.join("compact-lint.toml");
+        std::fs::write(&path, "[tags]\nrename = { \"@return\" = \"returns\" }\n")
+            .expect("the config is writable");
+
+        let error = Config::load(&path).expect_err("the replacement lacks its @");
+
+        assert!(error.to_string().contains("\"returns\""), "{error}");
+        std::fs::remove_dir_all(&dir).expect("the temp dir is removable");
+    }
+
+    #[test]
+    fn the_fix_placeholder_defaults_to_todo() {
+        assert_eq!(Config::default().fix.placeholder, "TODO");
+
+        let config: Config = toml::from_str("[fix]\nplaceholder = \"FIXME\"\n")
+            .expect("the snippet is valid config");
+        assert_eq!(config.fix.placeholder, "FIXME");
     }
 
     #[test]

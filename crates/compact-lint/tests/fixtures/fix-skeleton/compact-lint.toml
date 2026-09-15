@@ -1,20 +1,14 @@
-# compact-lint config for OpenZeppelin/compact-contracts.
-# Copy it to the repository root as compact-lint.toml.
-
 version = 1
-include = ["contracts/src/**/*.compact"]
-exclude = ["**/test/mocks/**", "**/archive/**"]
+include = ["**/*.compact"]
 
-# `@constraints` is the default; set `tag` to point the rule at another annotation.
-[constraints]
-tag = "@constraints"
+[fix]
+placeholder = "TODO"
 
 [tags]
 forbid = ["@return"]
 rename = { "@return" = "@returns" }
 
 [kinds.module]
-docs = "exported"
 tags = ["@module", "@description"]
 
 [kinds.circuit]
@@ -35,7 +29,3 @@ tags = ["@description"]
 
 [kinds.constructor]
 docs = "none"
-
-[kinds.contract]
-
-[kinds.type]
