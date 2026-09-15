@@ -2,7 +2,7 @@
 
 Doc-comment linter for Compact sources. It parses `.compact` files with
 [`compact-tree-sitter`](../compact-tree-sitter), matches every declaration against the
-per-kind template in `compact-lint.toml`, and prints one diagnostic per violation. `fix`
+per-kind template in `compact.toml`, and prints one diagnostic per violation. `fix`
 rewrites the comments the repairable rules report. `fill-constraints` compiles the
 contracts and writes the measured `k` and `rows` into the annotations.
 
@@ -25,11 +25,11 @@ compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-com
   walking: `node_modules`, `target`, `dist`, `build`, `.git`.
 - No `PATHS` — the config's `include` globs are used instead.
 - `--config <file>` — use this config instead of searching upward for
-  `compact-lint.toml`.
+  `compact.toml`.
 - `--strict` — report `k=?` / `rows=?` placeholders as errors instead of warnings. Use
   it on release branches.
 - `--no-format` — skip the `compact format --check` pass. Required where the `compact`
-  binary is unavailable, CI included. Same effect as `format = "off"` in `[rules]`.
+  binary is unavailable, CI included. Same effect as `format = "off"` in `[lint.rules]`.
 - `--compact-bin <path>` — path to the `compact` binary. Also settable with
   `COMPACT_LINT_COMPACT_BIN`; the flag wins.
 
@@ -89,10 +89,10 @@ Found 3 errors.
 
 - Every rule reports at a level: `error`, `warn`, `info`, or `off`.
 - `off` stops the rule running; its findings never reach the report or the counts.
-- Set them in `[rules]`, keyed by rule id:
+- Set them in `[lint.rules]`, keyed by rule id:
 
 ```toml
-[rules]
+[lint.rules]
 missing-doc = "error"
 constraints-placeholder = "warn"
 format = "off"
@@ -110,7 +110,7 @@ Defaults:
 
 - `--strict` promotes `constraints-placeholder` to `error` for that run; a rule set to
   `off` stays off.
-- An unknown key in `[rules]` is a config error.
+- An unknown key in `[lint.rules]` is a config error.
 
 ## Exit codes
 
@@ -300,36 +300,45 @@ Rule detail:
 
 ## Config
 
-`compact-lint.toml`, searched for upward from the current directory. Every field is
-optional; unknown fields are rejected. A config found by walking upward anchors the
-`include` globs at its own directory; a config named with `--config` is a shareable
-preset, so the globs stay anchored at the current directory.
+`compact.toml`, searched for upward from the current directory. The linter reads its
+`[lint]` table; every key below is a key of that table.
+
+- The file is shared with [`compact-deploy`](../../packages/deployer), which owns
+  `[profile]`, `[networks.*]`, `[wallet]` and `[contracts.*]` in the same file.
+- Tables the linter does not own are ignored, so a deployer-only key is never a lint
+  error.
+- Every field under `[lint]` is optional; an unknown one is rejected.
+- A `compact.toml` with no `[lint]` table is a config error, exit `2`. No `compact.toml`
+  anywhere up the tree is not: the run uses the built-in defaults.
+- A config found by walking upward anchors the `include` globs at its own directory; a
+  config named with `--config` is a shareable preset, so the globs stay anchored at the
+  current directory.
 
 ```toml
-version = 1
+[lint]
 include = ["contracts/src/**/*.compact"]
 exclude = ["**/test/mocks/**", "**/archive/**"]
 
-[constraints]
+[lint.constraints]
 tag = "@constraints"
 compiler = "0.34.0"
 sources = ["{dir}/test/mocks/Mock{stem}.compact", "{parent}/test/mocks/Mock{stem}.compact"]
 self = ["**/presets/**"]
 
-[constraints.overrides]
+[lint.constraints.overrides]
 "contracts/src/utils/Utils.compact" = "contracts/src/utils/test/mocks/MockUtils.compact"
 
-[tags]
+[lint.tags]
 forbid = ["@return"]
 rename = { "@return" = "@returns" }
 
-[fix]
+[lint.fix]
 placeholder = "TODO"
 
-[rules]
+[lint.rules]
 constraints-placeholder = "warn"
 
-[kinds.module]
+[lint.kinds.module]
 docs = "exported"
 tags = ["@module", "@description"]
 ```
@@ -338,7 +347,6 @@ Defaults when no config file is found:
 
 | Key | Default |
 | --- | --- |
-| `version` | `1`, the only version this build accepts |
 | `include` | `["**/*.compact"]` |
 | `exclude` | `[]` |
 | `constraints.tag` | `"@constraints"` |
@@ -372,7 +380,7 @@ Defaults when no config file is found:
 - `constraints.overrides` keys and values are paths relative to the config's directory,
   or to the current directory when the config came from `--config`.
 
-`examples/compact-contracts.toml` is the config for OpenZeppelin/compact-contracts.
+`examples/compact.toml` is the config for OpenZeppelin/compact-contracts.
 
 ## Doc-comment model
 
@@ -390,11 +398,12 @@ cargo test --workspace
 ```
 
 `tests/fixtures/<case>/` holds one `check` case per rule plus a clean case: a
-`compact-lint.toml`, the `.compact` sources, and `expected.txt`, the exact stdout with
+`compact.toml`, the `.compact` sources, and `expected.txt`, the exact stdout with
 paths relative to the case directory. A case that also runs under a flag carries the
-second expectation beside it, such as `expected-strict.txt`.
+second expectation beside it, such as `expected-strict.txt`. The `clean` case carries
+the deployer's tables too, and `no-lint-table` carries nothing else.
 
-`tests/fixtures/fix-<case>/` holds one `fix` case per rule: a `compact-lint.toml`,
+`tests/fixtures/fix-<case>/` holds one `fix` case per rule: a `compact.toml`,
 `before/`, `after/`, `expected.txt` for the write run and `expected-dry-run.txt` for the
 preview. The run copies `before/` into a temporary directory, so the fixtures are never
 rewritten in place.

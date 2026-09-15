@@ -1,13 +1,13 @@
-version = 1
+[lint]
 include = ["**/*.compact"]
 
-[constraints]
+[lint.constraints]
 tag = "@constraints"
 
-[kinds.module]
+[lint.kinds.module]
 tags = ["@module", "@description"]
 
-[kinds.circuit]
+[lint.kinds.circuit]
 
-[kinds.constructor]
+[lint.kinds.constructor]
 docs = "none"

@@ -228,7 +228,7 @@ fn an_explicit_path_replaces_the_include_globs() {
 
 #[test]
 fn an_explicit_config_anchors_discovery_at_the_working_directory() {
-    let config = case("clean").join("compact-lint.toml");
+    let config = case("clean").join("compact.toml");
     let output = binary()
         .current_dir(case("missing-doc"))
         .args(["check", "--no-format", "--colors=off", "--config"])
@@ -256,10 +256,18 @@ fn a_missing_compact_binary_exits_two_and_names_the_escape_hatch() {
 }
 
 #[test]
+fn a_config_holding_only_another_tool_tables_exits_two() {
+    let (code, _, stderr) = run("no-lint-table", &[]);
+
+    assert_eq!(code, EXIT_ERROR, "{stderr}");
+    assert!(stderr.contains("has no [lint] table"), "{stderr}");
+}
+
+#[test]
 fn an_unreadable_config_exits_two() {
     let output = binary()
         .current_dir(case("clean"))
-        .args(["check", "--no-format", "--config", "compact-lint.toml.nope"])
+        .args(["check", "--no-format", "--config", "compact.toml.nope"])
         .output()
         .expect("the binary ran");
 

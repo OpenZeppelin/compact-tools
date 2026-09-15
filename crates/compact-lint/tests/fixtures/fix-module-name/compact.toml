@@ -1,8 +1,8 @@
-version = 1
+[lint]
 include = ["**/*.compact"]
 
-[kinds.module]
+[lint.kinds.module]
 tags = ["@module", "@description"]
 
-[kinds.constructor]
+[lint.kinds.constructor]
 docs = "none"

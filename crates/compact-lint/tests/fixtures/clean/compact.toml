@@ -1,0 +1,42 @@
+# compact-deploy's tables, here so the case proves the linter ignores them.
+[profile]
+default_network = "local"
+
+[networks.local]
+network_id = "undeployed"
+indexer    = "http://127.0.0.1:8088/api/v4/graphql"
+indexer_ws = "ws://127.0.0.1:8088/api/v4/graphql/ws"
+node       = "http://127.0.0.1:9944"
+node_ws    = "ws://127.0.0.1:9944"
+
+[contracts.Clean]
+artifact         = "Clean"
+signing_key_file = "deploy/Clean.signingkey"
+
+[lint]
+include = ["**/*.compact"]
+
+[lint.tags]
+forbid = ["@return"]
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.circuit]
+tags = ["@description"]
+
+[lint.kinds.ledger]
+tags = ["@description"]
+
+[lint.kinds.witness]
+docs = "all"
+tags = ["@description"]
+
+[lint.kinds.struct]
+tags = ["@description"]
+
+[lint.kinds.enum]
+tags = ["@description"]
+
+[lint.kinds.constructor]
+docs = "none"

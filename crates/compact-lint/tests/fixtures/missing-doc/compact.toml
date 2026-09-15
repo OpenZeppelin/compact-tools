@@ -1,27 +1,27 @@
-version = 1
+[lint]
 include = ["**/*.compact"]
 
-[tags]
+[lint.tags]
 forbid = ["@return"]
 
-[kinds.module]
+[lint.kinds.module]
 tags = ["@module", "@description"]
 
-[kinds.circuit]
+[lint.kinds.circuit]
 tags = ["@description"]
 
-[kinds.ledger]
+[lint.kinds.ledger]
 tags = ["@description"]
 
-[kinds.witness]
+[lint.kinds.witness]
 docs = "all"
 tags = ["@description"]
 
-[kinds.struct]
+[lint.kinds.struct]
 tags = ["@description"]
 
-[kinds.enum]
+[lint.kinds.enum]
 tags = ["@description"]
 
-[kinds.constructor]
+[lint.kinds.constructor]
 docs = "none"

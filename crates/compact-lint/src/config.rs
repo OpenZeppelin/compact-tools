@@ -1,4 +1,7 @@
-//! `compact-lint.toml`: discovery, parsing, and the built-in defaults.
+//! `compact.toml`: discovery, parsing, and the built-in defaults.
+//!
+//! The file is shared with `compact-deploy`. The linter reads its `[lint]` table and
+//! ignores every other one.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -13,10 +16,7 @@ use crate::model::DeclKind;
 use crate::report::RuleId;
 
 /// The config file name searched for upward from the current directory.
-pub const CONFIG_FILE_NAME: &str = "compact-lint.toml";
-
-/// The only schema version this build understands.
-pub const SUPPORTED_VERSION: u32 = 1;
+pub const CONFIG_FILE_NAME: &str = "compact.toml";
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -32,10 +32,8 @@ pub enum ConfigError {
         #[source]
         source: toml::de::Error,
     },
-    #[error(
-        "config {path} is version {found}, but this build understands version {SUPPORTED_VERSION}"
-    )]
-    Version { path: PathBuf, found: u32 },
+    #[error("{CONFIG_FILE_NAME} at {path} has no [lint] table")]
+    MissingLintTable { path: PathBuf },
     #[error(
         "config {path} lists tag {tag:?}; tags are spelled with their `@`, like `@description`"
     )]
@@ -236,11 +234,17 @@ impl Default for FixConfig {
     }
 }
 
-/// A parsed `compact-lint.toml`, or the built-in defaults when no file was found.
+/// The whole `compact.toml`. Tables other tools own are ignored, so the root rejects
+/// nothing.
+#[derive(Debug, Default, Deserialize)]
+struct Document {
+    lint: Option<Config>,
+}
+
+/// A parsed `[lint]` table, or the built-in defaults when no file was found.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
-    pub version: u32,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub constraints: ConstraintsConfig,
@@ -253,7 +257,6 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            version: SUPPORTED_VERSION,
             include: vec!["**/*.compact".to_owned()],
             exclude: Vec::new(),
             constraints: ConstraintsConfig::default(),
@@ -266,26 +269,24 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Parses a config file and rejects a version this build does not implement.
+    /// Parses a config file's `[lint]` table.
     /// # Errors
-    /// Returns an error when the file is unreadable, malformed, or a future version.
+    /// Returns an error when the file is unreadable or malformed, or carries no `[lint]`
+    /// table.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
             path: path.to_owned(),
             source,
         })?;
 
-        let config: Self = toml::from_str(&text).map_err(|source| ConfigError::Parse {
+        let document: Document = toml::from_str(&text).map_err(|source| ConfigError::Parse {
             path: path.to_owned(),
             source,
         })?;
 
-        if config.version != SUPPORTED_VERSION {
-            return Err(ConfigError::Version {
-                path: path.to_owned(),
-                found: config.version,
-            });
-        }
+        let config = document.lint.ok_or_else(|| ConfigError::MissingLintTable {
+            path: path.to_owned(),
+        })?;
 
         if let Some(tag) = config.tags().find(|tag| !tag.is_well_formed()) {
             return Err(ConfigError::Tag {
@@ -365,7 +366,7 @@ fn glob_set(patterns: &[String], path: &Path) -> Result<GlobSet, ConfigError> {
     })
 }
 
-/// Walks up from `start` looking for `compact-lint.toml`.
+/// Walks up from `start` looking for `compact.toml`.
 #[must_use]
 pub fn discover(start: &Path) -> Option<PathBuf> {
     for directory in start.ancestors() {
@@ -379,7 +380,7 @@ pub fn discover(start: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, DocsPolicy, SUPPORTED_VERSION};
+    use super::{Config, DocsPolicy};
     use crate::diagnostic::Level;
     use crate::doc::Tag;
     use crate::model::DeclKind;
@@ -419,7 +420,6 @@ mod tests {
     fn defaults_require_docs_on_exported_declarations_only() {
         let config = Config::default();
 
-        assert_eq!(config.version, SUPPORTED_VERSION);
         assert_eq!(config.constraints.tag, Tag::new("@constraints"));
         for kind in [DeclKind::Module, DeclKind::Circuit, DeclKind::Type] {
             assert_eq!(config.kinds.get(kind).docs, DocsPolicy::Exported);
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn omitted_tables_fall_back_to_defaults() {
-        let config: Config = toml::from_str("version = 1\n[kinds.witness]\ndocs = \"all\"\n")
+        let config: Config = toml::from_str("[kinds.witness]\ndocs = \"all\"\n")
             .expect("the snippet is valid config");
 
         assert_eq!(config.kinds.witness.docs, DocsPolicy::All);
@@ -439,17 +439,17 @@ mod tests {
 
     #[test]
     fn an_unknown_key_is_rejected() {
-        let error = toml::from_str::<Config>("verison = 1\n").expect_err("the key is misspelled");
+        let error = toml::from_str::<Config>("inclued = []\n").expect_err("the key is misspelled");
 
-        assert!(error.to_string().contains("verison"), "{error}");
+        assert!(error.to_string().contains("inclued"), "{error}");
     }
 
     #[test]
     fn a_tag_without_its_at_sign_is_rejected() {
         let dir = std::env::temp_dir().join(format!("compact-lint-config-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("the temp dir is writable");
-        let path = dir.join("compact-lint.toml");
-        std::fs::write(&path, "[kinds.circuit]\ntags = [\"description\"]\n")
+        let path = dir.join("compact.toml");
+        std::fs::write(&path, "[lint.kinds.circuit]\ntags = [\"description\"]\n")
             .expect("the config is writable");
 
         let error = Config::load(&path).expect_err("the tag lacks its @");
@@ -476,9 +476,12 @@ mod tests {
     fn a_rename_target_without_its_at_sign_is_rejected() {
         let dir = std::env::temp_dir().join(format!("compact-lint-rename-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("the temp dir is writable");
-        let path = dir.join("compact-lint.toml");
-        std::fs::write(&path, "[tags]\nrename = { \"@return\" = \"returns\" }\n")
-            .expect("the config is writable");
+        let path = dir.join("compact.toml");
+        std::fs::write(
+            &path,
+            "[lint.tags]\nrename = { \"@return\" = \"returns\" }\n",
+        )
+        .expect("the config is writable");
 
         let error = Config::load(&path).expect_err("the replacement lacks its @");
 
@@ -539,5 +542,46 @@ mod tests {
             toml::from_str::<Config>("[kinds.circiut]\n").expect_err("the kind is misspelled");
 
         assert!(error.to_string().contains("circiut"), "{error}");
+    }
+
+    /// Writes `text` to a `compact.toml` of its own and returns what `load` made of it.
+    fn load_document(name: &str, text: &str) -> Result<Config, super::ConfigError> {
+        let dir = std::env::temp_dir().join(format!("compact-lint-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("the temp dir is writable");
+        let path = dir.join("compact.toml");
+        std::fs::write(&path, text).expect("the config is writable");
+
+        let loaded = Config::load(&path);
+
+        std::fs::remove_dir_all(&dir).expect("the temp dir is removable");
+        loaded
+    }
+
+    #[test]
+    fn tables_another_tool_owns_are_ignored() {
+        let config = load_document(
+            "foreign",
+            "[profile]\ndefault_network = \"local\"\n\n[lint]\ninclude = [\"src/**/*.compact\"]\n",
+        )
+        .expect("the deployer's tables are not the linter's business");
+
+        assert_eq!(config.include, ["src/**/*.compact"]);
+    }
+
+    #[test]
+    fn a_file_without_a_lint_table_is_an_error() {
+        let error = load_document("no-lint", "[profile]\ndefault_network = \"local\"\n")
+            .expect_err("the file carries no [lint] table");
+
+        assert!(error.to_string().contains("has no [lint] table"), "{error}");
+    }
+
+    #[test]
+    fn a_typo_under_the_lint_table_is_still_rejected() {
+        let error = load_document("lint-typo", "[lint]\ninclued = []\n")
+            .expect_err("the key is misspelled");
+        let source = std::error::Error::source(&error).expect("the parser named the key");
+
+        assert!(source.to_string().contains("inclued"), "{source}");
     }
 }

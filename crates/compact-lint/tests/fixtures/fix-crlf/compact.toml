@@ -1,15 +1,18 @@
-version = 1
+[lint]
 include = ["**/*.compact"]
 
-[tags]
+[lint.tags]
 forbid = ["@return"]
 rename = { "@return" = "@returns" }
 
-[kinds.module]
+[lint.kinds.module]
 tags = ["@module", "@description"]
 
-[kinds.circuit]
+[lint.kinds.circuit]
 tags = ["@description"]
 
-[kinds.constructor]
+[lint.kinds.ledger]
+tags = ["@description"]
+
+[lint.kinds.constructor]
 docs = "none"

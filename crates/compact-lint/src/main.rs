@@ -40,7 +40,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Check doc comments against the per-kind templates in compact-lint.toml.
+    /// Check doc comments against the per-kind templates in compact.toml's [lint] table.
     Check(CheckArgs),
     /// Rewrite doc comments so the rules `fix` covers stop reporting.
     Fix(FixArgs),
@@ -127,7 +127,7 @@ struct CheckArgs {
     /// Files or directories to check; defaults to the config's include globs.
     paths: Vec<PathBuf>,
 
-    /// Config file to use instead of searching upward for compact-lint.toml.
+    /// Config file to use instead of searching upward for compact.toml.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
@@ -152,7 +152,7 @@ struct FixArgs {
     /// Files or directories to fix; defaults to the config's include globs.
     paths: Vec<PathBuf>,
 
-    /// Config file to use instead of searching upward for compact-lint.toml.
+    /// Config file to use instead of searching upward for compact.toml.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
@@ -169,7 +169,7 @@ struct FillArgs {
     /// Files or directories to fill; defaults to the config's include globs.
     paths: Vec<PathBuf>,
 
-    /// Config file to use instead of searching upward for compact-lint.toml.
+    /// Config file to use instead of searching upward for compact.toml.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 

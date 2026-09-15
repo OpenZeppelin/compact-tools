@@ -1,6 +1,6 @@
 //! `compact-lint fix` end to end, one fixture case per rule.
 //!
-//! A case holds `compact-lint.toml`, `before/`, `after/`, `expected.txt` for the write
+//! A case holds `compact.toml`, `before/`, `after/`, `expected.txt` for the write
 //! run and `expected-dry-run.txt` for the preview. The run works on a copy of `before/`,
 //! so the fixtures themselves are never rewritten.
 
@@ -32,8 +32,8 @@ fn work(name: &str) -> TempDir {
     let root = case(name);
 
     std::fs::copy(
-        root.join("compact-lint.toml"),
-        directory.path().join("compact-lint.toml"),
+        root.join("compact.toml"),
+        directory.path().join("compact.toml"),
     )
     .expect("the case has a config");
     copy_tree(&root.join("before"), directory.path());
@@ -225,10 +225,10 @@ fn a_concise_run_prints_one_line_per_edit() {
 #[test]
 fn an_explicit_config_replaces_the_one_beside_the_sources() {
     let directory = work("rename");
-    std::fs::remove_file(directory.path().join("compact-lint.toml"))
+    std::fs::remove_file(directory.path().join("compact.toml"))
         .expect("the copied config is removable");
 
-    let config = case("rename").join("compact-lint.toml");
+    let config = case("rename").join("compact.toml");
     let output = binary()
         .current_dir(directory.path())
         .args(["fix", "--colors=off", "--config"])

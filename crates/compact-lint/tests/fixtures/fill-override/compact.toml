@@ -1,11 +1,11 @@
-version = 1
+[lint]
 exclude = ["**/test/mocks/**"]
 
-[constraints.overrides]
+[lint.constraints.overrides]
 "src/utils/Utils.compact" = "src/utils/test/mocks/MockUtilities.compact"
 
-[kinds.module]
+[lint.kinds.module]
 tags = ["@module", "@description"]
 
-[kinds.circuit]
+[lint.kinds.circuit]
 tags = ["@description"]

@@ -1,10 +1,10 @@
-version = 1
+[lint]
 
-[constraints]
+[lint.constraints]
 self = ["**/presets/**"]
 
-[kinds.module]
+[lint.kinds.module]
 tags = ["@module", "@description"]
 
-[kinds.circuit]
+[lint.kinds.circuit]
 tags = ["@description"]

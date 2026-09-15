@@ -1,25 +1,29 @@
 # compact-lint config for OpenZeppelin/compact-contracts.
-# Copy it to the repository root as compact-lint.toml.
+# Copy it to the repository root as compact.toml.
+#
+# One project, one config file. compact-deploy's `[profile]`, `[networks.*]`,
+# `[wallet]` and `[contracts.*]` tables live in this same file and the linter
+# ignores them; see examples/fungible-token/compact.toml for their shape.
 
-version = 1
+[lint]
 include = ["contracts/src/**/*.compact"]
 exclude = ["**/test/mocks/**", "**/archive/**"]
 
 # `@constraints` is the default; set `tag` to point the rule at another annotation.
-[constraints]
+[lint.constraints]
 tag = "@constraints"
 # Presets are contracts, so fill-constraints compiles them directly. Everything else is
 # measured through the mock beside it or in its parent, the default `sources` templates.
 self = ["**/presets/**"]
 
-[tags]
+[lint.tags]
 forbid = ["@return"]
 rename = { "@return" = "@returns" }
 
 # Every rule's default level, spelled out. Set one to "off" to stop it running, or to
 # "warn" / "info" to keep it out of the exit code. `check --strict` promotes
 # constraints-placeholder to "error" for that run.
-# [rules]
+# [lint.rules]
 # missing-doc = "error"
 # missing-tag = "error"
 # forbidden-tag = "error"
@@ -32,29 +36,29 @@ rename = { "@return" = "@returns" }
 # parse = "error"
 # format = "error"
 
-[kinds.module]
+[lint.kinds.module]
 docs = "exported"
 tags = ["@module", "@description"]
 
-[kinds.circuit]
+[lint.kinds.circuit]
 tags = ["@description"]
 
-[kinds.ledger]
+[lint.kinds.ledger]
 tags = ["@description"]
 
-[kinds.witness]
+[lint.kinds.witness]
 docs = "all"
 tags = ["@description"]
 
-[kinds.struct]
+[lint.kinds.struct]
 tags = ["@description"]
 
-[kinds.enum]
+[lint.kinds.enum]
 tags = ["@description"]
 
-[kinds.constructor]
+[lint.kinds.constructor]
 docs = "none"
 
-[kinds.contract]
+[lint.kinds.contract]
 
-[kinds.type]
+[lint.kinds.type]

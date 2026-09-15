@@ -45,8 +45,8 @@ fn work(name: &str) -> TempDir {
     let root = case(name);
 
     std::fs::copy(
-        root.join("compact-lint.toml"),
-        directory.path().join("compact-lint.toml"),
+        root.join("compact.toml"),
+        directory.path().join("compact.toml"),
     )
     .expect("the case has a config");
     copy_tree(&root.join("before"), directory.path());

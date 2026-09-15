@@ -1,15 +1,15 @@
-version = 1
+[lint]
 include = ["**/*.compact"]
 
 # `@throws` is forbidden but has no replacement, so `fix` leaves it where it is.
-[tags]
+[lint.tags]
 forbid = ["@throws"]
 
-[kinds.module]
+[lint.kinds.module]
 tags = ["@module", "@description"]
 
-[kinds.circuit]
+[lint.kinds.circuit]
 tags = ["@description"]
 
-[kinds.constructor]
+[lint.kinds.constructor]
 docs = "none"
