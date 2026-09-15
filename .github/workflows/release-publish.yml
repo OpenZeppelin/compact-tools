@@ -19,30 +19,30 @@ on:
           - compact-builder
           - compact-cli
           - compact-deployer
+          - compact-linter
           - compact-simulator
 
 jobs:
-  publish:
-    name: Publish merged release
+  # Detection is its own job so the binary matrix and the publish both read the
+  # same answer.
+  detect:
+    name: Detect released package
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
        contains(github.event.pull_request.labels.*.name, 'release'))
     runs-on: ubuntu-24.04
-    environment: compact-npm-prod # Final approval gate before npm publish
 
     permissions:
-      contents: write   # push the version tag
-      id-token: write   # mint the npm OIDC credential and the provenance statement
+      contents: read
+
+    outputs:
+      dir: ${{ steps.pkg.outputs.dir }}
+      name: ${{ steps.pkg.outputs.name }}
+      version: ${{ steps.pkg.outputs.version }}
+      dist_tag: ${{ steps.pkg.outputs.dist_tag }}
 
     steps:
-      - name: Get github app token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: gh-app-token
-        with:
-          app-id: ${{ vars.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-
       # For pull_request runs: checkout the merge commit (deterministic view of
       # what was just merged). For manual dispatch: checkout the dispatched ref
       # (defaults to main but can be any branch — hotfix, release-prep, etc.).
@@ -53,7 +53,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
-          token: ${{ steps.gh-app-token.outputs.token }}
 
       - name: Detect released package
         id: pkg
@@ -69,6 +68,7 @@ jobs:
               compact-builder)   DIR="builder" ;;
               compact-cli)       DIR="cli" ;;
               compact-deployer)  DIR="deployer" ;;
+              compact-linter)    DIR="linter" ;;
               compact-simulator) DIR="simulator" ;;
               *)
                 echo "::error::unknown package: $PKG"
@@ -88,6 +88,7 @@ jobs:
               builder)   PKG="compact-builder" ;;
               cli)       PKG="compact-cli" ;;
               deployer)  PKG="compact-deployer" ;;
+              linter)    PKG="compact-linter" ;;
               simulator) PKG="compact-simulator" ;;
               *)
                 echo "::error::unknown package directory: $DIR"
@@ -135,6 +136,98 @@ jobs:
             echo "- Trigger: $EVENT"
           } >> $GITHUB_STEP_SUMMARY
 
+  # compact-linter ships a native binary per target, built on its own runner. The
+  # npm package downloads them, so they must reach the GitHub release first.
+  binaries:
+    name: Build compact-lint for ${{ matrix.target }}
+    needs: detect
+    if: needs.detect.outputs.name == 'compact-linter'
+    runs-on: ${{ matrix.runner }}
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+          - target: aarch64-apple-darwin
+            runner: macos-15
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Check out target ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+
+      - name: Install the pinned toolchain
+        run: |
+          CHANNEL=$(grep -m1 '^channel' rust-toolchain.toml | cut -d'"' -f2)
+          rustup toolchain install "$CHANNEL" --profile minimal
+          rustup target add ${{ matrix.target }}
+          rustup show active-toolchain
+
+      - name: Build
+        run: cargo build --release -p compact-lint --target ${{ matrix.target }}
+
+      # Every target is built on its own native runner, so the binary runs here.
+      - name: Smoke test
+        run: target/${{ matrix.target }}/release/compact-lint --version
+
+      - name: Stage the release asset
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/compact-lint dist/compact-lint-${{ matrix.target }}
+
+      - name: Upload the release asset
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: compact-lint-${{ matrix.target }}
+          path: dist/compact-lint-${{ matrix.target }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish merged release
+    needs: [detect, binaries]
+    # `binaries` is skipped for every package but compact-linter, and a skipped
+    # dependency must not skip the publish.
+    if: >-
+      always() &&
+      needs.detect.result == 'success' &&
+      (needs.binaries.result == 'success' || needs.binaries.result == 'skipped')
+    runs-on: ubuntu-24.04
+    environment: compact-npm-prod # Final approval gate before npm publish
+
+    permissions:
+      contents: write   # push the version tag and create the GitHub release
+      id-token: write   # mint the npm OIDC credential and the provenance statement
+
+    steps:
+      - name: Get github app token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: gh-app-token
+        with:
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Check out target ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+          token: ${{ steps.gh-app-token.outputs.token }}
+
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -148,11 +241,11 @@ jobs:
         run: yarn install --immutable
 
       - name: Build package
-        run: yarn build --filter=@openzeppelin/${{ steps.pkg.outputs.name }}
+        run: yarn build --filter=@openzeppelin/${{ needs.detect.outputs.name }}
 
       - name: Create and push tag
         env:
-          TAG: ${{ steps.pkg.outputs.name }}/v${{ steps.pkg.outputs.version }}
+          TAG: ${{ needs.detect.outputs.name }}/v${{ needs.detect.outputs.version }}
         run: |
           if git ls-remote --tags --exit-code origin "refs/tags/$TAG" >/dev/null; then
             echo "tag $TAG already on origin, leaving it in place"
@@ -161,7 +254,55 @@ jobs:
             git push origin "$TAG"
           fi
 
+      - name: Download the release binaries
+        if: needs.detect.outputs.name == 'compact-linter'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          pattern: compact-lint-*
+          merge-multiple: true
+
+      # Asset names only: the installed package looks each digest up by the name
+      # it downloads.
+      - name: Write the checksums
+        if: needs.detect.outputs.name == 'compact-linter'
+        working-directory: dist
+        run: |
+          sha256sum compact-lint-* > checksums.txt
+          cat checksums.txt
+
+      # The npm package downloads these assets on first run, so the release has
+      # to carry them before the package reaches npm.
+      - name: Create the GitHub release
+        if: needs.detect.outputs.name == 'compact-linter'
+        env:
+          GH_TOKEN: ${{ steps.gh-app-token.outputs.token }}
+          TAG: ${{ needs.detect.outputs.name }}/v${{ needs.detect.outputs.version }}
+          VERSION: ${{ needs.detect.outputs.version }}
+          DIST_TAG: ${{ needs.detect.outputs.dist_tag }}
+        run: |
+          NOTES=$(awk -v v="$VERSION" '
+            $0 ~ "^## " v "( |$)" { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' packages/linter/CHANGELOG.md)
+          if [[ -z "${NOTES//[[:space:]]/}" ]]; then
+            NOTES="$TAG"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            ARGS=()
+            if [[ "$DIST_TAG" == "beta" ]]; then
+              ARGS+=(--prerelease)
+            fi
+            gh release create "$TAG" dist/* \
+              --title "compact-linter v$VERSION" \
+              --notes "$NOTES" \
+              "${ARGS[@]}"
+          fi
+
       - name: Publish to npm
         run: |
-          cd packages/${{ steps.pkg.outputs.dir }}
-          yarn npm publish --access public --provenance --tag ${{ steps.pkg.outputs.dist_tag }}
+          cd packages/${{ needs.detect.outputs.dir }}
+          yarn npm publish --access public --provenance --tag ${{ needs.detect.outputs.dist_tag }}

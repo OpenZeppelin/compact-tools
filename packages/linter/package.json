@@ -1,0 +1,43 @@
+{
+  "name": "@openzeppelin/compact-linter",
+  "description": "Doc-comment linter for Compact sources",
+  "version": "0.1.0",
+  "keywords": [
+    "compact",
+    "lint",
+    "linter",
+    "doc-comments",
+    "midnight"
+  ],
+  "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenZeppelin/compact-tools.git",
+    "directory": "packages/linter"
+  },
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": "dist/compactLinter.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "types": "tsc -p tsconfig.json --noEmit",
+    "test": "yarn vitest run",
+    "coverage": "yarn vitest run --coverage",
+    "clean": "git clean -fXd"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.3",
+    "@types/node": "26.1.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

@@ -11,6 +11,7 @@ on:
           - compact-builder
           - compact-cli
           - compact-deployer
+          - compact-linter
           - compact-simulator
       version_bump:
         description: "Version bump type (pre* strategies are beta-only)"
@@ -89,6 +90,9 @@ jobs:
             "compact-deployer")
               echo "dir=deployer" >> $GITHUB_OUTPUT
               ;;
+            "compact-linter")
+              echo "dir=linter" >> $GITHUB_OUTPUT
+              ;;
             "compact-simulator")
               echo "dir=simulator" >> $GITHUB_OUTPUT
               ;;
@@ -96,6 +100,15 @@ jobs:
 
       - name: Setup Environment
         uses: ./.github/actions/setup
+
+      # compact-linter's version lives in the crate too, and bumping it there
+      # rewrites Cargo.lock.
+      - name: Install the pinned toolchain
+        if: inputs.package == 'compact-linter'
+        run: |
+          CHANNEL=$(grep -m1 '^channel' rust-toolchain.toml | cut -d'"' -f2)
+          rustup toolchain install "$CHANNEL" --profile minimal
+          rustup show active-toolchain
 
       - name: Run tests for package
         run: yarn test --filter=@openzeppelin/${{ inputs.package }}
@@ -134,6 +147,20 @@ jobs:
             echo "- npm dist-tag: $DIST_TAG"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: Sync the crate version
+        if: inputs.package == 'compact-linter'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+        run: |
+          sed -i "0,/^version = .*/s//version = \"$NEW_VERSION\"/" crates/compact-lint/Cargo.toml
+          # Resolving the workspace rewrites the crate's own Cargo.lock entry.
+          cargo metadata --format-version 1 > /tmp/cargo-metadata.json
+          ACTUAL=$(node -p "JSON.parse(require('fs').readFileSync('/tmp/cargo-metadata.json','utf8')).packages.find((p) => p.name === 'compact-lint').version")
+          if [[ "$ACTUAL" != "$NEW_VERSION" ]]; then
+            echo "::error::crates/compact-lint/Cargo.toml is at $ACTUAL, expected $NEW_VERSION"
+            exit 1
+          fi
+
       - name: Verify package contents
         run: |
           cd packages/${{ steps.pkg.outputs.dir }}
@@ -156,6 +183,7 @@ jobs:
           fi
 
       - name: Commit version bump
+        if: inputs.package != 'compact-linter'
         uses: iarekylew00t/verified-bot-commit@42a042b0407248f3c0acac00c389e729e3476e86 # v2.3.5
         with:
           message: "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}"
@@ -163,6 +191,18 @@ jobs:
           ref: ${{ steps.version.outputs.branch }}
           files: |
             packages/${{ steps.pkg.outputs.dir }}/package.json
+
+      - name: Commit version bump with the crate
+        if: inputs.package == 'compact-linter'
+        uses: iarekylew00t/verified-bot-commit@42a042b0407248f3c0acac00c389e729e3476e86 # v2.3.5
+        with:
+          message: "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}"
+          token: ${{ steps.gh-app-token.outputs.token }}
+          ref: ${{ steps.version.outputs.branch }}
+          files: |
+            packages/linter/package.json
+            crates/compact-lint/Cargo.toml
+            Cargo.lock
 
       - name: Ensure release label exists
         env:
