@@ -1,13 +1,19 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   type ConfirmedDeploymentRecord,
+  type DeploymentRecord,
   Deployments,
+  type PartialDeploymentRecord,
   type PendingDeploymentRecord,
 } from './deployments.ts';
-import { PendingDeployExistsError } from './errors.ts';
+import {
+  DeploymentsFileError,
+  PartialDeployExistsError,
+  PendingDeployExistsError,
+} from './errors.ts';
 
 /** Never persisted; the pinning test asserts the ledger file omits it. */
 const SIGNING_KEY_HEX = 'aa'.repeat(32);
@@ -218,5 +224,162 @@ describe('Deployments', () => {
         '0xaddr2',
       );
     });
+  });
+});
+
+function partial(
+  address: string,
+  onChain: string[] = ['approve'],
+  pendingCircuits: string[] = ['burn'],
+): PartialDeploymentRecord {
+  return {
+    status: 'partial',
+    address,
+    txId: '0xpartialtx',
+    deployer: '0xdep',
+    artifact: 'src/artifacts/Token/Token',
+    circuitsOnChain: onChain,
+    circuitsPending: pendingCircuits,
+    submittedAt: new Date('2026-05-15T00:00:00Z').toISOString(),
+  };
+}
+
+/** Exhaustive narrowing over the union; a new member fails to compile here. */
+function describeRecord(record: DeploymentRecord): string {
+  switch (record.status) {
+    case 'pending':
+      return 'pending';
+    case 'partial':
+      return `partial:${record.circuitsPending.length}`;
+    case 'confirmed':
+      return 'confirmed';
+    default: {
+      const unreachable: never = record;
+      return unreachable;
+    }
+  }
+}
+
+describe('DeploymentRecord union', () => {
+  it('should narrow to exactly three members', () => {
+    expect(describeRecord(pending('0xa'))).toBe('pending');
+    expect(describeRecord(partial('0xa'))).toBe('partial:1');
+    expect(describeRecord(confirmed('0xa'))).toBe('confirmed');
+  });
+});
+
+describe('Deployments partial records', () => {
+  it('should record a partial head and rotates the prior head into history', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', confirmed('0xold'));
+    const { head, history } = await d.record('Token', partial('0xnew'));
+
+    expect(JSON.parse(readFileSync(head, 'utf8')).Token).toMatchObject({
+      status: 'partial',
+      address: '0xnew',
+      circuitsOnChain: ['approve'],
+      circuitsPending: ['burn'],
+    });
+    expect(JSON.parse(readFileSync(history, 'utf8')).Token[0].address).toBe(
+      '0xold',
+    );
+  });
+
+  it('should refuse a fresh deploy over a partial head without force', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', partial('0xpart'));
+
+    await expect(d.assertRecordable('Token')).rejects.toThrow(
+      PartialDeployExistsError,
+    );
+    await expect(d.record('Token', pending('0xnew'))).rejects.toThrow(
+      PartialDeployExistsError,
+    );
+  });
+
+  it('should rotate the partial head into history under force', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', partial('0xpart'));
+    const { head, history } = await d.record('Token', pending('0xfresh'), {
+      force: true,
+    });
+
+    expect(JSON.parse(readFileSync(head, 'utf8')).Token.address).toBe(
+      '0xfresh',
+    );
+    expect(JSON.parse(readFileSync(history, 'utf8')).Token[0]).toMatchObject({
+      status: 'partial',
+      address: '0xpart',
+    });
+  });
+
+  it('should overwrite a partial head with fresher progress, no rotation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', partial('0xpart', [], ['approve', 'burn']));
+    const { head, history } = await d.updatePartial(
+      'Token',
+      partial('0xpart', ['approve'], ['burn']),
+    );
+
+    expect(
+      JSON.parse(readFileSync(head, 'utf8')).Token.circuitsOnChain,
+    ).toStrictEqual(['approve']);
+    expect(existsSync(history)).toBe(false);
+  });
+
+  it('should promote a partial head to confirmed', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', partial('0xpart'));
+    const { head } = await d.confirm('Token', confirmed('0xpart'));
+
+    expect(JSON.parse(readFileSync(head, 'utf8')).Token.status).toBe(
+      'confirmed',
+    );
+  });
+
+  it('should refuse to promote onto a head for a different address', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', partial('0xpart'));
+
+    await expect(d.confirm('Token', confirmed('0xother'))).rejects.toThrow(
+      DeploymentsFileError,
+    );
+    await expect(d.updatePartial('Token', partial('0xother'))).rejects.toThrow(
+      DeploymentsFileError,
+    );
+  });
+
+  it('should refuse to overwrite a head that is already confirmed', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const d = make(root);
+    await d.record('Token', confirmed('0xpart'));
+
+    await expect(d.confirm('Token', confirmed('0xpart'))).rejects.toThrow(
+      /already confirmed/,
+    );
+    await expect(d.updatePartial('Token', partial('0xpart'))).rejects.toThrow(
+      /already confirmed/,
+    );
+  });
+
+  it('should refuse to promote when the head record is gone', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+
+    await expect(
+      make(root).confirm('Token', confirmed('0xpart')),
+    ).rejects.toThrow(DeploymentsFileError);
+  });
+
+  it('should keep the signing key out of a partial record', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'persist-test-'));
+    const { head } = await make(root).record('Token', partial('0xpart'));
+
+    expect(readFileSync(head, 'utf8')).not.toContain(SIGNING_KEY_HEX);
   });
 });

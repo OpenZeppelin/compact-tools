@@ -44,3 +44,17 @@ signing_key_file    = "fixtures/signingkeys/PrivateCounter.signingkey"
 private_state_id    = "private-counter-state"
 init_private_state  = { file = "fixtures/initstates/PrivateCounter.json" }
 witnesses           = { module = "fixtures/witnesses/PrivateCounter.witness.ts", export = "PrivateCounterWitnesses" }
+
+# Twenty circuits: too large for one deploy tx on the local stack. Fixture for
+# the Tests stage, which will drive the split, resume, and verify paths against
+# it. Requires `make compile` to produce `fixtures/artifacts/Fragmented/`.
+[contracts.Fragmented]
+artifact         = "Fragmented"
+signing_key_file = "fixtures/signingkeys/Fragmented.signingkey"
+circuits_per_tx  = 5
+
+# Same artifact, no `circuits_per_tx`, so the deployer has to decide the split
+# itself: it submits the whole contract and halves on the node's refusal.
+[contracts.FragmentedNoBudget]
+artifact         = "Fragmented"
+signing_key_file = "fixtures/signingkeys/FragmentedNoBudget.signingkey"

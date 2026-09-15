@@ -22,6 +22,7 @@ COMPACTC_VERSION := 0.31.1
 # is a no-op when nothing changed (poor man's build cache, free).
 COUNTER_OUT := $(INTEGRATION_DIR)/fixtures/artifacts/Counter/contract/index.js
 PRIVATE_OUT := $(INTEGRATION_DIR)/fixtures/artifacts/PrivateCounter/contract/index.js
+FRAGMENTED_OUT := $(INTEGRATION_DIR)/fixtures/artifacts/Fragmented/contract/index.js
 
 .PHONY: help \
         build test types lint lint-fix clean \
@@ -101,13 +102,16 @@ env-status:
 # Each fixture depends on its .compact source and on this Makefile, so a
 # COMPACTC_VERSION bump recompiles instead of reusing old artifacts.
 
-compile: $(COUNTER_OUT) $(PRIVATE_OUT)
+compile: $(COUNTER_OUT) $(PRIVATE_OUT) $(FRAGMENTED_OUT)
 
 $(COUNTER_OUT): $(INTEGRATION_DIR)/fixtures/Counter.compact Makefile
 	compact compile +$(COMPACTC_VERSION) $< $(INTEGRATION_DIR)/fixtures/artifacts/Counter
 
 $(PRIVATE_OUT): $(INTEGRATION_DIR)/fixtures/PrivateCounter.compact Makefile
 	compact compile +$(COMPACTC_VERSION) $< $(INTEGRATION_DIR)/fixtures/artifacts/PrivateCounter
+
+$(FRAGMENTED_OUT): $(INTEGRATION_DIR)/fixtures/Fragmented.compact Makefile
+	compact compile +$(COMPACTC_VERSION) $< $(INTEGRATION_DIR)/fixtures/artifacts/Fragmented
 
 # ── End-to-end integration test ────────────────────────────────────────
 #

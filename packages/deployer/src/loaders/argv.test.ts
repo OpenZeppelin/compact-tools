@@ -126,3 +126,33 @@ describe('parseDeployArgv', () => {
     );
   });
 });
+
+describe('parseDeployArgv — --circuits-per-tx', () => {
+  it('should parse a positive integer', () => {
+    expect(parseDeployArgv(['--circuits-per-tx', '8']).circuitsPerTx).toBe(8);
+  });
+
+  it('should be undefined when the flag is absent', () => {
+    expect(parseDeployArgv([]).circuitsPerTx).toBeUndefined();
+  });
+
+  it.each(['0', 'abc', '1.5', '3abc'])('should reject %s', (value) => {
+    expect(() => parseDeployArgv(['--circuits-per-tx', value])).toThrow(
+      '--circuits-per-tx requires a positive integer',
+    );
+  });
+
+  it.each([[], ['-1']])('should reject a missing value (%s)', (...rest) => {
+    expect(() =>
+      parseDeployArgv(['--circuits-per-tx', ...rest.flat()]),
+    ).toThrow('--circuits-per-tx requires a value');
+  });
+
+  it('should be accepted by the CLI unknown-flag guard', () => {
+    expect(
+      parseDeployArgv(['Token', '--circuits-per-tx', '4'], {
+        rejectUnknownFlags: true,
+      }).circuitsPerTx,
+    ).toBe(4);
+  });
+});

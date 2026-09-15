@@ -68,6 +68,11 @@ const contractSchema = z
     args: argsSchema.optional(),
     witnesses: fileOrModuleRefSchema.optional(),
     signing_key_file: z.string().min(1),
+    // Verifier keys per transaction. Set it for a contract too large to deploy
+    // in one tx: fragment 0 rides the deploy and the rest arrive as batched
+    // maintenance updates within the same `deploy()` call. `--circuits-per-tx`
+    // overrides it.
+    circuits_per_tx: z.number().int().positive().optional(),
   })
   .refine(
     (c) =>

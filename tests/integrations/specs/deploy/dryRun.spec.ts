@@ -40,6 +40,10 @@ describe('compact-deploy — --dry-run validates without submitting', () => {
       deploymentsFile: '',
       dryRun: true,
       explorerUrl: '',
+      // A dry run submits nothing, so it reports the artifact's circuit count
+      // against no transactions.
+      fragments: 0,
+      circuits: 1,
     });
   });
 

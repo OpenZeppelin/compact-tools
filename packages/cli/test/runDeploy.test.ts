@@ -236,6 +236,8 @@ describe('runDeploy CLI', () => {
         '90',
         '--sync-batch-size',
         '5000',
+        '--circuits-per-tx',
+        '5',
         '--no-cache',
         '--force',
         '--seed-cache-from-dust',
@@ -256,6 +258,7 @@ describe('runDeploy CLI', () => {
       expect(opts.syncTimeoutMs).toBe(30_000);
       expect(opts.txTimeoutMs).toBe(90_000);
       expect(opts.syncBatchSize).toBe(5000);
+      expect(opts.circuitsPerTx).toBe(5);
       expect(opts.skipWalletCache).toBe(true);
       expect(opts.force).toBe(true);
       expect(opts.seedCacheDust).toBe('/dust.json');
@@ -339,6 +342,28 @@ describe('runDeploy CLI', () => {
       expect(opts.syncBatchSize).toBeUndefined();
     });
 
+    it('should forward --circuits-per-tx to the prepare options', async () => {
+      await runMain(['Token', '--circuits-per-tx', '5']);
+      const opts = mockPrepare.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(opts.circuitsPerTx).toBe(5);
+    });
+
+    it('should leave circuitsPerTx undefined when --circuits-per-tx is omitted', async () => {
+      await runMain(['Token']);
+      const opts = mockPrepare.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(opts.circuitsPerTx).toBeUndefined();
+    });
+
+    it('should reject a non-positive --circuits-per-tx', async () => {
+      await runMain(['Token', '--circuits-per-tx', '0']);
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '--circuits-per-tx requires a positive integer',
+        ),
+      );
+      expect(mockExit).toHaveBeenCalledWith(2);
+    });
+
     it('should reject non-numeric --sync-batch-size', async () => {
       await runMain(['Token', '--sync-batch-size', 'abc']);
       expect(mockConsoleError).toHaveBeenCalledWith(
@@ -389,7 +414,7 @@ describe('runDeploy CLI', () => {
 
   // ------------------------------------------------------------------ //
   describe('successful deploy (text output)', () => {
-    it('should succeed-spin and log the four metadata lines', async () => {
+    it('should succeed-spin and log the metadata lines', async () => {
       mockPrepare.mockResolvedValue(fakeDeployer());
       await runMain(['Token', '--network', 'local']);
 
@@ -404,6 +429,12 @@ describe('runDeploy CLI', () => {
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('blockHeight:'),
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('fragments:'),
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
+        expect.stringContaining('circuits:'),
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
         expect.stringContaining('saved to:'),
