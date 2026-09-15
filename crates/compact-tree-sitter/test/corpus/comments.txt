@@ -1,0 +1,134 @@
+================================================================================
+line comment
+================================================================================
+
+// a note
+ledger _x: Field;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line_comment)
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier))))
+
+================================================================================
+block comment
+================================================================================
+
+/* a note */
+ledger _x: Field;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (block_comment)
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier))))
+
+================================================================================
+empty block comment
+================================================================================
+
+/**/
+ledger _x: Field;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (block_comment)
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier))))
+
+================================================================================
+doc comment
+================================================================================
+
+/** @description A flag. */
+ledger _x: Boolean;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (doc_comment)
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier))))
+
+================================================================================
+doc comment before an exported circuit
+================================================================================
+
+/**
+ * @description Returns the owner.
+ * @circuitInfo k=7, rows=76
+ */
+export circuit owner(): Bytes<32> {
+  return _owner;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (doc_comment)
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression
+      (identifier)
+      (generic_arguments
+        (number)))
+    body: (block)))
+
+================================================================================
+doc comment before an exported module
+================================================================================
+
+/** @module Ownable */
+export module Ownable {
+  /** @description A flag. */
+  export ledger _isInitialized: Boolean;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (doc_comment)
+  (module_declaration
+    name: (identifier)
+    body: (module_body
+      (doc_comment)
+      (ledger_declaration
+        name: (identifier)
+        type: (type_expression
+          (identifier))))))
+
+================================================================================
+comments inside a circuit body
+================================================================================
+
+circuit noop(): [] {
+  // a line
+  /* a block */
+  /** a doc */
+  return [];
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression)
+    body: (block
+      (line_comment)
+      (block_comment)
+      (doc_comment))))

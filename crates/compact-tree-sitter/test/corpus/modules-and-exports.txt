@@ -1,0 +1,116 @@
+================================================================================
+module with declarations in its body
+================================================================================
+
+module Ownable {
+  import CompactStandardLibrary;
+  export ledger _owner: Bytes<32>;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)
+    body: (module_body
+      (import_declaration
+        name: (identifier))
+      (ledger_declaration
+        name: (identifier)
+        type: (type_expression
+          (identifier)
+          (generic_arguments
+            (number)))))))
+
+================================================================================
+exported generic module
+================================================================================
+
+export module Signer<T> {
+  export circuit check(x: T): Boolean { return true; }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)
+    (generic_parameters
+      (generic_parameter
+        name: (identifier)))
+    body: (module_body
+      (circuit_declaration
+        name: (identifier)
+        parameters: (parameter_list)
+        type: (type_expression
+          (identifier))
+        body: (block)))))
+
+================================================================================
+nested modules
+================================================================================
+
+module Outer {
+  module Inner {
+    export ledger _flag: Boolean;
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)
+    body: (module_body
+      (module_declaration
+        name: (identifier)
+        body: (module_body
+          (ledger_declaration
+            name: (identifier)
+            type: (type_expression
+              (identifier))))))))
+
+================================================================================
+export list
+================================================================================
+
+export { A, B };
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (export_declaration
+    (identifier)
+    (identifier)))
+
+================================================================================
+export list without a trailing semicolon
+================================================================================
+
+export { A, B, }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (export_declaration
+    (identifier)
+    (identifier)))
+
+================================================================================
+export list inside a module
+================================================================================
+
+module M {
+  export { _name, _symbol, _decimals };
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)
+    body: (module_body
+      (export_declaration
+        (identifier)
+        (identifier)
+        (identifier)))))

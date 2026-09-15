@@ -1,0 +1,141 @@
+================================================================================
+bare module import
+================================================================================
+
+import CompactStandardLibrary;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    name: (identifier)))
+
+================================================================================
+path import
+================================================================================
+
+import "./Foo";
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    name: (string)))
+
+================================================================================
+module import with prefix
+================================================================================
+
+import Foo prefix Foo_;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    name: (identifier)
+    (import_prefix
+      prefix: (identifier))))
+
+================================================================================
+path import with prefix
+================================================================================
+
+import "./Foo" prefix F_;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    name: (string)
+    (import_prefix
+      prefix: (identifier))))
+
+================================================================================
+import with generic arguments
+================================================================================
+
+import Foo<T, U> prefix X_;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    name: (identifier)
+    (generic_arguments
+      (identifier)
+      (identifier))
+    (import_prefix
+      prefix: (identifier))))
+
+================================================================================
+path import with nested generic arguments
+================================================================================
+
+import "../../Signer"<Either<ZswapCoinPublicKey, ContractAddress>> prefix Signer_;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    name: (string)
+    (generic_arguments
+      (identifier)
+      (generic_arguments
+        (identifier)
+        (identifier)))
+    (import_prefix
+      prefix: (identifier))))
+
+================================================================================
+import selection
+================================================================================
+
+import { _name, _symbol } from "./Core";
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    (import_selection
+      (import_element
+        (identifier))
+      (import_element
+        (identifier)))
+    (string)))
+
+================================================================================
+import selection with alias and prefix
+================================================================================
+
+import { selfAsRecipient, UINT128_MAX as MAX } from "../utils/Utils" prefix Utils_;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    (import_selection
+      (import_element
+        (identifier))
+      (import_element
+        (identifier)
+        (identifier)))
+    (string)
+    (import_prefix
+      (identifier))))
+
+================================================================================
+import selection from a bare module
+================================================================================
+
+import { ZswapCoinPublicKey, Either } from CompactStandardLibrary;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_declaration
+    (import_selection
+      (import_element
+        (identifier))
+      (import_element
+        (identifier)))
+    (identifier)))

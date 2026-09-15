@@ -1,0 +1,17 @@
+The `.compact` files in this directory are copied verbatim from the Compact
+compiler repository and are used here only as parser fixtures.
+
+Source:     https://github.com/LFDT-Minokawa/compact
+Path:       examples/formatter/output/
+Commit:     c47230cc8c3e743634166d9b84698ac2b238c418
+License:    Apache-2.0
+Copyright:  Copyright (C) 2025 Midnight Foundation
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+these files except in compliance with the License. You may obtain a copy of the
+License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
