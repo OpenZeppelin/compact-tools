@@ -1,0 +1,19 @@
+Many.compact:6:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Ledger `_first` has no doc comment.
+
+    4 │  */
+    5 │ export module Many {
+  > 6 │   export ledger _first: Bytes<32>;
+      │   ^^^^^^^^^^^^^^^^^^^^
+    7 │ 
+    8 │   export ledger _second: Bytes<32>;
+
+  i Add a doc comment above it, or run compact-lint fix.
+
+  i Unsafe fix: Insert a doc skeleton for ledger `_first`
+
+      6 │ + ··/**
+      7 │ + ···*·@description·TODO
+      8 │ + ···*/
+

@@ -1,3 +1,29 @@
-Windows.compact:6:3: fix: inserted doc skeleton for ledger `_count`
-Windows.compact:10:6: fix: renamed @return to @returns
-Windows.compact:12:3: fix: inserted @constraints k=?, rows=?
+Windows.compact:6:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `_count` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for ledger `_count`
+
+      6 │ + ··/**
+      7 │ + ···*·@description·TODO
+      8 │ + ···*/
+
+Windows.compact:10:6 lint/forbidden-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Forbidden tag @return.
+
+  i Applied fix: Rename @return to @returns
+
+    10    │ - ···*·@return·{[]}·-·Empty·tuple.
+       10 │ + ···*·@returns·{[]}·-·Empty·tuple.
+
+Windows.compact:12:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      10 │ + ···*
+      11 │ + ···*·@constraints·k=?,·rows=?
+      12 │ + ···*
+

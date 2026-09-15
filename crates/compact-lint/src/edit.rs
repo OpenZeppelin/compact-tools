@@ -9,12 +9,14 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::report::Position;
+use crate::diagnostic::Span;
+use crate::report::RuleId;
 
-/// One repair, carrying the line `fix` prints for it.
+/// One repair, carrying the rule it answers and the span its diagnostic underlines.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Edit {
-    pub position: Position,
+    pub span: Span,
+    pub rule: RuleId,
     pub message: String,
     pub kind: EditKind,
 }
@@ -31,6 +33,20 @@ pub enum EditKind {
         indent: usize,
         op: DocOp,
     },
+}
+
+impl EditKind {
+    /// Whether the rewrite needs no follow-up.
+    ///
+    /// An edit that writes a value the tool already knows is safe; one that writes a
+    /// placeholder for a human to replace is not.
+    #[must_use]
+    pub const fn is_safe(&self) -> bool {
+        match self {
+            Self::Insert { .. } => false,
+            Self::Doc { op, .. } => op.is_safe(),
+        }
+    }
 }
 
 /// One change to the lines of a doc comment.
@@ -66,6 +82,17 @@ pub enum DocOp {
         tag: String,
         value: String,
     },
+}
+
+impl DocOp {
+    /// Whether the rewrite needs no follow-up; see [`EditKind::is_safe`].
+    #[must_use]
+    pub const fn is_safe(&self) -> bool {
+        match self {
+            Self::RenameTag { .. } | Self::SetModuleName { .. } | Self::SetTagValue { .. } => true,
+            Self::InsertTag { .. } | Self::InsertConstraints(_) => false,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -394,11 +421,13 @@ mod tests {
         DocOp, Edit, EditKind, apply, newline_of, rename_tag, render_doc, set_module_name,
         set_tag_value,
     };
-    use crate::report::Position;
+    use crate::diagnostic::Span;
+    use crate::report::{Position, RuleId};
 
     fn doc_edit(range: std::ops::Range<usize>, indent: usize, op: DocOp) -> Edit {
         Edit {
-            position: Position::file_start(),
+            span: Span::columns(Position::file_start(), 1),
+            rule: RuleId::MISSING_TAG,
             message: String::new(),
             kind: EditKind::Doc { range, indent, op },
         }
@@ -415,6 +444,43 @@ mod tests {
     fn rendered(doc: &str, indent: usize, ops: &[DocOp]) -> String {
         let borrowed: Vec<&DocOp> = ops.iter().collect();
         render_doc(doc, indent, "\n", &borrowed)
+    }
+
+    #[test]
+    fn only_the_rewrites_that_write_a_known_value_are_safe() {
+        assert!(
+            DocOp::RenameTag {
+                line: 1,
+                from: "@return".to_owned(),
+                to: "@returns".to_owned(),
+            }
+            .is_safe()
+        );
+        assert!(
+            DocOp::SetModuleName {
+                line: 1,
+                name: "Renamed".to_owned(),
+            }
+            .is_safe()
+        );
+        assert!(
+            DocOp::SetTagValue {
+                line: 1,
+                tag: "@constraints".to_owned(),
+                value: "k=7, rows=74".to_owned(),
+            }
+            .is_safe()
+        );
+
+        assert!(!tag("@description TODO", &[]).is_safe());
+        assert!(!DocOp::InsertConstraints("@constraints k=?, rows=?".to_owned()).is_safe());
+        assert!(
+            !EditKind::Insert {
+                offset: 0,
+                text: "/**\n * TODO\n */\n".to_owned(),
+            }
+            .is_safe()
+        );
     }
 
     #[test]
@@ -570,7 +636,8 @@ mod tests {
             "export ledger a: Uint<8>;\n/**\n * @return x\n */\nexport circuit run(): [] { }\n";
         let edits = [
             Edit {
-                position: Position::file_start(),
+                span: Span::columns(Position::file_start(), 1),
+                rule: RuleId::MISSING_DOC,
                 message: String::new(),
                 kind: EditKind::Insert {
                     offset: 0,

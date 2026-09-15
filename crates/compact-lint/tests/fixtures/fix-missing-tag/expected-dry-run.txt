@@ -1,0 +1,78 @@
+Untagged.compact:4:1 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Untagged` doc comment has no @description.
+
+    2 │  * @module Untagged
+    3 │  */
+  > 4 │ export module Untagged {
+      │ ^^^^^^^^^^^^^^^^^^^^^^
+    5 │   /** Approved accounts. Absent means not allowed. */
+    6 │   export ledger _allowed: Set<Bytes<32>>;
+
+  i Unsafe fix: Insert @description
+
+      3 │ + ·*·@description·TODO
+
+Untagged.compact:6:3 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `_allowed` doc comment has no @description.
+
+    4 │ export module Untagged {
+    5 │   /** Approved accounts. Absent means not allowed. */
+  > 6 │   export ledger _allowed: Set<Bytes<32>>;
+      │   ^^^^^^^^^^^^^^^^^^^^^^
+    7 │ 
+    8 │   /**
+
+  i Unsafe fix: Insert @description
+
+    5   │ - ··/**·Approved·accounts.·Absent·means·not·allowed.·*/
+      5 │ + ··/**
+      6 │ + ···*·@description·Approved·accounts.·Absent·means·not·allowed.
+      7 │ + ···*/
+
+Untagged.compact:12:3 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `run` doc comment has no @description.
+
+    10 │    * @constraints k=6, rows=28
+    11 │    */
+  > 12 │   export circuit run(): [] { }
+       │   ^^^^^^^^^^^^^^^^^^
+    13 │ 
+    14 │   /**
+
+  i Unsafe fix: Insert @description
+
+    9   │ - ···*·The·circuit·has·no·description·either.
+      9 │ + ···*·@description·The·circuit·has·no·description·either.
+
+Untagged.compact:17:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `store` doc comment has no @constraints.
+
+    15 │    * @param {Uint<8>} value - The value to store.
+    16 │    */
+  > 17 │   export circuit store(value: Uint<8>): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^^
+    18 │ }
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      15 │ + ···*·@constraints·k=?,·rows=?
+      16 │ + ···*
+
+Untagged.compact:17:3 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `store` doc comment has no @description.
+
+    15 │    * @param {Uint<8>} value - The value to store.
+    16 │    */
+  > 17 │   export circuit store(value: Uint<8>): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^^
+    18 │ }
+
+  i Unsafe fix: Insert @description
+
+      15 │ + ···*·@description·TODO
+

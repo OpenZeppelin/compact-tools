@@ -7,8 +7,10 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::diagnostic::Level;
 use crate::doc::Tag;
 use crate::model::DeclKind;
+use crate::report::RuleId;
 
 /// The config file name searched for upward from the current directory.
 pub const CONFIG_FILE_NAME: &str = "compact-lint.toml";
@@ -143,6 +145,73 @@ impl Default for ConstraintsConfig {
     }
 }
 
+/// The level each rule reports at; `off` stops it running.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, default)]
+pub struct RulesConfig {
+    #[serde(rename = "missing-doc")]
+    pub missing_doc: Level,
+    #[serde(rename = "missing-tag")]
+    pub missing_tag: Level,
+    #[serde(rename = "forbidden-tag")]
+    pub forbidden_tag: Level,
+    #[serde(rename = "module-name")]
+    pub module_name: Level,
+    #[serde(rename = "missing-constraints")]
+    pub missing_constraints: Level,
+    #[serde(rename = "constraints-format")]
+    pub constraints_format: Level,
+    #[serde(rename = "constraints-placeholder")]
+    pub constraints_placeholder: Level,
+    #[serde(rename = "constraints-unmeasured")]
+    pub constraints_unmeasured: Level,
+    #[serde(rename = "constraints-unmeasurable")]
+    pub constraints_unmeasurable: Level,
+    pub parse: Level,
+    pub format: Level,
+}
+
+impl Default for RulesConfig {
+    fn default() -> Self {
+        Self {
+            missing_doc: Level::Error,
+            missing_tag: Level::Error,
+            forbidden_tag: Level::Error,
+            module_name: Level::Error,
+            missing_constraints: Level::Error,
+            constraints_format: Level::Error,
+            // A placeholder is a value waiting on a measurement, not a defect; `--strict`
+            // promotes it on release branches.
+            constraints_placeholder: Level::Warn,
+            constraints_unmeasured: Level::Warn,
+            constraints_unmeasurable: Level::Warn,
+            parse: Level::Error,
+            format: Level::Error,
+        }
+    }
+}
+
+impl RulesConfig {
+    #[must_use]
+    pub fn get(&self, rule: RuleId) -> Level {
+        match rule {
+            RuleId::MISSING_DOC => self.missing_doc,
+            RuleId::MISSING_TAG => self.missing_tag,
+            RuleId::FORBIDDEN_TAG => self.forbidden_tag,
+            RuleId::MODULE_NAME => self.module_name,
+            RuleId::MISSING_CONSTRAINTS => self.missing_constraints,
+            RuleId::CONSTRAINTS_FORMAT => self.constraints_format,
+            RuleId::CONSTRAINTS_PLACEHOLDER => self.constraints_placeholder,
+            RuleId::CONSTRAINTS_UNMEASURED => self.constraints_unmeasured,
+            RuleId::CONSTRAINTS_UNMEASURABLE => self.constraints_unmeasurable,
+            RuleId::PARSE => self.parse,
+            RuleId::FORMAT => self.format,
+            // `fill` reports what changed, so it is not configurable.
+            _ => Level::Info,
+        }
+    }
+}
+
 /// Tags no doc comment may carry, and the replacements `fix` writes for them.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
@@ -178,6 +247,7 @@ pub struct Config {
     pub tags: TagsConfig,
     pub fix: FixConfig,
     pub kinds: KindsConfig,
+    pub rules: RulesConfig,
 }
 
 impl Default for Config {
@@ -190,6 +260,7 @@ impl Default for Config {
             tags: TagsConfig::default(),
             fix: FixConfig::default(),
             kinds: KindsConfig::default(),
+            rules: RulesConfig::default(),
         }
     }
 }
@@ -309,8 +380,40 @@ pub fn discover(start: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{Config, DocsPolicy, SUPPORTED_VERSION};
+    use crate::diagnostic::Level;
     use crate::doc::Tag;
     use crate::model::DeclKind;
+    use crate::report::RuleId;
+
+    #[test]
+    fn every_rule_defaults_to_error_but_the_ones_awaiting_a_measurement() {
+        let rules = Config::default().rules;
+
+        assert_eq!(rules.get(RuleId::MISSING_DOC), Level::Error);
+        assert_eq!(rules.get(RuleId::PARSE), Level::Error);
+        assert_eq!(rules.get(RuleId::FORMAT), Level::Error);
+        assert_eq!(rules.get(RuleId::CONSTRAINTS_PLACEHOLDER), Level::Warn);
+        assert_eq!(rules.get(RuleId::CONSTRAINTS_UNMEASURED), Level::Warn);
+        assert_eq!(rules.get(RuleId::CONSTRAINTS_UNMEASURABLE), Level::Warn);
+    }
+
+    #[test]
+    fn a_rules_table_sets_only_the_rules_it_names() {
+        let config: Config = toml::from_str("[rules]\nmissing-doc = \"off\"\nformat = \"warn\"\n")
+            .expect("the snippet is valid config");
+
+        assert_eq!(config.rules.get(RuleId::MISSING_DOC), Level::Off);
+        assert_eq!(config.rules.get(RuleId::FORMAT), Level::Warn);
+        assert_eq!(config.rules.get(RuleId::MISSING_TAG), Level::Error);
+    }
+
+    #[test]
+    fn an_unknown_rule_key_is_rejected() {
+        let error = toml::from_str::<Config>("[rules]\nmissing-docs = \"off\"\n")
+            .expect_err("the rule is misspelled");
+
+        assert!(error.to_string().contains("missing-docs"), "{error}");
+    }
 
     #[test]
     fn defaults_require_docs_on_exported_declarations_only() {

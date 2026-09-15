@@ -1,7 +1,8 @@
 //! `compact-lint fix` end to end, one fixture case per rule.
 //!
-//! A case holds `compact-lint.toml`, `before/`, `after/` and `expected.txt`. The run
-//! works on a copy of `before/`, so the fixtures themselves are never rewritten.
+//! A case holds `compact-lint.toml`, `before/`, `after/`, `expected.txt` for the write
+//! run and `expected-dry-run.txt` for the preview. The run works on a copy of `before/`,
+//! so the fixtures themselves are never rewritten.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -79,8 +80,8 @@ fn collect(root: &Path, directory: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) 
     }
 }
 
-fn expected(name: &str) -> String {
-    std::fs::read_to_string(case(name).join("expected.txt")).expect("the case has an expectation")
+fn expected(name: &str, file: &str) -> String {
+    std::fs::read_to_string(case(name).join(file)).expect("the case has an expectation")
 }
 
 /// Runs a subcommand inside `directory` and returns its exit code and stdout.
@@ -88,6 +89,7 @@ fn run(directory: &Path, args: &[&str]) -> (i32, String) {
     let output = binary()
         .current_dir(directory)
         .args(args)
+        .arg("--colors=off")
         .output()
         .expect("the binary ran");
 
@@ -103,7 +105,11 @@ fn assert_case(name: &str) {
     let root = directory.path();
 
     let (code, stdout) = run(root, &["fix"]);
-    assert_eq!(stdout, expected(name), "stdout for case {name}");
+    assert_eq!(
+        stdout,
+        expected(name, "expected.txt"),
+        "stdout for case {name}"
+    );
     assert_eq!(code, 0, "exit code for case {name}");
     assert_eq!(
         sources(root),
@@ -111,7 +117,9 @@ fn assert_case(name: &str) {
         "rewritten sources for case {name}"
     );
 
-    let (code, stdout) = run(root, &["check", "--no-format"]);
+    // An inserted annotation is a placeholder, which `check` warns about until it is
+    // measured; nothing at error level may survive the fix.
+    let (code, stdout) = run(root, &["check", "--no-format", "--diagnostic-level=error"]);
     assert_eq!(stdout, "", "check is clean after fixing case {name}");
     assert_eq!(code, 0, "check exit code after fixing case {name}");
 
@@ -122,7 +130,11 @@ fn assert_case(name: &str) {
     let preview = work(name);
     let before = sources(preview.path());
     let (code, stdout) = run(preview.path(), &["fix", "--dry-run"]);
-    assert_eq!(stdout, expected(name), "dry-run stdout for case {name}");
+    assert_eq!(
+        stdout,
+        expected(name, "expected-dry-run.txt"),
+        "dry-run stdout for case {name}"
+    );
     assert_eq!(code, EXIT_EDITS, "dry-run exit code for case {name}");
     assert_eq!(
         sources(preview.path()),
@@ -182,16 +194,32 @@ fn the_summary_goes_to_stderr_and_the_edits_to_stdout() {
     let directory = work("rename");
     let output = binary()
         .current_dir(directory.path())
-        .arg("fix")
+        .args(["fix", "--colors=off"])
         .output()
         .expect("the binary ran");
 
     let stderr = String::from_utf8(output.stderr).expect("the summary is UTF-8");
-    assert_eq!(stderr.trim_end(), "2 edits in 1 files");
+    assert!(stderr.starts_with("Checked 1 file in "), "{stderr}");
+    assert!(stderr.ends_with(". Fixed 1 file.\n"), "{stderr}");
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains(": fix: "),
+        String::from_utf8_lossy(&output.stdout).contains("  FIXED  "),
         "the edits belong on stdout"
     );
+}
+
+#[test]
+fn a_concise_run_prints_one_line_per_edit() {
+    let directory = work("rename");
+    let (code, stdout) = run(directory.path(), &["fix", "--reporter=concise"]);
+
+    assert_eq!(
+        stdout,
+        concat!(
+            "i Returns.compact:9:6: lint/forbidden-tag: Forbidden tag @return.\n",
+            "i Returns.compact:15:6: lint/forbidden-tag: Forbidden tag @return.\n",
+        )
+    );
+    assert_eq!(code, 0);
 }
 
 #[test]
@@ -203,14 +231,14 @@ fn an_explicit_config_replaces_the_one_beside_the_sources() {
     let config = case("rename").join("compact-lint.toml");
     let output = binary()
         .current_dir(directory.path())
-        .args(["fix", "--config"])
+        .args(["fix", "--colors=off", "--config"])
         .arg(&config)
         .output()
         .expect("the binary ran");
 
     assert_eq!(
         String::from_utf8(output.stdout).expect("the report is UTF-8"),
-        expected("rename")
+        expected("rename", "expected.txt")
     );
 }
 

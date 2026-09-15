@@ -1,0 +1,32 @@
+src/multisig/presets/Vault.compact:9:6 fill  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `deposit` measures k=12, rows=2048.
+
+     7 │    * @description Deposits a coin.
+     8 │    *
+  >  9 │    * @constraints k=?, rows=?
+       │      ^^^^^^^^^^^^
+    10 │    */
+    11 │   export circuit deposit(): [] { }
+
+  i Safe fix: Set @constraints to k=12, rows=2048
+
+    9   │ - ···*·@constraints·k=?,·rows=?
+      9 │ + ···*·@constraints·k=12,·rows=2048
+
+src/multisig/presets/Vault.compact:16:6 fill  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `withdraw` measures k=14, rows=8192.
+
+    14 │    * @description Withdraws a coin.
+    15 │    *
+  > 16 │    * @constraints k=?, rows=?
+       │      ^^^^^^^^^^^^
+    17 │    */
+    18 │   export circuit withdraw(): [] { }
+
+  i Safe fix: Set @constraints to k=14, rows=8192
+
+    16    │ - ···*·@constraints·k=?,·rows=?
+       16 │ + ···*·@constraints·k=14,·rows=8192
+

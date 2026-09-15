@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::config::Config;
+use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level, capitalise};
 use crate::doc::Tag;
 use crate::edit::{DocOp, Edit, EditKind, WriteError, apply, newline_of, write_atomically};
 use crate::model::DeclKind;
-use crate::report::Position;
+use crate::report::RuleId;
 use crate::rules::{Issue, LintError, Linter};
 use crate::target::{self, TargetError};
 
@@ -44,26 +45,19 @@ pub struct Options {
     pub dry_run: bool,
 }
 
-/// The edits one file took.
-pub struct FileEdits {
-    pub path: PathBuf,
-    pub edits: Vec<Edit>,
-}
-
-/// Every file the run changed, in the order they were visited.
+/// What the run changed, and the diagnostic for every edit.
 pub struct Outcome {
-    pub files: Vec<FileEdits>,
+    pub diagnostics: Vec<Diagnostic>,
+    /// Files the run visited, changed or not.
+    pub checked: usize,
+    /// Files that took at least one edit.
+    pub changed: usize,
 }
 
 impl Outcome {
     #[must_use]
     pub fn edits(&self) -> usize {
-        self.files.iter().map(|file| file.edits.len()).sum()
-    }
-
-    #[must_use]
-    pub fn summary(&self) -> String {
-        format!("{} edits in {} files", self.edits(), self.files.len())
+        self.diagnostics.len()
     }
 }
 
@@ -73,8 +67,15 @@ impl Outcome {
 pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
     let target = target::resolve(&options.paths, options.config_path.as_deref(), cwd)?;
 
+    let badge = if options.dry_run {
+        Badge::Fixable
+    } else {
+        Badge::Fixed
+    };
+
     let mut linter = Linter::new()?;
-    let mut files = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut changed = 0;
 
     for path in &target.files {
         let source = std::fs::read_to_string(path).map_err(|source| FixError::Read {
@@ -83,26 +84,65 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
         })?;
 
         let newline = newline_of(&source);
-        let edits: Vec<Edit> = linter
-            .issues(path, &source, &target.config, false)?
+        let issues = linter.issues(path, &source, &target.config)?;
+        let repairs: Vec<(&Issue, Edit)> = issues
             .iter()
-            .filter_map(|issue| edit_for(issue, &target.config, newline))
+            .filter_map(|issue| edit_for(issue, &target.config, newline).map(|edit| (issue, edit)))
             .collect();
 
-        if edits.is_empty() {
+        if repairs.is_empty() {
             continue;
         }
 
+        for (issue, edit) in &repairs {
+            diagnostics.push(diagnostic(path, issue, edit, &source, newline, badge));
+        }
+
+        let edits: Vec<Edit> = repairs.into_iter().map(|(_, edit)| edit).collect();
         if !options.dry_run {
             write_atomically(path, &apply(&source, &edits, newline))?;
         }
-        files.push(FileEdits {
-            path: path.clone(),
-            edits,
-        });
+        changed += 1;
     }
 
-    Ok(Outcome { files })
+    Ok(Outcome {
+        diagnostics,
+        checked: target.files.len(),
+        changed,
+    })
+}
+
+/// The `i` line above a fix diff: what it does, and whether it is already done.
+///
+/// An offered fix that writes a placeholder is `Unsafe`, the way Biome marks a fix the
+/// reader still has to finish.
+#[must_use]
+pub fn title(edit: &Edit, badge: Badge) -> String {
+    let what = capitalise(&edit.message);
+    match badge {
+        Badge::Fixed => format!("Applied fix: {what}"),
+        Badge::Fixable if edit.kind.is_safe() => format!("Safe fix: {what}"),
+        Badge::Fixable => format!("Unsafe fix: {what}"),
+    }
+}
+
+/// One repair as a diagnostic: the issue states the problem, the title states the fix.
+fn diagnostic(
+    path: &Path,
+    issue: &Issue,
+    edit: &Edit,
+    source: &str,
+    newline: &str,
+    badge: Badge,
+) -> Diagnostic {
+    let after = apply(source, std::slice::from_ref(edit), newline);
+
+    Diagnostic::new(path, edit.rule, Level::Info, issue.message())
+        .at(edit.span)
+        .fixed_by(
+            FixPreview::between(title(edit, badge), source, &after),
+            badge,
+        )
 }
 
 /// The repair for one issue, or `None` where the rule has no safe fix.
@@ -111,18 +151,20 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
 /// cannot invent, and `parse` and `format` are not doc-comment issues at all.
 #[must_use]
 pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
+    let span = issue.span();
     match issue {
         Issue::MissingDoc {
-            position,
             subject,
             kind,
             name,
             offset,
             indent,
             constraints,
+            ..
         } => Some(Edit {
-            position: *position,
-            message: format!("inserted doc skeleton for {subject}"),
+            span,
+            rule: RuleId::MISSING_DOC,
+            message: format!("insert a doc skeleton for {subject}"),
             kind: EditKind::Insert {
                 offset: *offset,
                 text: skeleton(
@@ -137,15 +179,15 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
         }),
 
         Issue::MissingTag {
-            position,
             kind,
             tag,
             name,
             doc,
             ..
         } => Some(Edit {
-            position: *position,
-            message: format!("inserted {tag}"),
+            span,
+            rule: RuleId::MISSING_TAG,
+            message: format!("insert {tag}"),
             kind: EditKind::Doc {
                 range: doc.range.clone(),
                 indent: doc.indent,
@@ -153,11 +195,10 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
             },
         }),
 
-        Issue::MissingConstraints {
-            position, tag, doc, ..
-        } => Some(Edit {
-            position: *position,
-            message: format!("inserted {tag} {UNMEASURED}"),
+        Issue::MissingConstraints { tag, doc, .. } => Some(Edit {
+            span,
+            rule: RuleId::MISSING_CONSTRAINTS,
+            message: format!("insert {tag} {UNMEASURED}"),
             kind: EditKind::Doc {
                 range: doc.range.clone(),
                 indent: doc.indent,
@@ -166,15 +207,16 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
         }),
 
         Issue::ForbiddenTag {
-            position,
             tag,
             line_offset,
             doc,
+            ..
         } => {
             let replacement = config.rename_of(tag)?;
             Some(Edit {
-                position: *position,
-                message: format!("renamed {tag} to {replacement}"),
+                span,
+                rule: RuleId::FORBIDDEN_TAG,
+                message: format!("rename {tag} to {replacement}"),
                 kind: EditKind::Doc {
                     range: doc.range.clone(),
                     indent: doc.indent,
@@ -188,13 +230,13 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
         }
 
         Issue::ModuleName {
-            position,
             name,
             line_offset,
             doc,
             ..
         } => Some(Edit {
-            position: *position,
+            span,
+            rule: RuleId::MODULE_NAME,
             message: format!("set {MODULE_TAG} to `{name}`"),
             kind: EditKind::Doc {
                 range: doc.range.clone(),
@@ -280,17 +322,6 @@ fn skeleton(
 
     // The declaration follows on its own line, back at its original indentation.
     format!("{}{newline}{margin}", lines.join(newline))
-}
-
-/// The line `fix` prints for one edit.
-#[must_use]
-pub fn line(path: &Path, position: Position, message: &str) -> String {
-    format!(
-        "{}:{}:{}: fix: {message}",
-        path.display(),
-        position.line,
-        position.column
-    )
 }
 
 #[cfg(test)]

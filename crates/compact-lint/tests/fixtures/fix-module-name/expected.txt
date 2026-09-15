@@ -1,2 +1,18 @@
-Renamed.compact:2:4: fix: set @module to `Renamed`
-Renamed.compact:7:6: fix: set @module to `Nested`
+Renamed.compact:2:4 lint/module-name  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Stale`, but the module is `Renamed`.
+
+  i Applied fix: Set @module to `Renamed`
+
+    2   │ - ·*·@module·Stale<T>·(archived)
+      2 │ + ·*·@module·Renamed·(archived)
+
+Renamed.compact:7:6 lint/module-name  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Inner`, but the module is `Nested`.
+
+  i Applied fix: Set @module to `Nested`
+
+    7   │ - ···*·@module·Inner.
+      7 │ + ···*·@module·Nested
+

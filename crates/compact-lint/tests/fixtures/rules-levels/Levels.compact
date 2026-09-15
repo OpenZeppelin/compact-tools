@@ -1,0 +1,14 @@
+/**
+ * @module Levels
+ * @description A module whose rules are set to other levels.
+ */
+export module Levels {
+  export ledger _owner: Bytes<32>;
+
+  /**
+   * @description Does nothing.
+   * @constraints k=6, rows=28
+   * @return {[]} - Empty tuple.
+   */
+  export circuit run(): [] { }
+}

@@ -1,0 +1,48 @@
+Unmeasured.compact:9:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` doc comment has no @constraints.
+
+     7 │    * @description Bumps the counter.
+     8 │    */
+  >  9 │   export circuit bump(): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^
+    10 │ 
+    11 │   /**
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      8 │ + ···*
+      9 │ + ···*·@constraints·k=?,·rows=?
+
+Unmeasured.compact:18:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `send` doc comment has no @constraints.
+
+    16 │    * @returns {[]} Empty tuple.
+    17 │    */
+  > 18 │   export circuit send(to: Bytes<32>): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^
+    19 │ 
+    20 │   /**
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      15 │ + ···*·@constraints·k=?,·rows=?
+      16 │ + ···*
+
+Unmeasured.compact:23:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `run` doc comment has no @constraints.
+
+    21 │    * @notice The annotation goes to the top, since there is no description.
+    22 │    */
+  > 23 │   export circuit run(): [] { }
+       │   ^^^^^^^^^^^^^^^^^^
+    24 │ 
+    25 │   /**
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      21 │ + ···*·@constraints·k=?,·rows=?
+      22 │ + ···*
+

@@ -1,0 +1,2 @@
+! Two.compact:8:6: lint/constraints-placeholder: @constraints value `k=?, rows=?` still holds a placeholder.
+× Two.compact:15:3: lint/missing-constraints: Circuit `bump` doc comment has no @constraints.

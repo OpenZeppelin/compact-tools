@@ -1,5 +1,45 @@
-Untagged.compact:4:1: fix: inserted @description
-Untagged.compact:6:3: fix: inserted @description
-Untagged.compact:12:3: fix: inserted @description
-Untagged.compact:17:3: fix: inserted @constraints k=?, rows=?
-Untagged.compact:17:3: fix: inserted @description
+Untagged.compact:4:1 lint/missing-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Untagged` doc comment has no @description.
+
+  i Applied fix: Insert @description
+
+      3 │ + ·*·@description·TODO
+
+Untagged.compact:6:3 lint/missing-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `_allowed` doc comment has no @description.
+
+  i Applied fix: Insert @description
+
+    5   │ - ··/**·Approved·accounts.·Absent·means·not·allowed.·*/
+      5 │ + ··/**
+      6 │ + ···*·@description·Approved·accounts.·Absent·means·not·allowed.
+      7 │ + ···*/
+
+Untagged.compact:12:3 lint/missing-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `run` doc comment has no @description.
+
+  i Applied fix: Insert @description
+
+    9   │ - ···*·The·circuit·has·no·description·either.
+      9 │ + ···*·@description·The·circuit·has·no·description·either.
+
+Untagged.compact:17:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `store` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      15 │ + ···*·@constraints·k=?,·rows=?
+      16 │ + ···*
+
+Untagged.compact:17:3 lint/missing-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `store` doc comment has no @description.
+
+  i Applied fix: Insert @description
+
+      15 │ + ···*·@description·TODO
+

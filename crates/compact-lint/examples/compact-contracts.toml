@@ -16,6 +16,22 @@ self = ["**/presets/**"]
 forbid = ["@return"]
 rename = { "@return" = "@returns" }
 
+# Every rule's default level, spelled out. Set one to "off" to stop it running, or to
+# "warn" / "info" to keep it out of the exit code. `check --strict` promotes
+# constraints-placeholder to "error" for that run.
+# [rules]
+# missing-doc = "error"
+# missing-tag = "error"
+# forbidden-tag = "error"
+# module-name = "error"
+# missing-constraints = "error"
+# constraints-format = "error"
+# constraints-placeholder = "warn"
+# constraints-unmeasured = "warn"
+# constraints-unmeasurable = "warn"
+# parse = "error"
+# format = "error"
+
 [kinds.module]
 docs = "exported"
 tags = ["@module", "@description"]

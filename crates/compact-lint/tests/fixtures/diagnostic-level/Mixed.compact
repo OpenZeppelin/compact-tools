@@ -1,0 +1,16 @@
+/**
+ * @module Mixed
+ * @description A module with one warning and one error.
+ */
+export module Mixed {
+  /**
+   * @description Not measured yet.
+   * @constraints k=?, rows=?
+   */
+  export circuit run(): [] { }
+
+  /**
+   * @description Unannotated.
+   */
+  export circuit bump(): [] { }
+}

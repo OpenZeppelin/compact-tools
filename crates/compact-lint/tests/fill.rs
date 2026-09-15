@@ -93,15 +93,15 @@ fn collect(root: &Path, directory: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) 
     }
 }
 
-fn expected(name: &str) -> String {
-    std::fs::read_to_string(case(name).join("expected.txt")).expect("the case has an expectation")
+fn expected(name: &str, file: &str) -> String {
+    std::fs::read_to_string(case(name).join(file)).expect("the case has an expectation")
 }
 
 /// Runs `fill-constraints` inside `directory`, pointed at the fake compiler.
 fn fill(directory: &Path, extra: &[&str]) -> Output {
     binary()
         .current_dir(directory)
-        .args(["fill-constraints", "--compact-bin"])
+        .args(["fill-constraints", "--colors=off", "--compact-bin"])
         .arg(fake_compact())
         .args(extra)
         .output()
@@ -120,6 +120,7 @@ fn run(directory: &Path, args: &[&str]) -> (i32, String) {
     let output = binary()
         .current_dir(directory)
         .args(args)
+        .arg("--colors=off")
         .output()
         .expect("the binary ran");
     code_and_stdout(&output)
@@ -127,13 +128,18 @@ fn run(directory: &Path, args: &[&str]) -> (i32, String) {
 
 /// The whole contract of a measurable case: it fills, it lands, it settles, it previews.
 ///
-/// `settled` is what a second run still reports, which is the unmeasured circuits.
-fn assert_case(name: &str, extra: &[&str], exit: i32, settled: &str) {
+/// A case holds `expected.txt` for the write run, `expected-settled.txt` for what a
+/// second run still reports, and `expected-dry-run.txt` for the preview.
+fn assert_case(name: &str, extra: &[&str], exit: i32) {
     let directory = work(name);
     let root = directory.path();
 
     let (code, stdout) = code_and_stdout(&fill(root, extra));
-    assert_eq!(stdout, expected(name), "stdout for case {name}");
+    assert_eq!(
+        stdout,
+        expected(name, "expected.txt"),
+        "stdout for case {name}"
+    );
     assert_eq!(code, exit, "exit code for case {name}");
     assert_eq!(
         sources(root),
@@ -146,7 +152,11 @@ fn assert_case(name: &str, extra: &[&str], exit: i32, settled: &str) {
     assert_eq!(code, 0, "check exit code after filling case {name}");
 
     let (code, stdout) = code_and_stdout(&fill(root, extra));
-    assert_eq!(stdout, settled, "a second run on case {name}");
+    assert_eq!(
+        stdout,
+        expected(name, "expected-settled.txt"),
+        "a second run on case {name}"
+    );
     assert_eq!(code, exit, "second run exit code for case {name}");
 
     let preview = work(name);
@@ -154,7 +164,11 @@ fn assert_case(name: &str, extra: &[&str], exit: i32, settled: &str) {
     let mut arguments = extra.to_vec();
     arguments.push("--dry-run");
     let (code, stdout) = code_and_stdout(&fill(preview.path(), &arguments));
-    assert_eq!(stdout, expected(name), "dry-run stdout for case {name}");
+    assert_eq!(
+        stdout,
+        expected(name, "expected-dry-run.txt"),
+        "dry-run stdout for case {name}"
+    );
     assert_eq!(code, exit, "dry-run exit code for case {name}");
     assert_eq!(
         sources(preview.path()),
@@ -165,28 +179,22 @@ fn assert_case(name: &str, extra: &[&str], exit: i32, settled: &str) {
 
 #[test]
 fn placeholders_and_stale_values_take_the_measurement() {
-    let unmeasured = expected("basic")
-        .lines()
-        .filter(|line| line.contains("constraints-unmeasured"))
-        .collect::<Vec<&str>>()
-        .join("\n");
-
-    assert_case("basic", &[], EXIT_UNMEASURED, &format!("{unmeasured}\n"));
+    assert_case("basic", &[], EXIT_UNMEASURED);
 }
 
 #[test]
 fn a_preset_matching_a_self_glob_compiles_itself() {
-    assert_case("self", &[], 0, "");
+    assert_case("self", &[], 0);
 }
 
 #[test]
 fn an_override_names_the_contract_that_measures_a_file() {
-    assert_case("override", &[], 0, "");
+    assert_case("override", &[], 0);
 }
 
 #[test]
 fn a_seeded_cache_fills_without_a_compiler() {
-    assert_case("no-compile", &["--no-compile"], 0, "");
+    assert_case("no-compile", &["--no-compile"], 0);
 }
 
 #[test]
@@ -195,10 +203,13 @@ fn a_circuit_the_report_marks_unproved_stays_unmeasured() {
     let (_, stdout) = code_and_stdout(&fill(directory.path(), &[]));
 
     assert!(
-        stdout.contains("circuit `initialize` has no measurement"),
+        stdout.contains("Circuit `initialize` has no measurement."),
         "{stdout}"
     );
-    assert!(!stdout.contains("k=5, rows=10"), "{stdout}");
+    assert!(
+        !stdout.contains("Set @constraints to k=5, rows=10"),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -209,7 +220,7 @@ fn a_file_with_no_measurement_source_reports_once_and_exits_one() {
 
     let (code, stdout) = code_and_stdout(&fill(root, &[]));
 
-    assert_eq!(stdout, expected("missing-source"));
+    assert_eq!(stdout, expected("missing-source", "expected.txt"));
     assert_eq!(code, EXIT_UNMEASURED);
     assert_eq!(sources(root), before);
 }
@@ -258,13 +269,15 @@ fn a_compile_writes_the_cache_the_builder_shares() {
 fn the_summary_goes_to_stderr_and_the_changes_to_stdout() {
     let directory = work("basic");
     let output = fill(directory.path(), &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr).trim_end(),
-        "2 values filled in 1 files, 1 unmeasured"
+    assert!(stderr.starts_with("Checked 1 file in "), "{stderr}");
+    assert!(
+        stderr.ends_with(". Filled 2 values in 1 file.\nFound 1 warning.\n"),
+        "{stderr}"
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains(": fill: "),
+        String::from_utf8_lossy(&output.stdout).contains(" fill  FIXED  "),
         "the changes belong on stdout"
     );
 }

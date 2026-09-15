@@ -1,1 +1,18 @@
-Unmeasured.compact:9:3: missing-constraints: circuit `run` doc comment has no @constraints
+Unmeasured.compact:9:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Circuit `run` doc comment has no @constraints.
+
+     7 │    * @description Writes to the ledger without an annotation.
+     8 │    */
+  >  9 │   export circuit run(): [] { }
+       │   ^^^^^^^^^^^^^^^^^^
+    10 │ 
+    11 │   /**
+
+  i Run compact-lint fill-constraints after adding the tag, or add it as @constraints k=?, rows=? to fill later.
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      8 │ + ···*
+      9 │ + ···*·@constraints·k=?,·rows=?
+

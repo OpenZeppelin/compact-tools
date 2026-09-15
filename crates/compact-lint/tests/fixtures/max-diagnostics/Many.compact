@@ -1,0 +1,11 @@
+/**
+ * @module Many
+ * @description A module with more findings than the cap shows.
+ */
+export module Many {
+  export ledger _first: Bytes<32>;
+
+  export ledger _second: Bytes<32>;
+
+  export ledger _third: Bytes<32>;
+}

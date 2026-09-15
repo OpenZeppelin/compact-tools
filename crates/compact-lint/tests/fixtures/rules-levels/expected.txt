@@ -1,0 +1,18 @@
+Levels.compact:11:6 lint/forbidden-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden tag @return.
+
+     9 │    * @description Does nothing.
+    10 │    * @constraints k=6, rows=28
+  > 11 │    * @return {[]} - Empty tuple.
+       │      ^^^^^^^
+    12 │    */
+    13 │   export circuit run(): [] { }
+
+  i Rename it to @returns.
+
+  i Safe fix: Rename @return to @returns
+
+    11    │ - ···*·@return·{[]}·-·Empty·tuple.
+       11 │ + ···*·@returns·{[]}·-·Empty·tuple.
+

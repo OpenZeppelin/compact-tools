@@ -1,0 +1,32 @@
+version = 1
+include = ["**/*.compact"]
+
+[tags]
+forbid = ["@return"]
+rename = { "@return" = "@returns" }
+
+[kinds.module]
+tags = ["@module", "@description"]
+
+[kinds.circuit]
+tags = ["@description"]
+
+[kinds.ledger]
+tags = ["@description"]
+
+[kinds.witness]
+docs = "all"
+tags = ["@description"]
+
+[kinds.struct]
+tags = ["@description"]
+
+[kinds.enum]
+tags = ["@description"]
+
+[kinds.constructor]
+docs = "none"
+
+[rules]
+missing-doc = "off"
+forbidden-tag = "warn"

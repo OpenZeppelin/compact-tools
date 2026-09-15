@@ -6,7 +6,8 @@ use std::process::Command;
 
 use thiserror::Error;
 
-use crate::report::{Finding, Position, RuleId};
+use crate::diagnostic::{Diagnostic, Level, sentence};
+use crate::report::RuleId;
 
 /// Environment override for the `compact` binary; the `--compact-bin` flag wins over it.
 pub const COMPACT_BIN_ENV: &str = "COMPACT_LINT_COMPACT_BIN";
@@ -14,7 +15,11 @@ pub const COMPACT_BIN_ENV: &str = "COMPACT_LINT_COMPACT_BIN";
 /// The default binary name, resolved through `PATH`.
 pub const DEFAULT_COMPACT_BIN: &str = "compact";
 
-pub const MESSAGE: &str = "not formatted; run `compact format`";
+/// The message every reported file carries; the repair is the diagnostic's advice.
+pub const MESSAGE: &str = "Not formatted.";
+
+/// The advice every `format` diagnostic carries.
+pub const ADVICE: &str = "Run compact format to fix it.";
 
 #[derive(Debug, Error)]
 pub enum FormatError {
@@ -28,14 +33,18 @@ pub enum FormatError {
     },
 }
 
-/// Runs `compact format --check` once over every file and maps its report to findings.
+/// Runs `compact format --check` once over every file and maps its report to diagnostics.
 ///
 /// The formatter writes one `<path>:` line per unformatted file to stderr, followed by
-/// an indented diff. An output that holds no such line yields one finding on the first
+/// an indented diff. An output that holds no such line yields one diagnostic on the first
 /// checked file carrying the formatter's own first line.
 /// # Errors
 /// Returns an error when the `compact` binary is missing or cannot be spawned.
-pub fn check(binary: &OsStr, files: &[PathBuf]) -> Result<Vec<Finding>, FormatError> {
+pub fn check(
+    binary: &OsStr,
+    files: &[PathBuf],
+    level: Level,
+) -> Result<Vec<Diagnostic>, FormatError> {
     if files.is_empty() {
         return Ok(Vec::new());
     }
@@ -68,23 +77,21 @@ pub fn check(binary: &OsStr, files: &[PathBuf]) -> Result<Vec<Finding>, FormatEr
         let raw = first_line(&stderr)
             .or_else(|| first_line(&stdout))
             .unwrap_or("compact format --check failed");
-        return Ok(vec![Finding::new(
-            files[0].clone(),
-            Position::file_start(),
-            RuleId::FORMAT,
-            raw.to_owned(),
-        )]);
+        return Ok(vec![
+            Diagnostic::new(files[0].clone(), RuleId::FORMAT, level, sentence(raw)).advise(ADVICE),
+        ]);
     }
 
     Ok(reported
         .into_iter()
         .map(|path| {
-            Finding::new(
+            Diagnostic::new(
                 resolve(path, files),
-                Position::file_start(),
                 RuleId::FORMAT,
+                level,
                 MESSAGE.to_owned(),
             )
+            .advise(ADVICE)
         })
         .collect())
 }
