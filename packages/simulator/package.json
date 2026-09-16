@@ -43,7 +43,7 @@
     "clean": "git clean -fXd"
   },
   "devDependencies": {
-    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-beta.8",
     "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.7",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
