@@ -117,8 +117,6 @@ Results carry `fragments` (transactions the address has taken, counting an inter
 
 **Resume guard limit.** The guard proves the recorded address holds a contract this signing key maintains whose on-chain keys match this artifact; it cannot tell two deploys of the same artifact with the same key apart. Do not hand-edit a `partial` record's `address`, or a sibling deploy will receive this run's remaining keys.
 
-The properties this path has to hold are listed in [docs/invariants.md](./docs/invariants.md).
-
 ## Deploying to real networks (preprod, preview, testnet)
 
 > Preview is down (null-routed DNS); preprod is reachable. A first cold preprod sync takes ~37 min, so raise `--sync-timeout`. Local standalone (`make env-up`) is still the fastest target. See [Known issues](#known-issues-may-2026).
