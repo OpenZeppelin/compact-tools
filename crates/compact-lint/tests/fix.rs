@@ -227,6 +227,21 @@ fn an_explicit_config_replaces_the_one_beside_the_sources() {
 }
 
 #[test]
+fn a_file_named_like_the_old_temporary_survives_a_fix() {
+    let directory = work("rename");
+    let planted = directory.path().join("Returns.compact.tmp");
+    std::fs::write(&planted, "not mine to truncate\n").expect("the plant is writable");
+
+    let (code, _) = run(directory.path(), &["fix"]);
+
+    assert_eq!(code, 0);
+    assert_eq!(
+        std::fs::read_to_string(&planted).expect("the plant is still there"),
+        "not mine to truncate\n"
+    );
+}
+
+#[test]
 fn a_missing_path_exits_two() {
     let directory = work("rename");
     let (code, _) = run(directory.path(), &["fix", "Nope.compact"]);
