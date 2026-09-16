@@ -1,0 +1,149 @@
+================================================================================
+ledger field
+================================================================================
+
+ledger _counter: Counter;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier))))
+
+================================================================================
+exported ledger field
+================================================================================
+
+export ledger _owner: Either<Bytes<32>, ContractAddress>;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier)
+      (generic_arguments
+        (identifier)
+        (generic_arguments
+          (number))
+        (identifier)))))
+
+================================================================================
+exported sealed ledger field
+================================================================================
+
+export sealed ledger _domain: Bytes<32>;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier)
+      (generic_arguments
+        (number)))))
+
+================================================================================
+ledger field with a tuple type
+================================================================================
+
+ledger _pair: [Field, Boolean];
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (ledger_declaration
+    name: (identifier)
+    type: (type_expression
+      (identifier)
+      (identifier))))
+
+================================================================================
+witness
+================================================================================
+
+witness wit_CallerSK(): Bytes<32>;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (witness_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression
+      (identifier)
+      (generic_arguments
+        (number)))))
+
+================================================================================
+exported witness with parameters
+================================================================================
+
+export witness wit_balance(ct: ElGamal_Ciphertext): Uint<128>;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (witness_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression
+      (identifier)
+      (generic_arguments
+        (number)))))
+
+================================================================================
+type alias
+================================================================================
+
+type Hash = Bytes<32>;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (type_declaration
+    name: (identifier)
+    value: (type_expression
+      (identifier)
+      (generic_arguments
+        (number)))))
+
+================================================================================
+exported new type alias
+================================================================================
+
+export new type AccountIdentifier = Bytes<32>;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (type_declaration
+    name: (identifier)
+    value: (type_expression
+      (identifier)
+      (generic_arguments
+        (number)))))
+
+================================================================================
+generic type alias
+================================================================================
+
+export type Pair<A, B> = [A, B];
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (type_declaration
+    name: (identifier)
+    (generic_parameters
+      (generic_parameter
+        name: (identifier))
+      (generic_parameter
+        name: (identifier)))
+    value: (type_expression
+      (identifier)
+      (identifier))))

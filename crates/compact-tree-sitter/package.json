@@ -1,0 +1,16 @@
+{
+  "name": "compact-tree-sitter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Declaration-level Compact grammar for tree-sitter",
+  "license": "MIT",
+  "main": "grammar.js",
+  "tree-sitter": [
+    {
+      "scope": "source.compact",
+      "file-types": [
+        "compact"
+      ]
+    }
+  ]
+}
