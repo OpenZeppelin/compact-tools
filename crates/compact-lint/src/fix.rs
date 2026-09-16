@@ -83,9 +83,10 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
         })?;
 
         let newline = newline_of(&source);
-        let edits: Vec<Edit> = linter
-            .issues(path, &source, &target.config, false)?
+        let issues = linter.issues(path, &source, &target.config, false)?;
+        let edits: Vec<Edit> = issues
             .iter()
+            .filter(|issue| !supplied_by_a_rename(issue, &issues, &target.config))
             .filter_map(|issue| edit_for(issue, &target.config, newline))
             .collect();
 
@@ -103,6 +104,27 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
     }
 
     Ok(Outcome { files })
+}
+
+/// Whether a forbidden tag in the same doc comment is renamed to the tag this
+/// `missing-tag` issue reports.
+///
+/// Inserting it as well would leave the comment carrying the tag twice.
+fn supplied_by_a_rename(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
+    let Issue::MissingTag { tag, doc, .. } = issue else {
+        return false;
+    };
+
+    issues.iter().any(|other| {
+        matches!(
+            other,
+            Issue::ForbiddenTag {
+                tag: forbidden,
+                doc: other_doc,
+                ..
+            } if other_doc == doc && config.rename_of(forbidden) == Some(tag)
+        )
+    })
 }
 
 /// The repair for one issue, or `None` where the rule has no safe fix.
