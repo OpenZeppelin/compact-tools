@@ -1,0 +1,1 @@
+live/Live.compact:6:3: missing-doc: ledger `_owner` has no doc comment
