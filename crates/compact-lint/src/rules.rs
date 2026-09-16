@@ -146,6 +146,9 @@ fn check_declaration(
         check_module_name(declaration, display, findings);
     }
 
+    // The constraints rule is fixed, so it stays outside the per-kind docs policy.
+    check_constraints(declaration, display, config, strict, findings);
+
     if !requires_docs {
         return;
     }
@@ -160,8 +163,6 @@ fn check_declaration(
             ));
         }
     }
-
-    check_constraints(declaration, display, config, strict, findings);
 }
 
 /// `@module <Name>` must name the module it documents.
@@ -337,6 +338,19 @@ mod tests {
 
         assert_eq!(
             findings(source, &circuit_config(), false),
+            ["a.compact:2:1: missing-constraints: circuit `bump` doc comment has no @constraints"]
+        );
+    }
+
+    #[test]
+    fn the_constraints_rule_survives_docs_none() {
+        let source =
+            "/** @description Bumps. */\nexport circuit bump(): [] { count.increment(1); }\n";
+        let mut config = circuit_config();
+        config.kinds.circuit.docs = DocsPolicy::None;
+
+        assert_eq!(
+            findings(source, &config, false),
             ["a.compact:2:1: missing-constraints: circuit `bump` doc comment has no @constraints"]
         );
     }
