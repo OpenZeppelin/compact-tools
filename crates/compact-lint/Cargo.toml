@@ -1,0 +1,33 @@
+[package]
+name = "compact-lint"
+version = "0.1.0"
+description = "Doc-comment linter for Compact sources"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "compact_lint"
+path = "src/lib.rs"
+
+[[bin]]
+name = "compact-lint"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+globset.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+tree-sitter.workspace = true
+compact-tree-sitter.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
