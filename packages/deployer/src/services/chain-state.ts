@@ -8,10 +8,12 @@
 
 import { verifierKeysEqual } from '@midnight-ntwrk/midnight-js-contracts';
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types';
+import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import { ConfigError, FragmentDeployError } from '../errors.ts';
 import type { ArtifactKeys } from '../loaders/artifact.ts';
 import { operationNames } from './contract-state.ts';
 import { remaining, sortCircuits } from './deploy-plan.ts';
+import { formatVerifyingKey, signatureKeysEqual } from './maintenance-tx.ts';
 
 /** Default gap between chain re-reads while waiting for the indexer to catch up. */
 const DEFAULT_STATE_POLL_MS = 2_000;
@@ -21,7 +23,7 @@ export interface ChainSnapshot {
   readonly circuits: readonly string[];
   readonly verifierKeys: ReadonlyMap<string, Uint8Array>;
   readonly counter: bigint;
-  readonly committee: readonly string[];
+  readonly committee: readonly SignatureVerifyingKey[];
   readonly threshold: number;
 }
 
@@ -100,6 +102,11 @@ export interface VerifyStateArgs {
   authority: Pick<ChainSnapshot, 'committee' | 'threshold'>;
 }
 
+/** Committee as one line of tagged keys, for the authority-drift message. */
+function formatCommittee(committee: readonly SignatureVerifyingKey[]): string {
+  return committee.map(formatVerifyingKey).join(', ');
+}
+
 /**
  * Every artifact circuit present on chain with identical key bytes,
  * and no extra on-chain circuit. A count check would pass a state that has the
@@ -117,10 +124,13 @@ export function verifyState({
   if (
     snapshot.threshold !== authority.threshold ||
     snapshot.committee.length !== authority.committee.length ||
-    snapshot.committee.some((key, i) => key !== authority.committee[i])
+    snapshot.committee.some((key, i) => {
+      const before = authority.committee[i];
+      return before === undefined || !signatureKeysEqual(key, before);
+    })
   ) {
     throw new ConfigError(
-      `Maintenance authority of ${address} changed during the deploy: committee [${authority.committee.join(', ')}] threshold ${authority.threshold} became committee [${snapshot.committee.join(', ')}] threshold ${snapshot.threshold}.`,
+      `Maintenance authority of ${address} changed during the deploy: committee [${formatCommittee(authority.committee)}] threshold ${authority.threshold} became committee [${formatCommittee(snapshot.committee)}] threshold ${snapshot.threshold}.`,
     );
   }
   const problems = compare(artifactKeys, snapshot);
@@ -147,14 +157,16 @@ export function signerIndex({
   address: string;
   snapshot: ChainSnapshot;
   /** Public half of the loaded signing key. Never the signing key. */
-  verifyingKey: string;
+  verifyingKey: SignatureVerifyingKey;
 }): number {
   if (snapshot.threshold !== 1) {
     throw new ConfigError(
       `Contract ${address} needs ${snapshot.threshold} maintenance signatures; the deployer holds one key. Complete this deploy with a multi-signer tool.`,
     );
   }
-  const index = snapshot.committee.indexOf(verifyingKey);
+  const index = snapshot.committee.findIndex((key) =>
+    signatureKeysEqual(key, verifyingKey),
+  );
   if (index < 0) {
     throw new ConfigError(
       `Contract ${address} is not maintained by this signing key. Check signing_key_file, or re-run with --force to deploy fresh.`,
@@ -168,7 +180,7 @@ export interface AssertResumableArgs {
   artifactKeys: ArtifactKeys;
   snapshot: ChainSnapshot | undefined;
   /** Verifying key derived from the loaded signing key. Never the signing key. */
-  verifyingKey: string;
+  verifyingKey: SignatureVerifyingKey;
 }
 
 /**

@@ -1,13 +1,13 @@
-import { shieldedToken, unshieldedToken } from '@midnight-ntwrk/ledger-v8';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
+import { shieldedToken, unshieldedToken } from '@midnightntwrk/ledger-v9';
 import {
   DustAddress,
   ShieldedAddress,
   UnshieldedAddress,
-} from '@midnight-ntwrk/wallet-sdk-address-format';
-import { PendingTransactions } from '@midnight-ntwrk/wallet-sdk-capabilities';
-import type { FacadeState } from '@midnight-ntwrk/wallet-sdk-facade';
+} from '@midnightntwrk/wallet-sdk-address-format';
+import { PendingTransactions } from '@midnightntwrk/wallet-sdk-capabilities';
+import type { FacadeState } from '@midnightntwrk/wallet-sdk-facade';
 import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
 import { UnfundedWalletError, WalletError } from '../errors.ts';

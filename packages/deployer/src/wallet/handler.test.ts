@@ -21,7 +21,7 @@ import {
 import {
   createKeystore,
   UnshieldedWallet,
-} from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+} from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
 import {
   afterEach,
@@ -76,14 +76,14 @@ vi.mock('@midnight-ntwrk/testkit-js', () => ({
   },
 }));
 
-vi.mock('@midnight-ntwrk/wallet-sdk-unshielded-wallet', () => ({
+vi.mock('@midnightntwrk/wallet-sdk-unshielded-wallet', () => ({
   createKeystore: vi.fn(() => ({ tag: 'keystore' })),
   UnshieldedWallet: vi.fn(() => ({
     restore: vi.fn(() => ({ tag: 'unshielded-restored' })),
   })),
 }));
 
-vi.mock('@midnight-ntwrk/ledger-v8', () => ({
+vi.mock('@midnightntwrk/ledger-v9', () => ({
   ZswapSecretKeys: { fromSeed: vi.fn(() => ({ tag: 'zswap-keys' })) },
   DustSecretKey: { fromSeed: vi.fn(() => ({ tag: 'dust-key' })) },
 }));
@@ -313,7 +313,7 @@ describe('WalletHandler', () => {
         { rootDir: ROOT_DIR },
       );
       expect(createKeystore).toHaveBeenCalledWith(
-        expect.any(Uint8Array),
+        { kind: 'schnorr', secret: expect.any(Uint8Array) },
         'testnet',
       );
     });

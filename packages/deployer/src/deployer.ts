@@ -65,6 +65,7 @@ import { formatError } from './services/error-format.ts';
 import {
   buildInsertTx,
   buildInsertUpdate,
+  formatVerifyingKey,
   verifyingKeyOf,
 } from './services/maintenance-tx.ts';
 import {
@@ -595,7 +596,7 @@ export class Deployer implements AsyncDisposable {
           contractName,
           contract: s.contract,
           artifact: s.artifact,
-          signingKey: s.signingKey.hex,
+          signingKey: s.signingKey.ledgerKey,
           args: s.args.values,
           initialPrivateState: s.initialPrivateState?.value,
           circuits: batch,
@@ -676,9 +677,9 @@ export class Deployer implements AsyncDisposable {
     const { head, providers, keys, txTimeoutMs } = args;
     const s = this.#state;
     // Only the public half of the loaded key is compared or logged.
-    const verifyingKey = verifyingKeyOf(s.signingKey.hex);
+    const verifyingKey = verifyingKeyOf(s.signingKey.ledgerKey);
     s.logger.debug(
-      `Resuming ${head.address}; maintenance verifying key ${verifyingKey}`,
+      `Resuming ${head.address}; maintenance verifying key ${formatVerifyingKey(verifyingKey)}`,
     );
     // Settle the deploy transaction first, keyed by address. A run killed
     // between submission and finalization leaves a record whose contract is
@@ -879,7 +880,7 @@ export class Deployer implements AsyncDisposable {
     providers.privateStateProvider.setContractAddress(address);
     await providers.privateStateProvider.setSigningKey(
       address,
-      s.signingKey.hex,
+      s.signingKey.ledgerKey,
     );
   }
 
@@ -984,7 +985,7 @@ export class Deployer implements AsyncDisposable {
       const signer = signerIndex({
         address,
         snapshot,
-        verifyingKey: verifyingKeyOf(s.signingKey.hex),
+        verifyingKey: verifyingKeyOf(s.signingKey.ledgerKey),
       });
       await this.#recordProgress({
         deployments,
@@ -1082,7 +1083,7 @@ export class Deployer implements AsyncDisposable {
             update: buildInsertUpdate({
               address,
               counter: snapshot.counter,
-              signingKey: s.signingKey.hex,
+              signingKey: s.signingKey.ledgerKey,
               signerIndex: signer,
               inserts: batch.map((circuitId) => ({
                 circuitId,

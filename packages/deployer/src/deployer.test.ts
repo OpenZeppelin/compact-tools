@@ -114,7 +114,7 @@ vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
 
 // Stub the bech32 codec triplet so `logWalletAddresses` reaches its
 // happy-path info logs instead of catching at the encode call.
-vi.mock('@midnight-ntwrk/wallet-sdk-address-format', () => {
+vi.mock('@midnightntwrk/wallet-sdk-address-format', () => {
   const codec = {
     encode: vi.fn(() => ({ toString: () => 'addr1stub' })),
   };
@@ -475,7 +475,7 @@ describe('Deployer', () => {
       ).toHaveBeenCalledWith('0xCONTRACT');
       expect(providers.privateStateProvider.setSigningKey).toHaveBeenCalledWith(
         '0xCONTRACT',
-        'contract-maintenance-key',
+        { tag: 'schnorr', value: 'contract-maintenance-key' },
       );
       // No [contracts.Counter].private_state_id in the fixture.
       expect(providers.privateStateProvider.set).not.toHaveBeenCalled();
