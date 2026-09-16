@@ -109,7 +109,7 @@ stays the place a syntax error is reported.
 
 Changes go to stdout, one per line:
 
-```
+```text
 contracts/src/access/Ownable.compact:59:6: fill: @constraints k=?, rows=? -> k=13, rows=4273
 ```
 
@@ -155,13 +155,13 @@ is called from the mock's constructor, never exported — or where the compiler'
 `contract-info.json` marks the circuit `proof: false`, which carries no constraints. The
 value is left alone and the circuit is reported:
 
-```
+```text
 contracts/src/access/Ownable.compact:37:6: constraints-unmeasured: circuit `initialize` has no measurement in contracts/src/access/test/mocks/MockOwnable.compact
 ```
 
 A file with no measurement source at all is reported once, with the candidates tried:
 
-```
+```text
 contracts/src/utils/Utils.compact:1:1: constraints-unmeasurable: no measurement source for contracts/src/utils/Utils.compact; tried contracts/src/utils/test/mocks/MockUtils.compact, contracts/src/test/mocks/MockUtils.compact
 ```
 
