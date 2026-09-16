@@ -40,6 +40,13 @@ const builder = new CompactBuilder({
 await builder.build();
 ```
 
+## Artifacts
+
+Each contract compiles into `<outDir>/<Contract>/` (flattened) or
+`<outDir>/<subdir>/<Contract>/` (`hierarchical: true`). Beside the `compiler/`
+output, every ZK compile writes `circuit-info.json` with the parsed `k`/`rows`
+per circuit. `--skip-zk` writes none.
+
 ## Public API
 
 ```ts
