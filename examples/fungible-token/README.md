@@ -46,7 +46,7 @@ fungible-token/
 
 - Node 24+
 - Docker — for the local Midnight stack, and for `proof_server = "auto"` on the testnets
-- The `compact` toolchain with compiler 0.31.1 available (`compact list`). The deployer pins compact-runtime 0.16.0; an artifact from the default compactc fails at submit with a `Version mismatch`.
+- The `compact` toolchain with compiler 0.34.0 available (`compact list`). The deployer pins compact-runtime 0.19.0; an artifact from an older compactc fails at submit with a `Version mismatch`.
 - A one-time root setup: `yarn install && yarn build` from the repo root. This is a yarn workspace, so binaries like `compact-compiler` and `compact-deploy` resolve automatically inside this folder.
 
 ## Run it
@@ -171,7 +171,7 @@ If you edit `contracts/TokenExample.compact` (or any vendored file under `contra
 yarn compile
 ```
 
-This runs the workspace's `compact-compiler` (the bin from `@openzeppelin/compact-cli`) over `contracts/` with compiler 0.31.1 and emits a hierarchical artifact tree under `artifacts/`. The `artifacts/` tree is gitignored: regenerate it locally, don't commit it.
+This runs the workspace's `compact-compiler` (the bin from `@openzeppelin/compact-cli`) over `contracts/` with compiler 0.34.0 and emits a hierarchical artifact tree under `artifacts/`. The `artifacts/` tree is gitignored: regenerate it locally, don't commit it.
 
 ## Cleanup
 

@@ -16,6 +16,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** the deploy stack moves to Ledger v9. `@midnight-ntwrk/compact-runtime` `0.16.0` → `0.19.0`, `@midnight-ntwrk/ledger-v8` `8.1.0` → `@midnightntwrk/ledger-v9` `1.0.0-rc.3`, `@midnight-ntwrk/compact-js` `2.5.1` → `2.5.5-rc.8`, the `midnight-js` packages and `testkit-js` `4.1.1` → `5.0.0-beta.7`, and the wallet-SDK packages to the `@midnightntwrk` scope at `4.0.0-beta.2` / `5.0.0-beta.2`. Artifacts must be compiled with `compact compile +0.34.0`; a 0.31.x artifact fails at submit with `Version mismatch`. See the README's "Supported stack" section (#192)
+- **Breaking:** the ledger tags signing and verifying keys with their signature scheme, as `{ tag: 'schnorr', value: <hex> }`. `SigningKey` gains a `ledgerKey` getter returning that form, `ChainSnapshot.committee` is `SignatureVerifyingKey[]` rather than `string[]`, and `verifyingKeyOf` takes and returns tagged keys. The `signing_key_file` on disk is unchanged: still 64 hex chars, no tag (#192)
+- yarn and pnpm consumers now need one resolution, `@midnightntwrk/ledger-v9` `1.0.0-rc.3`, instead of the six the v8 stack required. Everything else in that line pins exact versions (#192)
+- `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.0-rc.6`. The repo's integration stack moves to `midnightntwrk/indexer-standalone:4.4.0-rc.2` and `midnightntwrk/midnight-node:2.0.0-rc.4` (#192)
 - `DeploymentRecord` gains a `partial` member. A single-tx deploy still writes only `pending` then `confirmed`, so an exhaustive `switch` on `status` needs a new arm only if it reads records from a split deploy
 - A deploy that fits one transaction is unchanged: same transaction, same `pending` then `confirmed` records, no chain read and no maintenance transaction
 

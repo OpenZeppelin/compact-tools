@@ -41,32 +41,30 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 
 | Component | Version |
 |---|---|
-| `@midnight-ntwrk/compact-runtime` | 0.16.0 |
-| `@midnight-ntwrk/ledger-v8` | 8.1.0 |
-| `@midnight-ntwrk/midnight-js-*` | 4.1.1 |
-| `@midnight-ntwrk/testkit-js` | 4.1.1 |
-| `@midnight-ntwrk/wallet-sdk-facade` | 4.0.1 |
-| Compact compiler | 0.31.1 |
+| `@midnight-ntwrk/compact-runtime` | 0.19.0 |
+| `@midnightntwrk/ledger-v9` | 1.0.0-rc.3 |
+| `@midnight-ntwrk/compact-js` | 2.5.5-rc.8 |
+| `@midnight-ntwrk/midnight-js-*` | 5.0.0-beta.7 |
+| `@midnight-ntwrk/testkit-js` | 5.0.0-beta.7 |
+| `@midnightntwrk/wallet-sdk-facade` | 5.0.0-beta.2 |
+| Compact compiler | 0.34.0 |
 
-`ledger-v8` is pinned to 8.1.0 because `midnight-js-protocol` 4.1.1 requires exactly that version. A second copy of the ledger WASM in the tree fails a deploy with `expected instance of DustParameters`. npm dedupes to the single pinned copy on its own. yarn and pnpm resolve each range to the newest version, so a project using them adds the same pins as this repo's root `package.json`:
+The ledger and the wallet SDK live under the `@midnightntwrk` scope (no hyphen) in this line. `@midnight-ntwrk/ledger-v8` and `@midnight-ntwrk/wallet-sdk-*` are the v8 names and are gone from the tree.
+
+Two copies of the ledger WASM in one tree broke every deploy on the v8 stack with `expected instance of DustParameters`. `compact-js` 2.5.5-rc.8 declares `ledger-v9` as the range `^1.0.0-rc.3`, so yarn and pnpm resolve it to the newest prerelease and nest a second copy next to the pinned one. A project on either adds the pin this repo's root `package.json` carries:
 
 ```json
 "resolutions": {
-  "@midnight-ntwrk/ledger-v8": "8.1.0",
-  "@midnight-ntwrk/wallet-sdk-address-format": "3.1.2",
-  "@midnight-ntwrk/wallet-sdk-dust-wallet": "4.1.0",
-  "@midnight-ntwrk/wallet-sdk-facade": "4.0.1",
-  "@midnight-ntwrk/wallet-sdk-shielded": "3.0.1",
-  "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "3.1.0"
+  "@midnightntwrk/ledger-v9": "1.0.0-rc.3"
 }
 ```
 
-(`pnpm.overrides` for pnpm.)
+(`pnpm.overrides` for pnpm.) The wallet-SDK packages need no pin: every dependency inside that line is an exact version, so nothing floats.
 
-Compile with the pinned compiler: `compact compile +0.31.1`. The current default compactc (0.34.x) emits code for compact-runtime 0.19.0, and the deploy then fails with a `Version mismatch` runtime error.
+Compile with the pinned compiler: `compact compile +0.34.0`. An artifact from compactc 0.31.x emits code for compact-runtime 0.16.0, and the deploy then fails with a `Version mismatch` runtime error.
 
-- As of 2026-09, `OpenZeppelin/compact-contracts` `main` is on compact-runtime 0.19.0 / ledger-v9 1.0.0-rc.3, so contracts built there are not deployable with this tool today.
-- Moving the deployer to the v9 stack is pending a published `@midnight-ntwrk/ledger-v9`: `@midnight-ntwrk/compact-js` 2.5.3 depends on an unpublished ledger-v9 alpha, which yarn rejects with `YN0082`.
+- `OpenZeppelin/compact-contracts` `main` is on this stack, so contracts built there deploy with this tool.
+- The midnight-js, testkit and wallet-SDK packages are prereleases. The pins move with them until those lines cut a stable release.
 
 ## CLI
 
@@ -234,7 +232,7 @@ circuits_per_tx  = 8
 
 `proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the duration of the deploy; omitting it falls back to the env var `PROOF_SERVER_PORT` then to `http://127.0.0.1:6300`.
 
-`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, which pins `midnightntwrk/proof-server:8.0.3` and publishes port 6300 on a free host port. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; a compose file there wins over the packaged one.
+`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, which pins `midnightntwrk/proof-server:9.0.0-rc.6` and publishes port 6300 on a free host port. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; a compose file there wins over the packaged one.
 
 ## Keystore format
 
@@ -255,7 +253,9 @@ circuits_per_tx  = 8
 
 5. **Long-history dust sync exhausts default Node heap.** The deployer now raises the dust/shielded sync batch size (`batchUpdates = { size: 5000, … }`) so the replay no longer OOMs mid-stream ([midnightntwrk/midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)). First hit on `wallet-sdk-dust-wallet@4.0.0`; the override is kept on the shipped 4.1.0 and has not been re-tested without it. The restored dust tree plus shielded trial-decryption can still spike past V8's ~2 GB default old-space on a first preprod sync, so set `NODE_OPTIONS="--max-old-space-size=8192"` for that run. Cache fixes subsequent runs.
 
-6. **Root `resolutions` pin the wallet-SDK packages; do not drop them on a bump.** `testkit-js@4.1.1` pulls `@midnight-ntwrk/wallet-sdk@1.1.0`, which declares `wallet-sdk-facade ^4.0.1` and so resolves to 4.1.0 — a version that imports a nonexistent `Clock` export and fails to load. Without the pins the tree also duplicates `wallet-sdk-dust-wallet` (4.2.0) and `wallet-sdk-shielded` (3.0.2). The root `package.json` therefore pins `wallet-sdk-address-format 3.1.2`, `wallet-sdk-dust-wallet 4.1.0`, `wallet-sdk-facade 4.0.1`, `wallet-sdk-shielded 3.0.1`, `wallet-sdk-unshielded-wallet 3.1.0`.
+6. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing; do not drop it on a bump.** `compact-js` declares the range `^1.0.0-rc.3`, so without the pin yarn nests a second ledger copy at the newest prerelease. That duplication is what broke every deploy on the v8 stack. The wallet-SDK pins the v8 stack needed are gone: that line now uses exact versions throughout.
+
+7. **`@midnight-ntwrk/compact-runtime` resolves to two copies.** `compact-js` and `midnight-js-protocol` pin `0.19.0-rc.0` where the deployer and compiled artifacts use `0.19.0`, so both sit in the tree. The integration suite deploys on this tree, including the pruned constructor path that runs through `compact-js`, so the two are interchangeable in practice. Forcing one copy with a resolution has not been tested.
 
 ## Programmatic API
 
