@@ -67,7 +67,8 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, CheckError> {
         let include = config.include_set(source)?;
         discover::from_globs(&base, &include, &exclude)?
     } else {
-        discover::from_paths(&options.paths, &base, &exclude)?
+        let paths = absolute_paths(&options.paths, cwd);
+        discover::from_paths(&paths, &base, &exclude)?
     };
     let files: Vec<PathBuf> = files.iter().map(|path| display_path(path, cwd)).collect();
 
@@ -111,7 +112,42 @@ fn resolve_config(
     }
 }
 
+/// Discovery matches the exclude globs against paths relative to the config's
+/// directory, so a CLI path has to be anchored at `cwd` first: a bare `archive`
+/// given from a subdirectory would otherwise never match `contracts/archive/**`.
+fn absolute_paths(paths: &[PathBuf], cwd: &Path) -> Vec<PathBuf> {
+    paths
+        .iter()
+        .map(|path| {
+            if path.is_absolute() {
+                path.clone()
+            } else {
+                cwd.join(path)
+            }
+        })
+        .collect()
+}
+
 /// Paths under the working directory print relative to it; anything else prints as is.
 fn display_path(path: &Path, cwd: &Path) -> PathBuf {
     path.strip_prefix(cwd).unwrap_or(path).to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_relative_path_is_anchored_at_the_working_directory() {
+        let resolved = absolute_paths(&[PathBuf::from("archive")], Path::new("/repo/contracts"));
+
+        assert_eq!(resolved, vec![PathBuf::from("/repo/contracts/archive")]);
+    }
+
+    #[test]
+    fn an_absolute_path_is_left_alone() {
+        let resolved = absolute_paths(&[PathBuf::from("/elsewhere/X.compact")], Path::new("/repo"));
+
+        assert_eq!(resolved, vec![PathBuf::from("/elsewhere/X.compact")]);
+    }
 }
