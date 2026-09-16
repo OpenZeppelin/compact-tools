@@ -10,6 +10,7 @@ use serde::Deserialize;
 pub struct Tag(String);
 
 impl Tag {
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
