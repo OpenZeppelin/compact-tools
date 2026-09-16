@@ -152,6 +152,18 @@ fn a_forbidden_tag_with_a_replacement_is_renamed_in_place() {
 }
 
 #[test]
+fn a_rename_that_supplies_a_required_tag_suppresses_the_insert() {
+    assert_case("rename-supplies-tag");
+
+    let directory = work("rename-supplies-tag");
+    run(directory.path(), &["fix"]);
+    let fixed = std::fs::read_to_string(directory.path().join("Supplied.compact"))
+        .expect("the fixed source is readable");
+
+    assert_eq!(fixed.matches("@returns").count(), 1, "{fixed}");
+}
+
+#[test]
 fn a_stale_module_tag_takes_the_module_name() {
     assert_case("module-name");
 }
