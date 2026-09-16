@@ -38,6 +38,14 @@ pub enum ConfigError {
         "config {path} lists tag {tag:?}; tags are spelled with their `@`, like `@description`"
     )]
     Tag { path: PathBuf, tag: String },
+    #[error("config {path} renames {tag}, which tags.forbid does not list")]
+    RenameUnforbidden { path: PathBuf, tag: String },
+    #[error("config {path} renames {from} to {to}, which tags.forbid also lists")]
+    RenameToForbidden {
+        path: PathBuf,
+        from: String,
+        to: String,
+    },
     #[error("config {path} has an invalid fix.placeholder {placeholder:?}: {reason}")]
     Placeholder {
         path: PathBuf,
@@ -202,6 +210,22 @@ impl Config {
                 path: path.to_owned(),
                 tag: tag.to_string(),
             });
+        }
+
+        for (from, to) in &config.tags.rename {
+            if !config.tags.forbid.contains(from) {
+                return Err(ConfigError::RenameUnforbidden {
+                    path: path.to_owned(),
+                    tag: from.to_string(),
+                });
+            }
+            if config.tags.forbid.contains(to) {
+                return Err(ConfigError::RenameToForbidden {
+                    path: path.to_owned(),
+                    from: from.to_string(),
+                    to: to.to_string(),
+                });
+            }
         }
 
         if let Some(reason) = placeholder_defect(&config.fix.placeholder) {
@@ -398,6 +422,23 @@ mod tests {
         let config: Config = toml::from_str("[fix]\nplaceholder = \"FIXME\"\n")
             .expect("the snippet is valid config");
         assert_eq!(config.fix.placeholder, "FIXME");
+    }
+
+    #[test]
+    fn a_rename_of_a_tag_that_is_not_forbidden_is_rejected() {
+        let error = rejection("[tags]\nrename = { \"@return\" = \"@returns\" }\n");
+
+        assert!(error.contains("@return"), "{error}");
+        assert!(error.contains("tags.forbid does not list"), "{error}");
+    }
+
+    #[test]
+    fn a_rename_onto_a_forbidden_tag_is_rejected() {
+        let error = rejection(
+            "[tags]\nforbid = [\"@return\", \"@returns\"]\nrename = { \"@return\" = \"@returns\" }\n",
+        );
+
+        assert!(error.contains("tags.forbid also lists"), "{error}");
     }
 
     #[test]
