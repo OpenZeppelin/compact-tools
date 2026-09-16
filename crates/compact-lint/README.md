@@ -58,7 +58,7 @@ compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-com
   `Found N errors.` and `Found N warnings.` lines when either is non-zero.
 - A clean run prints only the summary line.
 
-```
+```text
 Gaps.compact:6:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   × Ledger `_owner` has no doc comment.
@@ -81,7 +81,7 @@ Gaps.compact:6:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━
 
 with this on stderr:
 
-```
+```text
 Checked 1 file in 2ms. No fixes applied.
 Found 3 errors.
 ```
@@ -94,7 +94,7 @@ Found 3 errors.
 - `--timings` prints the breakdown that shows it, longest phase first.
 - `--no-format`, or `format = "off"` in `[lint.rules]`, drops that phase.
 
-```
+```text
 Timings
   format check      2.7s   98.4%  compact format --check, 39 files, 1 process
   fix previews      30ms    1.1%  481 previews
@@ -227,7 +227,7 @@ stays the place a syntax error is reported.
 
 Each filled value is an `info` diagnostic carrying the annotation's before and after:
 
-```
+```text
 contracts/src/access/Ownable.compact:59:6 fill  FIXED  ━━━━━━━━━━
 
   i Circuit `transferOwnership` measures k=13, rows=4273.
