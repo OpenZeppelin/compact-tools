@@ -1,0 +1,152 @@
+================================================================================
+plain circuit
+================================================================================
+
+circuit assertInitialized(): [] {
+  assert(_isInitialized, "not initialized");
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression)
+    body: (block
+      (string))))
+
+================================================================================
+exported circuit
+================================================================================
+
+export circuit owner(): Either<Bytes<32>, ContractAddress> {
+  return _owner;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression
+      (identifier)
+      (generic_arguments
+        (identifier)
+        (generic_arguments
+          (number))
+        (identifier)))
+    body: (block)))
+
+================================================================================
+exported pure circuit
+================================================================================
+
+export pure circuit add(a: Uint<32>, b: Uint<32>): Uint<64> {
+  return a + b;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression
+      (identifier)
+      (generic_arguments
+        (number)))
+    body: (block)))
+
+================================================================================
+pure circuit
+================================================================================
+
+pure circuit half(x: Field): Field {
+  return x;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression
+      (identifier))
+    body: (block)))
+
+================================================================================
+generic circuit
+================================================================================
+
+export circuit pick<#T, U>(a: T, b: U): T {
+  return a;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    (generic_parameters
+      (generic_parameter
+        name: (identifier))
+      (generic_parameter
+        name: (identifier)))
+    parameters: (parameter_list)
+    type: (type_expression
+      (identifier))
+    body: (block)))
+
+================================================================================
+circuit with a destructuring parameter
+================================================================================
+
+circuit unpack({ left, right }: Pair): [] {
+  return [];
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list
+      (block))
+    type: (type_expression)
+    body: (block)))
+
+================================================================================
+circuit body with braces inside a string
+================================================================================
+
+circuit shout(): [] {
+  assert(false, "} not a brace {");
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (circuit_declaration
+    name: (identifier)
+    parameters: (parameter_list)
+    type: (type_expression)
+    body: (block
+      (string))))
+
+================================================================================
+constructor
+================================================================================
+
+constructor(initialOwner: Either<Bytes<32>, ContractAddress>) {
+  Ownable_initialize(initialOwner);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (constructor_declaration
+    (parameter_list)
+    (block)))

@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/OpenZeppelin/compact-tools"
+rust-version = "1.96"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+[workspace.dependencies]
+cc = "1"
+tree-sitter = "0.25"
+tree-sitter-language = "0.1"
