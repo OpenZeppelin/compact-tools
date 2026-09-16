@@ -2,12 +2,14 @@
 
 Doc-comment linter for Compact sources. It parses `.compact` files with
 [`compact-tree-sitter`](../compact-tree-sitter), matches every declaration against the
-per-kind template in `compact-lint.toml`, and prints one finding per line.
+per-kind template in `compact-lint.toml`, and prints one finding per line. `fix`
+rewrites the comments the repairable rules report.
 
 ## Usage
 
 ```sh
 compact-lint check [PATHS]... [--config <file>] [--strict] [--no-format] [--compact-bin <path>]
+compact-lint fix [PATHS]... [--config <file>] [--dry-run]
 ```
 
 - `PATHS` — files or directories, walked recursively for `.compact`. Skipped while
@@ -31,6 +33,52 @@ summary goes to stderr, where `M` is the number of files checked.
 - `0` — no findings.
 - `1` — findings.
 - `2` — usage, config, IO or parser error.
+
+## Fix
+
+`fix` rewrites `.compact` files so a following `check` is clean for every rule it
+covers. It runs the same detection pass as `check`, so the two never disagree.
+
+```sh
+compact-lint fix [PATHS]... [--config <file>] [--dry-run]
+```
+
+- `PATHS` and `--config` resolve exactly as they do for `check`.
+- `--dry-run` — report the edits and write nothing. Exit `1` when there are edits, so
+  CI gates on it the way it gates on `cargo fmt --check`.
+
+Edits go to stdout, one per line, in `path:line:col: fix: <message>` form. The
+`N edits in M files` summary goes to stderr, where `M` is the number of files changed.
+
+Exit codes:
+
+- `0` — the files were written, including when there was nothing to do.
+- `1` — `--dry-run` only: edits would be made.
+- `2` — usage, config, IO or parser error.
+
+What each rule's fix does:
+
+| Rule | Fix |
+| --- | --- |
+| `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
+| `missing-tag` | Inserts each missing tag after the block of the last tag that precedes it in `kinds.<kind>.tags`, else at the top of the body. A missing `@description` adopts untagged prose that opens the body instead of writing a placeholder. A `/** … */` one-liner expands to the multi-line form first. |
+| `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. |
+| `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
+| `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. |
+
+Not fixed:
+
+- `constraints-format` — a human wrote a measurement the rule cannot parse; guessing at
+  it would lose the value.
+- `constraints-placeholder` — filling `k=?` needs a real measurement.
+- `parse` — the file does not parse, so no rewrite is trustworthy.
+- `format` — that is `compact format`'s job.
+- A forbidden tag with no `tags.rename` entry stays a `check` finding.
+
+Existing lines are never reordered or reflowed. Edits are computed against the original
+text and applied from the highest offset down; several edits on one comment merge into a
+single replacement of it. Files are rewritten through a sibling `.tmp` file and renamed
+into place, keeping the file's line ending and its trailing newline, or lack of one.
 
 ## Rules
 
@@ -79,6 +127,10 @@ tag = "@constraints"
 
 [tags]
 forbid = ["@return"]
+rename = { "@return" = "@returns" }
+
+[fix]
+placeholder = "TODO"
 
 [kinds.module]
 docs = "exported"
@@ -94,6 +146,8 @@ Defaults when no config file is found:
 | `exclude` | `[]` |
 | `constraints.tag` | `"@constraints"` |
 | `tags.forbid` | `[]` |
+| `tags.rename` | `{}` |
+| `fix.placeholder` | `"TODO"` |
 | `kinds.<kind>.docs` | `"exported"` |
 | `kinds.<kind>.tags` | `[]` |
 
@@ -105,6 +159,11 @@ Defaults when no config file is found:
   `"all"` or `"none"` there.
 - `exclude` filters files found by walking a directory. A file named on the command
   line is always checked.
+- `tags.rename` maps a forbidden tag to the tag `fix` writes in its place. Every key
+  must appear in `tags.forbid` and no value may, or the config is rejected. Both
+  spellings are validated like every other tag. An unmapped forbidden tag is reported,
+  never rewritten.
+- `fix.placeholder` is the text `fix` writes where it has no value of its own.
 
 `examples/compact-contracts.toml` is the config for OpenZeppelin/compact-contracts.
 
@@ -123,6 +182,10 @@ Defaults when no config file is found:
 cargo test --workspace
 ```
 
-`tests/fixtures/<case>/` holds one case per rule plus a clean case: a
+`tests/fixtures/<case>/` holds one `check` case per rule plus a clean case: a
 `compact-lint.toml`, the `.compact` sources, and `expected.txt`, the exact stdout with
 paths relative to the case directory.
+
+`tests/fixtures/fix-<case>/` holds one `fix` case per rule: a `compact-lint.toml`,
+`before/`, `after/` and `expected.txt`. The run copies `before/` into a temporary
+directory, so the fixtures are never rewritten in place.
