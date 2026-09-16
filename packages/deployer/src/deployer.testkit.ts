@@ -39,7 +39,7 @@ export function fakeSubWalletStates() {
 /**
  * Emits one already-synced `FacadeState` with a `Proxy` balance map that
  * returns `1n` for any token key, so `syncAndVerifyFunds` passes through
- * without a real Rx pipeline (we don't mock ledger-v8 in this file).
+ * without a real Rx pipeline (we don't mock ledger-v9 in this file).
  */
 export function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
   const anyKeyHasBalance = new Proxy({} as Record<string, bigint>, {
@@ -170,7 +170,7 @@ export function fakeUnsubmittedDeploy(address = '0xCONTRACT') {
     public: { contractAddress: address },
     private: {
       unprovenTx: { tag: 'unproven' },
-      signingKey: 'contract-maintenance-key',
+      signingKey: { tag: 'schnorr', value: 'contract-maintenance-key' },
       initialPrivateState: { seeded: true },
     },
   };
@@ -212,7 +212,10 @@ export function fakeProviders(): FakeProviders {
       setContractAddress: vi.fn(),
       set: vi.fn(async () => undefined),
       setSigningKey: vi.fn(async () => undefined),
-      getSigningKey: vi.fn(async () => 'aa'.repeat(32)),
+      getSigningKey: vi.fn(async () => ({
+        tag: 'schnorr',
+        value: 'aa'.repeat(32),
+      })),
     },
     zkConfigProvider: {
       getVerifierKeys: vi.fn(async (ids: string[]) =>

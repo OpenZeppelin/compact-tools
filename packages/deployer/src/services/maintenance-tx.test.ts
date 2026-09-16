@@ -1,13 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import {
   ReplaceAuthority,
+  type Signature,
+  type SigningKey,
   signatureVerifyingKey,
   VerifierKeyInsert,
   VerifierKeyRemove,
   verifySignature,
-} from '@midnight-ntwrk/ledger-v8';
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+} from '@midnightntwrk/ledger-v9';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DeployError } from '../errors.ts';
 import {
@@ -34,8 +36,9 @@ beforeAll(() => {
   setNetworkId('undeployed');
 });
 
-const SIGNING_KEY = 'aa'.repeat(32);
-const OTHER_KEY = 'bc'.repeat(32);
+const SIGNING_KEY_HEX = 'aa'.repeat(32);
+const SIGNING_KEY: SigningKey = { tag: 'schnorr', value: SIGNING_KEY_HEX };
+const OTHER_KEY: SigningKey = { tag: 'schnorr', value: 'bc'.repeat(32) };
 const ADDRESS = 'cd'.repeat(32);
 
 function inserts(...circuitIds: string[]) {
@@ -49,8 +52,8 @@ describe('verifyingKeyOf', () => {
   it('should return the public half of the signing key', () => {
     const verifying = verifyingKeyOf(SIGNING_KEY);
 
-    expect(verifying).toBe(signatureVerifyingKey(SIGNING_KEY));
-    expect(verifying).not.toContain(SIGNING_KEY);
+    expect(verifying).toStrictEqual(signatureVerifyingKey(SIGNING_KEY));
+    expect(verifying.value).not.toBe(SIGNING_KEY.value);
   });
 });
 
@@ -109,7 +112,7 @@ describe('buildInsertUpdate', () => {
     });
 
     expect(update.signatures).toHaveLength(1);
-    const [index, signature] = update.signatures[0] as [bigint, string];
+    const [index, signature] = update.signatures[0] as [bigint, Signature];
     expect(index).toBe(0n);
     expect(
       verifySignature(
@@ -128,7 +131,7 @@ describe('buildInsertUpdate', () => {
       signingKey: SIGNING_KEY,
       signerIndex: 0,
     });
-    const [, signature] = update.signatures[0] as [bigint, string];
+    const [, signature] = update.signatures[0] as [bigint, Signature];
 
     expect(
       verifySignature(
@@ -154,7 +157,7 @@ describe('buildInsertUpdate', () => {
       signingKey: SIGNING_KEY,
       signerIndex: 0,
     });
-    const [, signature] = one.signatures[0] as [bigint, string];
+    const [, signature] = one.signatures[0] as [bigint, Signature];
 
     expect(two.dataToSign).not.toStrictEqual(one.dataToSign);
     expect(
@@ -175,7 +178,7 @@ describe('buildInsertUpdate', () => {
       signerIndex: 0,
     });
 
-    expect(update.toString(false)).not.toContain(SIGNING_KEY);
+    expect(update.toString(false)).not.toContain(SIGNING_KEY_HEX);
   });
 
   it('should refuse an empty insert list', () => {
@@ -219,7 +222,7 @@ describe('buildInsertTx', () => {
     });
 
     expect(buildInsertTx({ update }).toString(false)).not.toContain(
-      SIGNING_KEY,
+      SIGNING_KEY_HEX,
     );
   });
 });
@@ -234,7 +237,7 @@ describe('buildInsertUpdate committee slot', () => {
       signerIndex: 2,
     });
 
-    const [index, signature] = update.signatures[0] as [bigint, string];
+    const [index, signature] = update.signatures[0] as [bigint, Signature];
     expect(index).toBe(2n);
     expect(
       verifySignature(

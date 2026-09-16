@@ -1,5 +1,4 @@
 import { ContractExecutable } from '@midnight-ntwrk/compact-js';
-import { ContractDeploy, Intent, Transaction } from '@midnight-ntwrk/ledger-v8';
 import {
   type ContractProviders,
   createUnprovenDeployTx,
@@ -17,6 +16,12 @@ import {
   parseCoinPublicKeyToHex,
   ttlOneHour,
 } from '@midnight-ntwrk/midnight-js-utils';
+import {
+  ContractDeploy,
+  Intent,
+  type SigningKey,
+  Transaction,
+} from '@midnightntwrk/ledger-v9';
 import type { ContractConfig } from '../config/schema.ts';
 import type {
   ConfirmedDeploymentRecord,
@@ -83,7 +88,7 @@ export interface SubmitDeployArgs {
   contractName: string;
   contract: ContractConfig;
   artifact: Artifact;
-  signingKey: string;
+  signingKey: SigningKey;
   args: readonly unknown[];
   initialPrivateState: unknown;
   /**
@@ -183,7 +188,8 @@ function buildFullDeploy({
   const base = {
     compiledContract: artifact.compiledContract,
     signingKey,
-    args,
+    // The SDK takes a mutable tuple; copy rather than widen our own readonly type.
+    args: [...args],
   } as UnprovenDeployOptions;
   const deployOptions =
     contract.private_state_id !== undefined

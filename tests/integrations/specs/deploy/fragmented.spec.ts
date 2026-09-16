@@ -5,6 +5,7 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types';
 import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
 import { syncWallet } from '@midnight-ntwrk/testkit-js';
+import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import {
   Deployer,
   type DeployResult,
@@ -57,7 +58,7 @@ interface Snapshot {
   circuits: string[];
   verifierKeys: Map<string, Uint8Array>;
   counter: bigint;
-  committee: string[];
+  committee: SignatureVerifyingKey[];
   threshold: number;
 }
 

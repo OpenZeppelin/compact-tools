@@ -2,9 +2,9 @@
 services:
   proof-server:
     # Pinned to a release, not `:latest`, so the stack matches the
-    # ledger-v8 versions in "Supported stack" (packages/deployer/README.md)
+    # ledger-v9 versions in "Supported stack" (packages/deployer/README.md)
     # and does not move under the suite.
-    image: 'midnightntwrk/proof-server:8.0.3'
+    image: 'midnightntwrk/proof-server:9.0.0-rc.6'
     command: ['midnight-proof-server -v']
     ports:
       - '127.0.0.1:6300:6300'
@@ -15,8 +15,10 @@ services:
       disable: true
 
   indexer:
-    # Pinned for the same reason as proof-server above.
-    image: 'midnightntwrk/indexer-standalone:4.0.1'
+    # Pinned for the same reason as proof-server above. This is the ledger-9
+    # line matching node 2.0.0-rc.4; `latest` drifted to the Cardano-bridge
+    # indexer, which crash-loops without a Blockfrost id.
+    image: 'midnightntwrk/indexer-standalone:4.4.0-rc.2'
     ports:
       - '127.0.0.1:8088:8088'
     environment:
@@ -27,6 +29,12 @@ services:
       APP__INFRA__PUB_SUB__PASSWORD: 'indexer'
       APP__INFRA__LEDGER_STATE_STORAGE__PASSWORD: 'indexer'
       APP__INFRA__SECRET: '303132333435363738393031323334353637383930313233343536373839303132'
+      # The spo-indexer subprocess dials spo_node.url, which defaults to
+      # ws://localhost:9944 (nothing inside the container) and takes the whole
+      # process down. Point it at the node; blockfrost_id only has to be
+      # non-empty while SPO features are unused.
+      APP__INFRA__SPO_NODE__URL: 'ws://node:9944'
+      APP__INFRA__SPO_NODE__BLOCKFROST_ID: 'unused-local-devnet'
     healthcheck:
       test: ['CMD-SHELL', 'cat /var/run/indexer-standalone/running']
       interval: 10s
@@ -43,7 +51,7 @@ services:
         max-file: '3'
 
   node:
-    image: 'midnightntwrk/midnight-node:0.22.2'
+    image: 'midnightntwrk/midnight-node:2.0.0-rc.4'
     ports:
       - '127.0.0.1:9944:9944'
     healthcheck:

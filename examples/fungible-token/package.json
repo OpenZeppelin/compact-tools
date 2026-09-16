@@ -5,7 +5,7 @@
   "description": "compact-deploy walkthrough: deploys a TokenExample contract wrapping the OpenZeppelin Compact FungibleToken module, exercising every common Compact constructor argument type.",
   "type": "module",
   "scripts": {
-    "compile": "compact-compiler +0.31.1 --src contracts --out artifacts --hierarchical",
+    "compile": "compact-compiler +0.34.0 --src contracts --out artifacts --hierarchical",
     "deploy:local": "node deploy/deployTokenExample.ts",
     "deploy:preview": "node deploy/deployTokenExample.ts --network preview --sync-timeout 1800",
     "deploy:preprod": "node deploy/deployTokenExample.ts --network preprod --sync-timeout 7200",

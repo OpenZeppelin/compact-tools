@@ -45,9 +45,9 @@ From the repo root (`compact-tools/`):
 make test-integration                                     # env-up → compile → test → env-down
 ```
 
-Fixtures are compiled with `compact compile +0.31.1`. The deployer pins
-compact-runtime 0.16.0, and an artifact from the default compactc (0.34.x)
-fails at submit with a `Version mismatch`. See "Supported stack" in
+Fixtures are compiled with `compact compile +0.34.0`. The deployer pins
+compact-runtime 0.19.0, and an artifact from an older compactc fails at
+submit with a `Version mismatch`. See "Supported stack" in
 [`packages/deployer/README.md`](../../packages/deployer/README.md).
 
 `make test-integration` is fully self-contained: it builds the deployer
