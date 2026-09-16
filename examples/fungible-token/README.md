@@ -161,7 +161,9 @@ yarn deploy:preprod   # or yarn cli:preprod
 
 The deployer caches both shielded + dust state under `.states/`, so only the first sync on a network is slow; subsequent runs are near-instant.
 
-> Preview's endpoints are null-routed. Preprod is reachable but a cold first sync runs ~37 min. See the deployer's "Known issues" section in [`packages/deployer/README.md`](../../packages/deployer/README.md).
+> Neither target works today. Preview's endpoints are null-routed, and preprod still runs the v8 ledger,
+> whose transactions this deployer's `@midnightntwrk/ledger-v9` rejects. The commands above are kept for
+> the upgrade. See the deployer's "Known issues" section in [`packages/deployer/README.md`](../../packages/deployer/README.md).
 
 ## Recompile the contract
 

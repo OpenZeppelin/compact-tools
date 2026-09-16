@@ -4,7 +4,7 @@
 compact-deploy Token --network local
 ```
 
-> **Status: developer-preview, testnet only.** Verified on local devnet and on preprod. Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling.
+> **Status: developer-preview, local standalone only.** No public network runs the Ledger v9 stack yet. Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling.
 
 ## Requirements
 
@@ -117,9 +117,9 @@ Results carry `fragments` (transactions the address has taken; `0` on a dry-run)
 
 ## Deploying to real networks (preprod, preview, testnet)
 
-> Preview is null-routed; preprod is reachable. Local standalone (`make env-up`) is the fastest target.
+> Nothing public is deployable today: preprod is still on the v8 ledger and preview is null-routed. Local standalone (`make env-up`) is the only working target. The rules below apply once a public network moves to v9.
 
-- **First sync is slow**: ~3 min on preview, ~37 min on preprod from genesis. Cache makes reruns near-instant, but raise `--sync-timeout` for the first run.
+- **First sync is slow** on a long-history chain, tens of minutes from genesis. Cache makes reruns near-instant, but raise `--sync-timeout` for the first run.
 - **Bump the Node heap** for long-history chains: `NODE_OPTIONS="--max-old-space-size=8192"`.
 - **Lower `--sync-batch-size`** on a memory-constrained host. Larger replays a long dust history faster but costs memory per batch.
 - **Persist the sync knobs**: `sync_timeout` and `sync_batch_size` under `[networks.X]`. Precedence is CLI > TOML > default.
@@ -150,7 +150,7 @@ compact-deploy <Contract> --network preprod \
   --seed-cache-from-unshielded /path/to/unshielded.json
 ```
 
-- The dust file is the one that matters on preprod. The other two are optional.
+- The dust file is the one that matters on a long-history chain. The other two are optional.
 - Raw JSON or gzipped, detected by magic bytes.
 - The previous cache is kept at `<target>.gz.bak`, never deleted. Roll back with `mv .states/<target>.gz.bak .states/<target>.gz`.
 - The write is atomic: `<target>.gz.tmp` first, then renamed over `<target>.gz`.
@@ -234,17 +234,19 @@ An Ethereum V3 JSON keystore (scrypt + AES-128-CTR) tagged `version: "midnight-1
 
 ## Known issues
 
-1. **Preview endpoints are null-routed.** `rpc.preview` and `indexer.preview` resolve to `0.0.0.0`, which blocks every consumer of testkit-js's `PreviewTestEnvironment`. **Workaround:** none on public testnet; use local standalone.
+1. **Preprod runs the v8 ledger.** Its transactions carry the `midnight:transaction[v9]` header tag, which `@midnightntwrk/ledger-v9` rejects on deserialize. **Workaround:** none until preprod upgrades; use local standalone.
 
-2. **The faucet is manual.** Fund the wallet's `unshielded` address, logged at startup, before running.
+2. **Preview endpoints are null-routed.** `rpc.preview` and `indexer.preview` resolve to `0.0.0.0`, which blocks every consumer of testkit-js's `PreviewTestEnvironment`. **Workaround:** none on public testnet; use local standalone.
 
-3. **Dust fee overhead breaks faucet wallets.** testkit-js defaults `additionalFeeOverhead` to `5e20` against a faucet wallet's `~3e15` dust, giving `Insufficient Funds: could not balance dust`. The deployer overrides to `5e14`; library users building their own provider must mirror that.
+3. **The faucet is manual.** Fund the wallet's `unshielded` address, logged at startup, before running.
 
-4. **Long-history dust sync exhausts the default Node heap.** The deployer raises the sync batch size to 5000 ([midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)), but a first preprod sync can still pass V8's ~2 GB default old-space. Set `NODE_OPTIONS="--max-old-space-size=8192"` for that run; cache fixes the rest.
+4. **Dust fee overhead breaks faucet wallets.** testkit-js defaults `additionalFeeOverhead` to `5e20` against a faucet wallet's `~3e15` dust, giving `Insufficient Funds: could not balance dust`. The deployer overrides to `5e14`; library users building their own provider must mirror that.
 
-5. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing.** `compact-js` declares it as a range, so without the pin yarn nests a second ledger copy and deploys fail. Do not drop it on a bump.
+5. **Long-history dust sync exhausts the default Node heap.** The deployer raises the sync batch size to 5000 ([midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)), but a first sync on a long-history chain can still pass V8's ~2 GB default old-space. Set `NODE_OPTIONS="--max-old-space-size=8192"` for that run; cache fixes the rest.
 
-6. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.19.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Forcing one copy is untested.
+6. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing.** `compact-js` declares it as a range, so without the pin yarn nests a second ledger copy and deploys fail. Do not drop it on a bump.
+
+7. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.19.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Forcing one copy is untested.
 
 ## Programmatic API
 
