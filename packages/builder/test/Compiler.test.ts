@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import {
   beforeEach,
   describe,
@@ -51,6 +52,7 @@ vi.mock('ora', () => ({
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReaddir = vi.mocked(readdir);
+const mockWriteFileSync = vi.mocked(writeFileSync);
 
 describe('EnvironmentValidator', () => {
   let mockExec: MockedFunction<ExecFunction>;
@@ -1276,6 +1278,47 @@ describe('CompactCompiler', () => {
         'compact',
         expect.arrayContaining(['compile', '--skip-zk']),
       );
+    });
+
+    it('writes circuit-info.json into the artifact dir and nowhere else', async () => {
+      mockReaddir.mockResolvedValue([
+        {
+          name: 'MockOwnable.compact',
+          isFile: () => true,
+          isDirectory: () => false,
+        },
+      ] as any);
+      mockExistsSync.mockReturnValue(true);
+
+      const testMockExec = vi
+        .fn()
+        .mockResolvedValueOnce({ stdout: 'compact 0.1.0', stderr: '' })
+        .mockResolvedValueOnce({ stdout: 'compact 0.1.0', stderr: '' })
+        .mockResolvedValueOnce({ stdout: 'Compactc 0.26.0', stderr: '' })
+        .mockResolvedValueOnce({
+          stdout:
+            'Compiling 1 circuits:\n  circuit "transferOwnership" (k=10, rows=626)\n',
+          stderr: '',
+        });
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      compiler = new CompactCompiler({}, testMockExec);
+
+      await compiler.compile();
+
+      const written = mockWriteFileSync.mock.calls.map(([path]) =>
+        String(path),
+      );
+      expect(written).toEqual([
+        resolve('artifacts', 'MockOwnable', 'circuit-info.json'),
+      ]);
+      expect(JSON.parse(String(mockWriteFileSync.mock.calls[0][1]))).toEqual({
+        generatedAt: expect.any(String),
+        source: 'MockOwnable.compact',
+        circuits: [{ name: 'transferOwnership', k: 10, rows: 626 }],
+      });
+
+      logSpy.mockRestore();
     });
 
     it('should handle compilation errors gracefully', async () => {
