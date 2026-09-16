@@ -3,13 +3,15 @@
 Doc-comment linter for Compact sources. It parses `.compact` files with
 [`compact-tree-sitter`](../compact-tree-sitter), matches every declaration against the
 per-kind template in `compact-lint.toml`, and prints one finding per line. `fix`
-rewrites the comments the repairable rules report.
+rewrites the comments the repairable rules report. `fill-constraints` compiles the
+contracts and writes the measured `k` and `rows` into the annotations.
 
 ## Usage
 
 ```sh
 compact-lint check [PATHS]... [--config <file>] [--strict] [--no-format] [--compact-bin <path>]
 compact-lint fix [PATHS]... [--config <file>] [--dry-run]
+compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-compile] [--compact-bin <path>] [--artifacts <dir>]
 ```
 
 - `PATHS` — files or directories, walked recursively for `.compact`. Skipped while
@@ -80,6 +82,100 @@ text and applied from the highest offset down; several edits on one comment merg
 single replacement of it. Files are rewritten through a sibling `.tmp` file and renamed
 into place, keeping the file's line ending and its trailing newline, or lack of one.
 
+## Fill constraints
+
+`fill-constraints` measures every circuit that already carries the constraints tag and
+writes the value in, so `check --strict` is clean afterwards and a second run is a no-op.
+`k` and `rows` reach only the compiler's terminal output, so each contract is compiled
+under a pty and the progress lines are parsed.
+
+```sh
+compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-compile] [--compact-bin <path>] [--artifacts <dir>]
+```
+
+- `PATHS` and `--config` resolve exactly as they do for `check`.
+- `--dry-run` — report the changes and write nothing, the measurement cache included.
+- `--no-compile` — read the `.circuit-info.json` caches instead of compiling. A source
+  with no cached entry is an error.
+- `--compact-bin <path>` — path to the `compact` binary, as for `check`. Also settable
+  with `COMPACT_LINT_COMPACT_BIN`.
+- `--artifacts <dir>` — where the compiler writes. Without it a temporary directory is
+  used and removed at the end.
+
+Scope is the annotations that already exist: every exported non-pure circuit whose doc
+comment carries `constraints.tag`, whatever its value. A circuit with no annotation is
+`fix`'s job and is left alone here. A file holding a parse defect is skipped, so `check`
+stays the place a syntax error is reported.
+
+Changes go to stdout, one per line:
+
+```text
+contracts/src/access/Ownable.compact:59:6: fill: @constraints k=?, rows=? -> k=13, rows=4273
+```
+
+The `N values filled in M files, U unmeasured` summary goes to stderr. `M` counts the
+files that changed; `U` counts every tagged circuit left without a value, including the
+ones in a file with no measurement source.
+
+### How a source is resolved
+
+A library module does not compile on its own, so its constraints are measured through the
+mock contract that exports the same circuit names. For each file, in order:
+
+1. `constraints.overrides`, an exact path-to-path mapping.
+2. `constraints.self`, globs for files that are contracts and compile themselves.
+3. `constraints.sources`, templates expanded and tried until one exists. `{dir}` is the
+   file's directory, `{parent}` its parent, `{stem}` its name without the extension.
+
+Each distinct source is compiled once per run, whatever the number of files it measures.
+
+### The cache
+
+After a compile, the measurements are merged into `.circuit-info.json` beside the source,
+keyed by the source's file name. It is the file the TypeScript builder in
+`packages/builder` writes, in the same shape, so the two tools share it:
+
+```json
+{
+  "generatedAt": "2026-09-15T08:38:49.000Z",
+  "files": {
+    "MockOwnable.compact": [{ "name": "owner", "k": 7, "rows": 74 }]
+  }
+}
+```
+
+Other files' entries are kept and `generatedAt` is refreshed. `--no-compile` reads this
+file instead of running the compiler.
+
+### Unmeasured
+
+A tagged circuit is *unmeasured* when its source compiled but produced no measurement for
+its name. That happens where the mock has no exported circuit of that name — `initialize`
+is called from the mock's constructor, never exported — or where the compiler's
+`contract-info.json` marks the circuit `proof: false`, which carries no constraints. The
+value is left alone and the circuit is reported:
+
+```text
+contracts/src/access/Ownable.compact:37:6: constraints-unmeasured: circuit `initialize` has no measurement in contracts/src/access/test/mocks/MockOwnable.compact
+```
+
+A file with no measurement source at all is reported once, with the candidates tried:
+
+```text
+contracts/src/utils/Utils.compact:1:1: constraints-unmeasurable: no measurement source for contracts/src/utils/Utils.compact; tried contracts/src/utils/test/mocks/MockUtils.compact, contracts/src/test/mocks/MockUtils.compact
+```
+
+Exit codes:
+
+- `0` — every tagged circuit was measured, whether or not a value changed.
+- `1` — at least one circuit is unmeasured or unmeasurable.
+- `2` — usage, config, IO, compiler or missing-cache error. A failed compile prints the
+  source and the last 20 lines of the compiler's cleaned output; the raw pty stream is
+  never printed.
+
+Files are rewritten exactly as `fix` rewrites them: through a sibling `.tmp` file, keeping
+the line ending, and only the annotation's own line changes.
+
 ## Rules
 
 | Rule | Meaning |
@@ -124,6 +220,12 @@ exclude = ["**/test/mocks/**", "**/archive/**"]
 
 [constraints]
 tag = "@constraints"
+compiler = "0.34.0"
+sources = ["{dir}/test/mocks/Mock{stem}.compact", "{parent}/test/mocks/Mock{stem}.compact"]
+self = ["**/presets/**"]
+
+[constraints.overrides]
+"contracts/src/utils/Utils.compact" = "contracts/src/utils/test/mocks/MockUtils.compact"
 
 [tags]
 forbid = ["@return"]
@@ -145,6 +247,10 @@ Defaults when no config file is found:
 | `include` | `["**/*.compact"]` |
 | `exclude` | `[]` |
 | `constraints.tag` | `"@constraints"` |
+| `constraints.compiler` | none, so `compact` picks its default toolchain |
+| `constraints.sources` | `["{dir}/test/mocks/Mock{stem}.compact", "{parent}/test/mocks/Mock{stem}.compact"]` |
+| `constraints.self` | `[]` |
+| `constraints.overrides` | `{}` |
 | `tags.forbid` | `[]` |
 | `tags.rename` | `{}` |
 | `fix.placeholder` | `"TODO"` |
@@ -164,6 +270,11 @@ Defaults when no config file is found:
   spellings are validated like every other tag. An unmapped forbidden tag is reported,
   never rewritten.
 - `fix.placeholder` is the text `fix` writes where it has no value of its own.
+- `constraints.compiler` is passed as `+<version>` to `compact compile`.
+- `constraints.sources` templates are tried in order; the first existing file wins.
+- `constraints.self` marks files that compile themselves, so no mock is looked for.
+- `constraints.overrides` keys and values are paths relative to the config's directory,
+  or to the current directory when the config came from `--config`.
 
 `examples/compact-contracts.toml` is the config for OpenZeppelin/compact-contracts.
 
@@ -189,3 +300,10 @@ paths relative to the case directory.
 `tests/fixtures/fix-<case>/` holds one `fix` case per rule: a `compact-lint.toml`,
 `before/`, `after/` and `expected.txt`. The run copies `before/` into a temporary
 directory, so the fixtures are never rewritten in place.
+
+`tests/fixtures/fill-<case>/` holds the `fill-constraints` cases in the same shape. They
+run against `tests/fixtures/fill-fake-compact/bin/compact`, a shell script that prints the
+compiler's progress lines for a hard-coded table and writes a matching
+`contract-info.json`, so the tests need no toolchain. It still runs through the pty, so
+that path is covered too. `tests/fixtures/fill-transcript/pty.txt` is a captured
+transcript of a real compile, for the parser's unit tests.

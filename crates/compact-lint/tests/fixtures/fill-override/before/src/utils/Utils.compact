@@ -1,0 +1,12 @@
+/**
+ * @module Utils
+ * @description Test fixture.
+ */
+export module Utils {
+  /**
+   * @description Hashes a value.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit hash(): [] { }
+}

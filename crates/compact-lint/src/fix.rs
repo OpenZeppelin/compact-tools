@@ -1,16 +1,12 @@
 //! The `fix` subcommand: turn the fixable issues into edits and rewrite the files.
 
-use std::ffi::{OsStr, OsString};
-use std::fs::{File, OpenOptions};
-use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use thiserror::Error;
 
 use crate::config::Config;
 use crate::doc::Tag;
-use crate::edit::{DocOp, Edit, EditKind, apply, newline_of};
+use crate::edit::{DocOp, Edit, EditKind, WriteError, apply, newline_of, write_atomically};
 use crate::model::DeclKind;
 use crate::report::Position;
 use crate::rules::{Issue, LintError, Linter};
@@ -37,12 +33,8 @@ pub enum FixError {
         #[source]
         source: std::io::Error,
     },
-    #[error("cannot write {path}")]
-    Write {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    Write(#[from] WriteError),
 }
 
 /// Everything the `fix` subcommand needs, already resolved from flags.
@@ -310,71 +302,6 @@ fn skeleton(
 
     // The declaration follows on its own line, back at its original indentation.
     format!("{}{newline}{margin}", lines.join(newline))
-}
-
-/// How many unique names to try before giving up on the temporary file.
-const TEMPORARY_ATTEMPTS: u32 = 8;
-
-/// Writes through a sibling temporary file, so a failed write never truncates the source.
-fn write_atomically(path: &Path, text: &str) -> Result<(), FixError> {
-    let (temporary, mut handle) = create_temporary(path)?;
-
-    let write = handle
-        .write_all(text.as_bytes())
-        .and_then(|()| handle.sync_all())
-        .and_then(|()| std::fs::metadata(path))
-        .and_then(|metadata| std::fs::set_permissions(&temporary, metadata.permissions()))
-        .and_then(|()| std::fs::rename(&temporary, path));
-
-    write.map_err(|source| {
-        // The rename never happened, so the temporary file is ours to clean up.
-        let _ = std::fs::remove_file(&temporary);
-        FixError::Write {
-            path: path.to_owned(),
-            source,
-        }
-    })
-}
-
-/// Creates a sibling temporary file under a name nothing else holds.
-///
-/// A predictable name lets another process plant a file the write would truncate, so
-/// the name carries the pid and a timestamp and the file is created exclusively.
-fn create_temporary(path: &Path) -> Result<(PathBuf, File), FixError> {
-    let directory = path.parent().unwrap_or(Path::new("."));
-    let stem = path.file_name().unwrap_or(OsStr::new("source"));
-    let pid = std::process::id();
-
-    let mut last = None;
-    for attempt in 0..TEMPORARY_ATTEMPTS {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |since| since.subsec_nanos());
-        let mut name = OsString::from(".");
-        name.push(stem);
-        name.push(format!(".{pid}.{nanos}.{attempt}.tmp"));
-        let candidate = directory.join(name);
-
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-        {
-            Ok(handle) => return Ok((candidate, handle)),
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => last = Some(error),
-            Err(source) => {
-                return Err(FixError::Write {
-                    path: path.to_owned(),
-                    source,
-                });
-            }
-        }
-    }
-
-    Err(FixError::Write {
-        path: path.to_owned(),
-        source: last.unwrap_or_else(|| ErrorKind::AlreadyExists.into()),
-    })
 }
 
 /// The line `fix` prints for one edit.

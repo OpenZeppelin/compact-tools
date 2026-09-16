@@ -4,7 +4,14 @@
 //! offset down, so positions never shift, and edits that target the same doc comment are
 //! merged into one replacement of that comment.
 
+use std::ffi::{OsStr, OsString};
+use std::fs::{File, OpenOptions};
+use std::io::{ErrorKind, Write};
 use std::ops::Range;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use thiserror::Error;
 
 use crate::report::Position;
 
@@ -56,6 +63,97 @@ pub enum DocOp {
         line: usize,
         name: String,
     },
+    /// Everything after a tag on one line replaced with a new value.
+    SetTagValue {
+        /// 0-based line index inside the original comment.
+        line: usize,
+        tag: String,
+        value: String,
+    },
+}
+
+#[derive(Debug, Error)]
+pub enum WriteError {
+    #[error("cannot read {path}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("cannot write {path}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+/// How many unique names to try before giving up on the temporary file.
+const TEMPORARY_ATTEMPTS: u32 = 8;
+
+/// Writes through a sibling temporary file, so a failed write never truncates the source.
+/// # Errors
+/// Returns an error when the temporary file, the source's mode, or the rename fails.
+pub fn write_atomically(path: &Path, text: &str) -> Result<(), WriteError> {
+    let (temporary, mut handle) = create_temporary(path)?;
+
+    let write = handle
+        .write_all(text.as_bytes())
+        .and_then(|()| handle.sync_all())
+        .and_then(|()| std::fs::metadata(path))
+        .and_then(|metadata| std::fs::set_permissions(&temporary, metadata.permissions()))
+        .and_then(|()| std::fs::rename(&temporary, path));
+
+    write.map_err(|source| {
+        // The rename never happened, so the temporary file is ours to clean up.
+        let _ = std::fs::remove_file(&temporary);
+        WriteError::Write {
+            path: path.to_owned(),
+            source,
+        }
+    })
+}
+
+/// Creates a sibling temporary file under a name nothing else holds.
+///
+/// A predictable name lets anything else with write access to the directory plant a
+/// file the write would truncate, so the name carries the pid and a timestamp and the
+/// file is created exclusively.
+fn create_temporary(path: &Path) -> Result<(PathBuf, File), WriteError> {
+    let directory = path.parent().unwrap_or(Path::new("."));
+    let stem = path.file_name().unwrap_or(OsStr::new("source"));
+    let pid = std::process::id();
+
+    let mut last = None;
+    for attempt in 0..TEMPORARY_ATTEMPTS {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.subsec_nanos());
+        let mut name = OsString::from(".");
+        name.push(stem);
+        name.push(format!(".{pid}.{nanos}.{attempt}.tmp"));
+        let candidate = directory.join(name);
+
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(handle) => return Ok((candidate, handle)),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => last = Some(error),
+            Err(source) => {
+                return Err(WriteError::Write {
+                    path: path.to_owned(),
+                    source,
+                });
+            }
+        }
+    }
+
+    Err(WriteError::Write {
+        path: path.to_owned(),
+        source: last.unwrap_or_else(|| ErrorKind::AlreadyExists.into()),
+    })
 }
 
 /// The line ending the file already uses, taken from its first line.
@@ -140,6 +238,13 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
                     && let Some(renamed) = set_module_name(target, name)
                 {
                     *target = renamed;
+                }
+            }
+            DocOp::SetTagValue { line, tag, value } => {
+                if let Some(target) = lines.get_mut(line + shift)
+                    && let Some(rewritten) = set_tag_value(target, tag, value)
+                {
+                    *target = rewritten;
                 }
             }
             _ => {}
@@ -289,6 +394,22 @@ fn rename_tag(line: &str, from: &str, to: &str) -> Option<String> {
     None
 }
 
+/// Replaces everything after the tag, keeping a one-line comment's closing delimiter.
+fn set_tag_value(line: &str, tag: &str, value: &str) -> Option<String> {
+    let start = line.find(tag)?;
+    let rest = line.get(start + tag.len()..)?;
+    if rest.starts_with(|character: char| character.is_ascii_alphabetic()) {
+        return None;
+    }
+
+    let closer = if rest.trim_end().ends_with("*/") {
+        " */"
+    } else {
+        ""
+    };
+    Some(format!("{}{tag} {value}{closer}", &line[..start]))
+}
+
 /// Replaces the first word after `@module`, keeping whatever follows it.
 fn set_module_name(line: &str, name: &str) -> Option<String> {
     let tag = "@module";
@@ -317,6 +438,7 @@ fn set_module_name(line: &str, name: &str) -> Option<String> {
 mod tests {
     use super::{
         DocOp, Edit, EditKind, apply, newline_of, rename_tag, render_doc, set_module_name,
+        set_tag_value,
     };
     use crate::report::Position;
 
@@ -540,6 +662,56 @@ mod tests {
         assert_eq!(
             set_module_name(" * @module Stale", "Renamed"),
             Some(" * @module Renamed".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_constraints_value_is_replaced_where_it_stands() {
+        let doc = "/**\n * @description Bumps.\n *\n * @constraints k=?, rows=?\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::SetTagValue {
+                    line: 3,
+                    tag: "@constraints".to_owned(),
+                    value: "k=13, rows=4273".to_owned(),
+                }]
+            ),
+            "/**\n * @description Bumps.\n *\n * @constraints k=13, rows=4273\n */"
+        );
+    }
+
+    #[test]
+    fn a_value_rewrite_drops_what_trailed_the_old_one() {
+        assert_eq!(
+            set_tag_value(
+                " * @constraints k=1 rows=2 (stale)",
+                "@constraints",
+                "k=3, rows=4"
+            ),
+            Some(" * @constraints k=3, rows=4".to_owned())
+        );
+        assert_eq!(
+            set_tag_value(" * @constraintsX k=1", "@constraints", "k=3"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_one_line_doc_keeps_its_closing_delimiter() {
+        assert_eq!(
+            rendered(
+                "/** @constraints k=?, rows=? */",
+                2,
+                &[DocOp::SetTagValue {
+                    line: 0,
+                    tag: "@constraints".to_owned(),
+                    value: "k=7, rows=74".to_owned(),
+                }]
+            ),
+            "/** @constraints k=7, rows=74 */"
         );
     }
 
