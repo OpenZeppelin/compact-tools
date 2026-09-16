@@ -4,11 +4,11 @@
 compact-deploy Token --network local
 ```
 
-> **Status: developer-preview, testnet only.** Verified on local devnet and on preprod (dry run to chain tip, 2026-09-04); the preview endpoints are null-routed ([Known issues](#known-issues-may-2026)). Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling. See [Roadmap](#roadmap--todo).
+> **Status: developer-preview, testnet only.** Verified on local devnet and on preprod. Mainnet unsupported: unaudited, no hardware signer, no multisig, no tx retry, no upgrade tooling.
 
 ## Requirements
 
-- Node.js >= 24 — the deployer uses explicit resource management (`await using` / `AsyncDisposableStack`), global only from Node 24.
+- Node.js >= 24. The deployer uses `await using` / `AsyncDisposableStack`.
 
 ## Quick start
 
@@ -24,16 +24,14 @@ The deploy result lands in `deployments/compact/<network>.json`.
 
 ## Install & run
 
-The `compact-deploy` bin ships in `@openzeppelin/compact-cli`. Install it as a dev dependency of the project that holds your compiled artifacts, then run it with `npx`:
+The `compact-deploy` bin ships in `@openzeppelin/compact-cli`. Install it as a dev dependency of the project that holds your compiled artifacts:
 
 ```bash
 npm i -D @openzeppelin/compact-cli         # or pnpm/yarn
 npx compact-deploy Token --network local   # resolves the local install
 ```
 
-`npx` prefers the local `node_modules/.bin`, so the deployer and your compiled contracts share **one** `@midnight-ntwrk/compact-runtime` copy. A real deploy requires this: the deploy-tx builder creates a `ContractMaintenanceAuthority` from the runtime and hands it to your contract, and the WASM check rejects it unless both sides are the same physical copy.
-
-> **Ephemeral `npx @openzeppelin/compact-cli compact-deploy …` (no local install)** is fine for `--help`, `--version`, and `--dry-run` / validation, but **not reliable for a real deploy**: npx fetches the CLI into its own cache tree, so its `compact-runtime` differs from your project's and the submit fails with `expected instance of ContractMaintenanceAuthority`. Install it locally for real deploys.
+Install it locally for any real deploy. The deployer and your artifacts must share one physical `@midnight-ntwrk/compact-runtime` copy, and an ephemeral `npx @openzeppelin/compact-cli …` fetches its own, failing the submit with `expected instance of ContractMaintenanceAuthority`. Ephemeral is fine for `--help`, `--version` and `--dry-run`.
 
 ## Supported stack
 
@@ -49,9 +47,11 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 | `@midnightntwrk/wallet-sdk-facade` | 5.0.0-beta.2 |
 | Compact compiler | 0.34.0 |
 
-The ledger and the wallet SDK live under the `@midnightntwrk` scope (no hyphen) in this line. `@midnight-ntwrk/ledger-v8` and `@midnight-ntwrk/wallet-sdk-*` are the v8 names and are gone from the tree.
+Compile with `compact compile +0.34.0`. An older artifact fails at submit with `Version mismatch`.
 
-Two copies of the ledger WASM in one tree broke every deploy on the v8 stack with `expected instance of DustParameters`. `compact-js` 2.5.5-rc.8 declares `ledger-v9` as the range `^1.0.0-rc.3`, so yarn and pnpm resolve it to the newest prerelease and nest a second copy next to the pinned one. A project on either adds the pin this repo's root `package.json` carries:
+The ledger and the wallet SDK sit under the `@midnightntwrk` scope, no hyphen. Everything else keeps `@midnight-ntwrk`.
+
+yarn and pnpm need one pin, because `compact-js` declares the ledger as a range and a second ledger copy breaks every deploy:
 
 ```json
 "resolutions": {
@@ -59,12 +59,7 @@ Two copies of the ledger WASM in one tree broke every deploy on the v8 stack wit
 }
 ```
 
-(`pnpm.overrides` for pnpm.) The wallet-SDK packages need no pin: every dependency inside that line is an exact version, so nothing floats.
-
-Compile with the pinned compiler: `compact compile +0.34.0`. An artifact from compactc 0.31.x emits code for compact-runtime 0.16.0, and the deploy then fails with a `Version mismatch` runtime error.
-
-- `OpenZeppelin/compact-contracts` `main` is on this stack, so contracts built there deploy with this tool.
-- The midnight-js, testkit and wallet-SDK packages are prereleases. The pins move with them until those lines cut a stable release.
+(`pnpm.overrides` for pnpm.) Nothing else in the stack floats.
 
 ## CLI
 
@@ -91,60 +86,62 @@ compact-deploy <Contract>
 
 Exit codes: `0` ok · `2` config error (includes a pending or partial deploy record without `--force`) · `3` wallet error · `5` deploy tx failed or not confirmed · `6` deployments ledger unreadable or unwritable · `7` the deploy tx was refused as too large at the configured or minimum fragment size · `8` fragmented deploy incomplete · `1` unexpected.
 
-A deploy writes a `status: "pending"` record (address, txId) to `deployments/<network>.json` as soon as the node accepts the tx, then promotes it to `status: "confirmed"` (txHash, blockHeight) on finalization. A dropped connection or `--tx-timeout` leaves the pending record in place and names the address and txId in the error; the next deploy of that contract refuses until you check the tx on chain and pass `--force`.
+A deploy writes `status: "pending"` (address, txId) as soon as the node accepts the tx, then `status: "confirmed"` (txHash, blockHeight) on finalization. A dropped connection or `--tx-timeout` leaves the pending record in place; the next deploy of that contract refuses until you check the tx on chain and pass `--force`.
 
 ## Large contracts
 
-The node rejects a deploy tx above the per-block extrinsic limit with `1010: Invalid Transaction: Transaction would exhaust the block limits`. Weight grows with circuit count, so past roughly 15 circuits a single-tx deploy stops landing on the local stack.
+The node rejects a deploy tx above the per-block extrinsic limit with `1010: Invalid Transaction: Transaction would exhaust the block limits`. Weight grows with circuit count, so past roughly 15 circuits a single-tx deploy stops landing.
 
-- `--circuits-per-tx <n>` (or `[contracts.X].circuits_per_tx`) splits the deploy: fragment 0's verifier keys ride the deploy tx, each further fragment is one `MaintenanceUpdate` batching `VerifierKeyInsert`s.
+`--circuits-per-tx <n>` (or `[contracts.X].circuits_per_tx`) splits it: fragment 0's verifier keys ride the deploy tx, each further fragment is one `MaintenanceUpdate` batching `VerifierKeyInsert`s.
+
 - Left unset, the deployer submits the largest batch it can and halves on a refusal, down to a single circuit. There is no pre-flight weight check.
-- Set at or above the circuit count, it pins a single-tx deploy and disables halving: a refusal is exit 7, never a split. Use it as the never-fragment switch.
-- One `deploy()` call does the deploy, every insert, and a byte-for-byte check of every on-chain verifier key against the artifact. Only that check writes `confirmed`.
+- Set at or above the circuit count, it pins a single-tx deploy and disables halving: a refusal is exit 7, never a split.
 - Fragments are ordered by sorted circuit name, so a rerun rebuilds the same plan.
-- Between fragment 0 landing and the last insert the contract is live with a subset of its circuits, chosen by sorted name rather than by dependency. Keep every circuit safe to call on its own, or hold traffic until the deploy confirms.
-- Each fragment waits for the wallet to apply the previous spend before the next tx is balanced.
+- One `deploy()` call does the deploy, every insert, and a byte-for-byte check of every on-chain key against the artifact. Only that check writes `confirmed`.
+- Between fragment 0 landing and the last insert the contract is live with a subset of its circuits, ordered by name rather than by dependency. Keep every circuit safe to call alone, or hold traffic until the deploy confirms.
 - A constructor that creates or spends a Zswap coin cannot be split: exit 2.
-- A maintenance committee with a threshold above 1 is refused: the deployer holds one key. Exit 2.
+- A committee with a threshold above 1 is refused, since the deployer holds one key: exit 2.
 
-A split deploy writes `status: "partial"` (address, txId, `circuitsOnChain`, `circuitsPending`) instead of `pending`. Re-running the same deploy command resumes it: the remaining circuits come from chain state, not from the record. Resume is refused with exit 2 unless the recorded address exists, its maintenance committee holds this signing key, and every on-chain key matches the artifact. If the deploy tx is not seen within `--tx-timeout` and no state is readable yet, the run exits 8 instead: the tx may still be landing, so check the address on an explorer before reaching for `--force`. `--force` on a `partial` head abandons it (rotated into history) and deploys a new contract at a new address.
+### Resuming
 
-A resume confirms only once it knows the deploy tx's `txHash` and `blockHeight`, read from the indexer or carried in the `partial` record. If every circuit is on chain but the indexer never serves the deploy tx, each re-run exits 8 with the same message; the exit is to copy the two fields from an explorer into the record and re-run, which confirms without a new transaction. `--force` is not the answer there, since it abandons a fully landed contract.
+A split deploy writes `status: "partial"` (address, txId, `circuitsOnChain`, `circuitsPending`). Re-running the same command resumes it from chain state, not from the record.
 
-A resume stores the signing key for the address if the private-state store lacks it. It does not restore `initialPrivateState`: that value only exists inside the constructor run the original deploy did, so a dApp that needs it must seed the store itself.
+- Resume is refused with exit 2 unless the recorded address exists, its committee holds this signing key, and every on-chain key matches the artifact.
+- Exit 8 means the deploy tx was not seen within `--tx-timeout`. It may still be landing, so check the address on an explorer before reaching for `--force`.
+- If every circuit is on chain but the indexer never serves the deploy tx, copy `txHash` and `blockHeight` from an explorer into the record and re-run. That confirms without a new transaction.
+- `--force` on a `partial` head abandons it and deploys a new contract at a new address.
+- A resume stores the signing key if the private-state store lacks it. It never restores `initialPrivateState`, which exists only inside the original constructor run.
+- The guard cannot tell two deploys of the same artifact with the same key apart. Do not hand-edit a `partial` record's `address`, or a sibling deploy will receive this run's remaining keys.
 
-Results carry `fragments` (transactions the address has taken, counting an interrupted run's inserts; `0` on a dry-run) and `circuits` (keys verified on chain), printed by the CLI and included in `--json`. A `--json` failure of a fragmented deploy also carries `address`, `circuitsOnChain`, `circuitsPending`, and the failed insert's `txId`.
-
-**Resume guard limit.** The guard proves the recorded address holds a contract this signing key maintains whose on-chain keys match this artifact; it cannot tell two deploys of the same artifact with the same key apart. Do not hand-edit a `partial` record's `address`, or a sibling deploy will receive this run's remaining keys.
+Results carry `fragments` (transactions the address has taken; `0` on a dry-run) and `circuits` (keys verified on chain). A `--json` failure adds `address`, `circuitsOnChain`, `circuitsPending`, and the failed insert's `txId`.
 
 ## Deploying to real networks (preprod, preview, testnet)
 
-> Preview is down (null-routed DNS); preprod is reachable. A first cold preprod sync takes ~37 min, so raise `--sync-timeout`. Local standalone (`make env-up`) is still the fastest target. See [Known issues](#known-issues-may-2026).
+> Preview is null-routed; preprod is reachable. Local standalone (`make env-up`) is the fastest target.
 
-- **First sync is slow** (~3 min on preview, ~37 min on preprod from genesis, measured 2026-09-04). Cache makes reruns near-instant.
-- **Bump sync timeout**: `--sync-timeout 3600` (default 10 min).
-- **Bump Node heap** for long-history chains: `NODE_OPTIONS="--max-old-space-size=8192"`.
-- **Tune the sync batch size**: `--sync-batch-size <n>` (default 5000). Larger replays a long dust history faster but uses more memory per batch; lower it on a memory-constrained host.
-- **Persist the sync knobs in TOML**: set `sync_timeout` (seconds) and/or `sync_batch_size` under `[networks.X]` so you don't pass the flags every run. The matching CLI flag overrides the TOML value when both are present (CLI > TOML > default).
-- **Tip gate is tolerant**: sync completes once every sub-wallet is within 50 events of the tip, not at an exact gap of 0. On a live network the global dust stream advances continuously, so an exact-match gate would never fire.
+- **First sync is slow**: ~3 min on preview, ~37 min on preprod from genesis. Cache makes reruns near-instant, but raise `--sync-timeout` for the first run.
+- **Bump the Node heap** for long-history chains: `NODE_OPTIONS="--max-old-space-size=8192"`.
+- **Lower `--sync-batch-size`** on a memory-constrained host. Larger replays a long dust history faster but costs memory per batch.
+- **Persist the sync knobs**: `sync_timeout` and `sync_batch_size` under `[networks.X]`. Precedence is CLI > TOML > default.
+- **The tip gate is tolerant**: sync completes within 50 events of the tip. On a live network the dust stream advances continuously, so an exact gate would never fire.
 - **Seed source**: `--seed-file`, `MN_DEPLOYER_SEED`, or `[wallet].keystore`. The `wallet = { source = "local" }` shorthand is dev-preset only.
 
 ## Wallet cache
 
-After each successful sync the deployer writes `<compact.toml dir>/.states/<network>-<seed-hash>-<kind>.gz` (one file per shielded / dust / unshielded sub-wallet). Next run restores from it instead of re-syncing from genesis.
+After each successful sync the deployer writes `<compact.toml dir>/.states/<network>-<seed-hash>-<kind>.gz`, one file per shielded / dust / unshielded sub-wallet. The next run restores from it instead of re-syncing from genesis.
 
-- Contents: gzipped sub-wallet state (UTXOs, checkpoint). No private keys (re-derived from seed each run).
-- Keyed by SHA-256(seed) + network ID, so `local` vs `preprod` keep separate caches.
-- Bust it: `--no-cache` (force fresh) or `rm -rf .states/`. Auto-falls-back on corrupt or version-mismatched files.
-- Best-effort writes; never block a deploy. Concurrent runs against the same seed race. Don't.
-- Resolved against the `compact.toml` directory, not the shell CWD, so running from a subdirectory reuses the same cache. Same for the LevelDB private-state store (`<compact.toml dir>/midnight-level-db/`).
-- Both live under the `compact.toml` directory, which makes the project the unit of deployer state. Run one `compact-deploy` at a time per project: a second concurrent run fails on the LevelDB lock.
-- Library callers that run several deploys in one process must pass `privateStateProvider` (e.g. the SDK's in-memory provider) alongside `walletProvider`. The default LevelDB store holds its lock until the process exits.
+- Contents: gzipped sub-wallet state (UTXOs, checkpoint). No private keys; those are re-derived from the seed each run.
+- Keyed by SHA-256(seed) + network ID, so `local` and `preprod` keep separate caches.
+- Bust it with `--no-cache` or `rm -rf .states/`. Corrupt or version-mismatched files fall back to a fresh sync.
+- Writes are best-effort and never block a deploy.
+- Resolved against the `compact.toml` directory, not the shell CWD. Same for the LevelDB private-state store (`<compact.toml dir>/midnight-level-db/`).
+- Run one `compact-deploy` at a time per project. A second concurrent run fails on the LevelDB lock, and two runs on one seed race the cache.
+- Library callers running several deploys in one process must pass their own `privateStateProvider`. The default LevelDB store holds its lock until the process exits.
 - `.states/` is gitignored.
 
 ### Importing a pre-warmed state file
 
-If cold sync OOMs on preprod (the known upstream bug) and you already have a `wallet.serializeState()` snapshot from a prior session, drop it in with:
+Drop in a `wallet.serializeState()` snapshot from a prior session:
 
 ```
 compact-deploy <Contract> --network preprod \
@@ -153,13 +150,12 @@ compact-deploy <Contract> --network preprod \
   --seed-cache-from-unshielded /path/to/unshielded.json
 ```
 
-- The dust file is the one that matters on preprod; the shielded and unshielded imports are optional.
-- Accepts either raw JSON (the direct `serializeState()` output) or its gzipped copy. Gzip is detected by magic bytes.
-- The file is renamed to the seed-derived cache name and dropped into `.states/`.
-- **The previous cache (if any) is preserved at `<target>.gz.bak`** — never deleted, never overwritten by the import. To roll back from a bad import, `mv .states/<target>.gz.bak .states/<target>.gz`.
-- The write itself is atomic: payload lands in `<target>.gz.tmp` first, then is renamed over `<target>.gz`. A mid-write crash can never leave the live cache half-overwritten.
-- Restore failure (e.g. schema mismatch) falls through to the normal "fresh sync from genesis" path with a `warn` log — so the deploy still completes if the import doesn't take.
-- Ignored under `--no-cache` (with a warning), since load is disabled in that mode.
+- The dust file is the one that matters on preprod. The other two are optional.
+- Raw JSON or gzipped, detected by magic bytes.
+- The previous cache is kept at `<target>.gz.bak`, never deleted. Roll back with `mv .states/<target>.gz.bak .states/<target>.gz`.
+- The write is atomic: `<target>.gz.tmp` first, then renamed over `<target>.gz`.
+- A restore failure warns and falls through to a fresh sync, so the deploy still completes.
+- Ignored under `--no-cache`.
 
 ## Wallet seed resolution
 
@@ -228,36 +224,31 @@ signing_key_file = "./deploy/Vault.signingkey"
 circuits_per_tx  = 8
 ```
 
-`proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the duration of the deploy; omitting it falls back to the env var `PROOF_SERVER_PORT` then to `http://127.0.0.1:6300`.
+`proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the deploy; omitting it falls back to `PROOF_SERVER_PORT`, then to `http://127.0.0.1:6300`.
 
-`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, which pins `midnightntwrk/proof-server:9.0.0-rc.6` and publishes port 6300 on a free host port. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; a compose file there wins over the packaged one.
+`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, pinning `midnightntwrk/proof-server:9.0.0-rc.6`. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; it wins over the packaged one.
 
 ## Keystore format
 
-`compact-deploy` reads/writes a JSON keystore with the Ethereum V3 shape (scrypt + AES-128-CTR) but with `version: "midnight-1"` so other tooling does not silently mis-read it as an Ethereum key. The encrypted secret is a 32-byte Midnight wallet seed (hex).
+An Ethereum V3 JSON keystore (scrypt + AES-128-CTR) tagged `version: "midnight-1"`, so other tooling does not mis-read it as an Ethereum key. The encrypted secret is a 32-byte Midnight wallet seed (hex).
 
-## Known issues (May 2026)
+## Known issues
 
-1. **Preview endpoints null-routed.** `rpc.preview.midnight.network` and `indexer.preview.midnight.network` resolve to `0.0.0.0` on the authoritative AWS Route 53 nameservers for `midnight.network` (verified against Google, Cloudflare, and Quad9). Preview was alive on 2026-05-22, broken on 2026-05-24. Blocks every consumer of testkit-js's `PreviewTestEnvironment`. File at [midnightntwrk/servicedesk](https://github.com/midnightntwrk/servicedesk/issues/new?template=bug-report.yml). **Workaround:** none on public testnet. `make env-up` (local standalone) is the only working target until Midnight restores the endpoints.
+1. **Preview endpoints are null-routed.** `rpc.preview` and `indexer.preview` resolve to `0.0.0.0`, which blocks every consumer of testkit-js's `PreviewTestEnvironment`. **Workaround:** none on public testnet; use local standalone.
 
-2. **Preprod blocked: `Wallet.Sync: Could not deserialize Ledger Event` on `DustSpendProcessed`.** Dust sync aborts mid-stream on a `DustSpendProcessed` event whose `midnight:event[v9]:`-prefixed `raw` bytes fail `effect/Schema` parsing. The thrown `Wallet.Sync` corrupts `DustLocalState`. The next `walletBalance()` call hits `RuntimeError: unreachable` in the ledger WASM. Two independent runs, two different event IDs: 2026-05-22 id **565,975** (confirmed in Midnight dev Discord by `Knife`); 2026-05-24 id **571,224** with `maxId` 676,018. Affected stack: `wallet-sdk-dust-wallet@4.0.0`, `ledger-v8@8.0.3`, `testkit-js@4.1.0`. File at [midnightntwrk/midnight-wallet](https://github.com/midnightntwrk/midnight-wallet/issues/new). Distinct from [#361 `InvalidDustSpendProof`](https://github.com/midnightntwrk/midnight-wallet/issues/361), which is a chain-side tx rejection (this bug is client-side event ingest). **Workaround:** none. Preview is also down (see #1). Local standalone is the only working target today.
+2. **The faucet is manual.** Fund the wallet's `unshielded` address, logged at startup, before running.
 
-   **2026-09-04, stack `wallet-sdk-dust-wallet@4.1.0` / `ledger-v8@8.1.2` / `testkit-js@4.1.1`:** not reproduced.
-   A cold preprod dry run reached chain tip on all three sub-wallets (~37 min) and ended at the expected `UnfundedWalletError`.
+3. **Dust fee overhead breaks faucet wallets.** testkit-js defaults `additionalFeeOverhead` to `5e20` against a faucet wallet's `~3e15` dust, giving `Insufficient Funds: could not balance dust`. The deployer overrides to `5e14`; library users building their own provider must mirror that.
 
-3. **Faucet is manual.** The deployer never hits a faucet. Fund the wallet's `unshielded` address (logged at startup) via the official Midnight faucet site or Discord bot before running.
+4. **Long-history dust sync exhausts the default Node heap.** The deployer raises the sync batch size to 5000 ([midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)), but a first preprod sync can still pass V8's ~2 GB default old-space. Set `NODE_OPTIONS="--max-old-space-size=8192"` for that run; cache fixes the rest.
 
-4. **Dust fee overhead default breaks faucet wallets.** testkit-js default `additionalFeeOverhead` is `5e20` vs a faucet wallet's `~3e15` dust → `Insufficient Funds: could not balance dust`. Deployer overrides to `5e14` for non-mainnet. Library users constructing their own provider must mirror this.
+5. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing.** `compact-js` declares it as a range, so without the pin yarn nests a second ledger copy and deploys fail. Do not drop it on a bump.
 
-5. **Long-history dust sync exhausts default Node heap.** The deployer now raises the dust/shielded sync batch size (`batchUpdates = { size: 5000, … }`) so the replay no longer OOMs mid-stream ([midnightntwrk/midnight-wallet#425](https://github.com/midnightntwrk/midnight-wallet/issues/425)). First hit on `wallet-sdk-dust-wallet@4.0.0`; the override is kept on the shipped 4.1.0 and has not been re-tested without it. The restored dust tree plus shielded trial-decryption can still spike past V8's ~2 GB default old-space on a first preprod sync, so set `NODE_OPTIONS="--max-old-space-size=8192"` for that run. Cache fixes subsequent runs.
-
-6. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing; do not drop it on a bump.** `compact-js` declares the range `^1.0.0-rc.3`, so without the pin yarn nests a second ledger copy at the newest prerelease. That duplication is what broke every deploy on the v8 stack. The wallet-SDK pins the v8 stack needed are gone: that line now uses exact versions throughout.
-
-7. **`@midnight-ntwrk/compact-runtime` resolves to two copies.** `compact-js` and `midnight-js-protocol` pin `0.19.0-rc.0` where the deployer and compiled artifacts use `0.19.0`, so both sit in the tree. The integration suite deploys on this tree, including the pruned constructor path that runs through `compact-js`, so the two are interchangeable in practice. Forcing one copy with a resolution has not been tested.
+6. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.19.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Forcing one copy is untested.
 
 ## Programmatic API
 
-The package has no barrel entrypoint: each module is its own subpath export, so an import names the module it comes from and pulls in only that module.
+The package has no barrel entrypoint. Each module is its own subpath export, so an import names the module it comes from and pulls in only that module.
 
 | Subpath | Exports |
 |---|---|
@@ -271,7 +262,7 @@ The package has no barrel entrypoint: each module is its own subpath export, so 
 | `/providers/proof-server` | `ProofServer` |
 | `/wallet/handler` · `/wallet/keystore` · `/wallet/seeds` | `WalletHandler`, `Keystore`, `classifySeed`, `localPrefundedSeed` |
 
-Curried form — pass the compiled `Contract` class and the constructor args are typed function parameters:
+Curried form. Pass the compiled `Contract` class and the constructor args become typed parameters:
 
 ```ts
 import { runDeploy } from "@openzeppelin/compact-deployer/run-deploy";
@@ -285,7 +276,7 @@ const result = await runDeploy(Contract, { network: "local" })(
 console.log(result.address);
 ```
 
-Options-object form — name the contract as it appears in `compact.toml`, with args from the TOML or passed inline:
+Options-object form. Name the contract as it appears in `compact.toml`, with args from the TOML or inline:
 
 ```ts
 import { runDeploy } from "@openzeppelin/compact-deployer/run-deploy";
@@ -299,4 +290,4 @@ const result = await runDeploy({
 console.log(result.address);
 ```
 
-Every option has a `process.argv` default (`--network`, `--config`, `--dry-run`, …), so the same script works with flags at the call site. On failure `runDeploy` sets `process.exitCode` and rethrows the original error; it never calls `process.exit`, so catch it if you want that exit code to reach the shell.
+Every option has a `process.argv` default (`--network`, `--config`, `--dry-run`, …), so the same script works with flags at the call site. On failure `runDeploy` sets `process.exitCode` and rethrows; it never calls `process.exit`, so catch it if you want that code to reach the shell.
