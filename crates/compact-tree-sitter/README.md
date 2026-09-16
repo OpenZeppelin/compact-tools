@@ -8,12 +8,15 @@ leaves everything else opaque.
 
 ## What it covers
 
-- Every top-level and module-level declaration is a named node with a `name`
-  field: `pragma_declaration`, `include_declaration`, `import_declaration`,
-  `export_declaration`, `module_declaration`, `struct_declaration`,
-  `enum_declaration`, `contract_declaration`, `implements_declaration`,
-  `type_declaration`, `ledger_declaration`, `witness_declaration`,
-  `constructor_declaration`, `circuit_declaration`.
+- Every top-level and module-level declaration is a named node, but the fields
+  differ per declaration. These carry a `name` field: `pragma_declaration`,
+  `import_declaration`, `module_declaration`, `struct_declaration`,
+  `enum_declaration`, `contract_declaration`, `type_declaration`,
+  `ledger_declaration`, `witness_declaration`, `circuit_declaration`.
+- The exceptions: `include_declaration` carries `path`,
+  `implements_declaration` carries `type`, `constructor_declaration` has no
+  identifier, and `export_declaration` holds its exported names as bare
+  `identifier` children with no field.
 - `module_declaration` recurses: a `module_body` holds the same declarations.
 - Comments are named nodes in `extras`: `line_comment`, `block_comment`,
   `doc_comment`.

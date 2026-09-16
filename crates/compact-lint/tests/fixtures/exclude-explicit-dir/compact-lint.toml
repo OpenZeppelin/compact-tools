@@ -1,0 +1,9 @@
+version = 1
+include = ["contracts/**/*.compact"]
+exclude = ["contracts/archive/**"]
+
+[kinds.module]
+tags = ["@module", "@description"]
+
+[kinds.ledger]
+tags = ["@description"]

@@ -132,14 +132,21 @@ fn display(path: &Path) -> String {
 }
 
 /// Resolves `.` and `..` lexically, so two spellings of one path compare equal.
+///
+/// A `..` with nothing to cancel is kept, so a relative path that climbs out of its own
+/// directory still points where it did.
 fn normalize(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for component in path.components() {
         match component {
             Component::CurDir => {}
-            Component::ParentDir => {
-                out.pop();
-            }
+            Component::ParentDir => match out.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    out.pop();
+                }
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                _ => out.push(Component::ParentDir),
+            },
             other => out.push(other),
         }
     }
@@ -232,6 +239,35 @@ mod tests {
             resolve(&config, tree.path(), "src/utils/Utils.compact"),
             Source::Found(PathBuf::from("src/utils/test/mocks/MockUtilities.compact"))
         );
+    }
+
+    #[test]
+    fn a_parent_relative_template_resolves_outside_the_working_directory() {
+        let tree = tempfile::tempdir().expect("a temporary directory is available");
+        for relative in ["work/Ownable.compact", "mocks/Ownable.compact"] {
+            let path = tree.path().join(relative);
+            std::fs::create_dir_all(path.parent().expect("the path has a directory"))
+                .expect("the tree is writable");
+            std::fs::write(&path, "").expect("the source is writable");
+        }
+
+        let mut config = Config::default();
+        config.constraints.sources = vec!["../mocks/{stem}.compact".to_owned()];
+        let work = tree.path().join("work");
+
+        assert_eq!(
+            resolve(&config, &work, "Ownable.compact"),
+            Source::Found(PathBuf::from("../mocks/Ownable.compact"))
+        );
+    }
+
+    #[test]
+    fn normalize_keeps_a_parent_it_cannot_cancel() {
+        assert_eq!(
+            super::normalize(Path::new("../mocks/./Ownable.compact")),
+            PathBuf::from("../mocks/Ownable.compact")
+        );
+        assert_eq!(super::normalize(Path::new("/..")), PathBuf::from("/"));
     }
 
     #[test]
