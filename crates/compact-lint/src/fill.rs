@@ -44,11 +44,38 @@ pub struct Options {
     pub paths: Vec<PathBuf>,
     pub config_path: Option<PathBuf>,
     pub dry_run: bool,
-    /// Read the `.circuit-info.json` caches instead of compiling.
+    /// Read each contract's `circuit-info.json` instead of compiling.
     pub no_compile: bool,
     pub compact_bin: OsString,
-    /// Where the compiler writes; a run without one uses a temporary directory.
-    pub artifacts: PathBuf,
+    /// `--artifacts`; none takes `constraints.artifacts` under the config's directory.
+    pub artifacts: Option<PathBuf>,
+}
+
+/// The artifacts tree, and how a file written into it spells the source it measured.
+struct Artifacts {
+    directory: PathBuf,
+    /// The config's directory, which a recorded source path is relative to.
+    base: PathBuf,
+}
+
+impl Artifacts {
+    /// The compiled file as its artifact records it: relative to the config's directory,
+    /// with forward slashes.
+    fn recorded(&self, source: &Path, cwd: &Path) -> String {
+        let absolute = if source.is_absolute() {
+            source.to_owned()
+        } else {
+            cwd.join(source)
+        };
+
+        absolute
+            .strip_prefix(&self.base)
+            .unwrap_or(&absolute)
+            .components()
+            .map(|part| part.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/")
+    }
 }
 
 /// The diagnostics and the counts behind the summary.
@@ -104,11 +131,19 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
 
     sources.stop(timings, format!("{} files with annotations", work.len()));
 
+    let artifacts = Artifacts {
+        directory: options
+            .artifacts
+            .clone()
+            .unwrap_or_else(|| target.base.join(&target.config.constraints.artifacts)),
+        base: target.base.clone(),
+    };
     let measured = measure_sources(
         &work,
         options,
         target.config.constraints.compiler.as_ref(),
         cwd,
+        &artifacts,
         timings,
     )?;
 
@@ -130,12 +165,13 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
     Ok(outcome)
 }
 
-/// Compiles each distinct source once, or reads its cache under `--no-compile`.
+/// Compiles each distinct source once, or reads its artifact under `--no-compile`.
 fn measure_sources(
     work: &[Work],
     options: &Options,
     version: Option<&String>,
     cwd: &Path,
+    artifacts: &Artifacts,
     timings: &mut Timings,
 ) -> Result<BTreeMap<PathBuf, BTreeMap<String, Constraints>>, FillError> {
     let mut sources: Vec<&PathBuf> = work
@@ -151,31 +187,35 @@ fn measure_sources(
     let compiler = Compiler {
         binary: options.compact_bin.clone(),
         version: version.cloned(),
-        artifacts: options.artifacts.clone(),
+        artifacts: artifacts.directory.clone(),
         cwd: cwd.to_owned(),
     };
 
     let mut measured = BTreeMap::new();
     for source in sources {
         let phase = Phase::start(if options.no_compile {
-            "read cache"
+            "read artifact"
         } else {
             "compile"
         });
-        let list = if options.no_compile {
-            measure::read_cache(source)?.ok_or_else(|| MeasureError::CacheMiss {
-                path: measure::cache_path(source),
-                name: source.display().to_string(),
-            })?
+        let (list, detail) = if options.no_compile {
+            let path = measure::locate(&artifacts.directory, source)?;
+            let list = measure::read_artifact(&path)?;
+            (list, path.display().to_string())
         } else {
             let list = compiler.measure(source)?;
-            // A preview writes nothing, the cache included.
+            // A preview writes nothing, the artifact included.
             if !options.dry_run {
-                measure::write_cache(source, &list)?;
+                measure::write_artifact(
+                    &artifacts.directory,
+                    source,
+                    &artifacts.recorded(source, cwd),
+                    &list,
+                )?;
             }
-            list
+            (list, source.display().to_string())
         };
-        phase.stop(timings, source.display().to_string());
+        phase.stop(timings, detail);
 
         measured.insert(
             source.clone(),

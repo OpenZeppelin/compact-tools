@@ -193,7 +193,7 @@ fn an_override_names_the_contract_that_measures_a_file() {
 }
 
 #[test]
-fn a_seeded_cache_fills_without_a_compiler() {
+fn a_seeded_artifact_fills_without_a_compiler() {
     assert_case("no-compile", &["--no-compile"], 0);
 }
 
@@ -238,31 +238,85 @@ fn a_failed_compile_exits_two_with_the_output_tail() {
 }
 
 #[test]
-fn a_missing_cache_entry_exits_two_and_names_the_flag() {
+fn a_missing_artifact_exits_two_and_names_the_flag() {
     let directory = work("basic");
     let output = fill(directory.path(), &["--no-compile"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert_eq!(output.status.code(), Some(EXIT_ERROR));
-    assert!(stderr.contains(".circuit-info.json"), "{stderr}");
+    assert!(
+        stderr.contains("artifacts/MockOwnable/circuit-info.json"),
+        "{stderr}"
+    );
     assert!(stderr.contains("--no-compile"), "{stderr}");
 }
 
 #[test]
-fn a_compile_writes_the_cache_the_builder_shares() {
+fn a_compile_writes_the_artifact_circuit_info() {
     let directory = work("override");
     fill(directory.path(), &[]);
 
-    let cache = std::fs::read_to_string(
+    let artifact = std::fs::read_to_string(
         directory
             .path()
-            .join("src/utils/test/mocks/.circuit-info.json"),
+            .join("artifacts/MockUtilities/circuit-info.json"),
     )
-    .expect("the cache was written");
+    .expect("the artifact was written");
 
-    assert!(cache.contains("\"generatedAt\""), "{cache}");
-    assert!(cache.contains("\"MockUtilities.compact\""), "{cache}");
-    assert!(cache.contains("\"rows\": 310"), "{cache}");
+    assert!(artifact.contains("\"generatedAt\""), "{artifact}");
+    assert!(
+        artifact.contains("\"source\": \"src/utils/test/mocks/MockUtilities.compact\""),
+        "{artifact}"
+    );
+    assert!(artifact.contains("\"rows\": 310"), "{artifact}");
+    assert!(
+        directory
+            .path()
+            .join("artifacts/MockUtilities/compiler/contract-info.json")
+            .is_file(),
+        "the compiler's own report sits beside it"
+    );
+}
+
+#[test]
+fn a_hierarchical_artifact_tree_is_found_by_stem() {
+    let directory = work("no-compile");
+    let artifacts = directory.path().join("artifacts");
+    std::fs::create_dir_all(artifacts.join("access")).expect("the tree is writable");
+    std::fs::rename(
+        artifacts.join("MockOwnable"),
+        artifacts.join("access/MockOwnable"),
+    )
+    .expect("the contract directory is movable");
+
+    let (code, stdout) = code_and_stdout(&fill(directory.path(), &["--no-compile"]));
+
+    assert_eq!(stdout, expected("no-compile", "expected.txt"));
+    assert_eq!(code, 0);
+}
+
+#[test]
+fn two_artifacts_with_one_stem_are_an_error() {
+    let directory = work("no-compile");
+    let artifacts = directory.path().join("artifacts");
+    for subdirectory in ["access", "token"] {
+        let target = artifacts.join(subdirectory).join("MockOwnable");
+        std::fs::create_dir_all(&target).expect("the tree is writable");
+        std::fs::copy(
+            artifacts.join("MockOwnable/circuit-info.json"),
+            target.join("circuit-info.json"),
+        )
+        .expect("the artifact is copyable");
+    }
+    std::fs::remove_dir_all(artifacts.join("MockOwnable")).expect("the tree is writable");
+
+    let output = fill(directory.path(), &["--no-compile"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(stderr.contains("named MockOwnable"), "{stderr}");
+    assert!(stderr.contains("access/MockOwnable"), "{stderr}");
+    assert!(stderr.contains("token/MockOwnable"), "{stderr}");
 }
 
 #[test]

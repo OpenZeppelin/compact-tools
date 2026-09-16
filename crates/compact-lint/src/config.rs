@@ -162,6 +162,9 @@ pub const DEFAULT_SOURCES: [&str; 2] = [
     "{parent}/test/mocks/Mock{stem}.compact",
 ];
 
+/// Where the compiler writes, and where `fill-constraints` reads a measurement from.
+pub const DEFAULT_ARTIFACTS: &str = "artifacts";
+
 /// The circuit constraints annotation, and how `fill-constraints` measures it.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
@@ -169,6 +172,8 @@ pub struct ConstraintsConfig {
     pub tag: Tag,
     /// Toolchain version passed as `+<version>`; none leaves `compact` on its default.
     pub compiler: Option<String>,
+    /// Artifacts tree, relative to this file's directory; `--artifacts` overrides it.
+    pub artifacts: PathBuf,
     /// Measurement-source templates, first existing file wins.
     pub sources: Vec<String>,
     /// Globs for files that are contracts and compile themselves.
@@ -183,6 +188,7 @@ impl Default for ConstraintsConfig {
         Self {
             tag: Tag::new("@constraints"),
             compiler: None,
+            artifacts: PathBuf::from(DEFAULT_ARTIFACTS),
             sources: DEFAULT_SOURCES
                 .iter()
                 .map(|&template| template.to_owned())
@@ -683,6 +689,7 @@ mod tests {
         let constraints = Config::default().constraints;
 
         assert_eq!(constraints.compiler, None);
+        assert_eq!(constraints.artifacts, std::path::Path::new("artifacts"));
         assert_eq!(constraints.sources, super::DEFAULT_SOURCES);
         assert!(constraints.own.is_empty());
         assert!(constraints.overrides.is_empty());
@@ -691,11 +698,15 @@ mod tests {
     #[test]
     fn a_constraints_table_keeps_the_templates_it_does_not_name() {
         let config: Config = toml::from_str(
-            "[constraints]\ncompiler = \"0.34.0\"\nself = [\"**/presets/**\"]\n[constraints.overrides]\n\"a.compact\" = \"b.compact\"\n",
+            "[constraints]\ncompiler = \"0.34.0\"\nartifacts = \"contracts/artifacts\"\nself = [\"**/presets/**\"]\n[constraints.overrides]\n\"a.compact\" = \"b.compact\"\n",
         )
         .expect("the snippet is valid config");
 
         assert_eq!(config.constraints.compiler.as_deref(), Some("0.34.0"));
+        assert_eq!(
+            config.constraints.artifacts,
+            std::path::Path::new("contracts/artifacts")
+        );
         assert_eq!(config.constraints.own, ["**/presets/**"]);
         assert_eq!(config.constraints.sources, super::DEFAULT_SOURCES);
         assert_eq!(

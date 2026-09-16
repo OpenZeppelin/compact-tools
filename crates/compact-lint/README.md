@@ -212,13 +212,13 @@ compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-com
 ```
 
 - `PATHS` and `--config` resolve exactly as they do for `check`.
-- `--dry-run` — report the changes and write nothing, the measurement cache included.
-- `--no-compile` — read the `.circuit-info.json` caches instead of compiling. A source
-  with no cached entry is an error.
+- `--dry-run` — report the changes and write nothing, the artifact file included.
+- `--no-compile` — read each contract's `circuit-info.json` instead of compiling. A source
+  with no artifact file is an error.
 - `--compact-bin <path>` — path to the `compact` binary, as for `check`. Also settable
   with `COMPACT_LINT_COMPACT_BIN`.
-- `--artifacts <dir>` — where the compiler writes. Without it a temporary directory is
-  used and removed at the end.
+- `--artifacts <dir>` — the artifacts tree to read and write, overriding
+  `constraints.artifacts`.
 
 Scope is the annotations that already exist: every exported non-pure circuit whose doc
 comment carries `constraints.tag`, whatever its value. A circuit with no annotation is
@@ -254,23 +254,30 @@ mock contract that exports the same circuit names. For each file, in order:
 
 Each distinct source is compiled once per run, whatever the number of files it measures.
 
-### The cache
+### The artifact file
 
-After a compile, the measurements are merged into `.circuit-info.json` beside the source,
-keyed by the source's file name. It is the file the TypeScript builder in
-`packages/builder` writes, in the same shape, so the two tools share it:
+Each compiled contract carries its measurements in `circuit-info.json`, beside the
+compiler's own `compiler/contract-info.json` in its artifact directory. It is the file the
+TypeScript builder in `packages/builder` writes, in the same shape, so the two tools share
+it:
 
 ```json
 {
   "generatedAt": "2026-09-15T08:38:49.000Z",
-  "files": {
-    "MockOwnable.compact": [{ "name": "owner", "k": 7, "rows": 74 }]
-  }
+  "source": "contracts/src/access/test/mocks/MockOwnable.compact",
+  "circuits": [{ "name": "owner", "k": 7, "rows": 74 }]
 }
 ```
 
-Other files' entries are kept and `generatedAt` is refreshed. `--no-compile` reads this
-file instead of running the compiler.
+- `constraints.artifacts` names the tree, relative to the `compact.toml` directory, and
+  defaults to `artifacts`. `--artifacts <dir>` overrides it.
+- A compile writes `<artifacts>/<Stem>/circuit-info.json`, replacing what was there, with
+  `source` relative to the `compact.toml` directory.
+- `--no-compile` reads `<artifacts>/<Stem>/circuit-info.json`, and where that is absent
+  searches the tree for one `<Stem>/circuit-info.json`, which is where a hierarchical
+  build puts it. Two directories of one stem is an error.
+- In compact-contracts a full ZK `yarn compile` writes the file `--no-compile` reads, so
+  the linter never recompiles what the builder already measured.
 
 ### Unmeasured
 
@@ -288,7 +295,7 @@ Exit codes:
 
 - `0` — every tagged circuit was measured, whether or not a value changed.
 - `1` — at least one circuit is unmeasured or unmeasurable.
-- `2` — usage, config, IO, compiler or missing-cache error. A failed compile prints the
+- `2` — usage, config, IO, compiler or missing-artifact error. A failed compile prints the
   source and the last 20 lines of the compiler's cleaned output; the raw pty stream is
   never printed.
 

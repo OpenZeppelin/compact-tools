@@ -11,7 +11,6 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use tempfile::TempDir;
 
 use compact_lint::check;
 use compact_lint::diagnostic::{Action, Diagnostic, Level, Output, Reporter, Summary, counts};
@@ -182,7 +181,7 @@ struct FillArgs {
     #[arg(long)]
     dry_run: bool,
 
-    /// Read the .circuit-info.json caches instead of compiling.
+    /// Read each contract's circuit-info.json instead of compiling.
     #[arg(long)]
     no_compile: bool,
 
@@ -190,7 +189,7 @@ struct FillArgs {
     #[arg(long, value_name = "PATH", env = COMPACT_BIN_ENV)]
     compact_bin: Option<OsString>,
 
-    /// Directory the compiler writes to; kept after the run when given.
+    /// Artifacts tree to read and write; overrides constraints.artifacts.
     #[arg(long, value_name = "DIR")]
     artifacts: Option<PathBuf>,
 
@@ -290,8 +289,6 @@ fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
 }
 
 fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
-    let (artifacts, temporary) = artifacts_dir(args.artifacts)?;
-
     let options = fill::Options {
         paths: args.paths,
         config_path: args.config,
@@ -300,7 +297,7 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
         compact_bin: args
             .compact_bin
             .unwrap_or_else(|| OsString::from(DEFAULT_COMPACT_BIN)),
-        artifacts,
+        artifacts: args.artifacts,
     };
 
     let mut timings = Timings::default();
@@ -321,7 +318,6 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
     )
     .context("writing the report")?;
 
-    drop(temporary);
     if outcome.unmeasured > 0 {
         return Ok(ExitCode::from(EXIT_FINDINGS));
     }
@@ -330,16 +326,6 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
         printed.warnings,
         args.output.error_on_warnings,
     ))
-}
-
-/// The artifacts directory, plus the temporary one to remove once the run ends.
-fn artifacts_dir(given: Option<PathBuf>) -> Result<(PathBuf, Option<TempDir>)> {
-    if let Some(path) = given {
-        return Ok((path, None));
-    }
-
-    let directory = tempfile::tempdir().context("creating the artifacts directory")?;
-    Ok((directory.path().to_owned(), Some(directory)))
 }
 
 /// What a run did, everything the summary needs that the diagnostics do not carry.
