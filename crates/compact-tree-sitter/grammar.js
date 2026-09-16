@@ -2,8 +2,11 @@
 // @ts-check
 
 // Declaration-level grammar for Compact (Midnight), language version 0.26.
-// Every top-level and module-level declaration is a named node carrying a `name`
-// field; bodies, parameter lists and statements stay opaque brace-balanced runs.
+// Every top-level and module-level declaration is a named node, but the fields
+// vary: most carry `name`, while `include_declaration` carries `path`,
+// `implements_declaration` carries `type`, `constructor_declaration` has no
+// identifier at all, and `export_declaration` holds bare `identifier` children.
+// Bodies, parameter lists and statements stay opaque brace-balanced runs.
 
 /**
  * Comma-separated list with an optional trailing comma.
