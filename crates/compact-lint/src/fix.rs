@@ -179,11 +179,15 @@ fn diagnostic(
 /// Whether a forbidden tag in the same doc comment is renamed to the tag this
 /// `missing-tag` issue reports.
 ///
-/// Inserting it as well would leave the comment carrying the tag twice.
+/// Inserting it as well would leave the comment carrying the tag twice. A headed entry
+/// is exempt: a rename writes a bare tag, which is not the section that is missing.
 fn supplied_by_a_rename(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
     let Issue::MissingTag { entry, doc, .. } = issue else {
         return false;
     };
+    if entry.heading.is_some() {
+        return false;
+    }
 
     issues.iter().any(|other| {
         matches!(
@@ -398,16 +402,57 @@ fn skeleton(
 
 #[cfg(test)]
 mod tests {
-    use super::skeleton;
+    use super::{skeleton, supplied_by_a_rename};
     use crate::config::Config;
-    use crate::doc::TagSpec;
+    use crate::doc::{Tag, TagSpec};
     use crate::model::DeclKind;
+    use crate::rules::{Issue, Linter};
+    use std::path::Path;
+
+    /// The messages of the issues that still become edits after the rename filter.
+    fn kept(source: &str, config: &Config) -> Vec<String> {
+        let issues = Linter::new()
+            .expect("the bundled grammar loads")
+            .issues(Path::new("a.compact"), source, config)
+            .expect("the source produced a tree");
+
+        issues
+            .iter()
+            .filter(|issue| !supplied_by_a_rename(issue, &issues, config))
+            .map(Issue::message)
+            .collect()
+    }
 
     fn config() -> Config {
         let mut config = Config::default();
         config.kinds.module.tags = vec![TagSpec::parse("@module"), TagSpec::parse("@description")];
         config.kinds.circuit.tags = vec![TagSpec::parse("@description")];
         config
+    }
+
+    #[test]
+    fn a_rename_supplies_the_bare_tag_but_not_the_section_of_the_same_name() {
+        let source = "/**\n * @note Something.\n */\nexport circuit run(): [] { }\n";
+        let mut config = Config::default();
+        config.tags.forbid = vec![Tag::new("@note")];
+        config
+            .tags
+            .rename
+            .insert(Tag::new("@note"), Tag::new("@notice"));
+        config.kinds.circuit.tags = vec![
+            TagSpec::parse("@notice"),
+            TagSpec::parse("@notice Security"),
+        ];
+
+        // The bare `@notice` is gone: the rename writes it. The section is not.
+        assert_eq!(
+            kept(source, &config),
+            [
+                "Forbidden tag @note.",
+                "Circuit `run` doc comment has no @constraints.",
+                "Circuit `run` doc comment has no `@notice Security` section.",
+            ]
+        );
     }
 
     #[test]
