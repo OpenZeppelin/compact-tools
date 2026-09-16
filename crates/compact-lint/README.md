@@ -428,9 +428,10 @@ Defaults when no config file is found:
   `"all"` or `"none"` there.
 - `exclude` filters files found by walking a directory. A file named on the command
   line is always checked.
-- `tags.rename` maps a forbidden tag to the tag `fix` writes in its place. Both spellings
-  are validated like every other tag. An unmapped forbidden tag is reported, never
-  rewritten.
+- `tags.rename` maps a forbidden tag to the tag `fix` writes in its place. Every key
+  must appear in `tags.forbid` and no value may, or the config is rejected. Both
+  spellings are validated like every other tag. An unmapped forbidden tag is reported,
+  never rewritten.
 - `fix.placeholder` is the text `fix` writes where it has no value of its own.
 - `rules` takes one key per rule id, valued `"off"`, `"info"`, `"warn"` or `"error"`.
 - `constraints.compiler` is passed as `+<version>` to `compact compile`.

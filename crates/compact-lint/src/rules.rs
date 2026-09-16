@@ -442,6 +442,9 @@ fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Ve
         check_module_name(declaration, &doc, issues);
     }
 
+    // The constraints rule is fixed, so it stays outside the per-kind docs policy.
+    check_constraints(declaration, &doc, config, issues);
+
     if !requires_docs {
         return;
     }
@@ -466,7 +469,6 @@ fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Ve
     }
 
     check_sections(declaration, &doc, config, issues);
-    check_constraints(declaration, &doc, config, issues);
 }
 
 /// Headings the template does not list, and the order the listed entries appear in.
@@ -764,6 +766,19 @@ mod tests {
 
         assert_eq!(
             reported(source, &circuit_config()),
+            ["2:1 missing-constraints Circuit `bump` doc comment has no @constraints."]
+        );
+    }
+
+    #[test]
+    fn the_constraints_rule_survives_docs_none() {
+        let source =
+            "/** @description Bumps. */\nexport circuit bump(): [] { count.increment(1); }\n";
+        let mut config = circuit_config();
+        config.kinds.circuit.docs = DocsPolicy::None;
+
+        assert_eq!(
+            reported(source, &config),
             ["2:1 missing-constraints Circuit `bump` doc comment has no @constraints."]
         );
     }

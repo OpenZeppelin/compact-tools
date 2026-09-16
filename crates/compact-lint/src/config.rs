@@ -58,6 +58,20 @@ pub enum ConfigError {
         kind: &'static str,
         entry: String,
     },
+    #[error("config {path} renames {tag}, which tags.forbid does not list")]
+    RenameUnforbidden { path: PathBuf, tag: String },
+    #[error("config {path} renames {from} to {to}, which tags.forbid also lists")]
+    RenameToForbidden {
+        path: PathBuf,
+        from: String,
+        to: String,
+    },
+    #[error("config {path} has an invalid fix.placeholder {placeholder:?}: {reason}")]
+    Placeholder {
+        path: PathBuf,
+        placeholder: String,
+        reason: &'static str,
+    },
     #[error("config {path} has an invalid glob {pattern:?}")]
     Glob {
         path: PathBuf,
@@ -361,6 +375,30 @@ impl Config {
         }
         config.validate_entries(path)?;
 
+        for (from, to) in &config.tags.rename {
+            if !config.tags.forbid.contains(from) {
+                return Err(ConfigError::RenameUnforbidden {
+                    path: path.to_owned(),
+                    tag: from.to_string(),
+                });
+            }
+            if config.tags.forbid.contains(to) {
+                return Err(ConfigError::RenameToForbidden {
+                    path: path.to_owned(),
+                    from: from.to_string(),
+                    to: to.to_string(),
+                });
+            }
+        }
+
+        if let Some(reason) = placeholder_defect(&config.fix.placeholder) {
+            return Err(ConfigError::Placeholder {
+                path: path.to_owned(),
+                placeholder: config.fix.placeholder.clone(),
+                reason,
+            });
+        }
+
         Ok(config)
     }
 
@@ -453,6 +491,20 @@ impl Config {
     }
 }
 
+/// Why a placeholder cannot go on a `*` line of a doc comment, or `None` when it can.
+fn placeholder_defect(placeholder: &str) -> Option<&'static str> {
+    if placeholder.trim().is_empty() {
+        return Some("it is empty");
+    }
+    if placeholder.contains(['\n', '\r']) {
+        return Some("it spans more than one line");
+    }
+    if placeholder.contains("*/") {
+        return Some("`*/` would close the comment early");
+    }
+    None
+}
+
 fn glob_set(patterns: &[String], path: &Path) -> Result<GlobSet, ConfigError> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
@@ -484,11 +536,23 @@ pub fn discover(start: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, DocsPolicy};
+    use super::{CONFIG_FILE_NAME, Config, DocsPolicy};
     use crate::diagnostic::Level;
     use crate::doc::{Tag, TagSpec};
     use crate::model::DeclKind;
     use crate::report::RuleId;
+    use tempfile::TempDir;
+
+    /// Loads `snippet` as a config file and returns the rejection it produced.
+    fn rejection(snippet: &str) -> String {
+        let directory = TempDir::new().expect("a temporary directory is available");
+        let path = directory.path().join(CONFIG_FILE_NAME);
+        std::fs::write(&path, snippet).expect("the config is writable");
+
+        Config::load(&path)
+            .expect_err("the config is invalid")
+            .to_string()
+    }
 
     #[test]
     fn every_rule_defaults_to_error_but_the_ones_awaiting_a_measurement() {
@@ -725,6 +789,44 @@ mod tests {
             .expect_err("the key is misspelled");
 
         assert!(error.to_string().contains("sorces"), "{error}");
+    }
+
+    #[test]
+    fn a_rename_of_a_tag_that_is_not_forbidden_is_rejected() {
+        let error = rejection("[lint.tags]\nrename = { \"@return\" = \"@returns\" }\n");
+
+        assert!(error.contains("@return"), "{error}");
+        assert!(error.contains("tags.forbid does not list"), "{error}");
+    }
+
+    #[test]
+    fn a_rename_onto_a_forbidden_tag_is_rejected() {
+        let error = rejection(
+            "[lint.tags]\nforbid = [\"@return\", \"@returns\"]\nrename = { \"@return\" = \"@returns\" }\n",
+        );
+
+        assert!(error.contains("tags.forbid also lists"), "{error}");
+    }
+
+    #[test]
+    fn an_empty_fix_placeholder_is_rejected() {
+        let error = rejection("[lint.fix]\nplaceholder = \"  \"\n");
+
+        assert!(error.contains("is empty"), "{error}");
+    }
+
+    #[test]
+    fn a_multi_line_fix_placeholder_is_rejected() {
+        let error = rejection("[lint.fix]\nplaceholder = \"TO\\nDO\"\n");
+
+        assert!(error.contains("more than one line"), "{error}");
+    }
+
+    #[test]
+    fn a_fix_placeholder_closing_the_comment_is_rejected() {
+        let error = rejection("[lint.fix]\nplaceholder = \"TODO */\"\n");
+
+        assert!(error.contains("close the comment"), "{error}");
     }
 
     #[test]

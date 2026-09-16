@@ -262,6 +262,21 @@ fn an_explicit_path_replaces_the_include_globs() {
 }
 
 #[test]
+fn an_exclude_glob_applies_to_an_explicit_path_given_from_a_subdirectory() {
+    let output = binary()
+        .current_dir(case("exclude-explicit-dir").join("contracts"))
+        .args(["check", "--no-format", "--colors=off", "live", "archive"])
+        .output()
+        .expect("the binary ran");
+
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("the report is UTF-8"),
+        expected("exclude-explicit-dir", "expected.txt")
+    );
+    assert_eq!(output.status.code(), Some(EXIT_FINDINGS));
+}
+
+#[test]
 fn an_explicit_config_anchors_discovery_at_the_working_directory() {
     let config = case("clean").join("compact.toml");
     let output = binary()

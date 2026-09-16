@@ -1,0 +1,9 @@
+Supplied.compact:9:6 lint/forbidden-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Forbidden tag @return.
+
+  i Applied fix: Rename @return to @returns
+
+    9   │ - ···*·@return·{[]}·-·Empty·tuple.
+      9 │ + ···*·@returns·{[]}·-·Empty·tuple.
+

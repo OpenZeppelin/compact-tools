@@ -169,6 +169,18 @@ fn a_forbidden_tag_with_a_replacement_is_renamed_in_place() {
 }
 
 #[test]
+fn a_rename_that_supplies_a_required_tag_suppresses_the_insert() {
+    assert_case("rename-supplies-tag");
+
+    let directory = work("rename-supplies-tag");
+    run(directory.path(), &["fix"]);
+    let fixed = std::fs::read_to_string(directory.path().join("Supplied.compact"))
+        .expect("the fixed source is readable");
+
+    assert_eq!(fixed.matches("@returns").count(), 1, "{fixed}");
+}
+
+#[test]
 fn a_stale_module_tag_takes_the_module_name() {
     assert_case("module-name");
 }
@@ -260,6 +272,21 @@ fn an_explicit_config_replaces_the_one_beside_the_sources() {
     assert_eq!(
         String::from_utf8(output.stdout).expect("the report is UTF-8"),
         expected("rename", "expected.txt")
+    );
+}
+
+#[test]
+fn a_file_named_like_the_old_temporary_survives_a_fix() {
+    let directory = work("rename");
+    let planted = directory.path().join("Returns.compact.tmp");
+    std::fs::write(&planted, "not mine to truncate\n").expect("the plant is writable");
+
+    let (code, _) = run(directory.path(), &["fix"]);
+
+    assert_eq!(code, 0);
+    assert_eq!(
+        std::fs::read_to_string(&planted).expect("the plant is still there"),
+        "not mine to truncate\n"
     );
 }
 

@@ -1,0 +1,18 @@
+live/Live.compact:6:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Ledger `_owner` has no doc comment.
+
+    4 │  */
+    5 │ export module Live {
+  > 6 │   export ledger _owner: Bytes<32>;
+      │   ^^^^^^^^^^^^^^^^^^^^
+    7 │ }
+
+  i Add a doc comment above it, or run compact-lint fix.
+
+  i Unsafe fix: Insert a doc skeleton for ledger `_owner`
+
+      6 │ + ··/**
+      7 │ + ···*·@description·TODO
+      8 │ + ···*/
+

@@ -41,6 +41,11 @@ fn collect_compact_files(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = entry.path();
         let name = entry.file_name();
 
+        // A symlinked directory can point back up the tree and loop forever.
+        if path.is_symlink() {
+            continue;
+        }
+
         if path.is_dir() {
             if !SKIPPED_DIRS.iter().any(|skipped| name == *skipped) {
                 collect_compact_files(&path, out);

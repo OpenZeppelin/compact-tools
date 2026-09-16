@@ -100,6 +100,7 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
         let started = Instant::now();
         let repairs: Vec<(&Issue, Edit)> = issues
             .iter()
+            .filter(|issue| !supplied_by_a_rename(issue, &issues, &target.config))
             .filter_map(|issue| edit_for(issue, &target.config, newline).map(|edit| (issue, edit)))
             .collect();
 
@@ -173,6 +174,27 @@ fn diagnostic(
             FixPreview::between(title(edit, badge), source, &after),
             badge,
         )
+}
+
+/// Whether a forbidden tag in the same doc comment is renamed to the tag this
+/// `missing-tag` issue reports.
+///
+/// Inserting it as well would leave the comment carrying the tag twice.
+fn supplied_by_a_rename(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
+    let Issue::MissingTag { entry, doc, .. } = issue else {
+        return false;
+    };
+
+    issues.iter().any(|other| {
+        matches!(
+            other,
+            Issue::ForbiddenTag {
+                tag: forbidden,
+                doc: other_doc,
+                ..
+            } if other_doc == doc && config.rename_of(forbidden) == Some(&entry.tag)
+        )
+    })
 }
 
 /// The repair for one issue, or `None` where the rule has no safe fix.

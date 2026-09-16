@@ -1,0 +1,7 @@
+/**
+ * @module Live
+ * @description A maintained module.
+ */
+export module Live {
+  export ledger _owner: Bytes<32>;
+}
