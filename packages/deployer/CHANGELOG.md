@@ -8,13 +8,22 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `[contracts]` pattern keys, so one entry covers many contracts: a name pattern (`"Mock*"`) or a directory pattern (`"**/test/mocks/*"`) matched under the new `[profile].src_dir`. `{name}` expands to the contract name and `artifact` defaults to it. See the README's "Patterns" section (#193)
+- `initialPrivateState` on `DeployerOptions` and `RunDeployOptions` sets the initial private state in code and overrides `[contracts.X].init_private_state`. A `private_state_id` with no initial private state from either source fails with exit 2, and so does an in-code state with no `private_state_id` (#193)
+- `witnesses` on `DeployerOptions` and `RunDeployOptions` sets the witness implementations in code and overrides `[contracts.X].witnesses` (#193)
+- `record` on `DeployerOptions` and `RunDeployOptions`, default `true`. With `false` a deploy reads and writes no deployments ledger, so it never resumes and `deploymentsFile` is `''` (#193)
+- With no fragment budget, a later deploy of the same artifact on the same network starts at the size an earlier halving in the process settled on, instead of every circuit (#193)
+
 ### Changed
 
 - **Breaking:** the deploy stack moves to Ledger v9. Compile artifacts with `compact compile +0.34.0`; an older one fails at submit with `Version mismatch`. Versions in the README's "Supported stack" (#192)
 - **Breaking:** signing and verifying keys are tagged `{ tag, value }`, not hex. `SigningKey.ledgerKey` gives that form and `ChainSnapshot.committee` is `SignatureVerifyingKey[]`. `signing_key_file` on disk is unchanged (#192)
 - yarn and pnpm need one resolution, `@midnightntwrk/ledger-v9`, down from six (#192)
 - `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.0-rc.6` (#192)
-- `@midnightntwrk/ledger-v9` moves from 1.0.0-rc.3 to 1.0.0-rc.5. Update the yarn / pnpm resolution to match (#PR)
+- `@midnightntwrk/ledger-v9` moves from 1.0.0-rc.3 to 1.0.0-rc.5. Update the yarn / pnpm resolution to match (#193)
+- **Breaking:** `CompactConfigData.contracts` holds partial entries, which `CompactConfig.contract(name)` merges and validates. `listContracts()` returns exact keys only; `listPatterns()` returns the pattern keys (#193)
 
 ## 0.2.0 (2026-09-15)
 

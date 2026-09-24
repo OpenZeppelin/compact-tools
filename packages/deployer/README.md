@@ -96,6 +96,7 @@ The node rejects a deploy tx above the per-block extrinsic limit with `1010: Inv
 
 - Left unset, the deployer submits the largest batch it can and halves on a refusal, down to a single circuit. There is no pre-flight weight check.
 - Set at or above the circuit count, it pins a single-tx deploy and disables halving: a refusal is exit 7, never a split.
+- A size found by halving is remembered in memory: later deploys of the same artifact on the same network, in the same process, start there. A set budget and a resume ignore it.
 - Fragments are ordered by sorted circuit name, so a rerun rebuilds the same plan.
 - One `deploy()` call does the deploy, every insert, and a byte-for-byte check of every on-chain key against the artifact. Only that check writes `confirmed`.
 - Between fragment 0 landing and the last insert the contract is live with a subset of its circuits, ordered by name rather than by dependency. Keep every circuit safe to call alone, or hold traffic until the deploy confirms.
@@ -228,6 +229,28 @@ circuits_per_tx  = 8
 
 `"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, pinning `midnightntwrk/proof-server:9.0.0-rc.6`. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; it wins over the packaged one.
 
+### Patterns
+
+One `[contracts]` entry can cover many contracts. A key is one of:
+
+- `Token`: exact, that contract only.
+- `"Mock*"`: a name pattern (holds `*`, `?`, `[` or `{`), matched against the contract name.
+- `"**/test/mocks/*"`: a directory pattern (holds `/`), matched against the contract's source path under `[profile].src_dir`, `.compact` included. The source of `<name>` is the unique `<src_dir>/**/<name>.compact`, skipping `node_modules` and dot-directories. A second match is an error.
+
+Every matching pattern applies in file order, a later one overriding an earlier one field by field. The exact entry applies last. `{name}` in any string value expands to the contract name, and `artifact` defaults to it. `runDeploy(Contract)` searches exact keys only.
+
+```toml
+[profile]
+src_dir = "contracts/src"
+
+[contracts."**/test/mocks/*"]
+signing_key_file = "./deploy/{name}.signingkey"
+
+# Inherits signing_key_file from the pattern above.
+[contracts.MockToken]
+args = ["MyToken", "MTK", 18]
+```
+
 ## Keystore format
 
 An Ethereum V3 JSON keystore (scrypt + AES-128-CTR) tagged `version: "midnight-1"`, so other tooling does not mis-read it as an Ethereum key. The encrypted secret is a 32-byte Midnight wallet seed (hex).
@@ -246,7 +269,7 @@ An Ethereum V3 JSON keystore (scrypt + AES-128-CTR) tagged `version: "midnight-1
 
 6. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing.** `compact-js` declares it as a range, so without the pin yarn nests a second ledger copy and deploys fail. Do not drop it on a bump.
 
-7. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.19.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Forcing one copy is untested.
+7. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.19.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Forcing one `0.19.0` copy with a resolution also deploys, the split path included.
 
 ## Programmatic API
 
@@ -293,3 +316,24 @@ console.log(result.address);
 ```
 
 Every option has a `process.argv` default (`--network`, `--config`, `--dry-run`, …), so the same script works with flags at the call site. On failure `runDeploy` sets `process.exitCode` and rethrows; it never calls `process.exit`, so catch it if you want that code to reach the shell.
+
+Three options suit a caller that deploys many contracts from code, such as a test harness. `Deployer.prepare` and `runDeploy` both take them, with no argv flag:
+
+- `initialPrivateState` and `witnesses` override `[contracts.X].init_private_state` and `[contracts.X].witnesses`. A `private_state_id` and an initial private state come together: `prepare` throws `ConfigError` when one lacks the other.
+- `record: false` skips the deployments ledger. Nothing is read or written, so every deploy is fresh and `deploymentsFile` is `''`.
+
+```ts
+import { Deployer } from "@openzeppelin/compact-deployer/deployer";
+
+await using deployer = await Deployer.prepare({
+  contract: "MockToken",
+  network: "local",
+  logger,
+  walletProvider,       // one wallet shared across deploys
+  privateStateProvider, // e.g. testkit-js inMemoryPrivateStateProvider()
+  initialPrivateState: { secretKey },
+  witnesses,
+  record: false,
+});
+const { address } = await deployer.deploy();
+```
