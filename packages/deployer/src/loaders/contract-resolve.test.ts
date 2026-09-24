@@ -216,4 +216,41 @@ signing_key_file = "Broken.sk"
     const config = await CompactConfig.load(join(root, 'compact.toml'));
     expect(await resolveContractName(Target, config, root)).toBe('Token');
   });
+
+  it('should match an exact entry that takes its fields from a pattern', async () => {
+    class Target {
+      initialState() {}
+    }
+    const root = makeProject({ Token: { Contract: Target } });
+    const toml = readFileSync(join(root, 'compact.toml'), 'utf8').replace(
+      'artifact = "Token"\nsigning_key_file = "Token.sk"\n',
+      'args = []\n',
+    );
+    writeFileSync(
+      join(root, 'compact.toml'),
+      `${toml}\n[contracts."*"]\nsigning_key_file = "keys/{name}.sk"\n`,
+    );
+    const config = await CompactConfig.load(join(root, 'compact.toml'));
+    expect(config.contract('Token').signing_key_file).toBe('keys/Token.sk');
+    expect(await resolveContractName(Target, config, root)).toBe('Token');
+  });
+
+  it('should not search a contract that only a pattern matches', async () => {
+    class Target {
+      initialState() {}
+    }
+    const root = makeProject({ Token: { Contract: Target } });
+    const toml = readFileSync(join(root, 'compact.toml'), 'utf8').replace(
+      '[contracts.Token]',
+      '[contracts."Tok*"]',
+    );
+    writeFileSync(join(root, 'compact.toml'), toml);
+    const config = await CompactConfig.load(join(root, 'compact.toml'));
+    await expect(resolveContractName(Target, config, root)).rejects.toThrow(
+      ConfigError,
+    );
+    await expect(resolveContractName(Target, config, root)).rejects.toThrow(
+      /Pattern keys \(Tok\*\) are not searched: add an exact \[contracts\.X\] entry or use the string form/,
+    );
+  });
 });

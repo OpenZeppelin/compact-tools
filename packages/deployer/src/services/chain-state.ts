@@ -153,11 +153,14 @@ export function signerIndex({
   address,
   snapshot,
   verifyingKey,
+  recorded = true,
 }: {
   address: string;
   snapshot: ChainSnapshot;
   /** Public half of the loaded signing key. Never the signing key. */
   verifyingKey: SignatureVerifyingKey;
+  /** A deployments record exists for `--force` to replace. Default `true`. */
+  recorded?: boolean;
 }): number {
   if (snapshot.threshold !== 1) {
     throw new ConfigError(
@@ -168,8 +171,9 @@ export function signerIndex({
     signatureKeysEqual(key, verifyingKey),
   );
   if (index < 0) {
+    const force = recorded ? ', or re-run with --force to deploy fresh' : '';
     throw new ConfigError(
-      `Contract ${address} is not maintained by this signing key. Check signing_key_file, or re-run with --force to deploy fresh.`,
+      `Contract ${address} is not maintained by this signing key. Check signing_key_file${force}.`,
     );
   }
   return index;

@@ -3,7 +3,7 @@ import { ConfigError } from '../errors.ts';
 import { LoaderContext } from './context.ts';
 import { RefResolver } from './ref-resolver.ts';
 
-/** Initial private state for the contract constructor. `load` returns `undefined` when omitted in TOML. */
+/** Initial private state for the contract constructor. `load` returns `undefined` when neither source gives one. */
 export class InitialPrivateState {
   readonly value: unknown;
 
@@ -11,11 +11,17 @@ export class InitialPrivateState {
     this.value = value;
   }
 
-  /** Source: `{ file }` (JSON with `"123n"` bigint strings) or `{ module, export }` (value or zero-arg function). */
+  /**
+   * An `inCode` value wins, and `ref` is then never read. Source: `{ file }`
+   * (JSON with `"123n"` bigint strings) or `{ module, export }` (value or
+   * zero-arg function).
+   */
   static async load(
     ref: FileOrModuleRef | undefined,
     rootDir: string,
+    inCode?: unknown,
   ): Promise<InitialPrivateState | undefined> {
+    if (inCode !== undefined) return new InitialPrivateState(inCode);
     if (!ref) return undefined;
 
     const resolver = new RefResolver<unknown>(

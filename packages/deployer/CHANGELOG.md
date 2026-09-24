@@ -6,13 +6,15 @@ file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.3.0 (2026-09-24)
 
 ### Added
 
-- Fragmented deploy for contracts too large for one block, driven by `--circuits-per-tx` / `[contracts.X].circuits_per_tx`, with resume from chain state and a strict verify before `confirmed`. See the README's "Large contracts" section
-- `DeployResult` gains `fragments` and `circuits`; both appear in `--json`, alongside a failed fragmented deploy's `address`, `circuitsOnChain`, `circuitsPending`, and `txId`
-- Exit codes `7` (`BlockLimitError`: the deploy tx was refused as too large at the configured or minimum fragment size) and `8` (`FragmentDeployError`: fragmented deploy incomplete and resumable)
+- `[contracts]` pattern keys, so one entry covers many contracts: a name pattern (`"Mock*"`) or a directory pattern (`"**/test/mocks/*"`) matched under the new `[profile].src_dir`. `{name}` expands to the contract name and `artifact` defaults to it. See the README's "Patterns" section (#193)
+- `initialPrivateState` on `DeployerOptions` and `RunDeployOptions` sets the initial private state in code and overrides `[contracts.X].init_private_state`. A `private_state_id` with no initial private state from either source fails with exit 2, and so does an in-code state with no `private_state_id` (#193)
+- `witnesses` on `DeployerOptions` and `RunDeployOptions` sets the witness implementations in code and overrides `[contracts.X].witnesses` (#193)
+- `record` on `DeployerOptions` and `RunDeployOptions`, default `true`. With `false` a deploy reads and writes no deployments ledger, so it never resumes and `deploymentsFile` is `''` (#193)
+- With no fragment budget, a later deploy of the same artifact on the same network starts at the size an earlier halving in the process settled on, instead of every circuit (#193)
 
 ### Changed
 
@@ -20,8 +22,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** signing and verifying keys are tagged `{ tag, value }`, not hex. `SigningKey.ledgerKey` gives that form and `ChainSnapshot.committee` is `SignatureVerifyingKey[]`. `signing_key_file` on disk is unchanged (#192)
 - yarn and pnpm need one resolution, `@midnightntwrk/ledger-v9`, down from six (#192)
 - `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.0-rc.6` (#192)
-- `DeploymentRecord` gains a `partial` member. A single-tx deploy still writes only `pending` then `confirmed`, so an exhaustive `switch` on `status` needs a new arm only if it reads records from a split deploy
-- A deploy that fits one transaction is unchanged: same transaction, same `pending` then `confirmed` records, no chain read and no maintenance transaction
+- `@midnightntwrk/ledger-v9` moves from 1.0.0-rc.3 to 1.0.0-rc.5. npm now needs the pin too, as `overrides`. Update the yarn / pnpm resolution to match (#193)
+- **Breaking:** `CompactConfigData.contracts` holds partial entries, which `CompactConfig.contract(name)` merges and validates. `listContracts()` returns exact keys only; `listPatterns()` returns the pattern keys (#193)
+
+## 0.2.0 (2026-09-15)
+
+### Added
+
+- Fragmented deploy for contracts too large for one block, driven by `--circuits-per-tx` / `[contracts.X].circuits_per_tx`, with resume from chain state and a strict verify before `confirmed`. See the README's "Large contracts" section (#174)
+- `DeployResult` gains `fragments` and `circuits`; both appear in `--json`, alongside a failed fragmented deploy's `address`, `circuitsOnChain`, `circuitsPending`, and `txId` (#174)
+- Exit codes `7` (`BlockLimitError`: the deploy tx was refused as too large at the configured or minimum fragment size) and `8` (`FragmentDeployError`: fragmented deploy incomplete and resumable) (#174)
+
+### Changed
+
+- `DeploymentRecord` gains a `partial` member. A single-tx deploy still writes only `pending` then `confirmed`, so an exhaustive `switch` on `status` needs a new arm only if it reads records from a split deploy (#174)
+- A deploy that fits one transaction is unchanged: same transaction, same `pending` then `confirmed` records, no chain read and no maintenance transaction (#174)
 
 ## 0.1.0 (2026-09-09)
 
