@@ -8,12 +8,6 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Added
-
-- Fragmented deploy for contracts too large for one block, driven by `--circuits-per-tx` / `[contracts.X].circuits_per_tx`, with resume from chain state and a strict verify before `confirmed`. See the README's "Large contracts" section
-- `DeployResult` gains `fragments` and `circuits`; both appear in `--json`, alongside a failed fragmented deploy's `address`, `circuitsOnChain`, `circuitsPending`, and `txId`
-- Exit codes `7` (`BlockLimitError`: the deploy tx was refused as too large at the configured or minimum fragment size) and `8` (`FragmentDeployError`: fragmented deploy incomplete and resumable)
-
 ### Changed
 
 - **Breaking:** the deploy stack moves to Ledger v9. Compile artifacts with `compact compile +0.34.0`; an older one fails at submit with `Version mismatch`. Versions in the README's "Supported stack" (#192)
@@ -21,8 +15,19 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - yarn and pnpm need one resolution, `@midnightntwrk/ledger-v9`, down from six (#192)
 - `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.0-rc.6` (#192)
 - `@midnightntwrk/ledger-v9` moves from 1.0.0-rc.3 to 1.0.0-rc.5. Update the yarn / pnpm resolution to match (#PR)
-- `DeploymentRecord` gains a `partial` member. A single-tx deploy still writes only `pending` then `confirmed`, so an exhaustive `switch` on `status` needs a new arm only if it reads records from a split deploy
-- A deploy that fits one transaction is unchanged: same transaction, same `pending` then `confirmed` records, no chain read and no maintenance transaction
+
+## 0.2.0 (2026-09-15)
+
+### Added
+
+- Fragmented deploy for contracts too large for one block, driven by `--circuits-per-tx` / `[contracts.X].circuits_per_tx`, with resume from chain state and a strict verify before `confirmed`. See the README's "Large contracts" section (#174)
+- `DeployResult` gains `fragments` and `circuits`; both appear in `--json`, alongside a failed fragmented deploy's `address`, `circuitsOnChain`, `circuitsPending`, and `txId` (#174)
+- Exit codes `7` (`BlockLimitError`: the deploy tx was refused as too large at the configured or minimum fragment size) and `8` (`FragmentDeployError`: fragmented deploy incomplete and resumable) (#174)
+
+### Changed
+
+- `DeploymentRecord` gains a `partial` member. A single-tx deploy still writes only `pending` then `confirmed`, so an exhaustive `switch` on `status` needs a new arm only if it reads records from a split deploy (#174)
+- A deploy that fits one transaction is unchanged: same transaction, same `pending` then `confirmed` records, no chain read and no maintenance transaction (#174)
 
 ## 0.1.0 (2026-09-09)
 
