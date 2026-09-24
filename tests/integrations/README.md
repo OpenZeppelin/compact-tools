@@ -11,6 +11,7 @@ tests/integrations/
   tsconfig.json             # Type-check config; run by the root `yarn types`
   package.json              # Marks the tree as ESM; not a workspace member
   compact.toml              # Deployer config; paths resolve to this dir
+  pattern-no-record.compact.toml  # Pattern-only config for patternNoRecord.spec.ts
   _harness/                 # Shared setup: walletPool, network, paths, …
   fixtures/
     Counter.compact         # Minimal one-circuit fixture
@@ -21,7 +22,8 @@ tests/integrations/
     artifacts/              # Output of compact-compiler (gitignored)
   specs/
     deploy/                 # deploy, dry-run, history rotation/isolation,
-                            #   proof-server auto, async-dispose, PrivateCounter
+                            #   proof-server auto, async-dispose, PrivateCounter,
+                            #   pattern + no record, witnesses type guard
     wallet/                 # wallet pool, lifecycle, keystore+passphrase
     errors/                 # config-error surface
 ```
@@ -85,6 +87,8 @@ make env-down                                             # when you're done ite
 - **history isolation** — Counter and SecondaryCounter share an artifact but maintain independent head/history slots per contract name.
 - **keystore + passphrase** — `[wallet].keystore` configured in `compact.toml` resolves the seed via the `promptPassphrase` callback; wrong/missing passphrase fails with `WalletError`.
 - **PrivateCounter** — exercises the `init_private_state` and `witnesses = { module, export }` resolution paths end-to-end.
+- **pattern, in-code state, no ledger** — deploys `Fragmented` by name through the `"Fragment*"` pattern in `pattern-no-record.compact.toml`, with in-code `initialPrivateState` and `witnesses` and `record: false`. Asserts no deployments file, the four-transaction split, byte-equal verifier keys, and the stored private state.
+- **witnesses option types** — `specs/deploy/witnesses.type-test.ts` is compiled by `yarn types` and never run. It checks that an interface-typed witness set passes the `witnesses` option as is.
 
 ## Notes
 
