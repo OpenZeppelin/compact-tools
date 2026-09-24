@@ -40,7 +40,7 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 | Component | Version |
 |---|---|
 | `@midnight-ntwrk/compact-runtime` | 0.19.0 |
-| `@midnightntwrk/ledger-v9` | 1.0.0-rc.3 |
+| `@midnightntwrk/ledger-v9` | 1.0.0-rc.5 |
 | `@midnight-ntwrk/compact-js` | 2.5.5-rc.8 |
 | `@midnight-ntwrk/midnight-js-*` | 5.0.0-beta.7 |
 | `@midnight-ntwrk/testkit-js` | 5.0.0-beta.7 |
@@ -55,7 +55,7 @@ yarn and pnpm need one pin, because `compact-js` declares the ledger as a range 
 
 ```json
 "resolutions": {
-  "@midnightntwrk/ledger-v9": "1.0.0-rc.3"
+  "@midnightntwrk/ledger-v9": "1.0.0-rc.5"
 }
 ```
 

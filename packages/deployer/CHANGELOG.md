@@ -20,6 +20,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** signing and verifying keys are tagged `{ tag, value }`, not hex. `SigningKey.ledgerKey` gives that form and `ChainSnapshot.committee` is `SignatureVerifyingKey[]`. `signing_key_file` on disk is unchanged (#192)
 - yarn and pnpm need one resolution, `@midnightntwrk/ledger-v9`, down from six (#192)
 - `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.0-rc.6` (#192)
+- `@midnightntwrk/ledger-v9` moves from 1.0.0-rc.3 to 1.0.0-rc.5. Update the yarn / pnpm resolution to match (#PR)
 - `DeploymentRecord` gains a `partial` member. A single-tx deploy still writes only `pending` then `confirmed`, so an exhaustive `switch` on `status` needs a new arm only if it reads records from a split deploy
 - A deploy that fits one transaction is unchanged: same transaction, same `pending` then `confirmed` records, no chain read and no maintenance transaction
 

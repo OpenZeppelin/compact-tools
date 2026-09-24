@@ -37,7 +37,7 @@
     "vitest": "^4.1.9"
   },
   "resolutions": {
-    "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
     "glob": "^11.0.0",
     "undici": "^6.24.0",
     "uuid": "^13.0.0"
