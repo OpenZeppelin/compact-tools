@@ -62,6 +62,7 @@ import {
   toPendingRecord,
 } from './services/deploy-tx.ts';
 import { formatError } from './services/error-format.ts';
+import { rememberedSize, rememberSize } from './services/fragment-size.ts';
 import {
   buildInsertTx,
   buildInsertUpdate,
@@ -609,7 +610,7 @@ export class Deployer implements AsyncDisposable {
 
     const attempt = await this.#submitHalving({
       circuits,
-      size: s.budget ?? Math.max(circuits.length, 1),
+      size: s.budget ?? this.#unbudgetedSize(circuits.length),
       what: 'Deploy tx',
       submit: (batch) =>
         submitDeploy({
@@ -689,6 +690,20 @@ export class Deployer implements AsyncDisposable {
       fragmentZero: attempt.batch,
       tip: attempt.tip,
     };
+  }
+
+  /**
+   * Fragment 0's first size with no budget: what an earlier halving of this
+   * artifact on this network settled on, else every circuit.
+   */
+  #unbudgetedSize(circuitCount: number): number {
+    const s = this.#state;
+    const remembered = rememberedSize(s.artifact.artifactPath, s.networkName);
+    if (remembered === undefined) return Math.max(circuitCount, 1);
+    s.logger.info(
+      `Deploy tx starts at ${remembered} circuits per tx, the size an earlier deploy of this artifact settled on`,
+    );
+    return remembered;
   }
 
   /**
@@ -917,6 +932,7 @@ export class Deployer implements AsyncDisposable {
    * The only halving site. Strictly decreasing, floor one circuit, and
    * only when no explicit budget was given. Each attempt records the
    * dust index the wallet must pass before it can have seen that spend.
+   * A size reached by halving is remembered for later deploys of the artifact.
    */
   async #submitHalving<T>(args: {
     circuits: readonly string[];
@@ -935,17 +951,23 @@ export class Deployer implements AsyncDisposable {
     // The cap survives a short batch: a fragment with two circuits left must
     // not shrink the size every later fragment is allowed.
     let cap = Math.max(1, args.size);
+    let halved = false;
     for (;;) {
       const batch = args.circuits.slice(0, cap);
       const tip = await readDustTip(s.wallet);
       try {
-        return { batch, cap, tip, result: await args.submit(batch) };
+        const result = await args.submit(batch);
+        if (halved) {
+          rememberSize(s.artifact.artifactPath, s.networkName, cap);
+        }
+        return { batch, cap, tip, result };
       } catch (e) {
         const halvable =
           e instanceof BlockLimitError &&
           s.budget === undefined &&
           batch.length > 1;
         if (!halvable) throw e;
+        halved = true;
         cap = Math.floor(batch.length / 2);
         s.logger.info(
           `${args.what} too large at ${batch.length} circuits; retrying with ${cap} per tx`,

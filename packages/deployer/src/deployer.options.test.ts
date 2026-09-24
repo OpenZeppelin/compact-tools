@@ -27,6 +27,7 @@ import {
   fakeUnsubmittedDeploy,
   fakeVerifierKeys,
   headPath,
+  recordingLogger,
   silentLogger,
 } from './deployer.testkit.ts';
 import { Deployer, type DeployerOptions } from './deployer.ts';
@@ -574,6 +575,111 @@ witnesses = { module = "witnesses.mjs", export = "witnesses" }`;
         'initialPrivateState needs private_state_id, which "Counter" does not set.',
       );
       expect(ProofServer.start).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('remembered fragment size', () => {
+    const STARTS_AT = 'Deploy tx starts at';
+
+    beforeEach(() => {
+      deployLimit = 2;
+    });
+
+    /** Deploy, then give the next deploy an empty chain. */
+    async function deployThenReset(opts: Partial<DeployerOptions> = {}) {
+      await deploy(opts);
+      resetChain();
+    }
+
+    function startsAtLines(info: ReturnType<typeof recordingLogger>['info']) {
+      return info.mock.calls.filter(
+        ([message]) =>
+          typeof message === 'string' && message.startsWith(STARTS_AT),
+      );
+    }
+
+    it('should start a later deploy of the same artifact at the size halving found', async () => {
+      const first = recordingLogger();
+      await deployThenReset({ logger: first.logger });
+      const second = recordingLogger();
+
+      await deploy({ logger: second.logger });
+
+      expect(deploySizes).toStrictEqual([5, 2, 2]);
+      expect(startsAtLines(first.info)).toStrictEqual([]);
+      expect(startsAtLines(second.info)).toStrictEqual([
+        [
+          `${STARTS_AT} 2 circuits per tx, the size an earlier deploy of this artifact settled on`,
+        ],
+      ]);
+    });
+
+    it('should remember the smaller size an insert settled on', async () => {
+      insertLimit = 1;
+      await deployThenReset();
+
+      await deploy();
+
+      // 5 refused, then 2 landed. The inserts halved to 1, where the second
+      // deploy starts.
+      expect(deploySizes).toStrictEqual([5, 2, 1]);
+    });
+
+    it('should keep a pinned budget over the remembered size', async () => {
+      await deployThenReset();
+      deployLimit = 5;
+      const { logger, info } = recordingLogger();
+
+      await deploy({ circuitsPerTx: 3, logger });
+
+      expect(deploySizes).toStrictEqual([5, 2, 3]);
+      expect(startsAtLines(info)).toStrictEqual([]);
+    });
+
+    it('should plan a resume from the chain, never from the remembered size', async () => {
+      await deployThenReset();
+      onChain = ['approve', 'burn'];
+      writeFileSync(
+        headPath(fx.rootDir),
+        JSON.stringify({
+          Counter: {
+            status: 'partial',
+            address: ADDRESS,
+            txId: '0xTX',
+            deployer: '0xDEPLOYER',
+            artifact: 'Counter',
+            circuitsOnChain: ['approve', 'burn'],
+            circuitsPending: ['charge', 'deposit', 'evict'],
+            submittedAt: '2026-09-01T00:00:00.000Z',
+            txHash: '0xHASH',
+            blockHeight: 1234,
+          },
+        }),
+      );
+      insertSizes = [];
+
+      const result = await deploy();
+
+      expect(deploySizes).toStrictEqual([5, 2]);
+      expect(insertSizes).toStrictEqual([3]);
+      expect(result.circuits).toBe(5);
+    });
+
+    it('should not share a remembered size with another artifact', async () => {
+      await deployThenReset();
+      artifactPath = freshArtifactPath();
+
+      await deploy();
+
+      expect(deploySizes).toStrictEqual([5, 2, 5, 2]);
+    });
+
+    it('should not share a remembered size with another network', async () => {
+      await deployThenReset();
+
+      await deploy({ network: 'other' });
+
+      expect(deploySizes).toStrictEqual([5, 2, 5, 2]);
     });
   });
 });
