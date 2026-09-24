@@ -271,6 +271,22 @@ describe('Artifact.load — witnesses module ref', () => {
     });
     expect(art.artifactPath).toBe(join(root, 'WithWitnesses'));
   });
+
+  it('should use in-code witnesses without importing the witnesses ref', async () => {
+    makeArtifactDir(root, 'InCodeWitnesses');
+    const witnessImpls = { add: () => [undefined, 1] as [unknown, number] };
+    const art = await Artifact.load({
+      rootDir: root,
+      artifactsDir: 'src/artifacts',
+      artifact: 'InCodeWitnesses',
+      contractName: 'InCodeWitnesses',
+      witnesses: { module: 'missing.mjs', export: 'witnesses' },
+      witnessImpls,
+    });
+    expect((art.compiledContract as unknown as { w: unknown }).w).toBe(
+      witnessImpls,
+    );
+  });
 });
 
 describe('Artifact.load — entry-file fallbacks', () => {

@@ -538,6 +538,47 @@ describe('runDeploy', () => {
     expect(explorerCall).toBeDefined();
   });
 
+  it('should thread initialPrivateState, witnesses and record to Deployer.prepare', async () => {
+    process.argv = ['node', 'script.ts'];
+    const prepare = vi
+      .spyOn(deployerModule.Deployer, 'prepare')
+      .mockResolvedValue(fakeDeployer() as never);
+    const initialPrivateState = { seed: 1n };
+    const witnesses = {};
+
+    await runDeploy({
+      contract: 'X',
+      initialPrivateState,
+      witnesses,
+      record: false,
+    });
+
+    const callArgs = prepare.mock.calls[0]?.[0];
+    expect(callArgs?.initialPrivateState).toBe(initialPrivateState);
+    expect(callArgs?.witnesses).toBe(witnesses);
+    expect(callArgs?.record).toBe(false);
+  });
+
+  it('should print no saved-to line for a deploy that wrote no ledger', async () => {
+    process.argv = ['node', 'script.ts'];
+    const deploy = vi.fn(async () => fakeDeployResult({ deploymentsFile: '' }));
+    vi.spyOn(deployerModule.Deployer, 'prepare').mockResolvedValue(
+      fakeDeployer({ deploy }) as never,
+    );
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    await runDeploy({ contract: 'X', logger: logger as never });
+
+    const lines = logger.info.mock.calls.map((c) => String(c[0]));
+    expect(lines).toContainEqual(expect.stringContaining('blockHeight:'));
+    expect(lines).not.toContainEqual(expect.stringContaining('saved to:'));
+  });
+
   it('should log the stack trace in verbose mode when an Error throws', async () => {
     process.argv = ['node', 'script.ts', '--verbose'];
     const err = new Error('boom');

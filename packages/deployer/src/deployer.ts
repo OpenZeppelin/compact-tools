@@ -94,6 +94,10 @@ export interface DeployerOptions {
    * artifact's constructor signature.
    */
   args?: readonly unknown[] | Record<string, unknown>;
+  /** Initial private state. Overrides `[contracts.X].init_private_state`. */
+  initialPrivateState?: unknown;
+  /** Witness implementations. Override `[contracts.X].witnesses`. */
+  witnesses?: object;
   initPrivateStateOverride?: string;
   logger: Logger;
   promptPassphrase?: (path: string) => Promise<string>;
@@ -151,6 +155,11 @@ export interface DeployerOptions {
    */
   force?: boolean;
   /**
+   * Keep the deployments ledger. Default `true`. With `false` no ledger file
+   * is read or written, so every deploy is fresh and nothing can resume it.
+   */
+  record?: boolean;
+  /**
    * Verifier keys per transaction. Set it when a contract is too large for one
    * deploy tx: fragment 0 rides the deploy and the rest arrive as batched
    * maintenance updates, all within this one `deploy()` call. Left unset, the
@@ -170,6 +179,7 @@ export interface DeployResult {
   blockHeight: number;
   deployer: string;
   artifact: string;
+  /** The head ledger file, or `''` on a dry-run or with `record: false`. */
   deploymentsFile: string;
   dryRun: boolean;
   /** `[networks.X].explorer` + `/contracts/0x<address>`, or empty when no explorer is configured / in dry-run. */
@@ -294,6 +304,7 @@ export class Deployer implements AsyncDisposable {
     // Checked here so a bad budget fails before the wallet sync, which
     // on a real network is tens of minutes.
     assertBudget(opts.circuitsPerTx);
+    assertPrivateStateSource(opts, contract);
     const budget = opts.circuitsPerTx ?? contract.circuits_per_tx;
     const signingKey = await SigningKey.load(
       rootDir,
@@ -354,6 +365,7 @@ export class Deployer implements AsyncDisposable {
       artifact: contract.artifact,
       contractName: opts.contract,
       witnesses: contract.witnesses,
+      witnessImpls: opts.witnesses,
     });
     logger.debug(
       `Artifact: ${artifact.artifactPath} (${artifact.circuitNames.length} circuits)`,
@@ -372,6 +384,7 @@ export class Deployer implements AsyncDisposable {
     const initialPrivateState = await InitialPrivateState.load(
       contract.init_private_state,
       rootDir,
+      opts.initialPrivateState,
     );
 
     let wallet: MidnightWalletProvider;
@@ -458,7 +471,7 @@ export class Deployer implements AsyncDisposable {
 
   /**
    * Deploy the contract and leave a `confirmed` record under
-   * `deployments/<network>.json`.
+   * `deployments/<network>.json`, unless `record` is `false`.
    *
    * A contract that fits one tx takes the single-tx path unchanged. A larger
    * one is split: fragment 0's verifier keys ride the deploy tx and the rest
@@ -474,11 +487,14 @@ export class Deployer implements AsyncDisposable {
   async deploy(): Promise<DeployResult> {
     const s = this.#state;
     const contractName = s.opts.contract;
-    const deployments = new Deployments({
-      rootDir: s.config.rootDir,
-      deploymentsDir: s.config.deploymentsDir,
-      network: s.networkName,
-    });
+    const deployments: DeploymentsLedger =
+      s.opts.record === false
+        ? UNRECORDED
+        : new Deployments({
+            rootDir: s.config.rootDir,
+            deploymentsDir: s.config.deploymentsDir,
+            network: s.networkName,
+          });
     const force = s.opts.force === true;
     const head = await deployments.getHead(contractName);
     const providers = buildProviders({
@@ -549,23 +565,28 @@ export class Deployer implements AsyncDisposable {
    */
   async #finishSplit(args: {
     providers: ContractProviders;
-    deployments: Deployments;
+    deployments: DeploymentsLedger;
     started: Exclude<StartedDeploy, SingleDeploy>;
     keys: ArtifactKeys;
     txTimeoutMs: number;
   }): Promise<{ fragments: number; circuits: number }> {
-    const progress = await this.#insertRemaining(args);
-    // Strict verify gates the promotion to `confirmed`.
-    verifyState({
-      address: args.started.address,
-      artifactKeys: args.keys,
-      snapshot: progress.snapshot,
-      authority: progress.authority,
-    });
-    return {
-      fragments: progress.fragments,
-      circuits: progress.snapshot.circuits.length,
-    };
+    try {
+      const progress = await this.#insertRemaining(args);
+      // Strict verify gates the promotion to `confirmed`.
+      verifyState({
+        address: args.started.address,
+        artifactKeys: args.keys,
+        snapshot: progress.snapshot,
+        authority: progress.authority,
+      });
+      return {
+        fragments: progress.fragments,
+        circuits: progress.snapshot.circuits.length,
+      };
+    } catch (e) {
+      if (this.#state.opts.record !== false) throw e;
+      throw withoutRecord(e, args.started.txId);
+    }
   }
 
   /**
@@ -574,7 +595,7 @@ export class Deployer implements AsyncDisposable {
    */
   async #deployFragmentZero(args: {
     providers: ContractProviders;
-    deployments: Deployments;
+    deployments: DeploymentsLedger;
     txTimeoutMs: number;
     force: boolean;
   }): Promise<StartedDeploy> {
@@ -630,7 +651,13 @@ export class Deployer implements AsyncDisposable {
       contractName,
       submitted,
       txTimeoutMs,
-      recovery: record.status === 'partial' ? 'partial' : 'pending',
+      recovery: s.opts.record === false ? 'none' : record.status,
+      circuits: split
+        ? {
+            inDeployTx: attempt.batch,
+            notYetInserted: remaining(circuits, attempt.batch),
+          }
+        : undefined,
     });
     // Order copied from midnight-js's own post-success path, and reached only
     // on `SucceedEntirely`. The signing key and the initial private
@@ -936,7 +963,7 @@ export class Deployer implements AsyncDisposable {
    */
   async #insertRemaining(args: {
     providers: ContractProviders;
-    deployments: Deployments;
+    deployments: DeploymentsLedger;
     started: Exclude<StartedDeploy, SingleDeploy>;
     keys: ArtifactKeys;
     txTimeoutMs: number;
@@ -986,6 +1013,7 @@ export class Deployer implements AsyncDisposable {
         address,
         snapshot,
         verifyingKey: verifyingKeyOf(s.signingKey.ledgerKey),
+        recorded: s.opts.record !== false,
       });
       await this.#recordProgress({
         deployments,
@@ -1044,7 +1072,7 @@ export class Deployer implements AsyncDisposable {
    */
   async #insertBatch(args: {
     providers: ContractProviders;
-    deployments: Deployments;
+    deployments: DeploymentsLedger;
     started: Exclude<StartedDeploy, SingleDeploy>;
     keys: ArtifactKeys;
     all: readonly string[];
@@ -1155,7 +1183,7 @@ export class Deployer implements AsyncDisposable {
 
   /** Refresh the `partial` head from a chain snapshot. Reporting only. */
   async #recordProgress(args: {
-    deployments: Deployments;
+    deployments: DeploymentsLedger;
     record: PartialDeploymentRecord;
     started: StartedDeployBase;
     snapshot: ChainSnapshot;
@@ -1263,6 +1291,63 @@ function assertBudget(budget: number | undefined): void {
       `circuits_per_tx must be an integer >= 1; got ${budget}.`,
     );
   }
+}
+
+/** A private state and its `private_state_id` come together, from TOML or code. */
+function assertPrivateStateSource(
+  opts: DeployerOptions,
+  contract: ContractConfig,
+): void {
+  const inCode = opts.initialPrivateState !== undefined;
+  if (contract.private_state_id === undefined) {
+    if (inCode) {
+      throw new ConfigError(
+        `initialPrivateState needs private_state_id, which "${opts.contract}" does not set.`,
+      );
+    }
+    return;
+  }
+  if (inCode || contract.init_private_state !== undefined) return;
+  throw new ConfigError(
+    `"${opts.contract}" sets private_state_id but no init_private_state. Set init_private_state in compact.toml, or pass initialPrivateState.`,
+  );
+}
+
+/** The ledger calls `deploy()` makes. */
+type DeploymentsLedger = Pick<
+  Deployments,
+  'getHead' | 'assertRecordable' | 'record' | 'confirm' | 'updatePartial'
+>;
+
+const NO_PATHS: DeploymentsPaths = { head: '', history: '' };
+
+/** The ledger under `record: false`: no head to resume, no file to write. */
+const UNRECORDED: DeploymentsLedger = {
+  getHead: async () => undefined,
+  assertRecordable: async () => undefined,
+  record: async () => NO_PATHS,
+  confirm: async () => NO_PATHS,
+  updatePartial: async () => NO_PATHS,
+};
+
+/**
+ * A stopped split under `record: false`. No record holds the deploy tx, so the
+ * error names it, and no record is left to resume from.
+ */
+function withoutRecord(e: unknown, deployTxId: string): unknown {
+  if (!(e instanceof FragmentDeployError)) return e;
+  return new FragmentDeployError(
+    {
+      address: e.address,
+      circuitsOnChain: e.circuitsOnChain,
+      circuitsPending: e.circuitsPending,
+      reason: e.reason,
+      txId: e.txId,
+      timedOut: e.timedOut,
+      deployTxId,
+    },
+    e.cause !== undefined ? { cause: e.cause } : undefined,
+  );
 }
 
 /**

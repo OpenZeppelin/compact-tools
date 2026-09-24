@@ -302,6 +302,21 @@ describe('signerIndex', () => {
       'not maintained by this signing key',
     );
   });
+
+  it('should leave --force out of the refusal when no record exists', () => {
+    const thrown = catchThrown(() =>
+      signerIndex({
+        address: ADDRESS,
+        snapshot: snapshot({ committee: [vk('someone-else')] }),
+        verifyingKey: OUR_KEY,
+        recorded: false,
+      }),
+    );
+
+    expect((thrown as Error).message).toBe(
+      `Contract ${ADDRESS} is not maintained by this signing key. Check signing_key_file.`,
+    );
+  });
 });
 
 describe('assertResumable', () => {
