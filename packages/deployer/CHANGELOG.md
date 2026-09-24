@@ -22,7 +22,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** signing and verifying keys are tagged `{ tag, value }`, not hex. `SigningKey.ledgerKey` gives that form and `ChainSnapshot.committee` is `SignatureVerifyingKey[]`. `signing_key_file` on disk is unchanged (#192)
 - yarn and pnpm need one resolution, `@midnightntwrk/ledger-v9`, down from six (#192)
 - `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.0-rc.6` (#192)
-- `@midnightntwrk/ledger-v9` moves from 1.0.0-rc.3 to 1.0.0-rc.5. Update the yarn / pnpm resolution to match (#193)
+- `@midnightntwrk/ledger-v9` moves from 1.0.0-rc.3 to 1.0.0-rc.5. npm now needs the pin too, as `overrides`. Update the yarn / pnpm resolution to match (#193)
 - **Breaking:** `CompactConfigData.contracts` holds partial entries, which `CompactConfig.contract(name)` merges and validates. `listContracts()` returns exact keys only; `listPatterns()` returns the pattern keys (#193)
 
 ## 0.2.0 (2026-09-15)

@@ -51,15 +51,15 @@ Compile with `compact compile +0.34.0`. An older artifact fails at submit with `
 
 The ledger and the wallet SDK sit under the `@midnightntwrk` scope, no hyphen. Everything else keeps `@midnight-ntwrk`.
 
-yarn and pnpm need one pin, because `compact-js` declares the ledger as a range and a second ledger copy breaks every deploy:
+Every package manager needs one pin, because the stack's packages ask for different ledger versions and a second ledger copy breaks every deploy. With npm:
 
 ```json
-"resolutions": {
+"overrides": {
   "@midnightntwrk/ledger-v9": "1.0.0-rc.5"
 }
 ```
 
-(`pnpm.overrides` for pnpm.) Nothing else in the stack floats.
+yarn takes the same entry under `resolutions`, and pnpm under `pnpm.overrides`. Nothing else in the stack floats.
 
 ## CLI
 
