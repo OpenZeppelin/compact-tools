@@ -6,6 +6,12 @@ file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- A fragmented deploy of a contract compiled with `--feature-zkir-v3` no longer fails its verifier-key insert with `expected header tag 'midnight:verifier-key[v6]:'`. Each key is inserted under the version the ledger accepts for it (#200)
+
 ## 0.3.0 (2026-09-24)
 
 ### Added
