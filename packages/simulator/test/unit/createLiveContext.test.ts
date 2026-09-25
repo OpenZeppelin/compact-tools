@@ -1,11 +1,11 @@
+import type { ScopedTransactionOptions } from '@midnight-ntwrk/midnight-js-contracts';
 import type { PrivateStateProvider } from '@midnight-ntwrk/midnight-js-types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLiveContext } from '../../src/live/createLiveContext.js';
 
 const contracts = vi.hoisted(() => ({
   findDeployedContract: vi.fn(),
-  createCallTxOptions: vi.fn(),
-  submitCallTx: vi.fn(),
+  withContractScopedTransaction: vi.fn(),
 }));
 
 vi.mock('@midnight-ntwrk/midnight-js-contracts', () => contracts);
@@ -14,9 +14,8 @@ type PS = { secretKey: Uint8Array };
 
 /**
  * An in-memory stand-in for the harness's `PrivateStateProvider`, exercising
- * only the `get`/`set` slice `createLiveContext` uses. `findDeployedContract`
- * (and thus midnight-js) is never reached, so these tests run without the
- * optional live peers installed.
+ * only the `get`/`set` slice `createLiveContext` uses. midnight-js-contracts is
+ * mocked; the private-state tests never reach it.
  */
 const fakeProvider = (initial: Record<string, PS> = {}) => {
   const store = new Map<string, PS>(Object.entries(initial));
@@ -67,12 +66,18 @@ describe('createLiveContext private-state write', () => {
   });
 });
 
-describe('createLiveContext encryption-key mappings', () => {
+describe('createLiveContext scoped-transaction options', () => {
   const COMPILED = { name: 'compiled' };
-  const MAPPINGS = new Map([['bob-coin-key', 'bob-enc-key']]);
+  const TX_CTX = { txCtx: true };
+  const FINALIZED = { private: { result: [] } };
+  const OPTIONS: ScopedTransactionOptions = {
+    additionalCoinEncPublicKeyMappings: new Map([
+      ['bob-coin-key', 'bob-enc-key'],
+    ]),
+  };
   const deployed = { callTx: { deposit: vi.fn(), getParent: vi.fn() } };
 
-  const liveContext = (mappings?: ReadonlyMap<string, string>) =>
+  const liveContext = (scopedTransactionOptions?: ScopedTransactionOptions) =>
     createLiveContext<PS>({
       contractAddress: '0200cafef00d',
       providersFor: (alias) => ({ alias }),
@@ -80,15 +85,21 @@ describe('createLiveContext encryption-key mappings', () => {
       privateStateId: 'my-contract',
       publicDataProvider: {} as never,
       privateStateProvider: fakeProvider().provider,
-      additionalCoinEncPublicKeyMappings: mappings,
+      scopedTransactionOptions,
     });
 
   beforeEach(() => {
     vi.clearAllMocks();
     contracts.findDeployedContract.mockResolvedValue(deployed);
+    contracts.withContractScopedTransaction.mockImplementation(
+      async (_providers, fn: (txCtx: unknown) => Promise<void>) => {
+        await fn(TX_CTX);
+        return FINALIZED;
+      },
+    );
   });
 
-  it('returns the deployed handle as-is without mappings', async () => {
+  it('returns the deployed handle as-is without options', async () => {
     const handle = await liveContext().handleFor(null);
 
     expect(handle).toBe(deployed);
@@ -102,29 +113,19 @@ describe('createLiveContext encryption-key mappings', () => {
     );
   });
 
-  it('submits every circuit call with the mappings through the alias providers', async () => {
-    const callOptions = { circuitId: 'deposit' };
-    const finalized = { private: { result: [] } };
-    contracts.createCallTxOptions.mockReturnValue(callOptions);
-    contracts.submitCallTx.mockResolvedValue(finalized);
+  it('runs every circuit call in its own scoped transaction with the options', async () => {
+    const handle = await liveContext(OPTIONS).handleFor('ALICE');
 
-    const handle = await liveContext(MAPPINGS).handleFor('ALICE');
-    const result = await handle.callTx.deposit?.('coin');
+    expect(await handle.callTx.deposit?.('coin')).toBe(FINALIZED);
+    expect(await handle.callTx.getParent?.()).toBe(FINALIZED);
 
-    expect(Object.keys(handle.callTx)).toStrictEqual(['deposit', 'getParent']);
-    expect(contracts.createCallTxOptions).toHaveBeenCalledWith(
-      COMPILED,
-      'deposit',
-      '0200cafef00d',
-      'my-contract',
-      MAPPINGS,
-      ['coin'],
-    );
-    expect(contracts.submitCallTx).toHaveBeenCalledWith(
-      { alias: 'ALICE' },
-      callOptions,
-    );
-    expect(result).toBe(finalized);
-    expect(deployed.callTx.deposit).not.toHaveBeenCalled();
+    expect(deployed.callTx.deposit).toHaveBeenCalledWith(TX_CTX, 'coin');
+    expect(deployed.callTx.getParent).toHaveBeenCalledWith(TX_CTX);
+    const scopes = contracts.withContractScopedTransaction.mock.calls;
+    expect(scopes).toHaveLength(2);
+    for (const [providers, , options] of scopes) {
+      expect(providers).toBe(contracts.findDeployedContract.mock.calls[0]?.[0]);
+      expect(options).toBe(OPTIONS);
+    }
   });
 });

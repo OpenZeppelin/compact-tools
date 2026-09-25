@@ -2,7 +2,7 @@ import type { StateValue } from '@midnight-ntwrk/compact-runtime';
 // Type-only imports — erased at build, so they create no runtime edge to
 // midnight-js. The only runtime midnight-js edge in this file is the
 // lazy dynamic import inside `loadContracts`.
-import type { CallOptionsBase } from '@midnight-ntwrk/midnight-js-contracts';
+import type { ScopedTransactionOptions } from '@midnight-ntwrk/midnight-js-contracts';
 import type {
   PrivateStateProvider,
   PublicDataProvider,
@@ -66,11 +66,8 @@ export interface CreateLiveContextOptions<P> {
    * is the harness's responsibility (already required for `get`).
    */
   privateStateProvider: PrivateStateProvider<string, P>;
-  /** Passed to midnight-js on every live call. */
-  additionalCoinEncPublicKeyMappings?: CallOptionsBase<
-    never,
-    never
-  >['additionalCoinEncPublicKeyMappings'];
+  /** Runs every live call in a midnight-js scoped transaction with these options. */
+  scopedTransactionOptions?: ScopedTransactionOptions;
   /** Optional override of the indexer-lag policy. */
   indexerLag?: Partial<IndexerLagPolicy>;
 }
@@ -132,30 +129,26 @@ export function createLiveContext<P>(
     const built = loadContracts().then(async (contracts) => {
       const providers = options.providersFor(alias) as never;
       const compiledContract = options.compiledContract as never;
-      const { contractAddress, privateStateId } = options;
+      const { contractAddress, privateStateId, scopedTransactionOptions } =
+        options;
       const handle = await contracts.findDeployedContract(providers, {
         compiledContract,
         contractAddress,
         privateStateId,
       });
-      const mappings = options.additionalCoinEncPublicKeyMappings;
-      if (mappings === undefined) return handle;
-      // `callTx` is `submitCallTx(createCallTxOptions(...))` with the mappings
-      // slot left empty; rebuild each entry with it filled.
+      if (scopedTransactionOptions === undefined) return handle;
+      // A scoped transaction is the only midnight-js entry point that takes
+      // these options, so each call becomes a scope holding just that call.
       const callTx = Object.fromEntries(
-        Object.keys(handle.callTx).map((circuitId) => [
+        Object.entries(handle.callTx).map(([circuitId, call]) => [
           circuitId,
           (...args: unknown[]) =>
-            contracts.submitCallTx(
+            contracts.withContractScopedTransaction(
               providers,
-              contracts.createCallTxOptions(
-                compiledContract,
-                circuitId,
-                contractAddress,
-                privateStateId,
-                mappings,
-                args,
-              ),
+              async (txCtx) => {
+                await call(txCtx, ...args);
+              },
+              scopedTransactionOptions,
             ),
         ]),
       );

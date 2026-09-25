@@ -12,7 +12,7 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 ### Added
 
 - `BaseSimulatorOptions.time` sets the block time the kernel's time operations observe, in seconds since the epoch. Defaults to `0` for reproducible runs (#147)
-- `CreateLiveContextOptions.additionalCoinEncPublicKeyMappings` maps coin public keys to encryption public keys for every live call, so a circuit can send a shielded coin to a wallet other than the caller (#195)
+- `CreateLiveContextOptions.scopedTransactionOptions` runs every live call in a midnight-js scoped transaction with those options. With `additionalCoinEncPublicKeyMappings`, a circuit can send a shielded coin to a wallet other than the caller (#195)
 
 ### Changed
 
