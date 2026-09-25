@@ -41,13 +41,14 @@ release notes agree.
    - **Prerelease** - Advance the current beta cycle (`0.4.0-beta.0` ->
      `0.4.0-beta.1`). From a stable version it behaves like prepatch.
 
-5. A maintainer must approve the release before it proceeds.
-6. Once approved, the CI will automatically:
+5. The CI will automatically:
    - Run tests.
    - Bump the version.
    - Open a release PR against the branch you ran from, and auto-merge it.
-   - Create a git tag.
-   - Publish the package to npm under the channel's dist-tag.
+6. Once the release PR merges, a maintainer must approve the publish. The CI
+   then:
+   - Creates a git tag.
+   - Publishes the package to npm under the channel's dist-tag.
 7. Once published, go to "Releases" and create a GitHub release using the
    generated tag. Mark beta tags as prereleases.
 
