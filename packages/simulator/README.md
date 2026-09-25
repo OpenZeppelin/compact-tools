@@ -198,6 +198,21 @@ const owner = await simulator.signers.eitherFor('OWNER');
 > mechanism. These helpers exist for circuits that take the caller as an input
 > to other computations (e.g. commitment derivation).
 
+In live mode, midnight-js encrypts every shielded coin a circuit creates to its
+recipient's encryption key, and on its own knows only the calling wallet's.
+When a circuit sends a coin to another wallet's coin public key, pass that
+wallet's key pair to `createLiveContext`, or the call fails to build with
+`Unable to resolve encryption public key`:
+
+```typescript
+createLiveContext({
+  // ...
+  additionalCoinEncPublicKeyMappings: new Map([
+    [bob.coinPublicKey, bob.encryptionPublicKey],
+  ]),
+});
+```
+
 ### 🔧 Witness Overrides
 
 Perfect for testing edge cases and tracking witness usage. Dry only: the live

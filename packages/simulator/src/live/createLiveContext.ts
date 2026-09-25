@@ -1,12 +1,16 @@
 import type { StateValue } from '@midnight-ntwrk/compact-runtime';
 // Type-only imports — erased at build, so they create no runtime edge to
 // midnight-js. The only runtime midnight-js edge in this file is the
-// lazy dynamic import inside `loadFindDeployedContract`.
+// lazy dynamic import inside `loadContracts`.
 import type {
   PrivateStateProvider,
   PublicDataProvider,
 } from '@midnight-ntwrk/midnight-js-types';
-import type { DeployedTxHandle, LiveContext } from './LiveContext.js';
+import type {
+  DeployedTxHandle,
+  FinalizedCallResult,
+  LiveContext,
+} from './LiveContext.js';
 
 /**
  * Bounded retry policy for absorbing indexer block-lag on public-state reads.
@@ -65,29 +69,50 @@ export interface CreateLiveContextOptions<P> {
    * is the harness's responsibility (already required for `get`).
    */
   privateStateProvider: PrivateStateProvider<string, P>;
+  /**
+   * Encryption public keys for shielded recipients other than the calling
+   * wallet, keyed by coin public key. midnight-js refuses to build a call that
+   * creates a shielded coin for a coin public key it cannot map to one.
+   */
+  additionalCoinEncPublicKeyMappings?: ReadonlyMap<string, string>;
   /** Optional override of the indexer-lag policy. */
   indexerLag?: Partial<IndexerLagPolicy>;
 }
 
-type FindDeployedContractFn = (
-  providers: unknown,
-  options: unknown,
-) => Promise<{ callTx: DeployedTxHandle['callTx'] }>;
+/** The `@midnight-ntwrk/midnight-js-contracts` exports the live path calls. */
+interface ContractsModule {
+  findDeployedContract(
+    providers: unknown,
+    options: unknown,
+  ): Promise<DeployedTxHandle>;
+  createCallTxOptions(
+    compiledContract: unknown,
+    circuitId: string,
+    contractAddress: string,
+    privateStateId: string,
+    additionalCoinEncPublicKeyMappings: ReadonlyMap<string, string>,
+    args: unknown[],
+  ): unknown;
+  submitCallTx(
+    providers: unknown,
+    options: unknown,
+  ): Promise<FinalizedCallResult>;
+}
 
-let cachedFindDeployedContract: FindDeployedContractFn | undefined;
+let cachedContracts: ContractsModule | undefined;
 
 /**
- * Lazily loads `findDeployedContract`. The dynamic import is the sole runtime
+ * Lazily loads midnight-js-contracts. The dynamic import is the sole runtime
  * edge to midnight-js in the package's graph; a failure to resolve it (the
  * optional peers are absent) is rewrapped into an actionable message
  * rather than a raw `ERR_MODULE_NOT_FOUND`.
  */
-const loadFindDeployedContract = async (): Promise<FindDeployedContractFn> => {
-  if (cachedFindDeployedContract) return cachedFindDeployedContract;
+const loadContracts = async (): Promise<ContractsModule> => {
+  if (cachedContracts) return cachedContracts;
   try {
-    const mod = await import('@midnight-ntwrk/midnight-js-contracts');
-    cachedFindDeployedContract =
-      mod.findDeployedContract as unknown as FindDeployedContractFn;
+    cachedContracts = (await import(
+      '@midnight-ntwrk/midnight-js-contracts'
+    )) as unknown as ContractsModule;
   } catch (cause) {
     throw new Error(
       'install @midnight-ntwrk/midnight-js-contracts (and the midnight-js peers) ' +
@@ -95,7 +120,7 @@ const loadFindDeployedContract = async (): Promise<FindDeployedContractFn> => {
       { cause },
     );
   }
-  return cachedFindDeployedContract;
+  return cachedContracts;
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -123,18 +148,51 @@ export function createLiveContext<P>(
     ...options.indexerLag,
   };
   const handleCache = new Map<string, Promise<DeployedTxHandle>>();
+  const encKeyMappings = options.additionalCoinEncPublicKeyMappings;
+
+  // The handle's own `callTx` runs `submitCallTx(createCallTxOptions(...))`
+  // with the mappings slot left empty; rebuild each entry with it filled.
+  const withEncKeyMappings = (
+    handle: DeployedTxHandle,
+    contracts: ContractsModule,
+    providers: unknown,
+    mappings: ReadonlyMap<string, string>,
+  ): DeployedTxHandle => ({
+    ...handle,
+    callTx: Object.fromEntries(
+      Object.keys(handle.callTx).map((circuitId) => [
+        circuitId,
+        (...args: unknown[]) =>
+          contracts.submitCallTx(
+            providers,
+            contracts.createCallTxOptions(
+              options.compiledContract,
+              circuitId,
+              options.contractAddress,
+              options.privateStateId,
+              mappings,
+              args,
+            ),
+          ),
+      ]),
+    ),
+  });
 
   const resolveHandle = (alias: string | null): Promise<DeployedTxHandle> => {
     const key = alias ?? '\u0000default';
     const cached = handleCache.get(key);
     if (cached) return cached;
-    const built = loadFindDeployedContract().then((findDeployedContract) =>
-      findDeployedContract(options.providersFor(alias), {
+    const built = loadContracts().then(async (contracts) => {
+      const providers = options.providersFor(alias);
+      const handle = await contracts.findDeployedContract(providers, {
         compiledContract: options.compiledContract,
         contractAddress: options.contractAddress,
         privateStateId: options.privateStateId,
-      }),
-    );
+      });
+      return encKeyMappings === undefined
+        ? handle
+        : withEncKeyMappings(handle, contracts, providers, encKeyMappings);
+    });
     handleCache.set(key, built);
     return built;
   };
