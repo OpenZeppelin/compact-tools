@@ -16,6 +16,7 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 
 ### Changed
 
+- **Breaking:** `createLiveContext` takes midnight-js types. `findOptions` replaces `contractAddress`, `compiledContract` and `privateStateId`. `providersFor` returns `ContractProviders`, and `providersFor(null)` replaces `publicDataProvider` and `privateStateProvider`. `@midnight-ntwrk/compact-js` joins the optional peers (#196)
 - **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.19.0`, which made `initialState` and every circuit async. The `@midnight-ntwrk/midnight-js-contracts` and `@midnight-ntwrk/midnight-js-types` peers move from `^4.1.0` to `^5.0.0-beta.7`. Both peers stay optional, so a dry-only consumer needs neither (#152)
 - **Breaking:** construction is async. Replace `new MySimulator(args, options)` with `await MySimulator.create(args, options)`. Subclass `create` overrides return `Promise<MySimulator>` and delegate to `super._create([...args], options)` (#145, #147)
 - **Breaking:** circuit proxies return promises. `ContextlessCircuits` maps to `Promise<R>`, so an un-awaited call that used to pass as a truthy promise, such as `if (sim.isOwner(x))`, no longer typechecks (#145, #154)
