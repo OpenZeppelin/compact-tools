@@ -114,7 +114,7 @@
     "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.0-beta.7",
     "@midnight-ntwrk/midnight-js-network-id": "5.0.0-beta.7",
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.7",
-    "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.7",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.9-pre.c78447d3",
     "@midnight-ntwrk/midnight-js-utils": "5.0.0-beta.7",
     "@midnight-ntwrk/testkit-js": "5.0.0-beta.7",
     "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
