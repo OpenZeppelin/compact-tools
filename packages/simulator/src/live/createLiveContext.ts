@@ -1,12 +1,13 @@
+import type { Contract } from '@midnight-ntwrk/compact-js';
 import type { StateValue } from '@midnight-ntwrk/compact-runtime';
 // Type-only imports — erased at build, so they create no runtime edge to
 // midnight-js. The only runtime midnight-js edge in this file is the
 // lazy dynamic import inside `loadContracts`.
-import type { ScopedTransactionOptions } from '@midnight-ntwrk/midnight-js-contracts';
 import type {
-  PrivateStateProvider,
-  PublicDataProvider,
-} from '@midnight-ntwrk/midnight-js-types';
+  ContractProviders,
+  FindDeployedContractOptionsExistingPrivateState,
+  ScopedTransactionOptions,
+} from '@midnight-ntwrk/midnight-js-contracts';
 import type { DeployedTxHandle, LiveContext } from './LiveContext.js';
 
 /**
@@ -34,38 +35,21 @@ export const DEFAULT_INDEXER_LAG: IndexerLagPolicy = {
  * Options for {@link createLiveContext}.
  *
  * The package only assembles already-provided pieces; deploy, provider
- * construction, and wallet funding are the caller's harness. Provider
- * and contract specifics are threaded through opaquely — the harness owns their
- * construction and types.
+ * construction, and wallet funding are the caller's harness.
  *
- * @template P - Private state type.
+ * @template C - Contract type.
  */
-export interface CreateLiveContextOptions<P> {
-  /** The address of the already-deployed contract. */
-  contractAddress: string;
+export interface CreateLiveContextOptions<
+  C extends Contract.Any = Contract.Any,
+> {
   /**
-   * Per-alias `ContractProviders`, supplied by the harness. The wallet/signing
-   * differs per alias; `null` is the default signer. Threaded into
-   * `findDeployedContract`.
+   * Per-alias providers; `null` is the default signer. Public and private
+   * state are read through `providersFor(null)`, so aliases should share its
+   * private-state provider, and the harness calls its `setContractAddress`.
    */
-  providersFor: (alias: string | null) => unknown;
-  /** The compiled contract, from the harness. Threaded into `findDeployedContract`. */
-  compiledContract: unknown;
-  /** Identifier under which the contract's private state is stored. */
-  privateStateId: string;
-  /** Provider for reading on-chain public state. */
-  publicDataProvider: PublicDataProvider;
-  /**
-   * Provider for reading and (optionally) writing private state.
-   *
-   * Invariant: this MUST be the same provider instance wired into the
-   * `providersFor(alias)` bundle handed to `findDeployedContract`. The
-   * `setPrivateState` write below targets this provider, and the next
-   * `callTx` reads private state from the bundle's provider; if they are
-   * different instances the write is invisible to proving. `setContractAddress`
-   * is the harness's responsibility (already required for `get`).
-   */
-  privateStateProvider: PrivateStateProvider<string, P>;
+  providersFor: (alias: string | null) => ContractProviders<C>;
+  /** Passed to `findDeployedContract` for every alias. */
+  findOptions: FindDeployedContractOptionsExistingPrivateState<C>;
   /** Runs every live call in a midnight-js scoped transaction with these options. */
   scopedTransactionOptions?: ScopedTransactionOptions;
   /** Optional override of the indexer-lag policy. */
@@ -110,16 +94,18 @@ const sleep = (ms: number): Promise<void> =>
  * adapter ({@link LiveContext}) stays thin; this helper is separate and
  * imported only by live consumers (who already depend on midnight-js).
  *
- * @param options - Harness-provided providers, contract, and address.
+ * @param options - Harness-provided providers and `findDeployedContract` options.
  * @returns A {@link LiveContext} ready to pass to `create(args, { live })`.
  */
-export function createLiveContext<P>(
-  options: CreateLiveContextOptions<P>,
-): LiveContext<P> {
+export function createLiveContext<C extends Contract.Any>(
+  options: CreateLiveContextOptions<C>,
+): LiveContext<Contract.PrivateState<C>> {
   const lag: IndexerLagPolicy = {
     ...DEFAULT_INDEXER_LAG,
     ...options.indexerLag,
   };
+  const { findOptions, scopedTransactionOptions } = options;
+  const { contractAddress, privateStateId } = findOptions;
   const handleCache = new Map<string, Promise<DeployedTxHandle>>();
 
   const resolveHandle = (alias: string | null): Promise<DeployedTxHandle> => {
@@ -127,15 +113,14 @@ export function createLiveContext<P>(
     const cached = handleCache.get(key);
     if (cached) return cached;
     const built = loadContracts().then(async (contracts) => {
-      const providers = options.providersFor(alias) as never;
-      const compiledContract = options.compiledContract as never;
-      const { contractAddress, privateStateId, scopedTransactionOptions } =
-        options;
-      const handle = await contracts.findDeployedContract(providers, {
-        compiledContract,
-        contractAddress,
-        privateStateId,
-      });
+      const providers = options.providersFor(alias);
+      const found = await contracts.findDeployedContract(
+        providers,
+        findOptions,
+      );
+      // Erase `FoundContract<C>` to the structural handle `LiveBackend` reads;
+      // its typed `callTx` overloads are not assignable to `DeployedTxHandle`.
+      const handle = found as unknown as DeployedTxHandle;
       if (scopedTransactionOptions === undefined) return handle;
       // A scoped transaction is the only midnight-js entry point that takes
       // these options, so each call becomes a scope holding just that call.
@@ -159,7 +144,7 @@ export function createLiveContext<P>(
   };
 
   return {
-    contractAddress: options.contractAddress,
+    contractAddress,
 
     handleFor: resolveHandle,
 
@@ -170,13 +155,13 @@ export function createLiveContext<P>(
      * `ledgerExtractor` consumes.
      */
     async queryLedger(): Promise<StateValue> {
+      const { publicDataProvider } = options.providersFor(null);
       let delay = lag.baseDelayMs;
       let lastErr: unknown;
       for (let attempt = 0; attempt <= lag.retries; attempt++) {
         try {
-          const state = await options.publicDataProvider.queryContractState(
-            options.contractAddress,
-          );
+          const state =
+            await publicDataProvider.queryContractState(contractAddress);
           if (state != null) {
             // `ContractState.data` is the StateValue the dry path also extracts.
             return (state as unknown as { data: StateValue }).data;
@@ -190,31 +175,28 @@ export function createLiveContext<P>(
         }
       }
       throw new Error(
-        `no contract state at ${options.contractAddress} after ${lag.retries + 1} ` +
+        `no contract state at ${contractAddress} after ${lag.retries + 1} ` +
           'attempts — the write may be missing, or indexer lag exceeds the budget',
         lastErr === undefined ? undefined : { cause: lastErr },
       );
     },
 
-    async queryPrivateState(): Promise<P> {
-      const state = await options.privateStateProvider.get(
-        options.privateStateId,
-      );
+    async queryPrivateState(): Promise<Contract.PrivateState<C>> {
+      const { privateStateProvider } = options.providersFor(null);
+      const state = await privateStateProvider.get(privateStateId);
       if (state == null) {
-        throw new Error(
-          `no private state stored at "${options.privateStateId}"`,
-        );
+        throw new Error(`no private state stored at "${privateStateId}"`);
       }
       return state;
     },
 
     /**
-     * Writes the whole private state to the provider under `privateStateId`.
-     * The next impure `callTx` reads it fresh (no handle-cache invalidation
-     * needed). See the invariant on {@link CreateLiveContextOptions.privateStateProvider}.
+     * Writes the whole private state under `privateStateId`. The next impure
+     * `callTx` reads it fresh (no handle-cache invalidation needed).
      */
-    async setPrivateState(state: P): Promise<void> {
-      await options.privateStateProvider.set(options.privateStateId, state);
+    async setPrivateState(state: Contract.PrivateState<C>): Promise<void> {
+      const { privateStateProvider } = options.providersFor(null);
+      await privateStateProvider.set(privateStateId, state);
     },
   };
 }

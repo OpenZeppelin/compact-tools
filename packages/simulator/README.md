@@ -208,7 +208,8 @@ wallet's coin and encryption public keys (its `WalletProvider`'s
 
 ```typescript
 createLiveContext({
-  // ...
+  providersFor, // alias => ContractProviders
+  findOptions: { compiledContract, contractAddress, privateStateId },
   scopedTransactionOptions: {
     additionalCoinEncPublicKeyMappings: new Map([
       [bob.getCoinPublicKey(), bob.getEncryptionPublicKey()],
