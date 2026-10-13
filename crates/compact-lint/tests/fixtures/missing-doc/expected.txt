@@ -1,0 +1,3 @@
+Gaps.compact:6:3: missing-doc: ledger `_owner` has no doc comment
+Gaps.compact:8:3: missing-doc: enum `Kind` has no doc comment
+Gaps.compact:17:3: missing-doc: circuit `run` has no doc comment

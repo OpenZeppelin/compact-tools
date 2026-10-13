@@ -1,0 +1,1 @@
+Renamed.compact:2:4: module-name: @module names `Stale`, but the module is `Renamed`

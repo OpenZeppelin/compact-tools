@@ -1,0 +1,7 @@
+/**
+ * @module Old
+ * @description A retired module the config excludes.
+ */
+export module Old {
+  export ledger _owner: Bytes<32>;
+}
