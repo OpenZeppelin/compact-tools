@@ -11,12 +11,14 @@
  *   {@link parseCircuitConstraints}) — strips ANSI codes, spinner artifacts,
  *   and cursor-movement sequences from `compact compile` PTY output and
  *   extracts circuit constraint data.
- * - **Circuit info persistence** ({@link writeCircuitInfoJson}) — writes
- *   `.circuit-info.json` files with parsed circuit constraints.
+ * - **Artifact layout** ({@link artifactDir}) — resolves the per-contract
+ *   output directory `compact compile` writes into.
+ * - **Circuit info persistence** ({@link writeCircuitInfo}) — writes
+ *   `circuit-info.json` into a contract's artifact directory.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 /**
  * Converts a simple glob pattern to a regular expression.
  * Supports `*` (any sequence) and `?` (single char). All other glob features
@@ -242,51 +244,70 @@ export function parseCircuitConstraints(
   return [...circuits.values()];
 }
 
+// ─── Artifact layout ────────────────────────────────────────────────────
+
+/**
+ * Resolve the artifact directory `compact compile` writes a contract into.
+ *
+ * Flattened (default): `<outDir>/<Contract>/`. Hierarchical:
+ * `<outDir>/<subdir>/<Contract>/`, except for sources at the root of `srcDir`,
+ * which have no subdir and stay flattened.
+ *
+ * @param outDir       - Base artifacts directory
+ * @param file         - Relative path to the .compact file (from srcDir)
+ * @param hierarchical - Whether to mirror the source directory structure
+ * @returns The contract's artifact directory, under `outDir`
+ */
+export function artifactDir(
+  outDir: string,
+  file: string,
+  hierarchical: boolean,
+): string {
+  const fileDir = dirname(file);
+  const contract = basename(file, '.compact');
+  return hierarchical && fileDir !== '.'
+    ? join(outDir, fileDir, contract)
+    : join(outDir, contract);
+}
+
 // ─── Circuit info file ──────────────────────────────────────────────────
 
 /**
- * Shape of the `.circuit-info.json` file written per source directory.
+ * Shape of the `circuit-info.json` file written per compiled contract.
  */
-export interface CircuitInfoFile {
-  /** ISO timestamp of when this file was last generated */
+export interface CircuitInfo {
+  /** ISO timestamp of when this file was generated */
   generatedAt: string;
-  /** Map of compiled filename → circuit constraints */
-  files: Record<string, CircuitConstraint[]>;
+  /** Path of the compiled .compact file relative to srcDir, forward slashes */
+  source: string;
+  /** Circuit constraints in the compiler's output order */
+  circuits: CircuitConstraint[];
 }
 
 /**
- * Write or merge circuit constraint data into a `.circuit-info.json` file
- * in the source directory of the compiled file.
+ * Write circuit constraint data to `circuit-info.json` in a contract's
+ * artifact directory, beside the compiler's own output.
  *
- * If the file already exists, the entry for the given file is updated and
- * other entries are preserved. The `generatedAt` timestamp is always updated.
+ * Each compile replaces the file; nothing is merged from a previous run.
  *
- * @param file     - Relative path to the compiled .compact file (from srcDir)
- * @param srcDir   - Base source directory
- * @param circuits - Parsed circuit constraints to write
- * @returns The absolute path to the written `.circuit-info.json` file
+ * @param outputDir - The contract's artifact directory, created if missing
+ * @param file      - Relative path to the compiled .compact file (from srcDir)
+ * @param circuits  - Parsed circuit constraints to write
+ * @returns The absolute path to the written `circuit-info.json` file
  */
-export function writeCircuitInfoJson(
+export function writeCircuitInfo(
+  outputDir: string,
   file: string,
-  srcDir: string,
   circuits: CircuitConstraint[],
 ): string {
-  const srcFilePath = resolve(srcDir, file);
-  const dir = dirname(srcFilePath);
-  const jsonPath = resolve(dir, '.circuit-info.json');
+  const jsonPath = resolve(outputDir, 'circuit-info.json');
+  const info: CircuitInfo = {
+    generatedAt: new Date().toISOString(),
+    source: file.replaceAll('\\', '/'),
+    circuits,
+  };
 
-  let existing: CircuitInfoFile = { generatedAt: '', files: {} };
-  try {
-    existing = JSON.parse(readFileSync(jsonPath, 'utf-8'));
-  } catch {
-    // File doesn't exist or is invalid, start fresh
-  }
-
-  const fileName = file.split('/').pop() ?? file;
-  existing.generatedAt = new Date().toISOString();
-  existing.files[fileName] = circuits;
-
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(jsonPath, `${JSON.stringify(existing, null, 2)}\n`, 'utf-8');
+  mkdirSync(outputDir, { recursive: true });
+  writeFileSync(jsonPath, `${JSON.stringify(info, null, 2)}\n`, 'utf-8');
   return jsonPath;
 }

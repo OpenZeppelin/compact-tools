@@ -20,13 +20,13 @@ import {
 import {
   DustWallet,
   type DustWalletAPI,
-} from '@midnight-ntwrk/wallet-sdk-dust-wallet';
-import type { ShieldedWalletAPI } from '@midnight-ntwrk/wallet-sdk-shielded';
+} from '@midnightntwrk/wallet-sdk-dust-wallet';
+import type { ShieldedWalletAPI } from '@midnightntwrk/wallet-sdk-shielded';
 import {
   type UnshieldedKeystore,
   UnshieldedWallet,
   type UnshieldedWalletAPI,
-} from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+} from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
 import { WalletError } from '../errors.ts';
 import { formatError } from './error-format.ts';

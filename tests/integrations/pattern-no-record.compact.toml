@@ -1,0 +1,27 @@
+# Config for specs/deploy/patternNoRecord.spec.ts. All paths resolve against
+# this file's dir. No exact entry names a contract: every deploy resolves
+# through the pattern below.
+
+[profile]
+default_network = "local"
+artifacts_dir   = "fixtures/artifacts"
+deployments_dir = "deployments/pattern-no-record"
+
+[networks.local]
+network_id   = "undeployed"
+indexer      = "http://127.0.0.1:8088/api/v4/graphql"
+indexer_ws   = "ws://127.0.0.1:8088/api/v4/graphql/ws"
+node         = "http://127.0.0.1:9944"
+node_ws      = "ws://127.0.0.1:9944"
+proof_server = "http://127.0.0.1:6300"
+wallet       = { source = "local", index = 0 }
+
+# `artifact` defaults to the contract name. No `init_private_state`: the spec
+# passes the state in code.
+[contracts."Fragment*"]
+signing_key_file = "fixtures/signingkeys/{name}.signingkey"
+private_state_id = "{name}-private-state"
+# Pinned so the deploy never halves. A size learned by halving would carry
+# into fragmented.spec.ts's no-budget deploy: same artifact, network and
+# process.
+circuits_per_tx  = 5

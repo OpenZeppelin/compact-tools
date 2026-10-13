@@ -6,7 +6,7 @@
 services:
   proof-server:
     # Pinned to a release, not `:latest`, so `auto` cannot move under a deploy.
-    image: 'midnightntwrk/proof-server:8.0.3'
+    image: 'midnightntwrk/proof-server:9.0.0-rc.6'
     container_name: 'proof-server_$TESTCONTAINERS_UID'
     command: ['midnight-proof-server -v']
     # Host port 0: Docker picks a free one, so concurrent deploys cannot collide.

@@ -21,9 +21,10 @@ import {
   type ExecFunction,
 } from './types/options.ts';
 import {
+  artifactDir,
   cleanForDisplay,
   parseCircuitConstraints,
-  writeCircuitInfoJson,
+  writeCircuitInfo,
 } from './utils.ts';
 
 // Re-export public types and services so consumers keep importing them
@@ -291,7 +292,7 @@ export class CompactCompiler {
    *
    * When circuit constraint data is available in the compile output (i.e.,
    * compiling without `--skip-zk`), prints a clean summary and writes a
-   * `.circuit-info.json` file in the source directory.
+   * `circuit-info.json` file into the contract's artifact directory.
    *
    * @param file  - Relative path to the .compact file
    * @param index - Current file index (0-based) for progress tracking
@@ -327,8 +328,11 @@ export class CompactCompiler {
           .join('\n');
         UIService.printOutput(summary, chalk.cyan);
 
-        // Write .circuit-info.json in the source directory
-        writeCircuitInfoJson(file, this.options.srcDir, circuits);
+        writeCircuitInfo(
+          artifactDir(this.options.outDir, file, this.options.hierarchical),
+          file,
+          circuits,
+        );
       }
 
       const cleanStderr = cleanForDisplay(result.stderr);

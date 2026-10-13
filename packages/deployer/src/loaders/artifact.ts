@@ -35,6 +35,8 @@ export interface LoadArtifactOptions {
   artifact: string;
   contractName: string;
   witnesses?: FileOrModuleRef;
+  /** In-code witnesses. They win, and {@link witnesses} is then never imported. */
+  witnessImpls?: object;
 }
 
 /** Verifier key bytes per circuit, as read from `keys/<circuit>.verifier`. */
@@ -111,9 +113,9 @@ export class Artifact {
 
     const circuitNames = collectCircuitNames(zkirDir);
     const Ctor = await importContractCtor(ctx, entry);
-    const witnessImpls = witnesses
-      ? await importWitnesses(ctx, witnesses)
-      : undefined;
+    const witnessImpls =
+      opts.witnessImpls ??
+      (witnesses ? await importWitnesses(ctx, witnesses) : undefined);
 
     const compiledContract = buildCompiledContract({
       contractName,
@@ -149,7 +151,7 @@ async function importContractCtor(
 async function importWitnesses(
   ctx: LoaderContext,
   ref: FileOrModuleRef,
-): Promise<AnyWitnesses> {
+): Promise<object> {
   if (isFileRef(ref)) {
     throw new ConfigError(
       'witnesses must be a { module, export } reference; JSON file refs are not supported (witnesses are functions)',
@@ -169,18 +171,20 @@ async function importWitnesses(
       `witnesses: module ${path} export "${ref.export}" must resolve to an object`,
     );
   }
-  return resolved as AnyWitnesses;
+  return resolved;
 }
 
 function buildCompiledContract(input: {
   contractName: string;
   Ctor: Types.Ctor<AnyContract>;
-  witnessImpls: AnyWitnesses | undefined;
+  witnessImpls: object | undefined;
   contractDir: string;
 }): AnyCompiledContract {
   const base = CompiledContract.make(input.contractName, input.Ctor);
+  // Only the caller knows the artifact's witness types, and an interface-typed
+  // set has no index signature to satisfy the SDK's `Witnesses`.
   const withWit = input.witnessImpls
-    ? CompiledContract.withWitnesses(base, input.witnessImpls)
+    ? CompiledContract.withWitnesses(base, input.witnessImpls as AnyWitnesses)
     : CompiledContract.withVacantWitnesses(base);
   return CompiledContract.withCompiledFileAssets(withWit, input.contractDir);
 }

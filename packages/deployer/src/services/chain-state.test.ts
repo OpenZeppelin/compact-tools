@@ -1,4 +1,5 @@
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types';
+import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { ConfigError, FragmentDeployError } from '../errors.ts';
 import {
@@ -12,7 +13,13 @@ import {
 } from './chain-state.ts';
 
 const ADDRESS = 'cd'.repeat(32);
-const OUR_KEY = 'our-verifying-key';
+
+/** A committee member, named rather than hex so the assertions stay readable. */
+function vk(value: string): SignatureVerifyingKey {
+  return { tag: 'schnorr', value };
+}
+
+const OUR_KEY = vk('our-verifying-key');
 
 function keys(entries: Record<string, number[]>): ArtifactKeys {
   return new Map(
@@ -239,9 +246,9 @@ describe('verifyState', () => {
   });
 
   it.each([
-    ['committee', snapshot({ committee: [OUR_KEY, 'newcomer'] })],
+    ['committee', snapshot({ committee: [OUR_KEY, vk('newcomer')] })],
     ['threshold', snapshot({ threshold: 2 })],
-    ['membership', snapshot({ committee: ['someone-else'] })],
+    ['membership', snapshot({ committee: [vk('someone-else')] })],
   ])('should refuse a %s that moved during the deploy', (_label, chain) => {
     const thrown = catchThrown(() =>
       verifyState({
@@ -259,7 +266,7 @@ describe('verifyState', () => {
 
 describe('signerIndex', () => {
   it('should return this key slot in the committee', () => {
-    const chain = snapshot({ committee: ['someone-else', OUR_KEY] });
+    const chain = snapshot({ committee: [vk('someone-else'), OUR_KEY] });
 
     expect(
       signerIndex({ address: ADDRESS, snapshot: chain, verifyingKey: OUR_KEY }),
@@ -285,7 +292,7 @@ describe('signerIndex', () => {
     const thrown = catchThrown(() =>
       signerIndex({
         address: ADDRESS,
-        snapshot: snapshot({ committee: ['someone-else'] }),
+        snapshot: snapshot({ committee: [vk('someone-else')] }),
         verifyingKey: OUR_KEY,
       }),
     );
@@ -293,6 +300,21 @@ describe('signerIndex', () => {
     expect(thrown).toBeInstanceOf(ConfigError);
     expect((thrown as Error).message).toContain(
       'not maintained by this signing key',
+    );
+  });
+
+  it('should leave --force out of the refusal when no record exists', () => {
+    const thrown = catchThrown(() =>
+      signerIndex({
+        address: ADDRESS,
+        snapshot: snapshot({ committee: [vk('someone-else')] }),
+        verifyingKey: OUR_KEY,
+        recorded: false,
+      }),
+    );
+
+    expect((thrown as Error).message).toBe(
+      `Contract ${ADDRESS} is not maintained by this signing key. Check signing_key_file.`,
     );
   });
 });
@@ -333,7 +355,10 @@ describe('assertResumable', () => {
       assertResumable({
         address: ADDRESS,
         artifactKeys: ARTIFACT,
-        snapshot: snapshot({ threshold: 3, committee: [OUR_KEY, 'a', 'b'] }),
+        snapshot: snapshot({
+          threshold: 3,
+          committee: [OUR_KEY, vk('a'), vk('b')],
+        }),
         verifyingKey: OUR_KEY,
       }),
     );
@@ -349,7 +374,7 @@ describe('assertResumable', () => {
       assertResumable({
         address: ADDRESS,
         artifactKeys: ARTIFACT,
-        snapshot: snapshot({ committee: ['someone-else'] }),
+        snapshot: snapshot({ committee: [vk('someone-else')] }),
         verifyingKey: OUR_KEY,
       }),
     );

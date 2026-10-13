@@ -14,8 +14,8 @@ import {
   WalletFactory,
   WalletSaveStateProvider,
 } from '@midnight-ntwrk/testkit-js';
-import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
-import { UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+import { DustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet';
+import { UnshieldedWallet } from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WalletCache } from './wallet-cache.ts';
@@ -45,13 +45,13 @@ vi.mock('@midnight-ntwrk/testkit-js', () => ({
   WalletSaveStateProvider: vi.fn(),
 }));
 
-vi.mock('@midnight-ntwrk/wallet-sdk-dust-wallet', () => ({
+vi.mock('@midnightntwrk/wallet-sdk-dust-wallet', () => ({
   DustWallet: vi.fn(() => ({
     restore: vi.fn(() => ({ tag: 'dust-restored' })),
   })),
 }));
 
-vi.mock('@midnight-ntwrk/wallet-sdk-unshielded-wallet', () => ({
+vi.mock('@midnightntwrk/wallet-sdk-unshielded-wallet', () => ({
   UnshieldedWallet: vi.fn(() => ({
     restore: vi.fn(() => ({ tag: 'unshielded-restored' })),
   })),

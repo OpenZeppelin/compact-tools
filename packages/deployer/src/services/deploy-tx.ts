@@ -1,5 +1,4 @@
 import { ContractExecutable } from '@midnight-ntwrk/compact-js';
-import { ContractDeploy, Intent, Transaction } from '@midnight-ntwrk/ledger-v8';
 import {
   type ContractProviders,
   createUnprovenDeployTx,
@@ -17,6 +16,12 @@ import {
   parseCoinPublicKeyToHex,
   ttlOneHour,
 } from '@midnight-ntwrk/midnight-js-utils';
+import {
+  ContractDeploy,
+  Intent,
+  type SigningKey,
+  Transaction,
+} from '@midnightntwrk/ledger-v9';
 import type { ContractConfig } from '../config/schema.ts';
 import type {
   ConfirmedDeploymentRecord,
@@ -83,7 +88,7 @@ export interface SubmitDeployArgs {
   contractName: string;
   contract: ContractConfig;
   artifact: Artifact;
-  signingKey: string;
+  signingKey: SigningKey;
   args: readonly unknown[];
   initialPrivateState: unknown;
   /**
@@ -183,7 +188,8 @@ function buildFullDeploy({
   const base = {
     compiledContract: artifact.compiledContract,
     signingKey,
-    args,
+    // The SDK takes a mutable tuple; copy rather than widen our own readonly type.
+    args: [...args],
   } as UnprovenDeployOptions;
   const deployOptions =
     contract.private_state_id !== undefined
@@ -264,8 +270,19 @@ export interface AwaitDeployFinalizationArgs {
   contractName: string;
   submitted: SubmittedDeploy;
   txTimeoutMs: number;
-  /** The record this deploy wrote, which is what the operator has to act on. */
-  recovery: 'pending' | 'partial';
+  /**
+   * The record this deploy wrote, which is what the operator has to act on.
+   * `none` when it wrote none.
+   */
+  recovery: 'pending' | 'partial' | 'none';
+  /** A split's circuits, named in the message when no record holds them. */
+  circuits?: SplitCircuits;
+}
+
+/** How a split deploy divides the artifact's circuits. */
+export interface SplitCircuits {
+  inDeployTx: readonly string[];
+  notYetInserted: readonly string[];
 }
 
 /**
@@ -346,13 +363,14 @@ async function settle(
   return finalized;
 }
 
-/** Wait for the deploy tx to land. The pending record survives every failure. */
+/** Wait for the deploy tx to land. Its record, if any, survives every failure. */
 export function awaitDeployFinalization({
   providers,
   contractName,
   submitted,
   txTimeoutMs,
   recovery,
+  circuits,
 }: AwaitDeployFinalizationArgs): Promise<FinalizedTxData> {
   const { address, txId } = submitted;
   return awaitFinalization({
@@ -366,6 +384,7 @@ export function awaitDeployFinalization({
         txId,
         reason,
         recovery,
+        circuits,
         cause: detail?.cause,
       }),
   });
@@ -613,7 +632,8 @@ const RECOVERY = {
 
 /**
  * The tx is out of our hands and its ledger record survives, so the message has
- * to carry every identifier needed to reconcile by hand.
+ * to carry every identifier needed to reconcile by hand. With no record, it
+ * carries a split's circuits too.
  */
 function unconfirmed({
   contractName,
@@ -621,17 +641,27 @@ function unconfirmed({
   txId,
   reason,
   recovery,
+  circuits,
   cause,
 }: {
   contractName: string;
   address: string;
   txId: string;
   reason: string;
-  recovery: keyof typeof RECOVERY;
+  recovery: keyof typeof RECOVERY | 'none';
+  circuits?: SplitCircuits;
   cause?: unknown;
 }): DeployTxFailedError {
+  const next =
+    recovery === 'none' ? describeSplit(circuits) : ` ${RECOVERY[recovery]}`;
   return new DeployTxFailedError(
-    `Deploy of "${contractName}" was submitted but not confirmed: ${reason}. address ${address}, txId ${txId}. ${RECOVERY[recovery]}`,
+    `Deploy of "${contractName}" was submitted but not confirmed: ${reason}. address ${address}, txId ${txId}.${next}`,
     cause !== undefined ? { cause } : undefined,
   );
+}
+
+/** `''` for a single-tx deploy. */
+function describeSplit(circuits: SplitCircuits | undefined): string {
+  if (circuits === undefined) return '';
+  return ` In the deploy tx: ${circuits.inDeployTx.join(', ')}. Not yet inserted: ${circuits.notYetInserted.join(', ')}.`;
 }

@@ -1,5 +1,5 @@
 /**
- * Bridges the constructor's compact-runtime `ContractState` to the ledger-v8
+ * Bridges the constructor's compact-runtime `ContractState` to the ledger-v9
  * one and prunes it down to a single fragment's operations.
  *
  * The two `ContractState` classes are unrelated WASM types with the same name.
@@ -8,7 +8,7 @@
  */
 
 import type { ContractState as RuntimeContractState } from '@midnight-ntwrk/compact-runtime';
-import { ContractState as LedgerContractState } from '@midnight-ntwrk/ledger-v8';
+import { ContractState as LedgerContractState } from '@midnightntwrk/ledger-v9';
 import { DeployError } from '../errors.ts';
 
 /** Serialize-round-trip a runtime state into its ledger counterpart. */

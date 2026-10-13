@@ -147,6 +147,16 @@ describe('FragmentDeployError', () => {
     expect(message).toContain('re-run the same deploy to resume');
   });
 
+  it('should name the deploy tx in place of the resume hint when no record holds it', () => {
+    const e = new FragmentDeployError({ ...fields, deployTxId: '0xDEPLOY' });
+
+    expect(e.message).toBe(
+      'Fragmented deploy of 0xADDR is incomplete: insert timed out. On chain: approve, burn. Pending: evict. Deploy txId 0xDEPLOY.',
+    );
+    expect(e.deployTxId).toBe('0xDEPLOY');
+    expect(e.reason).toBe('insert timed out');
+  });
+
   it('should expose the fields for --json consumers', () => {
     const e = new FragmentDeployError({ ...fields, txId: '0xTX' });
 

@@ -199,15 +199,15 @@ describe('configSchema — contract refine (private state pairing)', () => {
     expect(() => configSchema.parse(baseConfig)).not.toThrow();
   });
 
-  it('should reject private_state_id without init_private_state', () => {
-    expect(() =>
-      configSchema.parse({
-        ...baseConfig,
-        contracts: {
-          Counter: { ...validContract, private_state_id: 'counter-ps' },
-        },
-      }),
-    ).toThrow(/private_state_id and init_private_state must be set together/);
+  it('should accept private_state_id without init_private_state', () => {
+    const parsed = configSchema.parse({
+      ...baseConfig,
+      contracts: {
+        Counter: { ...validContract, private_state_id: 'counter-ps' },
+      },
+    });
+    expect(parsed.contracts.Counter?.private_state_id).toBe('counter-ps');
+    expect(parsed.contracts.Counter?.init_private_state).toBeUndefined();
   });
 
   it('should reject init_private_state without private_state_id', () => {
@@ -221,7 +221,7 @@ describe('configSchema — contract refine (private state pairing)', () => {
           },
         },
       }),
-    ).toThrow(/private_state_id and init_private_state must be set together/);
+    ).toThrow(/init_private_state needs private_state_id/);
   });
 });
 
@@ -335,5 +335,108 @@ describe('circuits_per_tx', () => {
         contracts: { Counter: { ...validContract, circuits_per_tx: value } },
       }),
     ).toThrow();
+  });
+});
+
+describe('configSchema — patterns', () => {
+  it('should accept an optional src_dir', () => {
+    expect(configSchema.parse(baseConfig).profile.src_dir).toBeUndefined();
+    const parsed = configSchema.parse({
+      ...baseConfig,
+      profile: { src_dir: 'contracts/src' },
+    });
+    expect(parsed.profile.src_dir).toBe('contracts/src');
+  });
+
+  it('should accept a pattern entry with every field omitted', () => {
+    const parsed = configSchema.parse({
+      ...baseConfig,
+      contracts: { ...baseConfig.contracts, 'Mock*': {} },
+    });
+    expect(parsed.contracts['Mock*']).toEqual({});
+  });
+
+  it('should validate the fields a pattern entry sets', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        contracts: { 'Mock*': { circuits_per_tx: 0 } },
+      }),
+    ).toThrow();
+  });
+
+  it('should let an exact entry take signing_key_file from a name pattern', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        contracts: {
+          '*': { signing_key_file: 'keys/{name}.sk' },
+          Counter: { args: [] },
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('should accept an exact entry without artifact', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        contracts: { Counter: { signing_key_file: 'keys/counter.signing' } },
+      }),
+    ).not.toThrow();
+  });
+
+  it('should report a merged exact entry missing signing_key_file at its path', () => {
+    const result = configSchema.safeParse({
+      ...baseConfig,
+      contracts: { 'Mock*': { signing_key_file: 'mock.sk' }, Counter: {} },
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => i.path)).toEqual([
+      ['contracts', 'Counter', 'signing_key_file'],
+    ]);
+  });
+
+  it('should reject a pattern init_private_state when the merged entry has no private_state_id', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        contracts: {
+          '*': { init_private_state: { file: 'state.json' } },
+          Counter: validContract,
+        },
+      }),
+    ).toThrow(/init_private_state needs private_state_id/);
+  });
+
+  it('should report a bad contract field once', () => {
+    const result = configSchema.safeParse({
+      ...baseConfig,
+      contracts: { Counter: { ...validContract, circuits_per_tx: 0 } },
+    });
+    expect(result.error?.issues).toHaveLength(1);
+  });
+
+  it('should reject a directory pattern without src_dir', () => {
+    const result = configSchema.safeParse({
+      ...baseConfig,
+      contracts: { 'test/mocks/*': { signing_key_file: 'mock.sk' } },
+    });
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['profile', 'src_dir'],
+        message: 'required by the directory pattern "test/mocks/*"',
+      }),
+    ]);
+  });
+
+  it('should leave exact entries unchecked when a directory pattern exists', () => {
+    expect(() =>
+      configSchema.parse({
+        ...baseConfig,
+        profile: { src_dir: 'src' },
+        contracts: { 'test/mocks/*': {}, Counter: {} },
+      }),
+    ).not.toThrow();
   });
 });

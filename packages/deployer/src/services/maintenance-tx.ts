@@ -6,21 +6,52 @@
  * many `VerifierKeyInsert`s into a single signed `MaintenanceUpdate`.
  */
 
+import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { ttlOneHour } from '@midnight-ntwrk/midnight-js-utils';
 import {
   ContractOperationVersionedVerifierKey,
   Intent,
   MaintenanceUpdate,
+  type SignatureVerifyingKey,
+  type SigningKey,
   signatureVerifyingKey,
   signData,
   Transaction,
   VerifierKeyInsert,
-} from '@midnight-ntwrk/ledger-v8';
-import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { ttlOneHour } from '@midnight-ntwrk/midnight-js-utils';
+} from '@midnightntwrk/ledger-v9';
 import { DeployError } from '../errors.ts';
 
-/** Only ledger operation version the compiler emits keys for. */
-const VK_VERSION = 'v3' as const;
+type VerifierKeyVersion = ContractOperationVersionedVerifierKey['version'];
+
+/**
+ * Every verifier-key version the ledger accepts. The `Record` fails the build
+ * when a ledger bump adds or drops a version.
+ */
+const VERIFIER_KEY_VERSIONS = Object.keys({
+  v3: true,
+  v4: true,
+} satisfies Record<VerifierKeyVersion, true>) as VerifierKeyVersion[];
+
+/**
+ * `verifierKey` under the version its header declares. The ledger rejects a
+ * header that does not match the version, so it picks the version, not us.
+ */
+export function versionedVerifierKey(
+  circuitId: string,
+  verifierKey: Uint8Array,
+): ContractOperationVersionedVerifierKey {
+  const rejections: string[] = [];
+  for (const version of VERIFIER_KEY_VERSIONS) {
+    try {
+      return new ContractOperationVersionedVerifierKey(version, verifierKey);
+    } catch (error) {
+      rejections.push(`${version}: ${(error as Error).message}`);
+    }
+  }
+  throw new DeployError(
+    `Verifier key for circuit "${circuitId}" matches no ledger version (${rejections.join('; ')}).`,
+  );
+}
 
 /**
  * One circuit's key. The absence of any other update shape is what
@@ -37,8 +68,8 @@ export interface BuildInsertUpdateArgs {
   inserts: readonly KeyInsert[];
   /** Read from chain immediately before this call; never tracked locally. */
   counter: bigint;
-  /** Hex signing key. Reaches `signData` and nothing else. */
-  signingKey: string;
+  /** Signing key in the ledger's tagged form. Reaches `signData` and nothing else. */
+  signingKey: SigningKey;
   /**
    * This key's slot in the on-chain committee, from the same chain read
    * as `counter`. The ledger checks the signature against that slot, so a
@@ -48,9 +79,25 @@ export interface BuildInsertUpdateArgs {
   signerIndex: number;
 }
 
-/** Verifying key for a hex signing key. The public half is the only part that may be logged. */
-export function verifyingKeyOf(signingKey: string): string {
+/** Verifying key for a signing key. The public half is the only part that may be logged. */
+export function verifyingKeyOf(signingKey: SigningKey): SignatureVerifyingKey {
   return signatureVerifyingKey(signingKey);
+}
+
+/**
+ * A verifying key as a log line or an error message renders it. Two schemes can
+ * carry the same hex, so the tag stays in any text an operator compares keys by.
+ */
+export function formatVerifyingKey(key: SignatureVerifyingKey): string {
+  return `${key.tag}:${key.value}`;
+}
+
+/** Same key under the same signature scheme. */
+export function signatureKeysEqual(
+  a: SignatureVerifyingKey,
+  b: SignatureVerifyingKey,
+): boolean {
+  return a.tag === b.tag && a.value === b.value;
 }
 
 /**
@@ -74,7 +121,7 @@ export function buildInsertUpdate({
     ({ circuitId, verifierKey }) =>
       new VerifierKeyInsert(
         circuitId,
-        new ContractOperationVersionedVerifierKey(VK_VERSION, verifierKey),
+        versionedVerifierKey(circuitId, verifierKey),
       ),
   );
   // Sign the built update, then attach; `addSignature` returns the

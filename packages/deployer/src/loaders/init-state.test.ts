@@ -44,6 +44,16 @@ describe('InitialPrivateState', () => {
     expect(state?.value).toEqual({ counter: 5n, name: 'from-mod' });
   });
 
+  it('should return an in-code value without reading the ref', async () => {
+    const inCode = { counter: 1n };
+    const state = await InitialPrivateState.load(
+      { file: 'does-not-exist.json' },
+      '/tmp',
+      inCode,
+    );
+    expect(state?.value).toBe(inCode);
+  });
+
   it('should throw ConfigError when the module export is missing', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'initstate-test-'));
     writeFileSync(join(dir, 'm.mjs'), 'export const present = 1;');
