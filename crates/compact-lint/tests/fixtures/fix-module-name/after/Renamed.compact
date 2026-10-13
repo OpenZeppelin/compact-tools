@@ -1,0 +1,12 @@
+/**
+ * @module Renamed (archived)
+ * @description The tag still names the module's old name.
+ */
+export module Renamed {
+  /**
+   * @module Nested
+   * @description The inner tag names nothing that exists.
+   */
+  export module Nested {
+  }
+}

@@ -1,0 +1,12 @@
+version = 1
+include = ["**/*.compact"]
+
+[tags]
+forbid = ["@return"]
+rename = { "@return" = "@returns" }
+
+[kinds.module]
+tags = ["@module", "@description"]
+
+[kinds.circuit]
+tags = ["@description", "@returns"]

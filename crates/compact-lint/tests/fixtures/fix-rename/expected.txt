@@ -1,0 +1,2 @@
+Returns.compact:9:6: fix: renamed @return to @returns
+Returns.compact:15:6: fix: renamed @return to @returns

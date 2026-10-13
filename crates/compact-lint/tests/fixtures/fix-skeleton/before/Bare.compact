@@ -1,0 +1,32 @@
+pragma language_version >= 0.23.0;
+
+export module Bare {
+  import CompactStandardLibrary;
+
+  export ledger _count: Counter;
+
+  witness wit_Secret(): Bytes<32>;
+
+  export struct Reading {
+    value: Uint<64>
+  }
+
+  export enum Direction {
+    Up,
+    Down
+  }
+
+  export type Alias = Bytes<32>;
+
+  constructor() {
+    _count.resetToDefault();
+  }
+
+  export pure circuit double(value: Uint<8>): Uint<16> {
+    return value as Uint<16> * 2;
+  }
+
+  export circuit bump(): [] {
+    _count.increment(1);
+  }
+}

@@ -1,0 +1,13 @@
+/**
+ * @module Windows
+ * @description A module written with Windows line endings.
+ */
+export module Windows {
+  export ledger _count: Counter;
+
+  /**
+   * @description Bumps the counter.
+   * @return {[]} - Empty tuple.
+   */
+  export circuit bump(): [] { }
+}

@@ -1,0 +1,14 @@
+version = 1
+include = ["**/*.compact"]
+
+[kinds.module]
+tags = ["@module", "@description"]
+
+[kinds.circuit]
+tags = ["@description"]
+
+[kinds.ledger]
+tags = ["@description"]
+
+[kinds.constructor]
+docs = "none"

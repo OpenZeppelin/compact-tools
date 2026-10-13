@@ -25,3 +25,4 @@ tree-sitter-language = "0.1"
 walkdir = "2.5"
 
 assert_cmd = "2.2"
+tempfile = "3.27"
