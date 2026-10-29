@@ -65,6 +65,7 @@ export interface CompilerOptions { /* flags, targetDir, version, hierarchical, s
 export type BuilderOptions = CompilerOptions & {
   cleanDist?: boolean;
   copyToDist?: string[];
+  skipTsc?: boolean;
 };
 
 // Errors

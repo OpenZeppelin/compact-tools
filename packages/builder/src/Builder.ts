@@ -40,6 +40,9 @@ const execAsync = promisify(exec);
  * // Single file: `only` narrows the run, and suppresses the default Mock* exclude.
  * const builder = new CompactBuilder({ only: ['MockEcdsa.compact'] });
  *
+ * // Modules-only package: no TypeScript to compile, so skip tsc.
+ * const builder = new CompactBuilder({ skipTsc: true });
+ *
  * // Library publish: clean dist, hierarchical tree, exclude mocks + archive, copy metadata.
  * const builder = new CompactBuilder({
  *   cleanDist: true,
@@ -87,6 +90,7 @@ export class CompactBuilder {
    * `--only` are forwarded to {@link CompactCompiler.parseArgs}):
    * - `--clean-dist`            - rm -rf dist before building
    * - `--copy <path>`           - copy an extra file into dist/ (repeatable)
+   * - `--skip-tsc`              - skip the TypeScript compilation step
    *
    * @throws {Error} If `--copy` is provided without a value.
    */
@@ -101,6 +105,8 @@ export class CompactBuilder {
       const arg = args[i];
       if (arg === '--clean-dist') {
         builderOnly.cleanDist = true;
+      } else if (arg === '--skip-tsc') {
+        builderOnly.skipTsc = true;
       } else if (arg === '--copy') {
         const value = args[i + 1];
         if (value === undefined || value.startsWith('--')) {
@@ -167,10 +173,12 @@ export class CompactBuilder {
       });
     }
 
-    steps.push({
-      cmd: 'tsc --project tsconfig.build.json',
-      msg: 'Compiling TypeScript',
-    });
+    if (!this.options.skipTsc) {
+      steps.push({
+        cmd: 'tsc --project tsconfig.build.json',
+        msg: 'Compiling TypeScript',
+      });
+    }
 
     steps.push({
       cmd: `mkdir -p dist/artifacts && cp -Rf ${quotedSrc}/artifacts/* dist/artifacts/ 2>/dev/null || true`,
