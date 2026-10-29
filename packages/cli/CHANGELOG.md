@@ -9,6 +9,10 @@ Releases before this file see the `compact-cli/v*` tags.
 
 ## Unreleased
 
+### Added
+
+- `compact-builder --skip-tsc` skips the `tsc --project tsconfig.build.json` step, for packages that only ship `.compact` modules (#94)
+
 ## 0.3.1 (2026-11-19)
 
 ### Changed

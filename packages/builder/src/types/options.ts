@@ -138,6 +138,13 @@ export interface BuilderOnlyOptions {
    * @default []
    */
   copyToDist?: string[];
+  /**
+   * If true, skips the `tsc --project tsconfig.build.json` step.
+   * Use for packages that only ship `.compact` modules and artifacts and
+   * have no TypeScript to compile (no `tsconfig.build.json`).
+   * @default false
+   */
+  skipTsc?: boolean;
 }
 
 /**

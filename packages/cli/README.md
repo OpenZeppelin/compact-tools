@@ -65,6 +65,7 @@ library); `compact-builder` additionally accepts dist-layout options:
 | `+<version>` | both | Pin the Compact toolchain version (e.g `+0.29.0`). |
 | `--clean-dist` | builder | `rm -rf dist` before building. |
 | `--copy <path>` | builder | Copy an extra file into `dist/` (repeatable; e.g. `package.json`, `../README.md`). |
+| `--skip-tsc` | builder | Skip the `tsc --project tsconfig.build.json` step, for packages that only ship `.compact` modules. |
 
 See [`@openzeppelin/compact-builder`](../builder) for the full
 documentation, programmatic API, and behavioural details.
