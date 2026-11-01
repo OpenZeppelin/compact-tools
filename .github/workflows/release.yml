@@ -63,7 +63,7 @@ jobs:
           esac
 
       - name: Get github app token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: gh-app-token
         with:
           app-id: ${{ vars.GH_APP_ID }}
@@ -155,7 +155,7 @@ jobs:
           fi
 
       - name: Commit version bump
-        uses: iarekylew00t/verified-bot-commit@42a042b0407248f3c0acac00c389e729e3476e86 # v2.3.5
+        uses: iarekylew00t/verified-bot-commit@1ee4374942e5c5f814e9b3121d766cbe45cea360 # v2.3.6
         with:
           message: "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}"
           token: ${{ steps.gh-app-token.outputs.token }}
