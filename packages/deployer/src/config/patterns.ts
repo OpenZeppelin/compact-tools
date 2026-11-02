@@ -53,8 +53,12 @@ export function resolveEntry(
   return { keys, entry: expandName(merged, name) as ContractEntry };
 }
 
-/** Indexes the `.compact` sources under `dir`, skipping `node_modules` and dot-directories. */
-export async function indexSources(dir: string): Promise<SourceIndex> {
+/** Indexes the `.compact` sources under `dir`, skipping `node_modules`,
+ * dot-directories and the `exclude` globs, which are relative to `dir`. */
+export async function indexSources(
+  dir: string,
+  exclude: readonly string[] = [],
+): Promise<SourceIndex> {
   const isDir = await stat(dir).then(
     (s) => s.isDirectory(),
     () => false,
@@ -65,7 +69,7 @@ export async function indexSources(dir: string): Promise<SourceIndex> {
   const byName = new Map<string, string[]>();
   for await (const file of glob('**/*.compact', {
     cwd: dir,
-    exclude: ['**/node_modules'],
+    exclude: ['**/node_modules', ...exclude],
   })) {
     const path = file.split(sep).join('/');
     const name = posix.basename(path, '.compact');

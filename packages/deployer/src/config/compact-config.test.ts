@@ -345,6 +345,24 @@ signing_key_file = "./deploy/mock.signingkey"
     );
   });
 
+  it('should leave the excluded globs out of the source index', async () => {
+    const dir = tmpRepo(`${WITH_SRC_DIR.replace(
+      'src_dir = "contracts"',
+      'src_dir = "contracts"\nexclude = ["dist"]',
+    )}
+[contracts."**/mocks/*"]
+signing_key_file = "./deploy/mock.signingkey"
+`);
+    addSources(dir, [
+      'a/mocks/MockToken.compact',
+      'dist/a/mocks/MockToken.compact',
+    ]);
+    const config = await CompactConfig.load(undefined, dir);
+    expect(config.contract('MockToken').signing_key_file).toBe(
+      './deploy/mock.signingkey',
+    );
+  });
+
   it('should let an exact entry inherit from a directory pattern', async () => {
     const dir = tmpRepo(`${WITH_SRC_DIR}
 [contracts."**/mocks/*"]

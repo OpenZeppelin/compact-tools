@@ -16,6 +16,9 @@ const profileSchema = z
     deployments_dir: z.string().default('deployments/compact'),
     // Directory patterns in `[contracts]` match source paths under it.
     src_dir: z.string().optional(),
+    // Globs under `src_dir` left out of the source index, with `node_modules`
+    // and dot-directories. A build output that copies the sources goes here.
+    exclude: z.array(z.string()).default([]),
   })
   .default({});
 

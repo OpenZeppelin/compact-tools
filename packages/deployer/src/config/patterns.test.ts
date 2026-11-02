@@ -194,6 +194,22 @@ describe('indexSources / sourceOf', () => {
     expect([...index.byName]).toEqual([['Token', ['token/Token.compact']]]);
   });
 
+  it('should skip the excluded globs, relative to the directory', async () => {
+    const index = await indexSources(
+      srcTree([
+        'src/token/Token.compact',
+        'dist/token/Token.compact',
+        'dist/Token.compact',
+        'src/dist/Keep.compact',
+      ]),
+      ['dist'],
+    );
+    expect(Object.fromEntries(index.byName)).toEqual({
+      Keep: ['src/dist/Keep.compact'],
+      Token: ['src/token/Token.compact'],
+    });
+  });
+
   it('should throw ConfigError naming every source of an ambiguous name', async () => {
     const dir = srcTree(['b/Token.compact', 'a/Token.compact']);
     const index = await indexSources(dir);

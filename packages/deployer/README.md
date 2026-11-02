@@ -235,7 +235,7 @@ One `[contracts]` entry can cover many contracts. A key is one of:
 
 - `Token`: exact, that contract only.
 - `"Mock*"`: a name pattern (holds `*`, `?`, `[` or `{`), matched against the contract name.
-- `"**/test/mocks/*"`: a directory pattern (holds `/`), matched against the contract's source path under `[profile].src_dir`, `.compact` included. The source of `<name>` is the unique `<src_dir>/**/<name>.compact`, skipping `node_modules` and dot-directories. A second match is an error.
+- `"**/test/mocks/*"`: a directory pattern (holds `/`), matched against the contract's source path under `[profile].src_dir`, `.compact` included. The source of `<name>` is the unique `<src_dir>/**/<name>.compact`, skipping `node_modules`, dot-directories and the globs in `[profile].exclude`, relative to `src_dir` (`["dist"]` for a build that copies the sources). A second match is an error.
 
 Every matching pattern applies in file order, a later one overriding an earlier one field by field. The exact entry applies last. `{name}` in any string value expands to the contract name, and `artifact` defaults to it. `runDeploy(Contract)` searches exact keys only.
 

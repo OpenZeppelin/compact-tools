@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `[profile].exclude`, globs under `src_dir` left out of the source index, so a build output that copies the sources (`dist`) no longer makes every contract match twice (#207)
+
 ### Fixed
 
 - A fragmented deploy of a contract compiled with `--feature-zkir-v3` no longer fails its verifier-key insert with `expected header tag 'midnight:verifier-key[v6]:'`. Each key is inserted under the version the ledger accepts for it (#200)

@@ -20,10 +20,11 @@ const baseConfig = {
 };
 
 describe('configSchema — profile', () => {
-  it('should default artifacts_dir and deployments_dir', () => {
+  it('should default artifacts_dir, deployments_dir and exclude', () => {
     const parsed = configSchema.parse(baseConfig);
     expect(parsed.profile.artifacts_dir).toBe('src/artifacts');
     expect(parsed.profile.deployments_dir).toBe('deployments/compact');
+    expect(parsed.profile.exclude).toEqual([]);
   });
 
   it('should accept an explicit profile block', () => {
@@ -32,10 +33,12 @@ describe('configSchema — profile', () => {
       profile: {
         artifacts_dir: 'out',
         deployments_dir: 'deploys',
+        exclude: ['dist'],
       },
     });
     expect(parsed.profile.artifacts_dir).toBe('out');
     expect(parsed.profile.deployments_dir).toBe('deploys');
+    expect(parsed.profile.exclude).toEqual(['dist']);
   });
 });
 

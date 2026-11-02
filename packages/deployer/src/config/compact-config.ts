@@ -95,7 +95,10 @@ export class CompactConfig {
     const sources =
       profile.src_dir !== undefined &&
       Object.keys(contracts).some((key) => keyKind(key) === 'directory')
-        ? await indexSources(resolve(dirname(configPath), profile.src_dir))
+        ? await indexSources(
+            resolve(dirname(configPath), profile.src_dir),
+            profile.exclude,
+          )
         : undefined;
     const config = new CompactConfig(result.data, configPath, sources);
     // With a directory pattern, `configSchema` cannot check exact entries:
