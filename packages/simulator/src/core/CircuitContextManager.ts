@@ -91,10 +91,7 @@ export class CircuitContextManager<P> {
       currentZswapLocalState,
     } = await this.contract.initialState(initCtx, ...this.contractArgs);
 
-    // compact-runtime 0.18 restructured `CircuitContext` into a call-tree
-    // (`callContext` + per-contract `queryContexts`/`gasCosts`). Build it via
-    // the runtime's `createCircuitContext` factory rather than a hand-rolled
-    // literal so every required field is populated correctly.
+    // The runtime factory fills every field of the call-tree context.
     this.context = createCircuitContext<P>({
       circuitId: 'circuit',
       contractAddress: this.contractAddress,
