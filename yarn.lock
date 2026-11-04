@@ -380,19 +380,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@midnight-ntwrk/compact-runtime@npm:0.19.0":
-  version: 0.19.0
-  resolution: "@midnight-ntwrk/compact-runtime@npm:0.19.0"
-  dependencies:
-    "@midnightntwrk/onchain-runtime-v4": "npm:^4.0.0-rc.3"
-    "@noble/curves": "npm:^2.2.0"
-    "@noble/hashes": "npm:^2.0.1"
-    "@types/object-inspect": "npm:^1.8.1"
-    object-inspect: "npm:^1.12.3"
-  checksum: 10/a5974971b88eed71991e4087bce055c7d205ed00496636f0c906a2049d51a060b810d38233dc8ec04a5667b5c085002cd745b7411d79a70f9acd472a73af2c0b
-  languageName: node
-  linkType: hard
-
 "@midnight-ntwrk/compact-runtime@npm:0.19.0-rc.0":
   version: 0.19.0-rc.0
   resolution: "@midnight-ntwrk/compact-runtime@npm:0.19.0-rc.0"
@@ -403,6 +390,19 @@ __metadata:
     "@types/object-inspect": "npm:^1.8.1"
     object-inspect: "npm:^1.12.3"
   checksum: 10/316be241e39a2f6f0e7628a19757ad98b9963b602162dab2774df905ce444f61ea527c4e8867359a104ac531f7cbf03b4f22d55a06970f18759a8e9c40900344
+  languageName: node
+  linkType: hard
+
+"@midnight-ntwrk/compact-runtime@npm:0.21.0":
+  version: 0.21.0
+  resolution: "@midnight-ntwrk/compact-runtime@npm:0.21.0"
+  dependencies:
+    "@midnightntwrk/onchain-runtime-v4": "npm:^4.0.0-rc.3"
+    "@noble/curves": "npm:^2.2.0"
+    "@noble/hashes": "npm:^2.0.1"
+    "@types/object-inspect": "npm:^1.8.1"
+    object-inspect: "npm:^1.12.3"
+  checksum: 10/93e83d53e5bc769673267c8db117ef66748923388c207e291fb77b0592ef56cac8b0e149d24bc223ab0802dc14415bab5dd839ead5ff8e50a581a55f98e08f4f
   languageName: node
   linkType: hard
 
@@ -992,7 +992,7 @@ __metadata:
   resolution: "@openzeppelin/compact-deployer@workspace:packages/deployer"
   dependencies:
     "@midnight-ntwrk/compact-js": "npm:2.5.5-rc.8"
-    "@midnight-ntwrk/compact-runtime": "npm:0.19.0"
+    "@midnight-ntwrk/compact-runtime": "npm:0.21.0"
     "@midnight-ntwrk/midnight-js-contracts": "npm:5.0.0-beta.7"
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "npm:5.0.0-beta.7"
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "npm:5.0.0-beta.7"
@@ -1025,7 +1025,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-simulator@workspace:packages/simulator"
   dependencies:
-    "@midnight-ntwrk/compact-runtime": "npm:0.19.0"
+    "@midnight-ntwrk/compact-runtime": "npm:0.21.0"
     "@midnight-ntwrk/midnight-js-contracts": "npm:5.0.0-beta.7"
     "@midnight-ntwrk/midnight-js-types": "npm:5.0.0-beta.7"
     "@noble/curves": "npm:^2.2.0"
@@ -2805,7 +2805,7 @@ __metadata:
   resolution: "compact-tools-monorepo@workspace:."
   dependencies:
     "@biomejs/biome": "npm:2.5.6"
-    "@midnight-ntwrk/compact-runtime": "npm:0.19.0"
+    "@midnight-ntwrk/compact-runtime": "npm:0.21.0"
     "@midnight-ntwrk/midnight-js-network-id": "npm:5.0.0-beta.7"
     "@midnight-ntwrk/testkit-js": "npm:5.0.0-beta.7"
     "@openzeppelin/compact-deployer": "workspace:^"

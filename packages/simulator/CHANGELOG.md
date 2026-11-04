@@ -9,10 +9,21 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.21.0`. Compile artifacts with compactc `0.36.0`. Generated code checks the runtime version at load, so an older artifact throws `Version mismatch` when it loads (#208)
+
+## 0.4.1 (2026-09-25)
+
+### Added
+
+- `CreateLiveContextOptions.scopedTransactionOptions` runs every live call in a midnight-js scoped transaction with those options. With `additionalCoinEncPublicKeyMappings`, a circuit can send a shielded coin to a wallet other than the caller (#195)
+
+## 0.4.0 (2026-09-01)
+
 ### Added
 
 - `BaseSimulatorOptions.time` sets the block time the kernel's time operations observe, in seconds since the epoch. Defaults to `0` for reproducible runs (#147)
-- `CreateLiveContextOptions.scopedTransactionOptions` runs every live call in a midnight-js scoped transaction with those options. With `additionalCoinEncPublicKeyMappings`, a circuit can send a shielded coin to a wallet other than the caller (#195)
 
 ### Changed
 
