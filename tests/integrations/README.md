@@ -48,8 +48,8 @@ make test-integration                                     # env-up â†’ compile â
 ```
 
 Fixtures are compiled with `compact compile +0.36.0`. The deployer pins
-compact-runtime 0.21.0, and an artifact from an older compactc fails at
-submit with a `Version mismatch`. See "Supported stack" in
+compact-runtime 0.21.0, and an artifact from an older compactc fails when
+it loads with a `Version mismatch`. See "Supported stack" in
 [`packages/deployer/README.md`](../../packages/deployer/README.md).
 
 `make test-integration` is fully self-contained: it builds the deployer
