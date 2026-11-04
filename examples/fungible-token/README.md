@@ -46,7 +46,7 @@ fungible-token/
 
 - Node 24+
 - Docker — for the local Midnight stack, and for `proof_server = "auto"` on the testnets
-- The `compact` toolchain with compiler 0.36.0 available (`compact list`). The deployer pins compact-runtime 0.21.0; an artifact from an older compactc fails at submit with a `Version mismatch`.
+- The `compact` toolchain with compiler 0.36.0 available (`compact list`). The deployer pins compact-runtime 0.21.0; an artifact from an older compactc fails when it loads with a `Version mismatch`.
 - A one-time root setup: `yarn install && yarn build` from the repo root. This is a yarn workspace, so binaries like `compact-compiler` and `compact-deploy` resolve automatically inside this folder.
 
 ## Run it
