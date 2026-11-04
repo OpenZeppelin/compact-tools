@@ -12,6 +12,7 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 ### Changed
 
 - **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.21.0`. Compile artifacts with compactc `0.36.0`. Generated code checks the runtime version at load, so an older artifact throws `Version mismatch` when it loads (#208)
+- **Breaking:** `@midnight-ntwrk/compact-runtime` is a peer dependency, `^0.21.0`. Install it in your project; the simulator and your compiled contracts must share one copy, so a consumer that forced another version through `resolutions` has to drop that entry (#209)
 
 ## 0.4.1 (2026-09-25)
 
@@ -28,11 +29,6 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 ### Changed
 
 - **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.19.0`, which made `initialState` and every circuit async. The `@midnight-ntwrk/midnight-js-contracts` and `@midnight-ntwrk/midnight-js-types` peers move from `^4.1.0` to `^5.0.0-beta.7`. Both peers stay optional, so a dry-only consumer needs neither (#152)
-<<<<<<< HEAD
-- **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.21.0`. Compile artifacts with compactc `0.36.0`. Generated code checks the runtime version at load, so an older artifact throws `Version mismatch` when it loads (#208)
-- **Breaking:** `@midnight-ntwrk/compact-runtime` is a peer dependency, `^0.21.0`. Install it in your project; the simulator and your compiled contracts must share one copy, so a consumer that forced another version through `resolutions` has to drop that entry (#209)
-=======
->>>>>>> build/compact-toolchain-0.36
 - **Breaking:** construction is async. Replace `new MySimulator(args, options)` with `await MySimulator.create(args, options)`. Subclass `create` overrides return `Promise<MySimulator>` and delegate to `super._create([...args], options)` (#145, #147)
 - **Breaking:** circuit proxies return promises. `ContextlessCircuits` maps to `Promise<R>`, so an un-awaited call that used to pass as a truthy promise, such as `if (sim.isOwner(x))`, no longer typechecks (#145, #154)
 - **Breaking:** `getPrivateState()`, `getPublicState()`, and `getContractState()` return promises (#145)
