@@ -10,7 +10,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.21.0`. Compile artifacts with `compact compile +0.36.0`. Generated code checks the runtime version at load, so an older artifact throws `Version mismatch` (#TBD)
+- **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.21.0`. Compile artifacts with `compact compile +0.36.0`. Generated code checks the runtime version at load, so an older artifact throws `Version mismatch` (#208)
 
 ### Fixed
 
