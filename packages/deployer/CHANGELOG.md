@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.21.0`. Compile artifacts with `compact compile +0.36.0`. Generated code checks the runtime version at load, so an older artifact throws `Version mismatch` (#TBD)
+
 ### Fixed
 
 - A fragmented deploy of a contract compiled with `--feature-zkir-v3` no longer fails its verifier-key insert with `expected header tag 'midnight:verifier-key[v6]:'`. Each key is inserted under the version the ledger accepts for it (#200)

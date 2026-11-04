@@ -47,8 +47,8 @@ From the repo root (`compact-tools/`):
 make test-integration                                     # env-up → compile → test → env-down
 ```
 
-Fixtures are compiled with `compact compile +0.34.0`. The deployer pins
-compact-runtime 0.19.0, and an artifact from an older compactc fails at
+Fixtures are compiled with `compact compile +0.36.0`. The deployer pins
+compact-runtime 0.21.0, and an artifact from an older compactc fails at
 submit with a `Version mismatch`. See "Supported stack" in
 [`packages/deployer/README.md`](../../packages/deployer/README.md).
 

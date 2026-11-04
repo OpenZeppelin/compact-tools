@@ -13,11 +13,11 @@ More to come (private state + witnesses, multisig patterns, programmatic API).
 ## Conventions
 
 - Each example builds and runs on Node 24+.
-- Compiled artifacts are gitignored. Run `yarn compile` in the example before deploying; it needs the `compact` toolchain with compiler 0.34.0 installed.
+- Compiled artifacts are gitignored. Run `yarn compile` in the example before deploying; it needs the `compact` toolchain with compiler 0.36.0 installed.
 - `deploy/*.signingkey` files are gitignored. Generate per the example README.
 - `.states/` (wallet cache) and `deployments/` (deploy records) are gitignored.
 - Compact-contracts modules (`FungibleToken`, `Initializable`, `Utils`) are copied from [openzeppelin/compact-contracts](https://github.com/openzeppelin/compact-contracts) at commit `19b36a74`, not submodules. Each copy carries a local header naming that commit; refresh by recopying from a newer one and updating the header.
-- These examples must stay compilable on compactc 0.34.0, which is what the deployer's compact-runtime 0.19.0 pin requires. That is the same compiler compact-contracts `main` uses, so its sources drop in unchanged.
+- These examples must stay compilable on compactc 0.36.0, which is what the deployer's compact-runtime 0.21.0 pin requires. The vendored compact-contracts modules compile on it unchanged.
 
 ## Setup
 

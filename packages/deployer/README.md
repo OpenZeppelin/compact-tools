@@ -39,15 +39,15 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 
 | Component | Version |
 |---|---|
-| `@midnight-ntwrk/compact-runtime` | 0.19.0 |
+| `@midnight-ntwrk/compact-runtime` | 0.21.0 |
 | `@midnightntwrk/ledger-v9` | 1.0.0-rc.5 |
 | `@midnight-ntwrk/compact-js` | 2.5.5-rc.8 |
 | `@midnight-ntwrk/midnight-js-*` | 5.0.0-beta.7 |
 | `@midnight-ntwrk/testkit-js` | 5.0.0-beta.7 |
 | `@midnightntwrk/wallet-sdk-facade` | 5.0.0-beta.2 |
-| Compact compiler | 0.34.0 |
+| Compact compiler | 0.36.0 |
 
-Compile with `compact compile +0.34.0`. An older artifact fails at submit with `Version mismatch`.
+Compile with `compact compile +0.36.0`. An older artifact fails at submit with `Version mismatch`.
 
 The ledger and the wallet SDK sit under the `@midnightntwrk` scope, no hyphen. Everything else keeps `@midnight-ntwrk`.
 
@@ -269,7 +269,7 @@ An Ethereum V3 JSON keystore (scrypt + AES-128-CTR) tagged `version: "midnight-1
 
 6. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing.** `compact-js` declares it as a range, so without the pin yarn nests a second ledger copy and deploys fail. Do not drop it on a bump.
 
-7. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.19.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Forcing one `0.19.0` copy with a resolution also deploys, the split path included.
+7. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.21.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Do not force one copy with a resolution. `compact-js` builds circuit contexts with 0.19's positional `createCircuitContext`, and 0.21 takes an options object, so on a single `0.21.0` copy deploys still pass but every circuit call through `midnight-js` fails with `'contractState' parameter undefined has unexpected type`.
 
 ## Programmatic API
 

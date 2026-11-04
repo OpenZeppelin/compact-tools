@@ -12,10 +12,10 @@ LOGS_DIR         := $(INTEGRATION_DIR)/logs
 SERVICES         := proof-server indexer node
 PROOF_SERVER_URL := http://127.0.0.1:6300
 
-# The deployer pins compact-runtime 0.19.0, which is what compactc 0.34.0
+# The deployer pins compact-runtime 0.21.0, which is what compactc 0.36.0
 # emits code for. An artifact from an older compiler fails the deploy with
 # `Version mismatch`. See "Supported stack" in packages/deployer/README.md.
-COMPACTC_VERSION := 0.34.0
+COMPACTC_VERSION := 0.36.0
 
 # One marker file per fixture: Make uses mtime against the .compact
 # source to decide whether a re-compile is needed, so `make compile`

@@ -169,13 +169,13 @@ describe('CircuitContextManager', () => {
 
       // Built through the runtime factory, not a literal: the 0.18 call-tree
       // shape carries fields a hand-rolled object silently omits.
-      const newCtx = createCircuitContext<SimplePrivateState>(
-        'circuit',
-        OTHER_ADDRESS,
-        zswapLocalState,
-        oldCtx.callContext.currentQueryContext.state,
-        initialPrivateState,
-      );
+      const newCtx = createCircuitContext<SimplePrivateState>({
+        circuitId: 'circuit',
+        contractAddress: OTHER_ADDRESS,
+        coinPublicKeyOrZswapState: zswapLocalState,
+        contractState: oldCtx.callContext.currentQueryContext.state,
+        privateState: initialPrivateState,
+      });
 
       circuitCtxManager.setContext(newCtx);
 
