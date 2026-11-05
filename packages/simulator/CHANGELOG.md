@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 
-## Unreleased
+## 0.5.0 (2026-11-05)
 
 ### Changed
 
