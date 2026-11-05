@@ -12,6 +12,7 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 ### Changed
 
 - **Breaking:** `@midnight-ntwrk/compact-runtime` moves to `0.21.0`. Compile artifacts with compactc `0.36.0`. Generated code checks the runtime version at load, so an older artifact throws `Version mismatch` when it loads (#208)
+- **Breaking:** `@midnight-ntwrk/compact-runtime` is a peer dependency, `^0.21.0`. Install it in your project; the simulator and your compiled contracts must share one copy, so a consumer that forced another version through `resolutions` has to drop that entry (#209)
 
 ## 0.4.1 (2026-09-25)
 
