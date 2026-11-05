@@ -1,0 +1,59 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Bare
+ * @description TODO
+ */
+export module Bare {
+  import CompactStandardLibrary;
+
+  /**
+   * @description TODO
+   */
+  export ledger _count: Counter;
+
+  /**
+   * @description TODO
+   */
+  witness wit_Secret(): Bytes<32>;
+
+  /**
+   * @description TODO
+   */
+  export struct Reading {
+    value: Uint<64>
+  }
+
+  /**
+   * @description TODO
+   */
+  export enum Direction {
+    Up,
+    Down
+  }
+
+  /**
+   * TODO
+   */
+  export type Alias = Bytes<32>;
+
+  constructor() {
+    _count.resetToDefault();
+  }
+
+  /**
+   * @description TODO
+   */
+  export pure circuit double(value: Uint<8>): Uint<16> {
+    return value as Uint<16> * 2;
+  }
+
+  /**
+   * @description TODO
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit bump(): [] {
+    _count.increment(1);
+  }
+}

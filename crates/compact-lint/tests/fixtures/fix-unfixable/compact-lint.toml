@@ -1,0 +1,15 @@
+version = 1
+include = ["**/*.compact"]
+
+# `@throws` is forbidden but has no replacement, so `fix` leaves it where it is.
+[tags]
+forbid = ["@throws"]
+
+[kinds.module]
+tags = ["@module", "@description"]
+
+[kinds.circuit]
+tags = ["@description"]
+
+[kinds.constructor]
+docs = "none"

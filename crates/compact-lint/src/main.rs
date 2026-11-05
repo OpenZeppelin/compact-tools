@@ -10,10 +10,11 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
-use compact_lint::check::{self, Options, Outcome};
+use compact_lint::check::{self, Outcome};
+use compact_lint::fix;
 use compact_lint::format::{COMPACT_BIN_ENV, DEFAULT_COMPACT_BIN};
 
-/// Exit code for a run that produced findings.
+/// Exit code for a run that produced findings, or a `--dry-run` that would edit.
 const EXIT_FINDINGS: u8 = 1;
 
 /// Exit code for a usage, config, IO or parser error.
@@ -34,6 +35,8 @@ struct Cli {
 enum Command {
     /// Check doc comments against the per-kind templates in compact-lint.toml.
     Check(CheckArgs),
+    /// Rewrite doc comments so the rules `fix` covers stop reporting.
+    Fix(FixArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -58,6 +61,20 @@ struct CheckArgs {
     compact_bin: Option<OsString>,
 }
 
+#[derive(Debug, clap::Args)]
+struct FixArgs {
+    /// Files or directories to fix; defaults to the config's include globs.
+    paths: Vec<PathBuf>,
+
+    /// Config file to use instead of searching upward for compact-lint.toml.
+    #[arg(long, value_name = "FILE")]
+    config: Option<PathBuf>,
+
+    /// Report the edits without writing them; exits 1 when there are any.
+    #[arg(long)]
+    dry_run: bool,
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
@@ -70,10 +87,16 @@ fn main() -> ExitCode {
 
 fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
-    let Command::Check(args) = cli.command;
-
     let cwd = std::env::current_dir().context("reading the current directory")?;
-    let options = Options {
+
+    match cli.command {
+        Command::Check(args) => run_check(args, &cwd),
+        Command::Fix(args) => run_fix(args, &cwd),
+    }
+}
+
+fn run_check(args: CheckArgs, cwd: &std::path::Path) -> Result<ExitCode> {
+    let options = check::Options {
         paths: args.paths,
         config_path: args.config,
         strict: args.strict,
@@ -83,8 +106,8 @@ fn run() -> Result<ExitCode> {
             .unwrap_or_else(|| OsString::from(DEFAULT_COMPACT_BIN)),
     };
 
-    let outcome = check::run(&options, &cwd).context("running the check")?;
-    emit(&outcome).context("writing the report")?;
+    let outcome = check::run(&options, cwd).context("running the check")?;
+    emit_findings(&outcome).context("writing the report")?;
 
     Ok(if outcome.findings.is_empty() {
         ExitCode::SUCCESS
@@ -93,11 +116,46 @@ fn run() -> Result<ExitCode> {
     })
 }
 
-fn emit(outcome: &Outcome) -> std::io::Result<()> {
+fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
+    let options = fix::Options {
+        paths: args.paths,
+        config_path: args.config,
+        dry_run: args.dry_run,
+    };
+
+    let outcome = fix::run(&options, cwd).context("running the fix")?;
+    emit_edits(&outcome).context("writing the report")?;
+
+    Ok(if options.dry_run && outcome.edits() > 0 {
+        ExitCode::from(EXIT_FINDINGS)
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+fn emit_findings(outcome: &Outcome) -> std::io::Result<()> {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     for finding in &outcome.findings {
         writeln!(out, "{finding}")?;
+    }
+    out.flush()?;
+
+    eprintln!("{}", outcome.summary());
+    Ok(())
+}
+
+fn emit_edits(outcome: &fix::Outcome) -> std::io::Result<()> {
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    for file in &outcome.files {
+        for edit in &file.edits {
+            writeln!(
+                out,
+                "{}",
+                fix::line(&file.path, edit.position, &edit.message)
+            )?;
+        }
     }
     out.flush()?;
 
