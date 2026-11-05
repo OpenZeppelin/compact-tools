@@ -1,0 +1,56 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Clean
+ * @description A module that satisfies every rule.
+ */
+export module Clean {
+  import CompactStandardLibrary;
+
+  /**
+   * @description Whether the module is initialized.
+   */
+  export ledger _isInitialized: Boolean;
+
+  /**
+   * @description The caller's secret key.
+   */
+  witness wit_Secret(): Bytes<32>;
+
+  /**
+   * @description A single counter reading.
+   */
+  export struct Reading {
+    value: Uint<64>
+  }
+
+  /**
+   * @description The directions a counter moves in.
+   */
+  export enum Direction {
+    Up,
+    Down
+  }
+
+  constructor() {
+    _isInitialized = false;
+  }
+
+  /**
+   * @description Doubles its argument.
+   * @param {Uint<8>} value - The value to double.
+   * @returns {Uint<16>} The doubled value.
+   */
+  export pure circuit double(value: Uint<8>): Uint<16> {
+    return value as Uint<16> * 2;
+  }
+
+  /**
+   * @description Marks the module initialized.
+   * @constraints k=10, rows=626
+   * @returns {[]} Empty tuple.
+   */
+  export circuit initialize(): [] {
+    _isInitialized = true;
+  }
+}
