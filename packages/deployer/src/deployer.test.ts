@@ -99,19 +99,6 @@ vi.mock('rxjs', async (importOriginal) => {
   };
 });
 
-vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@midnight-ntwrk/midnight-js-network-id')
-    >();
-  return {
-    ...actual,
-    // Read by `buildInsertTx` for `Transaction.fromParts`, and by
-    // `logWalletAddresses` whose codec mock ignores it.
-    getNetworkId: vi.fn(() => 'undeployed'),
-  };
-});
-
 // Stub the bech32 codec triplet so `logWalletAddresses` reaches its
 // happy-path info logs instead of catching at the encode call.
 vi.mock('@midnightntwrk/wallet-sdk-address-format', () => {
