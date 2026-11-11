@@ -29,7 +29,7 @@
     "@openzeppelin/compact-deployer": "workspace:^",
     "@tsconfig/node24": "24.0.3",
     "@types/node": "26.1.2",
-    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/coverage-v8": "5.0.0",
     "pino": "^9.7.0",
     "ts-node": "^10.9.2",
     "turbo": "^2.10.8",
