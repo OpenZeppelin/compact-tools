@@ -20,7 +20,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `DeployerOptions.privateStateProvider` takes the midnight-js 5.0.0 provider, which reads and writes a contract's states through `forContract(address)`. Signing keys stay on the provider (#???)
+- `DeployerOptions.privateStateProvider` takes the midnight-js 5.0.0 provider, which reads and writes a contract's states through `forContract(address)`. Signing keys stay on the provider (#220)
 
 ## 0.4.0 (2026-11-05)
 
