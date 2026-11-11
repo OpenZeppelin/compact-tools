@@ -74,7 +74,10 @@ clean:
 # ── Integration-test docker stack ──────────────────────────────────────
 
 env-up: env-down
-	docker compose -f $(COMPOSE_FILE) up -d --wait
+	docker compose -f $(COMPOSE_FILE) up -d
+	@# proof-server disables its healthcheck, and Docker Compose 2.39+ fails a
+	@# blanket `--wait` on such a service; wait only on the two that expose one.
+	docker compose -f $(COMPOSE_FILE) up -d --wait node indexer
 	@echo "Waiting for the proof server to answer on $(PROOF_SERVER_URL)/version ..."
 	@i=0; until curl -sf $(PROOF_SERVER_URL)/version >/dev/null; do \
 		i=$$((i+1)); \

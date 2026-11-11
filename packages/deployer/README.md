@@ -46,6 +46,7 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 | `@midnight-ntwrk/testkit-js` | 5.0.0-beta.7 |
 | `@midnightntwrk/wallet-sdk-facade` | 5.0.0-beta.2 |
 | Compact compiler | 0.36.0 |
+| Proof server (`proof_server = "auto"`) | 9.0.1 |
 
 Compile with `compact compile +0.36.0`. An older artifact fails when it loads with `Version mismatch`. Recompiling changes every verifier key (ZKIR v3, `[v7]` header), so a maintenance update of a contract deployed from 0.34 artifacts rotates all of its keys and invalidates proofs in flight.
 
@@ -227,7 +228,7 @@ circuits_per_tx  = 8
 
 `proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the deploy; omitting it falls back to `PROOF_SERVER_PORT`, then to `http://127.0.0.1:6300`.
 
-`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, pinning `midnightntwrk/proof-server:9.0.0-rc.6`. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; it wins over the packaged one.
+`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, pinning `midnightntwrk/proof-server:9.0.1`. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; it wins over the packaged one.
 
 ### Patterns
 
