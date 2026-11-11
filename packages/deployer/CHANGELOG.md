@@ -6,6 +6,17 @@ file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed (breaking)
+
+- midnight-js moves to `5.0.0`, with `@midnight-ntwrk/compact-js` `3.0.0`, `@midnightntwrk/ledger-v9` `1.0.0`, `@midnight-ntwrk/testkit-js` `5.0.0` and the wallet SDK `2.0.0` line. The stack needs a ledger 9 network: proof server `9.0.0`, a node that accepts ledger-v9 `1.0.0` transactions and indexer `4.4.0-rc.6` or newer. Pin `@midnightntwrk/ledger-v9`, `@midnightntwrk/onchain-runtime-v4` and `@midnight-ntwrk/platform-js` to one copy each (#???)
+- The artifact directory must carry `compiler/contract-manifest.json`, which compactc 0.36.0 writes; midnight-js refuses a key or circuit the manifest does not cover (#???)
+
+### Changed
+
+- `DeployerOptions.privateStateProvider` takes the midnight-js 5.0.0 provider, which reads and writes a contract's states through `forContract(address)`. Signing keys stay on the provider (#???)
+
 ## 0.4.0 (2026-11-05)
 
 ### Changed

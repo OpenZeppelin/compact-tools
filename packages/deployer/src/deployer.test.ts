@@ -458,21 +458,16 @@ describe('Deployer', () => {
       await using d = await prepared();
       await expect(d.deploy()).rejects.toThrow(/FailEntirely/);
 
-      expect(
-        providers.privateStateProvider.setContractAddress,
-      ).not.toHaveBeenCalled();
+      expect(providers.privateStateProvider.forContract).not.toHaveBeenCalled();
       expect(
         providers.privateStateProvider.setSigningKey,
       ).not.toHaveBeenCalled();
     });
 
-    it('should store the address and the signing key once the tx succeeds', async () => {
+    it('should store the signing key once the tx succeeds', async () => {
       await using d = await prepared();
       await d.deploy();
 
-      expect(
-        providers.privateStateProvider.setContractAddress,
-      ).toHaveBeenCalledWith('0xCONTRACT');
       expect(providers.privateStateProvider.setSigningKey).toHaveBeenCalledWith(
         '0xCONTRACT',
         { tag: 'schnorr', value: 'contract-maintenance-key' },

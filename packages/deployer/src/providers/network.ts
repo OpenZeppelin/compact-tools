@@ -1,12 +1,13 @@
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import type { EnvironmentConfiguration } from '@midnight-ntwrk/testkit-js';
 import type { NetworkConfig } from '../config/schema.ts';
 import { ConfigError } from '../errors.ts';
 
 /**
- * Set the midnight-js network-id singleton + build an
- * `EnvironmentConfiguration`. `KNOWN_NETWORK_IDS` is closed so a typo
- * fails fast here instead of as a generic midnight-js error later.
+ * Build the `EnvironmentConfiguration` every provider and wallet is
+ * constructed from. midnight-js reads the network id from the provider
+ * set's `config`, so this is the one place it enters. `KNOWN_NETWORK_IDS`
+ * is closed so a typo fails fast here instead of as a generic midnight-js
+ * error later.
  */
 
 const KNOWN_NETWORK_IDS: ReadonlySet<string> = new Set([
@@ -31,8 +32,6 @@ export function applyNetwork(
       `Unknown network_id "${network.network_id}" (expected one of: ${[...KNOWN_NETWORK_IDS].join(', ')})`,
     );
   }
-  setNetworkId(network.network_id);
-
   const env: EnvironmentConfiguration = {
     walletNetworkId:
       network.network_id as EnvironmentConfiguration['walletNetworkId'],

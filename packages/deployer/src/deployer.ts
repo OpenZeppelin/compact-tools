@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import type { ContractProviders } from '@midnight-ntwrk/midnight-js-contracts';
+import type { Ledger9ContractProviders } from '@midnight-ntwrk/midnight-js-contracts';
 import type {
-  FinalizedTxData,
+  FinalizedTxRead,
   PrivateStateProvider,
 } from '@midnight-ntwrk/midnight-js-types';
 import type {
@@ -425,7 +425,7 @@ export class Deployer implements AsyncDisposable {
       // Surface the wallet's derived bech32m addresses right away so
       // the user can sanity-check they match the seed they intended
       // *before* settling in for a long shielded sync.
-      await logWalletAddresses(wallet, logger);
+      await logWalletAddresses(wallet, logger, env.networkId);
       await syncAndVerifyFunds({
         wallet,
         timeoutMs: syncTimeoutMs,
@@ -565,7 +565,7 @@ export class Deployer implements AsyncDisposable {
    * artifact. Only a pass here lets the caller write `confirmed`.
    */
   async #finishSplit(args: {
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     deployments: DeploymentsLedger;
     started: Exclude<StartedDeploy, SingleDeploy>;
     keys: ArtifactKeys;
@@ -595,7 +595,7 @@ export class Deployer implements AsyncDisposable {
    * state.
    */
   async #deployFragmentZero(args: {
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     deployments: DeploymentsLedger;
     txTimeoutMs: number;
     force: boolean;
@@ -712,7 +712,7 @@ export class Deployer implements AsyncDisposable {
    */
   async #resumeAt(args: {
     head: PartialDeploymentRecord;
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     keys: ArtifactKeys;
     txTimeoutMs: number;
   }): Promise<StartedDeploy> {
@@ -813,12 +813,12 @@ export class Deployer implements AsyncDisposable {
    */
   async #settleDeployTx(args: {
     head: PartialDeploymentRecord;
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     txTimeoutMs: number;
-  }): Promise<FinalizedTxData | undefined> {
+  }): Promise<FinalizedTxRead | undefined> {
     const { head, providers, txTimeoutMs } = args;
     const s = this.#state;
-    let landed: FinalizedTxData;
+    let landed: FinalizedTxRead;
     try {
       landed = await awaitDeployTxData({
         providers,
@@ -855,7 +855,7 @@ export class Deployer implements AsyncDisposable {
   /** Read chain state, reporting a read failure as the resumable error. */
   async #readSnapshotOrFail(
     head: PartialDeploymentRecord,
-    providers: ContractProviders,
+    providers: Ledger9ContractProviders,
   ): Promise<ChainSnapshot | undefined> {
     try {
       return await readSnapshot(providers.publicDataProvider, head.address);
@@ -881,7 +881,7 @@ export class Deployer implements AsyncDisposable {
    * is visible before it plans.
    */
   async #settlePendingInsert(args: {
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     txId: string;
     circuits: readonly string[];
     txTimeoutMs: number;
@@ -908,7 +908,7 @@ export class Deployer implements AsyncDisposable {
 
   /** Store the signing key for `address` when the private-state store lacks it. */
   async #ensureSigningKeyStored(args: {
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     address: string;
   }): Promise<void> {
     const { providers, address } = args;
@@ -919,7 +919,6 @@ export class Deployer implements AsyncDisposable {
       return;
     }
     s.logger.debug(`Storing the maintenance signing key for ${address}`);
-    providers.privateStateProvider.setContractAddress(address);
     await providers.privateStateProvider.setSigningKey(
       address,
       s.signingKey.ledgerKey,
@@ -984,7 +983,7 @@ export class Deployer implements AsyncDisposable {
    * and names the address and both circuit lists, so a re-run resumes.
    */
   async #insertRemaining(args: {
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     deployments: DeploymentsLedger;
     started: Exclude<StartedDeploy, SingleDeploy>;
     keys: ArtifactKeys;
@@ -1093,7 +1092,7 @@ export class Deployer implements AsyncDisposable {
    * it on chain, let the wallet catch up, and rewrite the progress record.
    */
   async #insertBatch(args: {
-    providers: ContractProviders;
+    providers: Ledger9ContractProviders;
     deployments: DeploymentsLedger;
     started: Exclude<StartedDeploy, SingleDeploy>;
     keys: ArtifactKeys;
@@ -1130,6 +1129,7 @@ export class Deployer implements AsyncDisposable {
           circuits: batch,
           // Counter read fresh from the snapshot above.
           unprovenTx: buildInsertTx({
+            networkId: providers.config.networkId,
             update: buildInsertUpdate({
               address,
               counter: snapshot.counter,

@@ -24,8 +24,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.6",
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-beta.7",
-    "@midnight-ntwrk/testkit-js": "5.0.0-beta.7",
+    "@midnight-ntwrk/testkit-js": "5.0.0",
     "@openzeppelin/compact-deployer": "workspace:^",
     "@tsconfig/node24": "24.0.3",
     "@types/node": "26.1.2",
@@ -37,7 +36,9 @@
     "vitest": "^4.1.9"
   },
   "resolutions": {
-    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
+    "@midnightntwrk/ledger-v9": "1.0.0",
+    "@midnightntwrk/onchain-runtime-v4": "4.0.0",
+    "@midnight-ntwrk/platform-js": "3.0.0",
     "glob": "^11.0.0",
     "undici": "^6.24.0",
     "uuid": "^13.0.0"

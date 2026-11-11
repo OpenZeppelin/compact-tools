@@ -1,4 +1,4 @@
-import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import type { NetworkId } from '@midnight-ntwrk/midnight-js-types';
 import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
 import { shieldedToken, unshieldedToken } from '@midnightntwrk/ledger-v9';
 import {
@@ -6,8 +6,7 @@ import {
   ShieldedAddress,
   UnshieldedAddress,
 } from '@midnightntwrk/wallet-sdk-address-format';
-import { PendingTransactions } from '@midnightntwrk/wallet-sdk-capabilities';
-import type { FacadeState } from '@midnightntwrk/wallet-sdk-facade';
+import { type FacadeState, isAwaiting } from '@midnightntwrk/wallet-sdk-facade';
 import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
 import { UnfundedWalletError, WalletError } from '../errors.ts';
@@ -40,9 +39,9 @@ export const SYNC_MAX_GAP = 50n;
 export async function logWalletAddresses(
   wallet: MidnightWalletProvider,
   logger: Logger,
+  networkId: NetworkId,
 ): Promise<void> {
   try {
-    const networkId = getNetworkId();
     const [shieldedState, unshieldedState, dustState] = await Promise.all([
       Rx.firstValueFrom(wallet.wallet.shielded.state),
       Rx.firstValueFrom(wallet.wallet.unshielded.state),
@@ -121,7 +120,7 @@ export async function readDustTip(
   wallet: MidnightWalletProvider,
 ): Promise<bigint> {
   const state = await Rx.firstValueFrom(wallet.wallet.state());
-  return state.dust.state.progress.highestRelevantWalletIndex;
+  return state.dust.progress.highestRelevantWalletIndex;
 }
 
 export interface AwaitDustSettledArgs {
@@ -136,16 +135,12 @@ export interface AwaitDustSettledArgs {
  *
  * Two conditions, because neither alone is enough. The dust index is a global
  * event id, so on a busy chain an unrelated event can carry it past the mark
- * before our own spend applies. The facade's pending set names the
- * transactions it is still waiting on, which is exactly our spend. A state
- * without a pending set is unsettled: the index alone cannot prove the spend
- * applied.
+ * before our own spend applies. The facade's lifecycle records name the
+ * transactions it still awaits an answer on, which is exactly our spend.
  */
 function dustCaughtUp(state: FacadeState, appliedBeyond: bigint): boolean {
-  if (state.dust.state.progress.appliedIndex <= appliedBeyond) return false;
-  const pending = state.pending;
-  if (pending === undefined) return false;
-  return PendingTransactions.allPending(pending).length === 0;
+  if (state.dust.progress.appliedIndex <= appliedBeyond) return false;
+  return !state.lifecycle.some(isAwaiting);
 }
 
 /**
@@ -230,9 +225,9 @@ export async function syncAndVerifyFunds(
       const dustBal = s.dust.balance(new Date());
       logger.info(
         `Still syncing (${elapsedHms} elapsed). ` +
-          `shielded ${describeProgress(s.shielded.state.progress)} balance=${shieldedBal}; ` +
+          `shielded ${describeProgress(s.shielded.progress)} balance=${shieldedBal}; ` +
           `unshielded ${describeProgress(s.unshielded.progress)} balance=${unshieldedBal}; ` +
-          `dust ${describeProgress(s.dust.state.progress)} balance=${dustBal}`,
+          `dust ${describeProgress(s.dust.progress)} balance=${dustBal}`,
       );
     });
 
@@ -282,15 +277,12 @@ export async function syncAndVerifyFunds(
       const bal = s.unshielded.balances[unshieldedToken().raw] ?? 0n;
       logger.info(`Unshielded sync complete — NIGHT balance: ${bal}`);
     }
-    if (!seenComplete.dust && s.dust.state.progress.isStrictlyComplete()) {
+    if (!seenComplete.dust && s.dust.progress.isStrictlyComplete()) {
       seenComplete.dust = true;
       const bal = s.dust.balance(new Date());
       logger.info(`Dust sync complete — dust balance: ${bal}`);
     }
-    if (
-      !seenComplete.shielded &&
-      s.shielded.state.progress.isStrictlyComplete()
-    ) {
+    if (!seenComplete.shielded && s.shielded.progress.isStrictlyComplete()) {
       seenComplete.shielded = true;
       const bal = s.shielded.balances[shieldedToken().raw] ?? 0n;
       logger.info(`Shielded sync complete — shielded balance: ${bal}`);
@@ -306,8 +298,8 @@ export async function syncAndVerifyFunds(
         // chain because the global dust stream keeps advancing (#115).
         Rx.filter(
           (s: FacadeState) =>
-            s.shielded.state.progress.isCompleteWithin(SYNC_MAX_GAP) &&
-            s.dust.state.progress.isCompleteWithin(SYNC_MAX_GAP) &&
+            s.shielded.progress.isCompleteWithin(SYNC_MAX_GAP) &&
+            s.dust.progress.isCompleteWithin(SYNC_MAX_GAP) &&
             s.unshielded.progress.isCompleteWithin(SYNC_MAX_GAP),
         ),
         Rx.timeout({

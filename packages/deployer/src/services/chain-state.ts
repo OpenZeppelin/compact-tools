@@ -8,7 +8,10 @@
 
 import { verifierKeysEqual } from '@midnight-ntwrk/midnight-js-contracts';
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types';
-import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
+import {
+  ContractState as LedgerContractState,
+  type SignatureVerifyingKey,
+} from '@midnightntwrk/ledger-v9';
 import { ConfigError, FragmentDeployError } from '../errors.ts';
 import type { ArtifactKeys } from '../loaders/artifact.ts';
 import { operationNames } from './contract-state.ts';
@@ -32,8 +35,10 @@ export async function readSnapshot(
   publicDataProvider: PublicDataProvider,
   address: string,
 ): Promise<ChainSnapshot | undefined> {
-  const state = await publicDataProvider.queryContractState(address);
-  if (state === null) return undefined;
+  const read = await publicDataProvider.queryContractState(address);
+  if (read === null) return undefined;
+  // The read carries the state as bytes; the ledger's own class decodes it.
+  const state = read.contractState.deserialize({ v9: LedgerContractState });
   const circuits = sortCircuits(operationNames(state));
   const verifierKeys = new Map<string, Uint8Array>();
   for (const name of circuits) {

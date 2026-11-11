@@ -1,8 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  localNetworkConfig,
-  setupLocalNetwork,
-} from '../../_harness/network.ts';
+import { localNetworkConfig } from '../../_harness/network.ts';
 import {
   type PoolAlias,
   PREFUNDED_SLOTS,
@@ -25,7 +22,6 @@ describe('compact-deploy — prefunded wallet pool', () => {
   let pool: WalletPool;
 
   beforeAll(() => {
-    setupLocalNetwork();
     pool = new WalletPool(localNetworkConfig());
   });
 

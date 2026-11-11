@@ -6,7 +6,7 @@
  * many `VerifierKeyInsert`s into a single signed `MaintenanceUpdate`.
  */
 
-import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import type { NetworkId } from '@midnight-ntwrk/midnight-js-types';
 import { ttlOneHour } from '@midnight-ntwrk/midnight-js-utils';
 import {
   ContractOperationVersionedVerifierKey,
@@ -135,6 +135,8 @@ export function buildInsertUpdate({
 
 export interface BuildInsertTxArgs {
   update: MaintenanceUpdate;
+  /** The network the providers were built for; a transaction names its network. */
+  networkId: NetworkId;
 }
 
 /**
@@ -143,7 +145,8 @@ export interface BuildInsertTxArgs {
  */
 export function buildInsertTx({
   update,
+  networkId,
 }: BuildInsertTxArgs): ReturnType<typeof Transaction.fromParts> {
   const intent = Intent.new(ttlOneHour()).addMaintenanceUpdate(update);
-  return Transaction.fromParts(getNetworkId(), undefined, undefined, intent);
+  return Transaction.fromParts(networkId, undefined, undefined, intent);
 }

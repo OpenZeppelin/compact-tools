@@ -8,15 +8,20 @@ import { ConfigError } from '../errors.ts';
 import { derivePrivateStatePassword } from './private-state-password.ts';
 
 vi.mock('@midnight-ntwrk/midnight-js-http-client-proof-provider', () => ({
-  httpClientProofProvider: vi.fn((url: string) => ({ kind: 'proof', url })),
+  httpClientProofProvider: vi.fn((opts: { url: string }) => ({
+    kind: 'proof',
+    url: opts.url,
+  })),
 }));
 
 vi.mock('@midnight-ntwrk/midnight-js-indexer-public-data-provider', () => ({
-  indexerPublicDataProvider: vi.fn((indexer: string, ws: string) => ({
-    kind: 'public',
-    indexer,
-    ws,
-  })),
+  indexerPublicDataProvider: vi.fn(
+    (opts: { queryURL: string; subscriptionURL: string }) => ({
+      kind: 'public',
+      indexer: opts.queryURL,
+      ws: opts.subscriptionURL,
+    }),
+  ),
 }));
 
 vi.mock('@midnight-ntwrk/midnight-js-level-private-state-provider', () => ({
@@ -238,10 +243,10 @@ describe('buildProviders', () => {
       privateStateSecret: SECRET,
     });
 
-    expect(indexerPublicDataProvider).toHaveBeenCalledWith(
-      env.indexer,
-      env.indexerWS,
-    );
+    expect(indexerPublicDataProvider).toHaveBeenCalledWith({
+      queryURL: env.indexer,
+      subscriptionURL: env.indexerWS,
+    });
   });
 
   it('should wire the proof-server URL into the HTTP proof provider', () => {
@@ -256,7 +261,7 @@ describe('buildProviders', () => {
     });
 
     const firstArg = vi.mocked(httpClientProofProvider).mock.calls[0]?.[0];
-    expect(firstArg).toBe(env.proofServer);
+    expect(firstArg).toMatchObject({ url: env.proofServer });
   });
 
   it('should expose wallet as both walletProvider and midnightProvider', () => {
@@ -296,7 +301,7 @@ describe('buildProviders', () => {
     expect(wallet.getEncryptionPublicKey).not.toHaveBeenCalled();
   });
 
-  it('should return all six provider slots', () => {
+  it('should return all six provider slots and the config', () => {
     const providers = buildProviders({
       env,
       wallet,
@@ -315,7 +320,25 @@ describe('buildProviders', () => {
         'proofProvider',
         'walletProvider',
         'midnightProvider',
+        'config',
       ].sort(),
     );
+  });
+
+  it('should carry the network id and a one-hour intent lifetime in config', () => {
+    const providers = buildProviders({
+      env,
+      wallet,
+      contractName: 'Counter',
+      contract: baseContract,
+      zkConfigPath: '/artifacts/Counter',
+      rootDir: ROOT_DIR,
+      privateStateSecret: SECRET,
+    });
+
+    expect(providers.config).toStrictEqual({
+      networkId: env.networkId,
+      ttlSeconds: 3600,
+    });
   });
 });
