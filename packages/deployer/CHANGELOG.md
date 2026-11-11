@@ -16,7 +16,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `@midnight-ntwrk/testkit-js` `5.0.0`
   - `@midnightntwrk/wallet-sdk-facade` `5.0.0`, with the other wallet SDK packages at the versions `@midnightntwrk/wallet-sdk` `2.0.0` pins
   Minimums from midnight-js: proof server `9.0.0`, indexer `4.4.0-rc.6`, and a node newer than `2.1.0-rc.4`, which refuses every call it builds. Verified stack, the one `proof-server.yml` and the integration suite pin: proof server `9.0.1`, node `2.1.101`, indexer `4.4.101`. Pin `@midnightntwrk/ledger-v9`, `@midnightntwrk/onchain-runtime-v4` and `@midnight-ntwrk/platform-js` to one copy each (#220)
-- The artifact directory must carry `compiler/contract-manifest.json`, which compactc 0.36.0 writes; midnight-js refuses a key or circuit the manifest does not cover (#220)
+- `Artifact.load` throws `ArtifactNotFoundError` for an artifact without `compiler/contract-manifest.json`, which compactc 0.36.0 writes and midnight-js checks every key and circuit against; without the check, the first key read failed with midnight-js's `ZkArtifactIntegrityError` naming provider options the deployer does not expose (#220)
 
 ### Changed
 

@@ -47,7 +47,7 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 | `@midnightntwrk/wallet-sdk-facade` | 5.0.0 |
 | Compact compiler | 0.36.0 |
 
-Compile with `compact compile +0.36.0`. An older artifact fails when it loads with `Version mismatch`. Recompiling changes every verifier key (ZKIR v3, `[v7]` header), so a maintenance update of a contract deployed from 0.34 artifacts rotates all of its keys and invalidates proofs in flight. midnight-js checks every key and circuit it loads against the artifact's `compiler/contract-manifest.json`, which the compiler writes next to `keys/` and `zkir/`; keep the whole artifact directory together.
+Compile with `compact compile +0.36.0`. An older artifact fails when it loads with `Version mismatch`. Recompiling changes every verifier key (ZKIR v3, `[v7]` header), so a maintenance update of a contract deployed from 0.34 artifacts rotates all of its keys and invalidates proofs in flight. midnight-js checks every key and circuit it loads against the artifact's `compiler/contract-manifest.json`, which the compiler writes next to `keys/` and `zkir/`, so the deployer refuses an artifact without it at load time; keep the whole artifact directory together.
 
 The ledger and the wallet SDK sit under the `@midnightntwrk` scope, no hyphen. Everything else keeps `@midnight-ntwrk`.
 
