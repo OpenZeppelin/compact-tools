@@ -1,14 +1,14 @@
 import { ContractExecutable } from '@midnight-ntwrk/compact-js';
 import {
-  type ContractProviders,
   createUnprovenDeployTx,
+  type Ledger9ContractProviders,
   submitTxAsync,
 } from '@midnight-ntwrk/midnight-js-contracts';
-import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import {
   exitResultOrError,
-  type FinalizedTxData,
-  makeContractExecutableRuntime,
+  type FinalizedTxRead,
+  LedgerTransaction,
+  makeLedger9ContractExecutableRuntime,
   type PrivateStateProvider,
   SucceedEntirely,
 } from '@midnight-ntwrk/midnight-js-types';
@@ -63,8 +63,20 @@ function isBlockLimitRejection(error: unknown): boolean {
 
 type UnprovenDeployOptions = Parameters<typeof createUnprovenDeployTx>[1];
 
-/** An unproven tx as `submitTxAsync` accepts it. */
+/** An unproven tx as `submitTxAsync` accepts it: a handle carrying its ledger era. */
 export type UnprovenTx = Parameters<typeof submitTxAsync>[1]['unprovenTx'];
+
+/** An unproven tx as the ledger builds it, before it is sealed into a handle. */
+export type LedgerUnprovenTx = ReturnType<typeof Transaction.fromParts>;
+
+/**
+ * Seal a transaction this package built into the handle midnight-js submits.
+ * Every artifact the deployer loads is a ledger 9 build (runtime 0.21), so the
+ * era is fixed here.
+ */
+export function sealUnprovenTx(tx: LedgerUnprovenTx): UnprovenTx {
+  return LedgerTransaction.seal('v9', 'Unproven', tx);
+}
 
 /** The signing key as the private-state store accepts it. */
 type PersistedSigningKey = Parameters<PrivateStateProvider['setSigningKey']>[1];
@@ -84,7 +96,7 @@ interface UnsubmittedDeploy {
 }
 
 export interface SubmitDeployArgs {
-  providers: ContractProviders;
+  providers: Ledger9ContractProviders;
   contractName: string;
   contract: ContractConfig;
   artifact: Artifact;
@@ -218,14 +230,15 @@ async function buildPrunedDeploy({
   circuits,
 }: SubmitDeployArgs): Promise<UnsubmittedDeploy> {
   const executable = ContractExecutable.make(artifact.compiledContract);
+  const { networkId } = providers.config;
   const coinPublicKey = parseCoinPublicKeyToHex(
     providers.walletProvider.getCoinPublicKey(),
-    getNetworkId(),
+    networkId,
   );
-  const runtime = makeContractExecutableRuntime(providers.zkConfigProvider, {
-    coinPublicKey,
-    signingKey,
-  });
+  const runtime = makeLedger9ContractExecutableRuntime(
+    providers.zkConfigProvider,
+    { coinPublicKey, signingKey },
+  );
   const privateStateIn =
     contract.private_state_id !== undefined ? initialPrivateState : undefined;
   const constructed = exitResultOrError(
@@ -250,7 +263,7 @@ async function buildPrunedDeploy({
     pruneState({ state: contractState, keep: sortCircuits(circuits) }),
   );
   const unprovenTx = Transaction.fromParts(
-    getNetworkId(),
+    networkId,
     undefined,
     undefined,
     Intent.new(ttlOneHour()).addDeploy(deploy),
@@ -258,7 +271,7 @@ async function buildPrunedDeploy({
   return {
     public: { contractAddress: deploy.address },
     private: {
-      unprovenTx,
+      unprovenTx: sealUnprovenTx(unprovenTx),
       signingKey: constructed.private.signingKey,
       initialPrivateState: privateState,
     },
@@ -266,7 +279,7 @@ async function buildPrunedDeploy({
 }
 
 export interface AwaitDeployFinalizationArgs {
-  providers: ContractProviders;
+  providers: Ledger9ContractProviders;
   contractName: string;
   submitted: SubmittedDeploy;
   txTimeoutMs: number;
@@ -298,11 +311,11 @@ export async function awaitFinalization({
   txTimeoutMs,
   fail,
 }: {
-  providers: ContractProviders;
+  providers: Ledger9ContractProviders;
   txId: string;
   txTimeoutMs: number;
   fail: FinalizationFail;
-}): Promise<FinalizedTxData> {
+}): Promise<FinalizedTxRead> {
   return settle(
     () => providers.publicDataProvider.watchForTxData(txId),
     txTimeoutMs,
@@ -323,11 +336,11 @@ export async function awaitDeployTxData({
   txTimeoutMs,
   fail,
 }: {
-  providers: ContractProviders;
+  providers: Ledger9ContractProviders;
   address: string;
   txTimeoutMs: number;
   fail: FinalizationFail;
-}): Promise<FinalizedTxData> {
+}): Promise<FinalizedTxRead> {
   return settle(
     () => providers.publicDataProvider.watchForDeployTxData(address),
     txTimeoutMs,
@@ -347,10 +360,10 @@ type FinalizationFail = (
 ) => Error;
 
 async function settle(
-  watch: () => Promise<FinalizedTxData>,
+  watch: () => Promise<FinalizedTxRead>,
   txTimeoutMs: number,
   fail: FinalizationFail,
-): Promise<FinalizedTxData> {
+): Promise<FinalizedTxRead> {
   const finalized = await raceForTxData(watch, txTimeoutMs, () =>
     fail(`no finalization within ${txTimeoutMs} ms`, { timedOut: true }),
   ).catch((e: unknown) => {
@@ -371,7 +384,7 @@ export function awaitDeployFinalization({
   txTimeoutMs,
   recovery,
   circuits,
-}: AwaitDeployFinalizationArgs): Promise<FinalizedTxData> {
+}: AwaitDeployFinalizationArgs): Promise<FinalizedTxRead> {
   const { address, txId } = submitted;
   return awaitFinalization({
     providers,
@@ -391,9 +404,9 @@ export function awaitDeployFinalization({
 }
 
 export interface SubmitInsertArgs {
-  providers: ContractProviders;
+  providers: Ledger9ContractProviders;
   contractName: string;
-  unprovenTx: UnprovenTx;
+  unprovenTx: LedgerUnprovenTx;
   /** Circuits in this batch. Named in a block-limit refusal. */
   circuits: readonly string[];
 }
@@ -411,12 +424,12 @@ export function submitInsert({
   return submitClassified(
     `Verifier-key insert for "${contractName}"`,
     circuits.length,
-    () => submitTxAsync(providers, { unprovenTx }),
+    () => submitTxAsync(providers, { unprovenTx: sealUnprovenTx(unprovenTx) }),
   );
 }
 
 export interface AwaitFragmentFinalizationArgs {
-  providers: ContractProviders;
+  providers: Ledger9ContractProviders;
   address: string;
   txId: string;
   txTimeoutMs: number;
@@ -438,7 +451,7 @@ export function awaitFragmentFinalization({
   txTimeoutMs,
   circuitsOnChain,
   circuitsPending,
-}: AwaitFragmentFinalizationArgs): Promise<FinalizedTxData> {
+}: AwaitFragmentFinalizationArgs): Promise<FinalizedTxRead> {
   return awaitFinalization({
     providers,
     txId,
@@ -459,7 +472,7 @@ export function awaitFragmentFinalization({
 }
 
 export interface PersistDeployPrivateStateArgs {
-  providers: ContractProviders;
+  providers: Ledger9ContractProviders;
   contract: ContractConfig;
   submitted: SubmittedDeploy;
 }
@@ -475,12 +488,10 @@ export async function persistDeployPrivateState({
   submitted,
 }: PersistDeployPrivateStateArgs): Promise<void> {
   const { address, unsubmitted } = submitted;
-  providers.privateStateProvider.setContractAddress(address);
   if (contract.private_state_id !== undefined) {
-    await providers.privateStateProvider.set(
-      contract.private_state_id,
-      unsubmitted.private.initialPrivateState,
-    );
+    await providers.privateStateProvider
+      .forContract(address)
+      .set(contract.private_state_id, unsubmitted.private.initialPrivateState);
   }
   await providers.privateStateProvider.setSigningKey(
     address,
@@ -609,10 +620,10 @@ export function toConfirmedRecord({
  * a ceiling. `onTimeout` supplies the caller's error type.
  */
 function raceForTxData(
-  watch: () => Promise<FinalizedTxData>,
+  watch: () => Promise<FinalizedTxRead>,
   txTimeoutMs: number,
   onTimeout: () => Error,
-): Promise<FinalizedTxData> {
+): Promise<FinalizedTxRead> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     watch(),

@@ -8,6 +8,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed (breaking)
+
+- midnight-js moves to `5.0.0` with:
+  - `@midnight-ntwrk/compact-js` `3.0.0`
+  - `@midnightntwrk/ledger-v9` `1.0.0`
+  - `@midnight-ntwrk/testkit-js` `5.0.0`
+  - `@midnightntwrk/wallet-sdk-facade` `5.0.0`, with the other wallet SDK packages at the versions `@midnightntwrk/wallet-sdk` `2.0.0` pins
+  Minimums from midnight-js: proof server `9.0.0`, indexer `4.4.0-rc.6`, and a node newer than `2.1.0-rc.4`, which refuses every call it builds. Verified stack, the one `proof-server.yml` and the integration suite pin: proof server `9.0.1`, node `2.1.101`, indexer `4.4.101`. Pin `@midnightntwrk/ledger-v9`, `@midnightntwrk/onchain-runtime-v4` and `@midnight-ntwrk/platform-js` to one copy each (#220)
+- `Artifact.load` throws `ArtifactNotFoundError` for an artifact without `compiler/contract-manifest.json`, which compactc 0.36.0 writes and midnight-js checks every key and circuit against; without the check, the first key read failed with midnight-js's `ZkArtifactIntegrityError` naming provider options the deployer does not expose (#220)
+
+### Changed
+
+- `DeployerOptions.privateStateProvider` takes the midnight-js 5.0.0 provider, which reads and writes a contract's states through `forContract(address)`. Signing keys stay on the provider (#220)
+
 ### Fixed
 
 - `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.1`. The `9.0.0-rc.6` it booted cannot prove circuits compiled with compactc 0.36.0: deploys succeed, and the first circuit call fails at `/check` with `unrecognised discriminant` (#215)

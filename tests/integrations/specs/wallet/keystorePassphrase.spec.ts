@@ -7,10 +7,7 @@ import { Keystore } from '@openzeppelin/compact-deployer/wallet/keystore';
 import { localPrefundedSeed } from '@openzeppelin/compact-deployer/wallet/seeds';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { testLogger } from '../../_harness/logger.ts';
-import {
-  localNetworkConfig,
-  setupLocalNetwork,
-} from '../../_harness/network.ts';
+import { localNetworkConfig } from '../../_harness/network.ts';
 import { ARTIFACTS_DIR, ROOT_DIR } from '../../_harness/paths.ts';
 import { PREFUNDED_SLOTS } from '../../_harness/walletPool.ts';
 
@@ -45,7 +42,6 @@ describe('compact-deploy — [wallet].keystore resolves via promptPassphrase', (
   let keystorePath: string;
 
   beforeAll(() => {
-    setupLocalNetwork();
     tmpRoot = mkdtempSync(join(tmpdir(), 'keystore-spec-'));
     keystorePath = join(tmpRoot, 'wallet.keystore.json');
 

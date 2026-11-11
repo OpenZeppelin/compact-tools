@@ -13,7 +13,6 @@ import {
   harnessPrivateStateProvider,
 } from '../../_harness/deployer.ts';
 import { testLogger } from '../../_harness/logger.ts';
-import { setupLocalNetwork } from '../../_harness/network.ts';
 import {
   CONFIG_PATH,
   requireArtifact,
@@ -30,7 +29,6 @@ import { getSharedPool } from '../../_harness/walletPool.ts';
  */
 describe('compact-deploy — injected wallets are not touched by the deployer', () => {
   beforeAll(() => {
-    setupLocalNetwork();
     requireArtifact('Counter');
     wipeDeployments();
   });
