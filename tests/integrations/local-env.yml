@@ -8,7 +8,7 @@ services:
     # `/check` (`unrecognised discriminant`), rc.8 fails scalar-returning
     # circuits at `/prove`. Deploys never prove a circuit, so this suite
     # cannot see the difference; compact-contracts' live suite can.
-    image: 'midnightntwrk/proof-server:9.0.0'
+    image: 'midnightntwrk/proof-server:9.0.1'
     command: ['midnight-proof-server -v']
     ports:
       - '127.0.0.1:6300:6300'
@@ -20,10 +20,8 @@ services:
 
   indexer:
     # Pinned for the same reason as proof-server above. This is the ledger-9
-    # line matching node 2.1.0-rc.4 (4.4.0-rc.2 cannot read its genesis);
-    # `latest` drifted to the Cardano-bridge indexer, which crash-loops
-    # without a Blockfrost id.
-    image: 'midnightntwrk/indexer-standalone:4.4.0-rc.6'
+    # release matching node 2.1.101 (4.4.0-rc.2 cannot read its genesis).
+    image: 'midnightntwrk/indexer-standalone:4.4.101'
     ports:
       - '127.0.0.1:8088:8088'
     environment:
@@ -56,9 +54,11 @@ services:
         max-file: '3'
 
   node:
-    # 2.0.0-rc.4 rejects the proofs proof-server 9.0.0 makes (`Custom error:
-    # 170` at submission); 2.1.0-rc.4 accepts them.
-    image: 'midnightntwrk/midnight-node:2.1.0-rc.4'
+    # 2.0.0-rc.4 rejects the proofs proof-server 9.0.x makes (`Custom error:
+    # 170` at submission). 2.1.0-rc.4 accepts them but refuses every call
+    # built by midnight-js 5.0.0 ("ran out of gas budget" at mempool
+    # admission); the 2.1.101 release accepts both.
+    image: 'midnightntwrk/midnight-node:2.1.101'
     ports:
       - '127.0.0.1:9944:9944'
     healthcheck:

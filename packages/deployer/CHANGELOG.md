@@ -10,7 +10,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.0`. The `9.0.0-rc.6` it booted cannot prove circuits compiled with compactc 0.36.0: deploys succeed, and the first circuit call fails at `/check` with `unrecognised discriminant` (#215)
+- `proof_server = "auto"` boots `midnightntwrk/proof-server:9.0.1`. The `9.0.0-rc.6` it booted cannot prove circuits compiled with compactc 0.36.0: deploys succeed, and the first circuit call fails at `/check` with `unrecognised discriminant` (#215)
 
 ## 0.4.0 (2026-11-05)
 
