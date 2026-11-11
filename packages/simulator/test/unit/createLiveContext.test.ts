@@ -14,23 +14,19 @@ type PS = { secretKey: Uint8Array };
 
 /**
  * An in-memory stand-in for the harness's `PrivateStateProvider`, exercising
- * only the `forContract(address)` view's `get`/`set` slice `createLiveContext`
- * uses. midnight-js-contracts is mocked; the private-state tests never reach it.
+ * only the `get`/`set` slice `createLiveContext` uses. midnight-js-contracts is
+ * mocked; the private-state tests never reach it.
  */
 const fakeProvider = (initial: Record<string, PS> = {}) => {
   const store = new Map<string, PS>(Object.entries(initial));
-  const calls: Array<{ address: string; id: string; state: PS }> = [];
+  const calls: Array<{ id: string; state: PS }> = [];
   const provider = {
-    forContract(address: string) {
-      return {
-        async get(id: string) {
-          return store.get(id) ?? null;
-        },
-        async set(id: string, state: PS) {
-          calls.push({ address, id, state });
-          store.set(id, state);
-        },
-      };
+    async get(id: string) {
+      return store.get(id) ?? null;
+    },
+    async set(id: string, state: PS) {
+      calls.push({ id, state });
+      store.set(id, state);
     },
   } as unknown as PrivateStateProvider<string, PS>;
   return { provider, calls };
@@ -47,16 +43,14 @@ const makeContext = (provider: PrivateStateProvider<string, PS>) =>
   });
 
 describe('createLiveContext private-state write', () => {
-  it("writes the whole private state to the contract's view under privateStateId", async () => {
+  it('writes the whole private state to the provider under privateStateId', async () => {
     const { provider, calls } = fakeProvider();
     const ctx = makeContext(provider);
 
     const sk = Uint8Array.of(1, 2, 3);
     await ctx.setPrivateState?.({ secretKey: sk });
 
-    expect(calls).toEqual([
-      { address: '0200cafef00d', id: 'my-contract', state: { secretKey: sk } },
-    ]);
+    expect(calls).toEqual([{ id: 'my-contract', state: { secretKey: sk } }]);
   });
 
   it('is observable by queryPrivateState (read-after-write parity)', async () => {

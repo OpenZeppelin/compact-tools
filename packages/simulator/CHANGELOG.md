@@ -7,12 +7,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 
-## Unreleased
-
-### Changed
-
-- **Breaking:** the live peers move to `@midnight-ntwrk/midnight-js-contracts` and `@midnight-ntwrk/midnight-js-types` `^5.0.0`. `createLiveContext` decodes the contract state the public data provider now returns as bytes, and reads and writes private state through `privateStateProvider.forContract(contractAddress)`, so a live harness has to hand it 5.0.0 providers (#???)
-
 ## 0.5.0 (2026-11-05)
 
 ### Changed

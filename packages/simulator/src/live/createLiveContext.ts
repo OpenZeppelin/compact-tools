@@ -1,7 +1,4 @@
-import {
-  ContractState,
-  type StateValue,
-} from '@midnight-ntwrk/compact-runtime';
+import type { StateValue } from '@midnight-ntwrk/compact-runtime';
 // Type-only imports — erased at build, so they create no runtime edge to
 // midnight-js. The only runtime midnight-js edge in this file is the
 // lazy dynamic import inside `loadContracts`.
@@ -65,8 +62,8 @@ export interface CreateLiveContextOptions<P> {
    * `providersFor(alias)` bundle handed to `findDeployedContract`. The
    * `setPrivateState` write below targets this provider, and the next
    * `callTx` reads private state from the bundle's provider; if they are
-   * different instances the write is invisible to proving. Reads and writes
-   * go through the provider's view of `contractAddress`.
+   * different instances the write is invisible to proving. `setContractAddress`
+   * is the harness's responsibility (already required for `get`).
    */
   privateStateProvider: PrivateStateProvider<string, P>;
   /** Runs every live call in a midnight-js scoped transaction with these options. */
@@ -177,15 +174,12 @@ export function createLiveContext<P>(
       let lastErr: unknown;
       for (let attempt = 0; attempt <= lag.retries; attempt++) {
         try {
-          const read = await options.publicDataProvider.queryContractState(
+          const state = await options.publicDataProvider.queryContractState(
             options.contractAddress,
           );
-          if (read != null) {
-            // The state arrives as bytes. Decoded with the runtime the
-            // contract was compiled against, `data.state` is the StateValue
-            // the dry path also extracts.
-            return read.contractState.deserialize({ v9: ContractState }).data
-              .state;
+          if (state != null) {
+            // `ContractState.data` is the StateValue the dry path also extracts.
+            return (state as unknown as { data: StateValue }).data;
           }
         } catch (err) {
           lastErr = err;
@@ -203,9 +197,9 @@ export function createLiveContext<P>(
     },
 
     async queryPrivateState(): Promise<P> {
-      const state = await options.privateStateProvider
-        .forContract(options.contractAddress)
-        .get(options.privateStateId);
+      const state = await options.privateStateProvider.get(
+        options.privateStateId,
+      );
       if (state == null) {
         throw new Error(
           `no private state stored at "${options.privateStateId}"`,
@@ -220,9 +214,7 @@ export function createLiveContext<P>(
      * needed). See the invariant on {@link CreateLiveContextOptions.privateStateProvider}.
      */
     async setPrivateState(state: P): Promise<void> {
-      await options.privateStateProvider
-        .forContract(options.contractAddress)
-        .set(options.privateStateId, state);
+      await options.privateStateProvider.set(options.privateStateId, state);
     },
   };
 }
