@@ -6,8 +6,6 @@
 services:
   proof-server:
     # Pinned to a release, not `:latest`, so `auto` cannot move under a deploy.
-    # 9.0.0 is the first release that proves ZKIR 3.1 (compactc 0.36.0);
-    # 9.0.1 is the current one.
     image: 'midnightntwrk/proof-server:9.0.1'
     container_name: 'proof-server_$TESTCONTAINERS_UID'
     command: ['midnight-proof-server -v']
