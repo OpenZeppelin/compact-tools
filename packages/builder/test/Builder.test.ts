@@ -8,6 +8,7 @@ describe('CompactBuilder.parseArgs', () => {
     expect(options.cleanDist).toBeUndefined();
     expect(options.exclude).toBeUndefined();
     expect(options.copyToDist).toBeUndefined();
+    expect(options.skipTsc).toBeUndefined();
     // Compiler-side defaults still apply
     expect(options.hierarchical).toBe(false);
     expect(options.flags).toBe('');
@@ -15,6 +16,13 @@ describe('CompactBuilder.parseArgs', () => {
 
   it('parses --clean-dist', () => {
     expect(CompactBuilder.parseArgs(['--clean-dist']).cleanDist).toBe(true);
+  });
+
+  it('parses --skip-tsc without forwarding it to the compiler', () => {
+    const options = CompactBuilder.parseArgs(['--skip-tsc', '--skip-zk']);
+
+    expect(options.skipTsc).toBe(true);
+    expect(options.flags).toBe('--skip-zk');
   });
 
   it('forwards --hierarchical to the compiler parser', () => {
@@ -144,6 +152,27 @@ describe('CompactBuilder step pipeline', () => {
     expect(steps[0].msg).toBe('Cleaning dist directory');
     expect(steps[0].cmd).toBe('rm -rf dist && mkdir -p dist');
     expect(steps).toHaveLength(5);
+  });
+
+  it('omits the TypeScript step when skipTsc is true', () => {
+    const builder = new CompactBuilder({ skipTsc: true });
+    const steps = builder.getSteps();
+
+    expect(steps.map((s) => s.msg)).toEqual([
+      'Copying artifacts',
+      'Removing witness directories from dist',
+      'Copying .compact files',
+    ]);
+    expect(steps.some((s) => s.cmd.includes('tsc'))).toBe(false);
+  });
+
+  it('keeps the clean-dist step first when combined with skipTsc', () => {
+    const builder = new CompactBuilder({ cleanDist: true, skipTsc: true });
+    const steps = builder.getSteps();
+
+    expect(steps[0].msg).toBe('Cleaning dist directory');
+    expect(steps[1].msg).toBe('Copying artifacts');
+    expect(steps).toHaveLength(4);
   });
 
   it('uses the hierarchical copy step when hierarchical is true', () => {
