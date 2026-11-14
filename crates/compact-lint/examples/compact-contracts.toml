@@ -11,6 +11,7 @@ tag = "@constraints"
 
 [tags]
 forbid = ["@return"]
+rename = { "@return" = "@returns" }
 
 [kinds.module]
 docs = "exported"

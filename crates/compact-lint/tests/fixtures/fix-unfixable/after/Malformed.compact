@@ -1,0 +1,12 @@
+/**
+ * @module Malformed
+ * @description A module whose annotations a rewrite cannot repair.
+ */
+export module Malformed {
+  /**
+   * @description The comma is missing, and nothing can guess the measurement.
+   * @constraints k=10 rows=626
+   * @throws {Error} The forbidden tag has no replacement.
+   */
+  export circuit first(): [] { }
+}
