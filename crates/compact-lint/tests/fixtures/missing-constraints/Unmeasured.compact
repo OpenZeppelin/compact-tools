@@ -1,0 +1,17 @@
+/**
+ * @module Unmeasured
+ * @description A module whose exported circuit is unmeasured.
+ */
+export module Unmeasured {
+  /**
+   * @description Writes to the ledger without an annotation.
+   */
+  export circuit run(): [] { }
+
+  /**
+   * @description Pure circuits are never annotated.
+   */
+  export pure circuit double(value: Uint<8>): Uint<16> {
+    return value as Uint<16> * 2;
+  }
+}
