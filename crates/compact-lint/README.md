@@ -176,7 +176,8 @@ Exit codes:
 - `1` — at least one circuit is unmeasured or unmeasurable.
 - `2` — usage, config, IO, compiler or missing-cache error. A failed compile prints the
   source and the last 20 lines of the compiler's cleaned output; the raw pty stream is
-  never printed.
+  never printed. A compile that proves a circuit but prints no measurement for it is an
+  error too, and leaves the cache as it was.
 
 Files are rewritten exactly as `fix` rewrites them: through a sibling `.tmp` file, keeping
 the line ending, and only the annotation's own line changes. Before the first write every

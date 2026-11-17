@@ -47,6 +47,8 @@ pub enum MeasureError {
     },
     #[error("compiling {file} failed:\n{tail}")]
     Compile { file: PathBuf, tail: String },
+    #[error("compiling {file} printed no measurement for {circuits}")]
+    Silent { file: PathBuf, circuits: String },
     #[error("cannot read {path}")]
     Read {
         path: PathBuf,
@@ -167,6 +169,21 @@ impl Compiler {
 
         let mut measured = parse(&cleaned);
         if let Some(proved) = proved_circuits(&output)? {
+            let silent: Vec<&str> = proved
+                .iter()
+                .filter(|name| {
+                    !measured
+                        .iter()
+                        .any(|measurement| &measurement.name == *name)
+                })
+                .map(String::as_str)
+                .collect();
+            if !silent.is_empty() {
+                return Err(MeasureError::Silent {
+                    file: source.to_owned(),
+                    circuits: silent.join(", "),
+                });
+            }
             measured.retain(|measurement| proved.contains(&measurement.name));
         }
         Ok(measured)
@@ -187,6 +204,8 @@ impl Compiler {
         command.arg(source);
         command.arg(output);
         command.env("TERM", "xterm-256color");
+        // Under `NO_COLOR` the compiler prints no progress lines, so nothing is measured.
+        command.env_remove("NO_COLOR");
         command.cwd(&self.cwd);
 
         let mut child = pair

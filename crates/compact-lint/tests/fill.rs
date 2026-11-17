@@ -258,6 +258,36 @@ fn a_source_saved_during_the_compile_is_not_overwritten() {
 }
 
 #[test]
+fn no_color_in_the_environment_still_measures() {
+    let directory = work("basic");
+    let (code, stdout) =
+        code_and_stdout(&fill_with_env(directory.path(), &[], &[("NO_COLOR", "1")]));
+
+    assert_eq!(stdout, expected("basic"));
+    assert_eq!(code, EXIT_UNMEASURED);
+}
+
+#[test]
+fn a_compile_with_no_progress_lines_exits_two_and_keeps_the_cache() {
+    let directory = work("no-compile");
+    let cache = directory
+        .path()
+        .join("src/access/test/mocks/.circuit-info.json");
+    let before = std::fs::read(&cache).expect("the seeded cache is readable");
+
+    let output = fill_with_env(directory.path(), &[], &[("FAKE_COMPACT_SILENT", "1")]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(stderr.contains("MockOwnable.compact"), "{stderr}");
+    assert!(stderr.contains("owner"), "{stderr}");
+    assert_eq!(
+        std::fs::read(&cache).expect("the cache is still readable"),
+        before
+    );
+}
+
+#[test]
 fn a_missing_cache_entry_exits_two_and_names_the_flag() {
     let directory = work("basic");
     let output = fill(directory.path(), &["--no-compile"]);
