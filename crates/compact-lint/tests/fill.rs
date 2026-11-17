@@ -11,8 +11,8 @@ use std::process::{Command, Output};
 use assert_cmd::prelude::*;
 use tempfile::TempDir;
 
-/// Exit code for a run that left a tagged circuit unmeasured.
-const EXIT_UNMEASURED: i32 = 1;
+/// Exit code for an error-level diagnostic, or a warning under `--error-on-warnings`.
+const EXIT_FINDINGS: i32 = 1;
 
 /// Exit code for a config, IO or compiler error.
 const EXIT_ERROR: i32 = 2;
@@ -193,7 +193,7 @@ fn assert_case(name: &str, extra: &[&str], exit: i32) {
 
 #[test]
 fn placeholders_and_stale_values_take_the_measurement() {
-    assert_case("basic", &[], EXIT_UNMEASURED);
+    assert_case("basic", &[], 0);
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn a_circuit_the_report_marks_unproved_stays_unmeasured() {
 }
 
 #[test]
-fn a_file_with_no_measurement_source_reports_once_and_exits_one() {
+fn a_file_with_no_measurement_source_reports_once() {
     let directory = work("missing-source");
     let root = directory.path();
     let before = sources(root);
@@ -240,8 +240,26 @@ fn a_file_with_no_measurement_source_reports_once_and_exits_one() {
     let (code, stdout) = code_and_stdout(&fill(root, &[]));
 
     assert_eq!(stdout, expected("missing-source", "expected.txt"));
-    assert_eq!(code, EXIT_UNMEASURED);
+    assert_eq!(code, 0);
     assert_eq!(sources(root), before);
+}
+
+#[test]
+fn an_unmeasured_circuit_fails_the_run_only_at_error_level_or_with_error_on_warnings() {
+    let directory = work("basic");
+    let root = directory.path();
+    let (code, _) = code_and_stdout(&fill(root, &["--dry-run"]));
+    assert_eq!(code, 0, "at the default warn level");
+
+    let (code, _) = code_and_stdout(&fill(root, &["--dry-run", "--error-on-warnings"]));
+    assert_eq!(code, EXIT_FINDINGS, "with --error-on-warnings");
+
+    let config = root.join("compact.toml");
+    let mut text = std::fs::read_to_string(&config).expect("the config is readable");
+    text.push_str("\n[lint.rules]\nconstraints-unmeasured = \"error\"\n");
+    std::fs::write(&config, text).expect("the config is writable");
+    let (code, _) = code_and_stdout(&fill(root, &["--dry-run"]));
+    assert_eq!(code, EXIT_FINDINGS, "at the error level");
 }
 
 #[test]
@@ -284,7 +302,7 @@ fn no_color_in_the_environment_still_measures() {
         code_and_stdout(&fill_with_env(directory.path(), &[], &[("NO_COLOR", "1")]));
 
     assert_eq!(stdout, expected("basic", "expected.txt"));
-    assert_eq!(code, EXIT_UNMEASURED);
+    assert_eq!(code, 0);
 }
 
 #[test]

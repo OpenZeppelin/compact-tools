@@ -300,8 +300,9 @@ with the candidates tried named in the advice.
 
 Exit codes:
 
-- `0` — every tagged circuit was measured, whether or not a value changed.
-- `1` — at least one circuit is unmeasured or unmeasurable.
+- `0` — no error-level diagnostics, whether or not a value changed. Unmeasured and
+  unmeasurable circuits are `warn` by default, so they leave the exit code alone.
+- `1` — at least one error-level diagnostic, or a warning with `--error-on-warnings`.
 - `2` — usage, config, IO, compiler or missing-artifact error. A failed compile prints the
   source and the last 20 lines of the compiler's cleaned output; the raw pty stream is
   never printed. A compile that proves a circuit but prints no measurement for it is an

@@ -318,9 +318,6 @@ fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
     )
     .context("writing the report")?;
 
-    if outcome.unmeasured > 0 {
-        return Ok(ExitCode::from(EXIT_FINDINGS));
-    }
     Ok(exit_code(
         printed.errors,
         printed.warnings,

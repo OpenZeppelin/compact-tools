@@ -90,7 +90,6 @@ pub struct Outcome {
     pub files: usize,
     /// Files the run read, changed or not.
     pub checked: usize,
-    pub unmeasured: usize,
 }
 
 /// One file's annotations and the contract they are measured through.
@@ -157,7 +156,6 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
         filled: 0,
         files: 0,
         checked: target.files.len(),
-        unmeasured: 0,
     };
     let writes: Vec<(&Work, String)> = work
         .iter()
@@ -288,7 +286,6 @@ fn fill_file(
                 outcome
                     .diagnostics
                     .push(unmeasurable(&file.path, tried, level));
-                outcome.unmeasured += file.sites.len();
             }
             return None;
         }
@@ -307,7 +304,6 @@ fn fill_file(
                     tag,
                     unmeasured_level,
                 ));
-                outcome.unmeasured += 1;
             }
             continue;
         };
