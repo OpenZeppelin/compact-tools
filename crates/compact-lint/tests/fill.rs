@@ -70,19 +70,32 @@ fn copy_tree(from: &Path, to: &Path) {
 /// Every `.compact` file under `root`, keyed by its path relative to it.
 fn sources(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     let mut found = BTreeMap::new();
-    collect(root, root, &mut found);
+    collect(root, root, true, &mut found);
     found
 }
 
-fn collect(root: &Path, directory: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+/// Every file under `root`, artifacts included, keyed by its path relative to it.
+fn tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    let mut found = BTreeMap::new();
+    collect(root, root, false, &mut found);
+    found
+}
+
+fn collect(
+    root: &Path,
+    directory: &Path,
+    only_sources: bool,
+    out: &mut BTreeMap<PathBuf, Vec<u8>>,
+) {
     for entry in std::fs::read_dir(directory).expect("the tree is readable") {
         let entry = entry.expect("the entry is readable");
         let path = entry.path();
         if path.is_dir() {
-            collect(root, &path, out);
-        } else if path
-            .extension()
-            .is_some_and(|extension| extension == "compact")
+            collect(root, &path, only_sources, out);
+        } else if !only_sources
+            || path
+                .extension()
+                .is_some_and(|extension| extension == "compact")
         {
             let relative = path.strip_prefix(root).expect("the path is under the root");
             out.insert(
@@ -165,7 +178,7 @@ fn assert_case(name: &str, extra: &[&str], exit: i32) {
     assert_eq!(code, exit, "second run exit code for case {name}");
 
     let preview = work(name);
-    let before = sources(preview.path());
+    let before = tree(preview.path());
     let mut arguments = extra.to_vec();
     arguments.push("--dry-run");
     let (code, stdout) = code_and_stdout(&fill(preview.path(), &arguments));
@@ -175,11 +188,7 @@ fn assert_case(name: &str, extra: &[&str], exit: i32) {
         "dry-run stdout for case {name}"
     );
     assert_eq!(code, exit, "dry-run exit code for case {name}");
-    assert_eq!(
-        sources(preview.path()),
-        before,
-        "dry-run wrote to case {name}"
-    );
+    assert_eq!(tree(preview.path()), before, "dry-run wrote to case {name}");
 }
 
 #[test]

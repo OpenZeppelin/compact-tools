@@ -39,6 +39,8 @@ pub enum FillError {
     },
     #[error("refusing to write {path}: it changed during the run")]
     Changed { path: PathBuf },
+    #[error("cannot create a temporary directory for the dry-run compile")]
+    Scratch(#[source] std::io::Error),
 }
 
 /// Everything the subcommand needs, already resolved from flags and env.
@@ -214,7 +216,7 @@ fn measure_sources(
     sources.sort();
     sources.dedup();
 
-    let compiler = Compiler {
+    let mut compiler = Compiler {
         binary: options.compact_bin.clone(),
         version: version.cloned(),
         artifacts: artifacts.directory.clone(),
@@ -232,17 +234,21 @@ fn measure_sources(
             let path = measure::locate(&artifacts.directory, source)?;
             let list = measure::read_artifact(&path)?;
             (list, path.display().to_string())
+        } else if options.dry_run {
+            // A preview writes nothing to the project, so it compiles into a directory that
+            // is removed once the compile ends.
+            let scratch = tempfile::tempdir().map_err(FillError::Scratch)?;
+            scratch.path().clone_into(&mut compiler.artifacts);
+            let list = compiler.measure(source)?;
+            (list, source.display().to_string())
         } else {
             let list = compiler.measure(source)?;
-            // A preview writes nothing, the artifact included.
-            if !options.dry_run {
-                measure::write_artifact(
-                    &artifacts.directory,
-                    source,
-                    &artifacts.recorded(source, cwd),
-                    &list,
-                )?;
-            }
+            measure::write_artifact(
+                &artifacts.directory,
+                source,
+                &artifacts.recorded(source, cwd),
+                &list,
+            )?;
             (list, source.display().to_string())
         };
         phase.stop(timings, detail);

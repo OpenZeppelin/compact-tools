@@ -215,7 +215,8 @@ compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-com
 ```
 
 - `PATHS` and `--config` resolve exactly as they do for `check`.
-- `--dry-run` — report the changes and write nothing, the artifact file included.
+- `--dry-run` — report the changes and write nothing to the project. A compile goes to a
+  temporary directory, removed when it ends, so the artifacts tree is left alone.
 - `--no-compile` — read each contract's `circuit-info.json` instead of compiling. A source
   with no artifact file is an error.
 - `--compact-bin <path>` — path to the `compact` binary, as for `check`. Also settable
