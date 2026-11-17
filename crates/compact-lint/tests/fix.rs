@@ -159,6 +159,11 @@ fn sections_are_inserted_by_heading_and_the_blocks_come_back_in_template_order()
 }
 
 #[test]
+fn a_section_goes_in_below_every_paragraph_of_the_block_before_it() {
+    assert_case("sections-paragraphs");
+}
+
+#[test]
 fn the_constraints_annotation_follows_the_description_block() {
     assert_case("constraints");
 }

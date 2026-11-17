@@ -365,9 +365,9 @@ fn expand(single: &str, margin: &str, gutter: &str) -> Vec<String> {
     ]
 }
 
-/// A tag block lands after the block of the last entry in `after` that is present, else at
-/// the top of the body. With `adopts_prose`, untagged prose opening the body takes the
-/// tag instead of a new line going in.
+/// A tag block lands after the block of the last entry in `after` that is present, every
+/// paragraph of it included, else at the top of the body. With `adopts_prose`, untagged
+/// prose opening the body takes the tag instead of a new line going in.
 fn insert_tag(
     lines: &mut Vec<String>,
     gutter: &str,
@@ -386,7 +386,7 @@ fn insert_tag(
         return;
     }
 
-    let at = tag_block_end(lines, closer, after).map_or(1.min(closer), |end| end + 1);
+    let at = paragraphs_end(lines, closer, after).map_or(1.min(closer), |end| end + 1);
     for (offset, line) in inserted.iter().enumerate() {
         lines.insert(at + offset, format!("{gutter}{line}"));
     }
@@ -479,12 +479,30 @@ fn description_end(lines: &[String], closer: usize) -> Option<usize> {
     tag_block_end(lines, closer, &[TagSpec::bare(Tag::new(DESCRIPTION_TAG))])
 }
 
-/// The last line of the block opened by the last occurrence of any entry in `entries`.
-fn tag_block_end(lines: &[String], closer: usize, entries: &[TagSpec]) -> Option<usize> {
-    let start = (1..closer).rev().find(|index| {
+/// The line holding the last occurrence of any entry in `entries`.
+fn last_occurrence(lines: &[String], closer: usize, entries: &[TagSpec]) -> Option<usize> {
+    (1..closer).rev().find(|index| {
         let text = content(&lines[*index]);
         entries.iter().any(|entry| entry.matches_line(text))
-    })?;
+    })
+}
+
+/// The last non-blank line before the tag that follows the last occurrence of any entry in
+/// `entries`, so a block's later paragraphs count as part of it.
+fn paragraphs_end(lines: &[String], closer: usize, entries: &[TagSpec]) -> Option<usize> {
+    let start = last_occurrence(lines, closer, entries)?;
+    let next_tag = (start + 1..closer)
+        .find(|index| starts_tag(content(&lines[*index])))
+        .unwrap_or(closer);
+    (start..next_tag)
+        .rev()
+        .find(|index| !is_blank(&lines[*index]))
+}
+
+/// The last line of the first paragraph of the block opened by the last occurrence of any
+/// entry in `entries`.
+fn tag_block_end(lines: &[String], closer: usize, entries: &[TagSpec]) -> Option<usize> {
+    let start = last_occurrence(lines, closer, entries)?;
 
     let mut end = start;
     while end + 1 < closer {
@@ -746,6 +764,16 @@ mod tests {
         assert_eq!(
             rendered(doc, 0, &[section("@notice Security", &["@notice Privacy"])]),
             "/**\n * @notice Privacy:\n * - Amounts.\n * @notice Security:\n * TODO\n * @notice Scope:\n * - Notes only.\n */"
+        );
+    }
+
+    #[test]
+    fn a_section_lands_after_every_paragraph_of_the_block_before_it() {
+        let doc = "/**\n * @description First paragraph.\n *\n * Second paragraph.\n *\n * @notice Security:\n * - Nonces.\n */";
+
+        assert_eq!(
+            rendered(doc, 0, &[section("@notice Privacy", &["@description"])]),
+            "/**\n * @description First paragraph.\n *\n * Second paragraph.\n * @notice Privacy:\n * TODO\n *\n * @notice Security:\n * - Nonces.\n */"
         );
     }
 
