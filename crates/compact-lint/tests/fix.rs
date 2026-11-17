@@ -174,6 +174,11 @@ fn a_stale_module_tag_takes_the_module_name() {
 }
 
 #[test]
+fn a_module_name_rewrite_keeps_a_closing_delimiter_on_its_line() {
+    assert_case("module-name-terminator");
+}
+
+#[test]
 fn a_crlf_source_keeps_its_line_endings() {
     assert_case("crlf");
 }

@@ -289,8 +289,10 @@ fn rename_tag(line: &str, from: &str, to: &str) -> Option<String> {
     None
 }
 
-/// Replaces the first word after `@module`, keeping whatever follows it.
+/// Replaces the first word after `@module`, keeping whatever follows it. A `*/` closing
+/// the comment on the same line is never part of the value.
 fn set_module_name(line: &str, name: &str) -> Option<String> {
+    let (line, terminator) = split_terminator(line);
     let tag = "@module";
     let start = line.find(tag)?;
     let after = start + tag.len();
@@ -302,15 +304,33 @@ fn set_module_name(line: &str, name: &str) -> Option<String> {
         .find(char::is_whitespace)
         .map_or(value.len(), |index| index);
 
-    if value.is_empty() {
-        return Some(format!("{line} {name}"));
+    let renamed = if value.is_empty() {
+        format!("{line} {name}")
+    } else {
+        format!(
+            "{}{}{name}{}",
+            &line[..after],
+            &rest[..spaces],
+            &value[word..]
+        )
+    };
+
+    if terminator.is_empty() || terminator.starts_with(char::is_whitespace) {
+        Some(format!("{renamed}{terminator}"))
+    } else {
+        Some(format!("{renamed} {terminator}"))
     }
-    Some(format!(
-        "{}{}{name}{}",
-        &line[..after],
-        &rest[..spaces],
-        &value[word..]
-    ))
+}
+
+/// Splits a trailing `*/`, with the whitespace before it, off a comment line.
+fn split_terminator(line: &str) -> (&str, &str) {
+    match line.trim_end().strip_suffix("*/") {
+        Some(body) => {
+            let kept = body.trim_end();
+            (kept, &line[kept.len()..])
+        }
+        None => (line, ""),
+    }
 }
 
 #[cfg(test)]
@@ -540,6 +560,22 @@ mod tests {
         assert_eq!(
             set_module_name(" * @module Stale", "Renamed"),
             Some(" * @module Renamed".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_module_rewrite_keeps_the_closing_delimiter() {
+        assert_eq!(
+            set_module_name("/** @module */", "Access"),
+            Some("/** @module Access */".to_owned())
+        );
+        assert_eq!(
+            set_module_name("/** @module Ownable*/", "Access"),
+            Some("/** @module Access */".to_owned())
+        );
+        assert_eq!(
+            set_module_name(" * @module Old */", "Access"),
+            Some(" * @module Access */".to_owned())
         );
     }
 

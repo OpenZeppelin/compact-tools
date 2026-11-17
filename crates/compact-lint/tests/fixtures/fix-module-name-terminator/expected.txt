@@ -1,0 +1,3 @@
+Terminators.compact:1:5: fix: set @module to `Empty`
+Terminators.compact:5:5: fix: set @module to `Glued`
+Terminators.compact:10:4: fix: set @module to `Spaced`

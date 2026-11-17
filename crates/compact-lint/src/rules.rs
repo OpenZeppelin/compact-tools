@@ -175,6 +175,9 @@ impl Issue {
     }
 }
 
+/// Each declaration's kind and name, in source order.
+pub type Outline = Vec<(DeclKind, Option<String>)>;
+
 /// A reusable parser plus the rules that run over its trees.
 pub struct Linter {
     parser: Parser,
@@ -237,6 +240,27 @@ impl Linter {
             .iter()
             .map(|issue| issue.finding(display))
             .collect())
+    }
+
+    /// The declarations `source` parses into, or `None` when it holds a parse defect.
+    /// # Errors
+    /// Returns an error when tree-sitter produces no tree for `source`.
+    pub fn outline(&mut self, display: &Path, source: &str) -> Result<Option<Outline>, LintError> {
+        let tree = self
+            .parser
+            .parse(source, None)
+            .ok_or_else(|| LintError::NoTree(display.to_owned()))?;
+        let root = tree.root_node();
+
+        if first_defect(root).is_some() {
+            return Ok(None);
+        }
+        Ok(Some(
+            declarations(root, source)
+                .into_iter()
+                .map(|declaration| (declaration.kind, declaration.name))
+                .collect(),
+        ))
     }
 }
 

@@ -64,7 +64,7 @@ What each rule's fix does:
 | `missing-tag` | Inserts each missing tag after the block of the last tag that precedes it in `kinds.<kind>.tags`, else at the top of the body. A missing `@description` adopts untagged prose that opens the body instead of writing a placeholder. A `/** … */` one-liner expands to the multi-line form first. |
 | `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. On a circuit with no doc comment, it inserts a doc comment holding only that line. |
 | `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
-| `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. |
+| `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. A `*/` on the same line stays in place. |
 
 Not fixed:
 
@@ -74,6 +74,9 @@ Not fixed:
 - `parse` — the file does not parse, so no rewrite is trustworthy.
 - `format` — that is `compact format`'s job.
 - A forbidden tag with no `tags.rename` entry stays a `check` finding.
+
+Before writing, `fix` parses the rewritten file and refuses it, exiting `2`, when its
+declarations differ from the original's: a doc edit never should change them.
 
 Existing lines are never reordered or reflowed. Edits are computed against the original
 text and applied from the highest offset down; several edits on one comment merge into a

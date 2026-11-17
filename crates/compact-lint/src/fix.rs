@@ -43,6 +43,8 @@ pub enum FixError {
         #[source]
         source: std::io::Error,
     },
+    #[error("refusing to write {path}: the edits would change its declarations")]
+    Unsafe { path: PathBuf },
 }
 
 /// Everything the `fix` subcommand needs, already resolved from flags.
@@ -102,8 +104,12 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
             continue;
         }
 
+        let fixed = apply(&source, &edits, newline);
+        if changes_declarations(&mut linter, path, &source, &fixed)? {
+            return Err(FixError::Unsafe { path: path.clone() });
+        }
         if !options.dry_run {
-            write_atomically(path, &apply(&source, &edits, newline))?;
+            write_atomically(path, &fixed)?;
         }
         files.push(FileEdits {
             path: path.clone(),
@@ -112,6 +118,17 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
     }
 
     Ok(Outcome { files })
+}
+
+/// Whether `after` parses into other declarations than `before`. Doc edits never should,
+/// so a difference means an edit broke a comment delimiter.
+fn changes_declarations(
+    linter: &mut Linter,
+    path: &Path,
+    before: &str,
+    after: &str,
+) -> Result<bool, LintError> {
+    Ok(linter.outline(path, before)? != linter.outline(path, after)?)
 }
 
 /// Whether a forbidden tag in the same doc comment is renamed to the tag this
@@ -414,10 +431,12 @@ pub fn line(path: &Path, position: Position, message: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::skeleton;
+    use super::{changes_declarations, skeleton};
     use crate::config::Config;
     use crate::doc::Tag;
     use crate::model::DeclKind;
+    use crate::rules::Linter;
+    use std::path::Path;
 
     fn config() -> Config {
         let mut config = Config::default();
@@ -456,6 +475,18 @@ mod tests {
             skeleton(DeclKind::Type, Some("RoleId"), false, &config(), 2, "\n"),
             "/**\n   * TODO\n   */\n  "
         );
+    }
+
+    #[test]
+    fn an_unterminated_comment_counts_as_a_declaration_change() {
+        let mut linter = Linter::new().expect("the bundled grammar loads");
+        let path = Path::new("a.compact");
+        let before = "/** @module Old */\nmodule Access {\n}\n";
+
+        let closed = "/** @module Access */\nmodule Access {\n}\n";
+        let unclosed = "/** @module Access\nmodule Access {\n}\n";
+        assert!(!changes_declarations(&mut linter, path, before, closed).expect("parses"));
+        assert!(changes_declarations(&mut linter, path, before, unclosed).expect("parses"));
     }
 
     #[test]

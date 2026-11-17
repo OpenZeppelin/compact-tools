@@ -1,0 +1,12 @@
+/** @module Empty */
+module Empty {
+}
+
+/** @module Glued */
+module Glued {
+}
+
+/**
+ * @module Spaced */
+module Spaced {
+}
