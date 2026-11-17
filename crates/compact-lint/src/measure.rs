@@ -23,9 +23,10 @@ const CONTRACT_INFO_PATH: [&str; 2] = ["compiler", "contract-info.json"];
 /// Compiler-output lines kept in a failure report.
 const TAIL_LINES: usize = 20;
 
-/// Terminal geometry for the compile; a wide row keeps a progress line off the wrap.
+/// Terminal geometry for the compile. The compiler prints only as many circuit lines as
+/// the terminal has rows, and a wide row keeps a progress line off the wrap.
 const PTY_SIZE: PtySize = PtySize {
-    rows: 60,
+    rows: 500,
     cols: 200,
     pixel_width: 0,
     pixel_height: 0,
