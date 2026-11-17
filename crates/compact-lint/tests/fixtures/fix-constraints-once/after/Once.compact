@@ -1,0 +1,19 @@
+/**
+ * @description Runs.
+ * @constraints k=7, rows=74
+ */
+export circuit run(): [] { }
+
+/**
+ * @description TODO
+ *
+ * @constraints k=?, rows=?
+ */
+export circuit bump(): [] { }
+
+/**
+ * @description Sends.
+ *
+ * @constraints k=?, rows=?
+ */
+export circuit send(): [] { }

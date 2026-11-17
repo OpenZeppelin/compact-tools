@@ -1,5 +1,6 @@
 //! `compact-lint.toml`: discovery, parsing, and the built-in defaults.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -37,6 +38,20 @@ pub enum ConfigError {
         "config {path} lists tag {tag:?}; tags are spelled with their `@`, like `@description`"
     )]
     Tag { path: PathBuf, tag: String },
+    #[error("config {path} renames {tag}, which tags.forbid does not list")]
+    RenameUnforbidden { path: PathBuf, tag: String },
+    #[error("config {path} renames {from} to {to}, which tags.forbid also lists")]
+    RenameToForbidden {
+        path: PathBuf,
+        from: String,
+        to: String,
+    },
+    #[error("config {path} has an invalid fix.placeholder {placeholder:?}: {reason}")]
+    Placeholder {
+        path: PathBuf,
+        placeholder: String,
+        reason: &'static str,
+    },
     #[error("config {path} has an invalid glob {pattern:?}")]
     Glob {
         path: PathBuf,
@@ -117,11 +132,28 @@ impl Default for ConstraintsConfig {
     }
 }
 
-/// Tags no doc comment may carry.
+/// Tags no doc comment may carry, and the replacements `fix` writes for them.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
 pub struct TagsConfig {
     pub forbid: Vec<Tag>,
+    /// Forbidden tag to its replacement; an unmapped forbidden tag stays a finding.
+    pub rename: BTreeMap<Tag, Tag>,
+}
+
+/// What `fix` writes where it has no value to write.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, default)]
+pub struct FixConfig {
+    pub placeholder: String,
+}
+
+impl Default for FixConfig {
+    fn default() -> Self {
+        Self {
+            placeholder: "TODO".to_owned(),
+        }
+    }
 }
 
 /// A parsed `compact-lint.toml`, or the built-in defaults when no file was found.
@@ -133,6 +165,7 @@ pub struct Config {
     pub exclude: Vec<String>,
     pub constraints: ConstraintsConfig,
     pub tags: TagsConfig,
+    pub fix: FixConfig,
     pub kinds: KindsConfig,
 }
 
@@ -144,6 +177,7 @@ impl Default for Config {
             exclude: Vec::new(),
             constraints: ConstraintsConfig::default(),
             tags: TagsConfig::default(),
+            fix: FixConfig::default(),
             kinds: KindsConfig::default(),
         }
     }
@@ -178,6 +212,30 @@ impl Config {
             });
         }
 
+        for (from, to) in &config.tags.rename {
+            if !config.tags.forbid.contains(from) {
+                return Err(ConfigError::RenameUnforbidden {
+                    path: path.to_owned(),
+                    tag: from.to_string(),
+                });
+            }
+            if config.tags.forbid.contains(to) {
+                return Err(ConfigError::RenameToForbidden {
+                    path: path.to_owned(),
+                    from: from.to_string(),
+                    to: to.to_string(),
+                });
+            }
+        }
+
+        if let Some(reason) = placeholder_defect(&config.fix.placeholder) {
+            return Err(ConfigError::Placeholder {
+                path: path.to_owned(),
+                placeholder: config.fix.placeholder.clone(),
+                reason,
+            });
+        }
+
         Ok(config)
     }
 
@@ -199,7 +257,15 @@ impl Config {
 
         per_kind
             .chain(self.tags.forbid.iter())
+            .chain(self.tags.rename.keys())
+            .chain(self.tags.rename.values())
             .chain(std::iter::once(&self.constraints.tag))
+    }
+
+    /// The replacement `fix` writes for a forbidden tag, when the config names one.
+    #[must_use]
+    pub fn rename_of(&self, tag: &Tag) -> Option<&Tag> {
+        self.tags.rename.get(tag)
     }
 
     /// Compiles the `include` globs.
@@ -215,6 +281,20 @@ impl Config {
     pub fn exclude_set(&self, path: &Path) -> Result<GlobSet, ConfigError> {
         glob_set(&self.exclude, path)
     }
+}
+
+/// Why a placeholder cannot go on a `*` line of a doc comment, or `None` when it can.
+fn placeholder_defect(placeholder: &str) -> Option<&'static str> {
+    if placeholder.trim().is_empty() {
+        return Some("it is empty");
+    }
+    if placeholder.contains(['\n', '\r']) {
+        return Some("it spans more than one line");
+    }
+    if placeholder.contains("*/") {
+        return Some("`*/` would close the comment early");
+    }
+    None
 }
 
 fn glob_set(patterns: &[String], path: &Path) -> Result<GlobSet, ConfigError> {
@@ -248,9 +328,21 @@ pub fn discover(start: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, DocsPolicy, SUPPORTED_VERSION};
+    use super::{CONFIG_FILE_NAME, Config, DocsPolicy, SUPPORTED_VERSION};
     use crate::doc::Tag;
     use crate::model::DeclKind;
+    use tempfile::TempDir;
+
+    /// Loads `snippet` as a config file and returns the rejection it produced.
+    fn rejection(snippet: &str) -> String {
+        let directory = TempDir::new().expect("a temporary directory is available");
+        let path = directory.path().join(CONFIG_FILE_NAME);
+        std::fs::write(&path, snippet).expect("the config is writable");
+
+        Config::load(&path)
+            .expect_err("the config is invalid")
+            .to_string()
+    }
 
     #[test]
     fn defaults_require_docs_on_exported_declarations_only() {
@@ -293,6 +385,81 @@ mod tests {
 
         assert!(error.to_string().contains("\"description\""), "{error}");
         std::fs::remove_dir_all(&dir).expect("the temp dir is removable");
+    }
+
+    #[test]
+    fn a_rename_maps_a_forbidden_tag_to_its_replacement() {
+        let config: Config = toml::from_str(
+            "[tags]\nforbid = [\"@return\"]\nrename = { \"@return\" = \"@returns\" }\n",
+        )
+        .expect("the snippet is valid config");
+
+        assert_eq!(
+            config.rename_of(&Tag::new("@return")),
+            Some(&Tag::new("@returns"))
+        );
+        assert_eq!(config.rename_of(&Tag::new("@notice")), None);
+    }
+
+    #[test]
+    fn a_rename_target_without_its_at_sign_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("compact-lint-rename-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("the temp dir is writable");
+        let path = dir.join("compact-lint.toml");
+        std::fs::write(&path, "[tags]\nrename = { \"@return\" = \"returns\" }\n")
+            .expect("the config is writable");
+
+        let error = Config::load(&path).expect_err("the replacement lacks its @");
+
+        assert!(error.to_string().contains("\"returns\""), "{error}");
+        std::fs::remove_dir_all(&dir).expect("the temp dir is removable");
+    }
+
+    #[test]
+    fn the_fix_placeholder_defaults_to_todo() {
+        assert_eq!(Config::default().fix.placeholder, "TODO");
+
+        let config: Config = toml::from_str("[fix]\nplaceholder = \"FIXME\"\n")
+            .expect("the snippet is valid config");
+        assert_eq!(config.fix.placeholder, "FIXME");
+    }
+
+    #[test]
+    fn a_rename_of_a_tag_that_is_not_forbidden_is_rejected() {
+        let error = rejection("[tags]\nrename = { \"@return\" = \"@returns\" }\n");
+
+        assert!(error.contains("@return"), "{error}");
+        assert!(error.contains("tags.forbid does not list"), "{error}");
+    }
+
+    #[test]
+    fn a_rename_onto_a_forbidden_tag_is_rejected() {
+        let error = rejection(
+            "[tags]\nforbid = [\"@return\", \"@returns\"]\nrename = { \"@return\" = \"@returns\" }\n",
+        );
+
+        assert!(error.contains("tags.forbid also lists"), "{error}");
+    }
+
+    #[test]
+    fn an_empty_fix_placeholder_is_rejected() {
+        let error = rejection("[fix]\nplaceholder = \"  \"\n");
+
+        assert!(error.contains("is empty"), "{error}");
+    }
+
+    #[test]
+    fn a_multi_line_fix_placeholder_is_rejected() {
+        let error = rejection("[fix]\nplaceholder = \"TO\\nDO\"\n");
+
+        assert!(error.contains("more than one line"), "{error}");
+    }
+
+    #[test]
+    fn a_fix_placeholder_closing_the_comment_is_rejected() {
+        let error = rejection("[fix]\nplaceholder = \"TODO */\"\n");
+
+        assert!(error.contains("close the comment"), "{error}");
     }
 
     #[test]

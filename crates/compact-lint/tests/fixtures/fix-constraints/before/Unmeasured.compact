@@ -1,0 +1,31 @@
+/**
+ * @module Unmeasured
+ * @description A module whose exported circuits are unmeasured.
+ */
+export module Unmeasured {
+  /**
+   * @description Bumps the counter.
+   */
+  export circuit bump(): [] { }
+
+  /**
+   * @description Sends a coin
+   * to the recipient named below.
+   *
+   * @param {Bytes<32>} to - The recipient.
+   * @returns {[]} Empty tuple.
+   */
+  export circuit send(to: Bytes<32>): [] { }
+
+  /**
+   * @notice The annotation goes to the top, since there is no description.
+   */
+  export circuit run(): [] { }
+
+  /**
+   * @description Pure circuits are never annotated.
+   */
+  export pure circuit double(value: Uint<8>): Uint<16> {
+    return value as Uint<16> * 2;
+  }
+}

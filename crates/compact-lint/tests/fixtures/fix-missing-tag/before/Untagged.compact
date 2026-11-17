@@ -1,0 +1,18 @@
+/**
+ * @module Untagged
+ */
+export module Untagged {
+  /** Approved accounts. Absent means not allowed. */
+  export ledger _allowed: Set<Bytes<32>>;
+
+  /**
+   * The circuit has no description either.
+   * @constraints k=6, rows=28
+   */
+  export circuit run(): [] { }
+
+  /**
+   * @param {Uint<8>} value - The value to store.
+   */
+  export circuit store(value: Uint<8>): [] { }
+}

@@ -1,0 +1,8 @@
+Bare.compact:3:1: fix: inserted doc skeleton for module `Bare`
+Bare.compact:6:3: fix: inserted doc skeleton for ledger `_count`
+Bare.compact:8:3: fix: inserted doc skeleton for witness `wit_Secret`
+Bare.compact:10:3: fix: inserted doc skeleton for struct `Reading`
+Bare.compact:14:3: fix: inserted doc skeleton for enum `Direction`
+Bare.compact:19:3: fix: inserted doc skeleton for type `Alias`
+Bare.compact:25:3: fix: inserted doc skeleton for circuit `double`
+Bare.compact:29:3: fix: inserted doc skeleton for circuit `bump`

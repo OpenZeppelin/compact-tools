@@ -1,6 +1,7 @@
 //! Declarations the linter checks, lifted out of the tree-sitter tree.
 
 use std::fmt;
+use std::ops::Range;
 
 use tree_sitter::Node;
 
@@ -75,6 +76,8 @@ pub struct Declaration {
     pub exported: bool,
     pub pure: bool,
     pub position: Position,
+    /// Byte offset of the declaration's first token, where `fix` inserts a skeleton.
+    pub offset: usize,
     /// The doc comment immediately preceding the declaration, if one attaches.
     pub doc: Option<AttachedDoc>,
 }
@@ -86,6 +89,8 @@ pub struct AttachedDoc {
     /// 0-based row of the `/**` line, for turning a tag's offset into a position.
     pub start_row: usize,
     pub start_column: usize,
+    /// Byte range of the `/** … */` node, the span `fix` rewrites.
+    pub range: Range<usize>,
 }
 
 impl AttachedDoc {
@@ -152,6 +157,7 @@ fn declaration(kind: DeclKind, node: Node<'_>, source: &str) -> Declaration {
         exported,
         pure,
         position: Position::from_zero_based(start.row, start.column),
+        offset: node.start_byte(),
         doc: attached_doc(node, source),
     }
 }
@@ -169,6 +175,7 @@ fn attached_doc(node: Node<'_>, source: &str) -> Option<AttachedDoc> {
         comment: DocComment::parse(text(previous, source)?),
         start_row: start.row,
         start_column: start.column,
+        range: previous.start_byte()..previous.end_byte(),
     })
 }
 

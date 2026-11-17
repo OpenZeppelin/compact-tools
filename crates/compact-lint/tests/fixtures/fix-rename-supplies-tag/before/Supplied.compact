@@ -1,0 +1,12 @@
+/**
+ * @module Supplied
+ * @description A module whose circuit still uses the old return tag.
+ */
+export module Supplied {
+  /**
+   * @description Does nothing.
+   * @constraints k=6, rows=28
+   * @return {[]} - Empty tuple.
+   */
+  export circuit run(): [] { }
+}

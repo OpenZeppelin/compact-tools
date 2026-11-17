@@ -1,0 +1,19 @@
+/**
+ * @module Returns
+ * @description A module that still uses the old return tag.
+ */
+export module Returns {
+  /**
+   * @description Does nothing.
+   * @constraints k=6, rows=28
+   * @returns {[]} - Empty tuple.
+   */
+  export circuit run(): [] { }
+
+  /**
+   * @description Not exported, so its docs are optional, but the tag is not.
+   * @returns {[]} - Empty tuple.
+   * @returns {[]} - The new spelling is left alone.
+   */
+  circuit helper(): [] { }
+}

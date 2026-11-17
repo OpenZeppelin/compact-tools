@@ -1,0 +1,21 @@
+/**
+ * @description First line
+ * continuation
+ *
+ * @constraints k=?, rows=?
+ */
+export circuit run(): [] { }
+
+/**
+ * @description Approved accounts
+ * across every shard.
+ */
+export ledger accounts: Uint<64>;
+
+/**
+ * @description Sends
+ * and returns.
+ *
+ * @constraints k=?, rows=?
+ */
+export circuit send(): [] { }

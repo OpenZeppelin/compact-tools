@@ -1,0 +1,2 @@
+Renamed.compact:2:4: fix: set @module to `Renamed`
+Renamed.compact:7:6: fix: set @module to `Nested`
