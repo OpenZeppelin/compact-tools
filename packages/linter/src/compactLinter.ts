@@ -15,6 +15,17 @@ function packageVersion(): string {
   return (JSON.parse(manifest) as { version: string }).version;
 }
 
+/** Node reports a glibc version only when it runs on glibc. */
+function isMusl(): boolean {
+  if (process.platform !== 'linux') {
+    return false;
+  }
+  const report = process.report.getReport() as {
+    header?: { glibcVersionRuntime?: string };
+  };
+  return report.header?.glibcVersionRuntime === undefined;
+}
+
 function fail(message: string): never {
   process.stderr.write(`compact-linter: ${message}
 `);
@@ -30,6 +41,7 @@ async function runLint(): Promise<void> {
       version: packageVersion(),
       platform: process.platform,
       arch: process.arch,
+      musl: isMusl(),
       env: process.env,
       notify: (message) =>
         process.stderr.write(`compact-linter: ${message}

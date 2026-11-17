@@ -30,8 +30,9 @@ Commands, flags, exit codes and `compact-lint.toml` are documented in the
   Linux, `~/Library/Caches/compact-linter` on macOS. Later runs print nothing and start
   it directly. The installed package is never written to, so read-only installs and
   Yarn Plug'n'Play work.
-- No prebuilt binary for the host is a hard error: build the crate with
-  `cargo install --path crates/compact-lint` and point `COMPACT_LINT_BINARY` at it.
+- No prebuilt binary for the host is a hard error, and that includes musl Linux such as
+  Alpine: build the crate with `cargo install --path crates/compact-lint` and point
+  `COMPACT_LINT_BINARY` at it.
 
 ## Environment
 
@@ -44,4 +45,4 @@ Commands, flags, exit codes and `compact-lint.toml` are documented in the
 ## Requirements
 
 - Node.js >= 24
-- Linux or macOS, x86_64 or aarch64
+- Linux with glibc, or macOS; x86_64 or aarch64

@@ -83,6 +83,7 @@ function options(
     version: '0.1.0',
     platform: 'linux',
     arch: 'x64',
+    musl: false,
     env: {},
     notify: (message) => notices.push(message),
     ...overrides,
@@ -173,6 +174,22 @@ describe('resolveBinary', () => {
     ).rejects.toThrow(
       'no prebuilt binary for win32-x64; build from source with cargo (crates/compact-lint) and set COMPACT_LINT_BINARY',
     );
+  });
+
+  it('reports a musl linux host', async () => {
+    await expect(resolveBinary(options({ musl: true }))).rejects.toThrow(
+      'no prebuilt binary for musl Linux, the release binaries need glibc; build from source with cargo (crates/compact-lint) and set COMPACT_LINT_BINARY',
+    );
+  });
+
+  it('runs COMPACT_LINT_BINARY on a musl host', async () => {
+    const binary = await resolveBinary(
+      options({
+        musl: true,
+        env: { COMPACT_LINT_BINARY: '/opt/compact-lint' },
+      }),
+    );
+    expect(binary).toBe('/opt/compact-lint');
   });
 
   it('returns COMPACT_LINT_BINARY without contacting the origin', async () => {

@@ -32,6 +32,8 @@ export interface ResolveOptions {
   version: string;
   platform: string;
   arch: string;
+  /** Whether the host's C library is musl; every Linux asset links glibc. */
+  musl: boolean;
   env: Record<string, string | undefined>;
   /** Called once, before the first download of a run. */
   notify: (message: string) => void;
@@ -90,7 +92,7 @@ export function expectedChecksum(text: string, asset: string): string {
 }
 
 /**
- * Path to the `compact-lint` executable, downloading it into the package cache when missing.
+ * Path to the `compact-lint` executable, downloading it into the user cache when missing.
  *
  * Messages carry no `compact-lint:` prefix; the bin adds it.
  */
@@ -98,6 +100,12 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
   const override = options.env.COMPACT_LINT_BINARY;
   if (override) {
     return override;
+  }
+
+  if (options.platform === 'linux' && options.musl) {
+    throw new Error(
+      'no prebuilt binary for musl Linux, the release binaries need glibc; build from source with cargo (crates/compact-lint) and set COMPACT_LINT_BINARY',
+    );
   }
 
   const target = resolveTarget(options.platform, options.arch);
