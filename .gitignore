@@ -66,6 +66,9 @@ vendor/
 target/
 .toolkit-cache/
 
+# Written by the release workflow, published inside the compact-linter package.
+packages/linter/checksums.txt
+
 coverage
 **/reports
 

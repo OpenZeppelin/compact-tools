@@ -8,6 +8,13 @@ license = "MIT"
 repository = "https://github.com/OpenZeppelin/compact-tools"
 rust-version = "1.96"
 
+# Release binaries ship as GitHub release assets, so size and speed both matter.
+# Unwinding stays on: the error paths depend on it.
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
