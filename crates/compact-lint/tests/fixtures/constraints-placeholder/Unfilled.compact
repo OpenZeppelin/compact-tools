@@ -1,0 +1,11 @@
+/**
+ * @module Unfilled
+ * @description A module whose annotation is still a placeholder.
+ */
+export module Unfilled {
+  /**
+   * @description Not measured yet.
+   * @constraints k=?, rows=?
+   */
+  export circuit run(): [] { }
+}

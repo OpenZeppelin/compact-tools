@@ -1,0 +1,20 @@
+/**
+ * @module Gaps
+ * @description A module whose members are undocumented.
+ */
+export module Gaps {
+  export ledger _owner: Bytes<32>;
+
+  export enum Kind {
+    One
+  }
+
+  /**
+   * @description Detached by the line comment below it.
+   * @constraints k=6, rows=28
+   */
+  // The comment that breaks the attachment.
+  export circuit run(): [] {
+    _owner = default<Bytes<32>>;
+  }
+}

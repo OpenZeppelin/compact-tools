@@ -1,0 +1,10 @@
+/**
+ * @module Untagged
+ */
+export module Untagged {
+  /**
+   * The module has no @description, and neither has this circuit.
+   * @constraints k=6, rows=28
+   */
+  export circuit run(): [] { }
+}
