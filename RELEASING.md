@@ -82,7 +82,8 @@ breaking change. After that, only `prerelease` moves the counter. Running
 
 ## First-release order
 
-There's a one-step dependency chain across the five published packages:
+`compact-cli` depends on `compact-builder` and `compact-deployer`. The other
+published packages have no internal dependencies:
 
 ```text
 compact-cli (bin wrapper)
