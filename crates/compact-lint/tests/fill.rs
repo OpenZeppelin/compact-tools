@@ -243,7 +243,7 @@ fn a_missing_cache_entry_exits_two_and_names_the_flag() {
 }
 
 #[test]
-fn a_compile_writes_the_cache_the_builder_shares() {
+fn a_compile_writes_the_measurement_cache() {
     let directory = work("override");
     fill(directory.path(), &[]);
 

@@ -138,8 +138,7 @@ Each distinct source is compiled once per run, whatever the number of files it m
 ### The cache
 
 After a compile, the measurements are merged into `.circuit-info.json` beside the source,
-keyed by the source's file name. It is the file the TypeScript builder in
-`packages/builder` writes, in the same shape, so the two tools share it:
+keyed by the source's file name:
 
 ```json
 {
