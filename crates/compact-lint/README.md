@@ -179,7 +179,9 @@ Exit codes:
   never printed.
 
 Files are rewritten exactly as `fix` rewrites them: through a sibling `.tmp` file, keeping
-the line ending, and only the annotation's own line changes.
+the line ending, and only the annotation's own line changes. Before the first write every
+file is read again, and a file saved during the run makes it exit `2` with nothing
+written.
 
 ## Rules
 

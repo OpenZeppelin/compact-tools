@@ -99,11 +99,16 @@ fn expected(name: &str) -> String {
 
 /// Runs `fill-constraints` inside `directory`, pointed at the fake compiler.
 fn fill(directory: &Path, extra: &[&str]) -> Output {
+    fill_with_env(directory, extra, &[])
+}
+
+fn fill_with_env(directory: &Path, extra: &[&str], env: &[(&str, &str)]) -> Output {
     binary()
         .current_dir(directory)
         .args(["fill-constraints", "--compact-bin"])
         .arg(fake_compact())
         .args(extra)
+        .envs(env.iter().copied())
         .output()
         .expect("the binary ran")
 }
@@ -229,6 +234,27 @@ fn a_failed_compile_exits_two_with_the_output_tail() {
     assert!(stderr.contains("MockBroken.compact"), "{stderr}");
     assert!(stderr.contains("type mismatch"), "{stderr}");
     assert!(!stderr.contains('\u{1b}'), "the raw pty stream leaked");
+}
+
+#[test]
+fn a_source_saved_during_the_compile_is_not_overwritten() {
+    let directory = work("basic");
+    let file = directory.path().join("src/access/Ownable.compact");
+    let output = fill_with_env(
+        directory.path(),
+        &[],
+        &[(
+            "FAKE_COMPACT_EDIT",
+            file.to_str().expect("the path is UTF-8"),
+        )],
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let text = std::fs::read_to_string(&file).expect("the source is readable");
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(stderr.contains("Ownable.compact"), "{stderr}");
+    assert!(text.ends_with("// saved during the compile\n"), "{text}");
+    assert!(text.contains("@constraints k=?, rows=?"), "{text}");
 }
 
 #[test]

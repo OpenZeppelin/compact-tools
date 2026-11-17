@@ -19,6 +19,11 @@ source=$1
 output=$2
 name=$(basename "$source")
 
+# A save to the named file while the compile runs.
+if [ -n "$FAKE_COMPACT_EDIT" ]; then
+  echo "// saved during the compile" >> "$FAKE_COMPACT_EDIT"
+fi
+
 # name k rows proof
 case "$name" in
   MockOwnable.compact)

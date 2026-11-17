@@ -41,6 +41,8 @@ pub enum FillError {
         #[source]
         source: std::io::Error,
     },
+    #[error("refusing to write {path}: it changed during the run")]
+    Changed { path: PathBuf },
 }
 
 /// Everything the subcommand needs, already resolved from flags and env.
@@ -124,10 +126,37 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FillError> {
         files: 0,
         unmeasured: 0,
     };
-    for file in &work {
-        fill_file(file, &measured, &tag, options, &mut outcome)?;
+    let writes: Vec<(&Work, String)> = work
+        .iter()
+        .filter_map(|file| {
+            fill_file(file, &measured, &tag, &mut outcome).map(|fixed| (file, fixed))
+        })
+        .collect();
+
+    if !options.dry_run {
+        // A compile can run for minutes; every file is checked before the first write.
+        for (file, _) in &writes {
+            ensure_unchanged(file)?;
+        }
+        for (file, fixed) in &writes {
+            write_atomically(&file.path, fixed)?;
+        }
     }
     Ok(outcome)
+}
+
+fn ensure_unchanged(file: &Work) -> Result<(), FillError> {
+    let current = std::fs::read_to_string(&file.path).map_err(|source| FillError::Read {
+        path: file.path.clone(),
+        source,
+    })?;
+    if current == file.text {
+        Ok(())
+    } else {
+        Err(FillError::Changed {
+            path: file.path.clone(),
+        })
+    }
 }
 
 /// Compiles each distinct source once, or reads its cache under `--no-compile`.
@@ -180,20 +209,20 @@ fn measure_sources(
     Ok(measured)
 }
 
-/// Rewrites one file's annotations and records what changed and what could not be measured.
+/// Records what changed and what could not be measured, and returns the rewritten text
+/// when an annotation changed.
 fn fill_file(
     file: &Work,
     measured: &BTreeMap<PathBuf, BTreeMap<String, Constraints>>,
     tag: &crate::doc::Tag,
-    options: &Options,
     outcome: &mut Outcome,
-) -> Result<(), FillError> {
+) -> Option<String> {
     let source = match &file.source {
         Source::Found(source) => source,
         Source::Missing(tried) => {
             outcome.lines.push(unmeasurable_line(&file.path, tried));
             outcome.unmeasured += file.sites.len();
-            return Ok(());
+            return None;
         }
     };
     let constraints = measured.get(source);
@@ -234,16 +263,12 @@ fn fill_file(
     }
 
     if edits.is_empty() {
-        return Ok(());
+        return None;
     }
 
     outcome.filled += edits.len();
     outcome.files += 1;
-    if !options.dry_run {
-        let newline = newline_of(&file.text);
-        write_atomically(&file.path, &apply(&file.text, &edits, newline))?;
-    }
-    Ok(())
+    Some(apply(&file.text, &edits, newline_of(&file.text)))
 }
 
 fn unmeasured_line(path: &Path, site: &ConstraintSite, source: &Path) -> String {
