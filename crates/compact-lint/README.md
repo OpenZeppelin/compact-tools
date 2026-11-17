@@ -306,7 +306,7 @@ Exit codes:
 - `2` — usage, config, IO, compiler or missing-artifact error. A failed compile prints the
   source and the last 20 lines of the compiler's cleaned output; the raw pty stream is
   never printed. A compile that proves a circuit but prints no measurement for it is an
-  error too, and leaves the artifact as it was.
+  error too, and writes no `circuit-info.json`.
 
 Files are rewritten exactly as `fix` rewrites them: through a sibling `.tmp` file, keeping
 the line ending, and only the annotation's own line changes. Before the first write every

@@ -306,7 +306,7 @@ fn no_color_in_the_environment_still_measures() {
 }
 
 #[test]
-fn a_compile_with_no_progress_lines_exits_two_and_keeps_the_artifact() {
+fn a_compile_with_no_progress_lines_exits_two_without_writing_circuit_info() {
     let directory = work("no-compile");
     let artifact = directory
         .path()
