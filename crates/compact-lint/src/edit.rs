@@ -114,15 +114,15 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
     let margin = " ".repeat(indent);
     let gutter = format!("{margin} * ");
 
-    // An insertion needs a body, so a `/** … */` one-liner expands first.
-    let expands = lines.len() == 1
-        && ops
-            .iter()
-            .any(|op| matches!(op, DocOp::InsertTag { .. } | DocOp::InsertConstraints(_)));
-    let shift = usize::from(expands);
-    if expands {
-        lines = expand(&lines[0], &margin, &gutter);
-    }
+    // Insertions search the body only, so text on the `/**` or `*/` line moves first.
+    let inserts = ops
+        .iter()
+        .any(|op| matches!(op, DocOp::InsertTag { .. } | DocOp::InsertConstraints(_)));
+    let shift = if inserts {
+        isolate_delimiters(&mut lines, &margin, &gutter)
+    } else {
+        0
+    };
 
     // In-place ops address the original lines, so they run before any insertion moves
     // them; tags precede the constraints line, which anchors itself on `@description`.
@@ -164,6 +164,36 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
     }
 
     lines.join(newline)
+}
+
+/// Moves text sharing a line with `/**` or `*/` onto a body line of its own. Returns how
+/// many lines the original lines moved down.
+fn isolate_delimiters(lines: &mut Vec<String>, margin: &str, gutter: &str) -> usize {
+    if lines.len() == 1 {
+        *lines = expand(&lines[0], margin, gutter);
+        return 1;
+    }
+
+    let closer = lines.len() - 1;
+    if let Some(body) = lines[closer].trim_end().strip_suffix("*/") {
+        let text = content(body).to_owned();
+        if !text.is_empty() {
+            lines[closer] = format!("{gutter}{text}");
+            lines.push(format!("{margin} */"));
+        }
+    }
+
+    let text = lines[0]
+        .strip_prefix("/**")
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    if text.is_empty() {
+        return 0;
+    }
+    lines[0].truncate("/**".len());
+    lines.insert(1, format!("{gutter}{text}"));
+    1
 }
 
 /// Splits `/** text */` into the three-line form, keeping the comment's indentation.
@@ -420,6 +450,66 @@ mod tests {
         assert_eq!(
             rendered(doc, 2, &[tag("@module M", &[])]),
             "/**\n   * @module M\n   * @description Approved accounts.\n   */"
+        );
+    }
+
+    #[test]
+    fn a_tag_on_the_opening_line_keeps_its_continuation() {
+        let doc = "/** @description First line\n * continuation\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::InsertConstraints(
+                    "@constraints k=?, rows=?".to_owned()
+                )]
+            ),
+            "/**\n * @description First line\n * continuation\n *\n * @constraints k=?, rows=?\n */"
+        );
+    }
+
+    #[test]
+    fn prose_on_the_opening_line_is_adopted() {
+        let doc = "/** Approved accounts\n * @param {T} a - A.\n */";
+
+        assert_eq!(
+            rendered(doc, 0, &[tag("@description TODO", &[])]),
+            "/**\n * @description Approved accounts\n * @param {T} a - A.\n */"
+        );
+    }
+
+    #[test]
+    fn text_before_the_closer_moves_onto_its_own_line() {
+        let doc = "/**\n * @description Runs\n * and returns. */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::InsertConstraints(
+                    "@constraints k=?, rows=?".to_owned()
+                )]
+            ),
+            "/**\n * @description Runs\n * and returns.\n *\n * @constraints k=?, rows=?\n */"
+        );
+    }
+
+    #[test]
+    fn an_in_place_edit_follows_text_moved_off_the_opening_line() {
+        let doc = "/** @return x\n */";
+        let ops = [
+            DocOp::RenameTag {
+                line: 0,
+                from: "@return".to_owned(),
+                to: "@returns".to_owned(),
+            },
+            tag("@description TODO", &[]),
+        ];
+
+        assert_eq!(
+            rendered(doc, 0, &ops),
+            "/**\n * @description TODO\n * @returns x\n */"
         );
     }
 

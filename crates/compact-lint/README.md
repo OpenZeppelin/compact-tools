@@ -61,7 +61,7 @@ What each rule's fix does:
 | Rule | Fix |
 | --- | --- |
 | `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
-| `missing-tag` | Inserts each missing tag after the block of the last tag that precedes it in `kinds.<kind>.tags`, else at the top of the body. A missing `@description` adopts untagged prose that opens the body instead of writing a placeholder. A `/** … */` one-liner expands to the multi-line form first. |
+| `missing-tag` | Inserts each missing tag after the block of the last tag that precedes it in `kinds.<kind>.tags`, else at the top of the body. A missing `@description` adopts untagged prose that opens the body instead of writing a placeholder. Text on the `/**` or `*/` line moves onto its own body line first, so a `/** … */` one-liner expands to the multi-line form. |
 | `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. On a circuit with no doc comment, it inserts a doc comment holding only that line. |
 | `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
 | `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. A `*/` on the same line stays in place. |

@@ -179,6 +179,11 @@ fn a_module_name_rewrite_keeps_a_closing_delimiter_on_its_line() {
 }
 
 #[test]
+fn text_on_a_delimiter_line_moves_before_an_insertion() {
+    assert_case("delimiter-text");
+}
+
+#[test]
 fn a_crlf_source_keeps_its_line_endings() {
     assert_case("crlf");
 }
