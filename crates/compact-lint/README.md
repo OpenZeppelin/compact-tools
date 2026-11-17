@@ -41,7 +41,7 @@ summary goes to stderr, where `M` is the number of files checked.
 | `forbidden-tag` | A tag listed in `tags.forbid` is present. |
 | `module-name` | `@module <Name>` does not name the module it documents. |
 | `missing-constraints` | An exported non-pure circuit has no constraints tag. |
-| `constraints-format` | The constraints value is not `k=<n>, rows=<n>`. |
+| `constraints-format` | The constraints value is not `k=<n>, rows=<n>`, optionally followed by whitespace and a note such as `(zkir-v3)`. |
 | `constraints-placeholder` | `--strict` only: the constraints value still holds a `?`. |
 | `parse` | The file holds a syntax defect; the first one is reported and the doc rules are skipped for that file. |
 | `format` | `compact format --check` reported the file. |

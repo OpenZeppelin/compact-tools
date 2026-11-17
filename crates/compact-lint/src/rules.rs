@@ -237,7 +237,7 @@ fn check_constraints(
             display,
             position,
             RuleId::CONSTRAINTS_FORMAT,
-            format!("{tag} value `{value}` is not `k=<n>, rows=<n>`"),
+            format!("{tag} value `{value}` is not `k=<n>, rows=<n> [note]`"),
         ));
         return;
     };
@@ -252,11 +252,15 @@ fn check_constraints(
     }
 }
 
-/// Matches `k=<n|?>,<space>*rows=<n|?>`; returns whether either field is a `?` placeholder.
+/// Matches `k=<n|?>,<space>*rows=<n|?>`, optionally followed by whitespace and a note
+/// such as `(zkir-v3)`; returns whether either field is a `?` placeholder.
 fn parse_constraints(value: &str) -> Option<bool> {
     let rest = value.strip_prefix("k=")?;
     let (k, rest) = rest.split_once(',')?;
     let rows = rest.trim_start().strip_prefix("rows=")?;
+    let rows = rows
+        .split_once(char::is_whitespace)
+        .map_or(rows, |(rows, _note)| rows);
 
     let k_placeholder = is_placeholder(k)?;
     let rows_placeholder = is_placeholder(rows)?;
@@ -441,8 +445,15 @@ mod tests {
         assert_eq!(parse_constraints("k=10, rows=626"), Some(false));
         assert_eq!(parse_constraints("k=10,rows=626"), Some(false));
         assert_eq!(parse_constraints("k=?, rows=626"), Some(true));
-        assert_eq!(parse_constraints("k=10, rows=626 (approx)"), None);
         assert_eq!(parse_constraints("rows=626, k=10"), None);
+    }
+
+    #[test]
+    fn constraints_accept_a_note_after_whitespace() {
+        assert_eq!(parse_constraints("k=6, rows=34 (zkir-v3)"), Some(false));
+        assert_eq!(parse_constraints("k=?, rows=? (zkir-v3)"), Some(true));
+        assert_eq!(parse_constraints("k=6, rows=34(zkir-v3)"), None);
+        assert_eq!(parse_constraints("k=6 (zkir-v3), rows=34"), None);
     }
 
     #[test]
