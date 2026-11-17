@@ -1,6 +1,6 @@
 //! What a subcommand runs over: the resolved config plus the file list.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
@@ -67,19 +67,36 @@ pub fn resolve(
 }
 
 /// Discovery matches the exclude globs against paths relative to the config's
-/// directory, so a CLI path has to be anchored at `cwd` first: a bare `archive`
-/// given from a subdirectory would otherwise never match `contracts/archive/**`.
+/// directory, so a CLI path has to be anchored at `cwd` and normalized first: a bare
+/// `archive` given from a subdirectory, or `./archive`, would otherwise never match
+/// `contracts/archive/**`.
 fn absolute_paths(paths: &[PathBuf], cwd: &Path) -> Vec<PathBuf> {
     paths
         .iter()
-        .map(|path| {
-            if path.is_absolute() {
-                path.clone()
-            } else {
-                cwd.join(path)
-            }
-        })
+        .map(|path| normalize(&cwd.join(path)))
         .collect()
+}
+
+/// Resolves `.` and `..` lexically, so two spellings of one path compare equal.
+///
+/// A `..` with nothing to cancel is kept, so a relative path that climbs out of its own
+/// directory still points where it did.
+pub(crate) fn normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => match out.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    out.pop();
+                }
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                _ => out.push(Component::ParentDir),
+            },
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// Paths under the working directory print relative to it; anything else prints as is.
@@ -103,5 +120,28 @@ mod tests {
         let resolved = absolute_paths(&[PathBuf::from("/elsewhere/X.compact")], Path::new("/repo"));
 
         assert_eq!(resolved, vec![PathBuf::from("/elsewhere/X.compact")]);
+    }
+
+    #[test]
+    fn current_and_parent_components_are_resolved() {
+        let resolved = absolute_paths(
+            &[
+                PathBuf::from("./archive"),
+                PathBuf::from("../contracts/archive"),
+                PathBuf::from("/repo/contracts/./live/../archive"),
+            ],
+            Path::new("/repo/contracts"),
+        );
+
+        assert_eq!(resolved, vec![PathBuf::from("/repo/contracts/archive"); 3]);
+    }
+
+    #[test]
+    fn normalize_keeps_a_parent_it_cannot_cancel() {
+        assert_eq!(
+            normalize(Path::new("../mocks/./Ownable.compact")),
+            PathBuf::from("../mocks/Ownable.compact")
+        );
+        assert_eq!(normalize(Path::new("/..")), PathBuf::from("/"));
     }
 }

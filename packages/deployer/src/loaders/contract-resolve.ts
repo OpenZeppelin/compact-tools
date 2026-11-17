@@ -4,11 +4,12 @@ import { findArtifactEntry, resolveUnderRoot } from './artifact-path.ts';
 import { LoaderContext } from './context.ts';
 
 /**
- * Walks `compact.toml`'s `[contracts.X]` entries and returns the name
+ * Walks `compact.toml`'s exact `[contracts.X]` entries and returns the name
  * whose compiled `Contract` class is identity-equal to the one
  * imported by the caller's deploy script. Used by the curried
  * `runDeploy(Contract)(...)` form so the deploy script names the
- * contract once.
+ * contract once. Pattern keys have no name to walk, so a contract that
+ * only a pattern matches needs the string form.
  *
  * Throws when:
  * - no entry resolves to the same Contract class (the script likely
@@ -56,11 +57,16 @@ export async function resolveContractName(
       `Ambiguous Contract: matches ${matches.length} entries in compact.toml (${matches.join(', ')}). Use the string form: runDeploy({ contract: 'X' }).`,
     );
   }
+  const patterns = config.listPatterns();
+  const patternHint =
+    patterns.length > 0
+      ? ` Pattern keys (${patterns.join(', ')}) are not searched: add an exact [contracts.X] entry or use the string form, runDeploy({ contract: 'X' }).`
+      : '';
   const tail =
     tried.length > 0
       ? `\nSkipped: ${tried.map((t) => `${t.name} (${t.reason})`).join('; ')}`
       : '';
   throw new ConfigError(
-    `Contract class did not match any [contracts.X] entry in compact.toml. Make sure the import path resolves to the same artifact directory referenced by the TOML.${tail}`,
+    `Contract class did not match any [contracts.X] entry in compact.toml. Make sure the import path resolves to the same artifact directory referenced by the TOML.${patternHint}${tail}`,
   );
 }

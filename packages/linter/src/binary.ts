@@ -3,10 +3,11 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 /** npm `platform-arch` pair to the Rust target triple the release assets are named after. */
 const TARGETS: Record<string, string> = {
@@ -24,14 +25,38 @@ const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 /** Where the binary is fetched from and cached, and who is told about a download. */
 export interface ResolveOptions {
-  /** Root of the installed package; the cache lives under `.cache/` inside it. */
+  /** Root of the installed package, which carries the release's `checksums.txt`. */
   packageDir: string;
+  /** Per-user directory the binary is cached in, never inside the installed package. */
+  cacheDir: string;
   version: string;
   platform: string;
   arch: string;
+  /** Whether the host's C library is musl; every Linux asset links glibc. */
+  musl: boolean;
   env: Record<string, string | undefined>;
   /** Called once, before the first download of a run. */
   notify: (message: string) => void;
+}
+
+/**
+ * `compact-linter` under the user's cache: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME`
+ * or `~/.cache` elsewhere. The installed package can be read-only (Yarn Plug'n'Play, a
+ * global install).
+ */
+export function userCacheDir(
+  platform: string,
+  env: Record<string, string | undefined>,
+  home: string,
+): string {
+  if (platform === 'darwin') {
+    return join(home, 'Library', 'Caches', 'compact-linter');
+  }
+  const xdg = env.XDG_CACHE_HOME;
+  return join(
+    xdg && isAbsolute(xdg) ? xdg : join(home, '.cache'),
+    'compact-linter',
+  );
 }
 
 export function resolveTarget(platform: string, arch: string): string | null {
@@ -67,7 +92,7 @@ export function expectedChecksum(text: string, asset: string): string {
 }
 
 /**
- * Path to the `compact-lint` executable, downloading it into the package cache when missing.
+ * Path to the `compact-lint` executable, downloading it into the user cache when missing.
  *
  * Messages carry no `compact-lint:` prefix; the bin adds it.
  */
@@ -77,6 +102,12 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
     return override;
   }
 
+  if (options.platform === 'linux' && options.musl) {
+    throw new Error(
+      'no prebuilt binary for musl Linux, the release binaries need glibc; build from source with cargo (crates/compact-lint) and set COMPACT_LINT_BINARY',
+    );
+  }
+
   const target = resolveTarget(options.platform, options.arch);
   if (target === null) {
     throw new Error(
@@ -84,38 +115,50 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
     );
   }
 
-  const cacheDir = join(options.packageDir, '.cache');
-  const cached = join(cacheDir, `compact-lint-${options.version}-${target}`);
+  const cached = join(
+    options.cacheDir,
+    `compact-lint-${options.version}-${target}`,
+  );
   if (existsSync(cached)) {
     return cached;
   }
 
+  // Digests come from the package, never the release, so a replaced asset fails here.
   const asset = assetName(target);
+  const expected = expectedChecksum(
+    packagedChecksums(options.packageDir),
+    asset,
+  );
   const base =
     options.env.COMPACT_LINT_DOWNLOAD_BASE ??
     `${RELEASE_BASE}/compact-linter/v${options.version}`;
   options.notify(`downloading ${asset} (v${options.version})`);
 
-  const [binary, checksums] = await Promise.all([
-    fetchBytes(`${base}/${asset}`),
-    fetchText(`${base}/checksums.txt`),
-  ]);
-
-  const expected = expectedChecksum(checksums, asset);
+  const binary = await fetchBytes(`${base}/${asset}`);
   const actual = sha256(binary);
   if (actual !== expected) {
     throw new Error(
-      `checksum mismatch for ${asset}: expected ${expected}, got ${actual}; delete ${cached} and retry`,
+      `checksum mismatch for ${asset}: expected ${expected}, got ${actual}`,
     );
   }
 
   // Staged under a unique name so concurrent runs never read a half-written file.
-  mkdirSync(cacheDir, { recursive: true });
+  mkdirSync(options.cacheDir, { recursive: true });
   const staged = `${cached}.${randomUUID()}.tmp`;
   writeFileSync(staged, binary);
   chmodSync(staged, 0o755);
   renameSync(staged, cached);
   return cached;
+}
+
+function packagedChecksums(packageDir: string): string {
+  const path = join(packageDir, 'checksums.txt');
+  if (!existsSync(path)) {
+    throw new Error(
+      `${path} is missing, so a download cannot be verified; set COMPACT_LINT_BINARY`,
+    );
+  }
+  return readFileSync(path, 'utf8');
 }
 
 async function fetchOk(url: string): Promise<Response> {
@@ -136,8 +179,4 @@ async function fetchOk(url: string): Promise<Response> {
 
 async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await (await fetchOk(url)).arrayBuffer());
-}
-
-async function fetchText(url: string): Promise<string> {
-  return (await fetchOk(url)).text();
 }

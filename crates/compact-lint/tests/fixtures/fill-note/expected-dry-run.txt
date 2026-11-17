@@ -1,0 +1,16 @@
+src/access/Ownable.compact:16:6 fill  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `transferOwnership` measures k=13, rows=4871.
+
+    14 │    * @description Transfers ownership.
+    15 │    *
+  > 16 │    * @constraints k=9, rows=42 (zkir-v3)
+       │      ^^^^^^^^^^^^
+    17 │    */
+    18 │   export circuit transferOwnership(): [] { }
+
+  i Safe fix: Set @constraints to k=13, rows=4871
+
+    16    │ - ···*·@constraints·k=9,·rows=42·(zkir-v3)
+       16 │ + ···*·@constraints·k=13,·rows=4871
+

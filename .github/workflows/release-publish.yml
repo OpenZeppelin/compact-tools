@@ -1,6 +1,11 @@
-# Publishes to npm via OIDC trusted publishing, not a token.
-# Each package must list this repo and this workflow file as a Trusted
-# Publisher on npmjs.org, or the publish step fails to authenticate.
+# Publishes to npm over one of two auth paths, picked per run by probing the
+# registry. A package that already exists publishes via OIDC trusted
+# publishing, and must list this repo and this workflow file as a Trusted
+# Publisher on npmjs.org or the publish step fails to authenticate. A package
+# that does not exist yet publishes with the NPM_TOKEN secret, because a
+# Trusted Publisher can only be registered against a package the registry
+# already knows. Register it right after the first publish; every later
+# version then takes the OIDC path.
 name: Publish Release
 
 on:
@@ -41,6 +46,7 @@ jobs:
       name: ${{ steps.pkg.outputs.name }}
       version: ${{ steps.pkg.outputs.version }}
       dist_tag: ${{ steps.pkg.outputs.dist_tag }}
+      sha: ${{ steps.pkg.outputs.sha }}
 
     steps:
       # For pull_request runs: checkout the merge commit (deterministic view of
@@ -127,6 +133,7 @@ jobs:
             echo "name=$PKG"
             echo "version=$VERSION"
             echo "dist_tag=$DIST_TAG"
+            echo "sha=$(git rev-parse HEAD)"
           } >> $GITHUB_OUTPUT
           {
             echo "### Publishing"
@@ -135,6 +142,21 @@ jobs:
             echo "- npm dist-tag: $DIST_TAG"
             echo "- Trigger: $EVENT"
           } >> $GITHUB_STEP_SUMMARY
+
+      # A re-run from a later commit must not publish or attach assets under a tag
+      # that names another commit. An annotated tag is compared by its peeled commit.
+      - name: Check an existing tag
+        env:
+          TAG: ${{ steps.pkg.outputs.name }}/v${{ steps.pkg.outputs.version }}
+        run: |
+          PEELED=$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)
+          DIRECT=$(git ls-remote origin "refs/tags/$TAG" | cut -f1)
+          TAGGED=${PEELED:-$DIRECT}
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [[ -n "$TAGGED" && "$TAGGED" != "$HEAD_SHA" ]]; then
+            echo "::error::tag $TAG points to $TAGGED, not $HEAD_SHA; dispatch the run from the tag"
+            exit 1
+          fi
 
   # compact-linter ships a native binary per target, built on its own runner. The
   # npm package downloads them, so they must reach the GitHub release first.
@@ -166,10 +188,23 @@ jobs:
         with:
           egress-policy: audit
 
+      # Cargo runs build scripts, so no token stays in .git/config.
       - name: Check out target ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+          persist-credentials: false
+
+      # A dispatched branch can move after detect ran; build only the commit it checked.
+      - name: Check the commit
+        env:
+          DETECTED: ${{ needs.detect.outputs.sha }}
+        run: |
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [[ "$HEAD_SHA" != "$DETECTED" ]]; then
+            echo "::error::checked out $HEAD_SHA, but detect checked $DETECTED; re-run all jobs"
+            exit 1
+          fi
 
       - name: Install the pinned toolchain
         run: |
@@ -211,7 +246,7 @@ jobs:
 
     permissions:
       contents: write   # push the version tag and create the GitHub release
-      id-token: write   # mint the npm OIDC credential and the provenance statement
+      id-token: write   # mint the npm OIDC credential (existing packages) and the provenance statement (both paths)
 
     steps:
       - name: Get github app token
@@ -227,6 +262,17 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
           token: ${{ steps.gh-app-token.outputs.token }}
+
+      # A dispatched branch can move after detect ran; build only the commit it checked.
+      - name: Check the commit
+        env:
+          DETECTED: ${{ needs.detect.outputs.sha }}
+        run: |
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [[ "$HEAD_SHA" != "$DETECTED" ]]; then
+            echo "::error::checked out $HEAD_SHA, but detect checked $DETECTED; re-run all jobs"
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -290,7 +336,15 @@ jobs:
             NOTES="$TAG"
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+            # A re-run keeps the published assets and ships their checksums.
+            ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+            for NAME in checksums.txt $(cd dist && ls compact-lint-*); do
+              if ! grep -qx "$NAME" <<< "$ASSETS"; then
+                echo "::error::release $TAG has no $NAME; delete the release and re-run"
+                exit 1
+              fi
+            done
+            gh release download "$TAG" --pattern checksums.txt --dir dist --clobber
           else
             ARGS=()
             if [[ "$DIST_TAG" == "beta" ]]; then
@@ -302,7 +356,55 @@ jobs:
               "${ARGS[@]}"
           fi
 
-      - name: Publish to npm
+      # The launcher verifies a download against the digests it was published with,
+      # so a release asset replaced later fails the check.
+      - name: Add the checksums to the package
+        if: needs.detect.outputs.name == 'compact-linter'
+        run: cp dist/checksums.txt packages/linter/checksums.txt
+
+      # Anything but a clean 200 or 404 fails the run, so a flaky registry can
+      # never read as "new package" and quietly downgrade an existing package
+      # from OIDC to token auth.
+      - name: Check whether the package is already on npm
+        id: registry
+        env:
+          PKG: ${{ needs.detect.outputs.name }}
         run: |
-          cd packages/${{ needs.detect.outputs.dir }}
-          yarn npm publish --access public --provenance --tag ${{ needs.detect.outputs.dist_tag }}
+          if ! STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+              --retry 3 --retry-all-errors --max-time 30 \
+              "https://registry.npmjs.org/@openzeppelin%2f$PKG"); then
+            echo "::error::could not reach the npm registry to look up @openzeppelin/$PKG"
+            exit 1
+          fi
+          case "$STATUS" in
+            200) FIRST_PUBLISH=false ;;
+            404) FIRST_PUBLISH=true ;;
+            *)
+              echo "::error::unexpected HTTP $STATUS from the npm registry for @openzeppelin/$PKG"
+              exit 1
+              ;;
+          esac
+          echo "first_publish=$FIRST_PUBLISH" >> $GITHUB_OUTPUT
+
+      # The token is exported into the publish process only, never written to a
+      # .yarnrc.yml or an .npmrc that could be committed or cached.
+      - name: Publish to npm
+        env:
+          PKG: ${{ needs.detect.outputs.name }}
+          DIR: ${{ needs.detect.outputs.dir }}
+          DIST_TAG: ${{ needs.detect.outputs.dist_tag }}
+          FIRST_PUBLISH: ${{ steps.registry.outputs.first_publish }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd "packages/$DIR"
+          if [[ "$FIRST_PUBLISH" == "true" ]]; then
+            if [[ -z "$NPM_TOKEN" ]]; then
+              echo "::error::first publish of @openzeppelin/$PKG needs the NPM_TOKEN secret in the compact-npm-prod environment"
+              exit 1
+            fi
+            echo "first publish of @openzeppelin/$PKG: using NPM_TOKEN"
+            export YARN_NPM_AUTH_TOKEN="$NPM_TOKEN"
+          else
+            echo "existing package @openzeppelin/$PKG: OIDC"
+          fi
+          yarn npm publish --access public --provenance --tag "$DIST_TAG"

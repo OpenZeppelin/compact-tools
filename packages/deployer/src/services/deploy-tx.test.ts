@@ -7,7 +7,8 @@ import {
   createUnprovenDeployTx,
   submitTxAsync,
 } from '@midnight-ntwrk/midnight-js-contracts';
-import { makeContractExecutableRuntime } from '@midnight-ntwrk/midnight-js-types';
+import { makeLedger9ContractExecutableRuntime } from '@midnight-ntwrk/midnight-js-types';
+import { Transaction } from '@midnightntwrk/ledger-v9';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ContractConfig } from '../config/schema.ts';
 import {
@@ -46,14 +47,10 @@ vi.mock('@midnight-ntwrk/midnight-js-types', async (importOriginal) => {
     await importOriginal<typeof import('@midnight-ntwrk/midnight-js-types')>();
   return {
     ...actual,
-    makeContractExecutableRuntime: vi.fn(),
+    makeLedger9ContractExecutableRuntime: vi.fn(),
     exitResultOrError: <T>(exit: T): T => exit,
   };
 });
-
-vi.mock('@midnight-ntwrk/midnight-js-network-id', () => ({
-  getNetworkId: vi.fn(() => 'undeployed'),
-}));
 
 vi.mock('@midnight-ntwrk/midnight-js-utils', () => ({
   parseCoinPublicKeyToHex: vi.fn(() => '00'.repeat(32)),
@@ -267,14 +264,15 @@ describe('awaitDeployFinalization', () => {
 
 describe('persistDeployPrivateState', () => {
   function fakePrivateStateProvider() {
+    const set = vi.fn(async () => undefined);
     return {
-      setContractAddress: vi.fn(),
-      set: vi.fn(async () => undefined),
+      forContract: vi.fn(() => ({ set })),
+      set,
       setSigningKey: vi.fn(async () => undefined),
     };
   }
 
-  it('should scope the store to the address and store the signing key', async () => {
+  it('should store the signing key and leave the state store untouched', async () => {
     const privateStateProvider = fakePrivateStateProvider();
     await persistDeployPrivateState({
       providers: { privateStateProvider } as never,
@@ -282,17 +280,15 @@ describe('persistDeployPrivateState', () => {
       submitted: fakeSubmitted(),
     });
 
-    expect(privateStateProvider.setContractAddress).toHaveBeenCalledWith(
-      '0xCONTRACT',
-    );
     expect(privateStateProvider.setSigningKey).toHaveBeenCalledWith(
       '0xCONTRACT',
       'signing-key',
     );
+    expect(privateStateProvider.forContract).not.toHaveBeenCalled();
     expect(privateStateProvider.set).not.toHaveBeenCalled();
   });
 
-  it('should store the initial private state under the configured id', async () => {
+  it("should store the initial private state under the configured id in the address's view", async () => {
     const privateStateProvider = fakePrivateStateProvider();
     await persistDeployPrivateState({
       providers: { privateStateProvider } as never,
@@ -303,6 +299,7 @@ describe('persistDeployPrivateState', () => {
       submitted: fakeSubmitted(),
     });
 
+    expect(privateStateProvider.forContract).toHaveBeenCalledWith('0xCONTRACT');
     expect(privateStateProvider.set).toHaveBeenCalledWith('counter-state', {
       seeded: true,
     });
@@ -437,7 +434,7 @@ function stubConstructor(result = constructorResult()): void {
   vi.mocked(ContractExecutable.make).mockReturnValue({
     initialize: vi.fn(() => ({ tag: 'effect' })),
   } as never);
-  vi.mocked(makeContractExecutableRuntime).mockReturnValue({
+  vi.mocked(makeLedger9ContractExecutableRuntime).mockReturnValue({
     runPromiseExit: vi.fn(async () => result),
   } as never);
 }
@@ -454,6 +451,7 @@ function splitArgs(
     providers: {
       walletProvider: { getCoinPublicKey: () => 'bech32-coin-key' },
       zkConfigProvider: { tag: 'zk' },
+      config: { networkId: 'undeployed', ttlSeconds: 3600 },
     } as never,
     circuits,
   };
@@ -469,9 +467,12 @@ describe('submitDeploy on a pruned fragment', () => {
     expect(createUnprovenDeployTx).not.toHaveBeenCalled();
     expect(submitted.txId).toBe('0xTX');
     expect(submitted.address).toMatch(/^[0-9a-f]+$/);
-    const rendered = String(
-      vi.mocked(submitTxAsync).mock.calls[0]?.[1].unprovenTx,
-    );
+    // The pruned path seals the ledger tx into the handle `submitTxAsync`
+    // takes; decode it with the same ledger to inspect what was built.
+    const handle = vi.mocked(submitTxAsync).mock.calls[0]?.[1].unprovenTx;
+    const rendered = handle
+      ?.deserialize({ v9: Transaction })
+      .toString(false) as string;
     expect(rendered).toContain('Deploy ContractState');
     expect(rendered).not.toContain('MaintenanceUpdate');
     // The deploy tx carries fragment 0's operations and no others.

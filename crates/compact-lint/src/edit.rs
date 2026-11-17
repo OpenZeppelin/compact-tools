@@ -253,15 +253,15 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
     let margin = " ".repeat(indent);
     let gutter = format!("{margin} * ");
 
-    // An insertion needs a body, so a `/** … */` one-liner expands first.
-    let expands = lines.len() == 1
-        && ops
-            .iter()
-            .any(|op| matches!(op, DocOp::InsertTag { .. } | DocOp::InsertConstraints(_)));
-    let shift = usize::from(expands);
-    if expands {
-        lines = expand(&lines[0], &margin, &gutter);
-    }
+    // Insertions search the body only, so text on the `/**` or `*/` line moves first.
+    let inserts = ops
+        .iter()
+        .any(|op| matches!(op, DocOp::InsertTag { .. } | DocOp::InsertConstraints(_)));
+    let shift = if inserts {
+        isolate_delimiters(&mut lines, &margin, &gutter)
+    } else {
+        0
+    };
 
     // In-place ops address the original lines, so they run before any insertion moves
     // them; tags precede the constraints line, which anchors itself on `@description`.
@@ -318,6 +318,36 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
     }
 
     lines.join(newline)
+}
+
+/// Moves text sharing a line with `/**` or `*/` onto a body line of its own. Returns how
+/// many lines the original lines moved down.
+fn isolate_delimiters(lines: &mut Vec<String>, margin: &str, gutter: &str) -> usize {
+    if lines.len() == 1 {
+        *lines = expand(&lines[0], margin, gutter);
+        return 1;
+    }
+
+    let closer = lines.len() - 1;
+    if let Some(body) = lines[closer].trim_end().strip_suffix("*/") {
+        let text = content(body).to_owned();
+        if !text.is_empty() {
+            lines[closer] = format!("{gutter}{text}");
+            lines.push(format!("{margin} */"));
+        }
+    }
+
+    let text = lines[0]
+        .strip_prefix("/**")
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    if text.is_empty() {
+        return 0;
+    }
+    lines[0].truncate("/**".len());
+    lines.insert(1, format!("{gutter}{text}"));
+    1
 }
 
 /// Splits `/** text */` into the three-line form, keeping the comment's indentation.
@@ -519,8 +549,10 @@ fn set_tag_value(line: &str, tag: &str, value: &str) -> Option<String> {
     Some(format!("{}{tag} {value}{closer}", &line[..start]))
 }
 
-/// Replaces the first word after `@module`, keeping whatever follows it.
+/// Replaces the first word after `@module`, keeping whatever follows it. A `*/` closing
+/// the comment on the same line is never part of the value.
 fn set_module_name(line: &str, name: &str) -> Option<String> {
+    let (line, terminator) = split_terminator(line);
     let tag = "@module";
     let start = line.find(tag)?;
     let after = start + tag.len();
@@ -532,15 +564,33 @@ fn set_module_name(line: &str, name: &str) -> Option<String> {
         .find(char::is_whitespace)
         .map_or(value.len(), |index| index);
 
-    if value.is_empty() {
-        return Some(format!("{line} {name}"));
+    let renamed = if value.is_empty() {
+        format!("{line} {name}")
+    } else {
+        format!(
+            "{}{}{name}{}",
+            &line[..after],
+            &rest[..spaces],
+            &value[word..]
+        )
+    };
+
+    if terminator.is_empty() || terminator.starts_with(char::is_whitespace) {
+        Some(format!("{renamed}{terminator}"))
+    } else {
+        Some(format!("{renamed} {terminator}"))
     }
-    Some(format!(
-        "{}{}{name}{}",
-        &line[..after],
-        &rest[..spaces],
-        &value[word..]
-    ))
+}
+
+/// Splits a trailing `*/`, with the whitespace before it, off a comment line.
+fn split_terminator(line: &str) -> (&str, &str) {
+    match line.trim_end().strip_suffix("*/") {
+        Some(body) => {
+            let kept = body.trim_end();
+            (kept, &line[kept.len()..])
+        }
+        None => (line, ""),
+    }
 }
 
 #[cfg(test)]
@@ -738,6 +788,66 @@ mod tests {
     }
 
     #[test]
+    fn a_tag_on_the_opening_line_keeps_its_continuation() {
+        let doc = "/** @description First line\n * continuation\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::InsertConstraints(
+                    "@constraints k=?, rows=?".to_owned()
+                )]
+            ),
+            "/**\n * @description First line\n * continuation\n *\n * @constraints k=?, rows=?\n */"
+        );
+    }
+
+    #[test]
+    fn prose_on_the_opening_line_is_adopted() {
+        let doc = "/** Approved accounts\n * @param {T} a - A.\n */";
+
+        assert_eq!(
+            rendered(doc, 0, &[tag("@description TODO", &[])]),
+            "/**\n * @description Approved accounts\n * @param {T} a - A.\n */"
+        );
+    }
+
+    #[test]
+    fn text_before_the_closer_moves_onto_its_own_line() {
+        let doc = "/**\n * @description Runs\n * and returns. */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::InsertConstraints(
+                    "@constraints k=?, rows=?".to_owned()
+                )]
+            ),
+            "/**\n * @description Runs\n * and returns.\n *\n * @constraints k=?, rows=?\n */"
+        );
+    }
+
+    #[test]
+    fn an_in_place_edit_follows_text_moved_off_the_opening_line() {
+        let doc = "/** @return x\n */";
+        let ops = [
+            DocOp::RenameTag {
+                line: 0,
+                from: "@return".to_owned(),
+                to: "@returns".to_owned(),
+            },
+            tag("@description TODO", &[]),
+        ];
+
+        assert_eq!(
+            rendered(doc, 0, &ops),
+            "/**\n * @description TODO\n * @returns x\n */"
+        );
+    }
+
+    #[test]
     fn constraints_follow_the_description_and_its_continuation_lines() {
         let doc = "/**\n * @description Sends a coin\n * to the recipient.\n * @param {Coin} coin - The coin.\n */";
 
@@ -925,6 +1035,22 @@ mod tests {
                 }]
             ),
             "/** @constraints k=7, rows=74 */"
+        );
+    }
+
+    #[test]
+    fn a_module_rewrite_keeps_the_closing_delimiter() {
+        assert_eq!(
+            set_module_name("/** @module */", "Access"),
+            Some("/** @module Access */".to_owned())
+        );
+        assert_eq!(
+            set_module_name("/** @module Ownable*/", "Access"),
+            Some("/** @module Access */".to_owned())
+        );
+        assert_eq!(
+            set_module_name(" * @module Old */", "Access"),
+            Some(" * @module Access */".to_owned())
         );
     }
 

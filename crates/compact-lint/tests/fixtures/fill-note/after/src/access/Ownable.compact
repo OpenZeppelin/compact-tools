@@ -1,0 +1,19 @@
+/**
+ * @module Ownable
+ * @description Test fixture.
+ */
+export module Ownable {
+  /**
+   * @description Returns the owner.
+   *
+   * @constraints k=7, rows=74 (zkir-v3)
+   */
+  export circuit owner(): [] { }
+
+  /**
+   * @description Transfers ownership.
+   *
+   * @constraints k=13, rows=4871
+   */
+  export circuit transferOwnership(): [] { }
+}

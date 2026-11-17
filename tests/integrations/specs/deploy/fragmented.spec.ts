@@ -6,6 +6,10 @@ import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types';
 import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
 import { syncWallet } from '@midnight-ntwrk/testkit-js';
 import {
+  ContractState,
+  type SignatureVerifyingKey,
+} from '@midnightntwrk/ledger-v9';
+import {
   Deployer,
   type DeployResult,
 } from '@openzeppelin/compact-deployer/deployer';
@@ -16,10 +20,7 @@ import {
   harnessPrivateStateProvider,
 } from '../../_harness/deployer.ts';
 import { testLogger } from '../../_harness/logger.ts';
-import {
-  localNetworkConfig,
-  setupLocalNetwork,
-} from '../../_harness/network.ts';
+import { localNetworkConfig } from '../../_harness/network.ts';
 import {
   ARTIFACTS_DIR,
   CONFIG_PATH,
@@ -57,21 +58,25 @@ interface Snapshot {
   circuits: string[];
   verifierKeys: Map<string, Uint8Array>;
   counter: bigint;
-  committee: string[];
+  committee: SignatureVerifyingKey[];
   threshold: number;
 }
 
 function publicProvider(): PublicDataProvider {
   const env = localNetworkConfig();
-  return indexerPublicDataProvider(env.indexer, env.indexerWS);
+  return indexerPublicDataProvider({
+    queryURL: env.indexer,
+    subscriptionURL: env.indexerWS,
+  });
 }
 
 async function snapshotOf(
   provider: PublicDataProvider,
   address: string,
 ): Promise<Snapshot> {
-  const state = await provider.queryContractState(address);
-  if (state === null) throw new Error(`no contract state at ${address}`);
+  const read = await provider.queryContractState(address);
+  if (read === null) throw new Error(`no contract state at ${address}`);
+  const state = read.contractState.deserialize({ v9: ContractState });
   const circuits = state
     .operations()
     .map((op) => (typeof op === 'string' ? op : Buffer.from(op).toString()))
@@ -142,7 +147,6 @@ function tapSubmissions(
 
 /** The suite's funded wallet for this file, synced before every deploy. */
 async function fragmentWallet(): Promise<MidnightWalletProvider> {
-  setupLocalNetwork();
   const wallet = await getSharedPool().signerFor('DEPLOYER');
   await syncWallet(wallet.wallet);
   return wallet;

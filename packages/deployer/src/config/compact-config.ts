@@ -2,11 +2,21 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
+import type { ZodIssue } from 'zod';
 import { ConfigError } from '../errors.ts';
+import {
+  indexSources,
+  keyKind,
+  type ResolvedEntry,
+  resolveEntry,
+  type SourceIndex,
+  sourceOf,
+} from './patterns.ts';
 import {
   type CompactConfigData,
   type ContractConfig,
   configSchema,
+  contractSchema,
   type NetworkConfig,
   type WalletConfig,
 } from './schema.ts';
@@ -27,11 +37,19 @@ export class CompactConfig {
    */
   readonly rootDir: string;
   readonly #data: CompactConfigData;
+  /** Set when a directory pattern exists. */
+  readonly #sources: SourceIndex | undefined;
+  readonly #resolved = new Map<string, ContractConfig>();
 
-  private constructor(data: CompactConfigData, configPath: string) {
+  private constructor(
+    data: CompactConfigData,
+    configPath: string,
+    sources: SourceIndex | undefined,
+  ) {
     this.#data = data;
     this.configPath = configPath;
     this.rootDir = dirname(configPath);
+    this.#sources = sources;
   }
 
   /** Walks up from `cwd` Foundry-style when `explicitPath` is omitted. */
@@ -68,19 +86,24 @@ export class CompactConfig {
 
     const result = configSchema.safeParse(parsed);
     if (!result.success) {
-      const issues = result.error.issues
-        .map((i) => {
-          // A TOML document always parses to a table, so an issue can
-          // never land at the empty root path.
-          /* v8 ignore next */
-          const at = i.path.join('.') || '(root)';
-          return `  - ${at}: ${i.message}`;
-        })
-        .join('\n');
-      throw new ConfigError(`compact.toml validation failed:\n${issues}`);
+      throw new ConfigError(
+        `compact.toml validation failed:\n${formatIssues(result.error.issues)}`,
+      );
     }
 
-    return new CompactConfig(result.data, configPath);
+    const { contracts, profile } = result.data;
+    const sources =
+      profile.src_dir !== undefined &&
+      Object.keys(contracts).some((key) => keyKind(key) === 'directory')
+        ? await indexSources(resolve(dirname(configPath), profile.src_dir))
+        : undefined;
+    const config = new CompactConfig(result.data, configPath, sources);
+    // With a directory pattern, `configSchema` cannot check exact entries:
+    // whether the pattern applies needs the source index.
+    if (sources) {
+      for (const name of config.listContracts()) config.contract(name);
+    }
+    return config;
   }
 
   get defaultNetwork(): string | undefined {
@@ -103,16 +126,27 @@ export class CompactConfig {
     return Object.hasOwn(this.#data.networks, name);
   }
 
+  /** Whether any `[contracts]` key, exact or pattern, applies to `name`. */
   hasContract(name: string): boolean {
-    return Object.hasOwn(this.#data.contracts, name);
+    return this.#resolve(name) !== undefined;
   }
 
   listNetworks(): string[] {
     return Object.keys(this.#data.networks);
   }
 
+  /** Names with an exact `[contracts.X]` key. */
   listContracts(): string[] {
-    return Object.keys(this.#data.contracts);
+    return Object.keys(this.#data.contracts).filter(
+      (key) => keyKind(key) === 'exact',
+    );
+  }
+
+  /** Name and directory pattern keys, in file order. */
+  listPatterns(): string[] {
+    return Object.keys(this.#data.contracts).filter(
+      (key) => keyKind(key) !== 'exact',
+    );
   }
 
   network(name: string): NetworkConfig {
@@ -125,15 +159,54 @@ export class CompactConfig {
     return n;
   }
 
+  /** Merges every `[contracts]` key that applies to `name`, then validates the result. */
   contract(name: string): ContractConfig {
-    const c = this.#data.contracts[name];
-    if (!c) {
+    const cached = this.#resolved.get(name);
+    if (cached) return cached;
+    const resolved = this.#resolve(name);
+    if (!resolved) {
+      const available = [
+        ...this.listContracts(),
+        ...this.listPatterns().map((key) => `"${key}"`),
+      ].join(', ');
+      const noSource =
+        this.#sources && !this.#sources.byName.has(name)
+          ? ` (no ${name}.compact under ${this.#sources.dir})`
+          : '';
       throw new ConfigError(
-        `Contract "${name}" not defined. Available: ${this.listContracts().join(', ')}`,
+        `Contract "${name}" not defined. Available: ${available}${noSource}`,
       );
     }
-    return c;
+    const result = contractSchema.safeParse(resolved.entry);
+    if (!result.success) {
+      const keys = resolved.keys.map((key) => `"${key}"`).join(', ');
+      throw new ConfigError(
+        `compact.toml validation failed for contract "${name}" (from ${keys}):\n${formatIssues(result.error.issues, ['contracts', name])}`,
+      );
+    }
+    this.#resolved.set(name, result.data);
+    return result.data;
   }
+
+  #resolve(name: string): ResolvedEntry | undefined {
+    const source = this.#sources && sourceOf(name, this.#sources);
+    return resolveEntry(name, this.#data.contracts, source);
+  }
+}
+
+function formatIssues(
+  issues: readonly ZodIssue[],
+  prefix: readonly (string | number)[] = [],
+): string {
+  return issues
+    .map((i) => {
+      // A TOML document always parses to a table, so an issue can
+      // never land at the empty root path.
+      /* v8 ignore next */
+      const at = [...prefix, ...i.path].join('.') || '(root)';
+      return `  - ${at}: ${i.message}`;
+    })
+    .join('\n');
 }
 
 function resolveExplicit(p: string, cwd: string): string {

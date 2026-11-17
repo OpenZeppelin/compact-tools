@@ -177,11 +177,11 @@ What each rule's fix does:
 | Rule | Fix |
 | --- | --- |
 | `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, a headed entry becomes a `@tag Heading:` line with `fix.placeholder` under it, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
-| `missing-tag` | Inserts each missing entry after the block of the last entry that precedes it in the template order, optional ones included, else at the top of the body. A headed entry goes in as a two-line section block; the predecessor's block is found by heading, not by bare tag. A missing bare `@description` adopts untagged prose that opens the body instead of writing a placeholder. A `/** … */` one-liner expands to the multi-line form first. |
+| `missing-tag` | Inserts each missing entry after the block of the last entry that precedes it in the template order, optional ones included, else at the top of the body. A headed entry goes in as a two-line section block; the predecessor's block is found by heading, not by bare tag. A missing bare `@description` adopts untagged prose that opens the body instead of writing a placeholder. Text on the `/**` or `*/` line moves onto its own body line first, so a `/** … */` one-liner expands to the multi-line form. |
 | `tag-order` | Splits the comment body into one block per tag, sorts the blocks matching a listed entry into config order, and writes them back into the same slots. Prose before the first tag, unlisted blocks and the blank lines separating slots stay put, so a second run reports nothing. |
-| `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. |
+| `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. On a circuit with no doc comment, it inserts a doc comment holding only that line. Nothing is inserted when a `tags.rename` entry renames another tag in the comment to the constraints tag, and a circuit never gets the constraints tag twice, even when `kinds.circuit.tags` lists it. |
 | `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
-| `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. |
+| `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. A `*/` on the same line stays in place. |
 
 Not fixed:
 
@@ -193,6 +193,9 @@ Not fixed:
 - `parse` — the file does not parse, so no rewrite is trustworthy.
 - `format` — that is `compact format`'s job.
 - A forbidden tag with no `tags.rename` entry stays a `check` finding.
+
+Before writing, `fix` parses the rewritten file and refuses it, exiting `2`, when its
+declarations differ from the original's: a doc edit never should change them.
 
 Lines are never reflowed, and only `tag-order` moves them, whole blocks at a time. Edits
 are computed against the original
@@ -224,6 +227,9 @@ Scope is the annotations that already exist: every exported non-pure circuit who
 comment carries `constraints.tag`, whatever its value. A circuit with no annotation is
 `fix`'s job and is left alone here. A file holding a parse defect is skipped, so `check`
 stays the place a syntax error is reported.
+
+A note after the value, such as `(zkir-v3)`, stays while the measurement matches and is
+dropped when the value changes.
 
 Each filled value is an `info` diagnostic carrying the annotation's before and after:
 
@@ -297,10 +303,13 @@ Exit codes:
 - `1` — at least one circuit is unmeasured or unmeasurable.
 - `2` — usage, config, IO, compiler or missing-artifact error. A failed compile prints the
   source and the last 20 lines of the compiler's cleaned output; the raw pty stream is
-  never printed.
+  never printed. A compile that proves a circuit but prints no measurement for it is an
+  error too, and leaves the artifact as it was.
 
 Files are rewritten exactly as `fix` rewrites them: through a sibling `.tmp` file, keeping
-the line ending, and only the annotation's own line changes.
+the line ending, and only the annotation's own line changes. Before the first write every
+file is read again, and a file saved during the run makes it exit `2` with nothing
+written.
 
 ## Rules
 
@@ -313,7 +322,7 @@ the line ending, and only the annotation's own line changes.
 | `forbidden-tag` | A tag listed in `tags.forbid` is present. |
 | `module-name` | `@module <Name>` does not name the module it documents. |
 | `missing-constraints` | An exported non-pure circuit has no constraints tag. |
-| `constraints-format` | The constraints value is not `k=<n>, rows=<n>`. |
+| `constraints-format` | The constraints value is not `k=<n>, rows=<n>`, optionally followed by whitespace and a note such as `(zkir-v3)`. |
 | `constraints-placeholder` | The constraints value still holds a `?`. |
 | `constraints-unmeasured` | `fill-constraints` only: the source compiled but measured no circuit of that name. |
 | `constraints-unmeasurable` | `fill-constraints` only: no measurement source resolves for the file. |
@@ -328,8 +337,8 @@ Rule detail:
 - **Export.** "Exported" means the declaration carries the `export` token itself. A
   non-exported circuit inside an exported module is not exported.
 - **Constraints.** The rule applies to exported non-pure circuits only, and that is
-  fixed, not configurable. A missing doc comment reports as `missing-doc`, not
-  `missing-constraints`.
+  fixed, not configurable. A missing doc comment reports as `missing-doc` when the
+  kind's `docs` policy requires one, and as `missing-constraints` when it does not.
 - **`module-name`.** The documented name is the first word of the `@module` value,
   without its generic arguments or trailing punctuation, so `@module Signer<T>` matches
   `module Signer` and `@module Utils.` matches `module Utils`.

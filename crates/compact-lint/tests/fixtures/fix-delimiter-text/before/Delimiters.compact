@@ -1,0 +1,14 @@
+/** @description First line
+ * continuation
+ */
+export circuit run(): [] { }
+
+/** Approved accounts
+ * across every shard.
+ */
+export ledger accounts: Uint<64>;
+
+/**
+ * @description Sends
+ * and returns. */
+export circuit send(): [] { }

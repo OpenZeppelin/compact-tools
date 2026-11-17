@@ -52,6 +52,19 @@ pub struct ConstraintSite {
     pub doc: DocRef,
 }
 
+impl ConstraintSite {
+    /// The value without a trailing note such as `(zkir-v3)`.
+    #[must_use]
+    pub fn measurement(&self) -> &str {
+        let Some(rows) = self.value.find("rows=") else {
+            return &self.value;
+        };
+        self.value[rows..]
+            .find(char::is_whitespace)
+            .map_or(&self.value, |end| &self.value[..rows + end])
+    }
+}
+
 /// One rule violation, carrying what `check` prints and what `fix` needs to repair it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Issue {
@@ -121,6 +134,18 @@ pub enum Issue {
         tag: Tag,
         doc: DocRef,
     },
+    /// `missing-constraints` on a circuit with no doc comment, where the docs policy
+    /// does not ask for one.
+    UndocumentedConstraints {
+        position: Position,
+        end: Position,
+        subject: String,
+        tag: Tag,
+        /// Byte offset of the declaration's first token.
+        offset: usize,
+        /// The declaration's start column, reused as the comment's indentation.
+        indent: usize,
+    },
     ConstraintsFormat {
         position: Position,
         tag: Tag,
@@ -145,6 +170,7 @@ impl Issue {
             | Self::ForbiddenTag { position, .. }
             | Self::ModuleName { position, .. }
             | Self::MissingConstraints { position, .. }
+            | Self::UndocumentedConstraints { position, .. }
             | Self::ConstraintsFormat { position, .. }
             | Self::ConstraintsPlaceholder { position, .. } => *position,
         }
@@ -160,7 +186,9 @@ impl Issue {
             Self::TagOrder { .. } => RuleId::TAG_ORDER,
             Self::ForbiddenTag { .. } => RuleId::FORBIDDEN_TAG,
             Self::ModuleName { .. } => RuleId::MODULE_NAME,
-            Self::MissingConstraints { .. } => RuleId::MISSING_CONSTRAINTS,
+            Self::MissingConstraints { .. } | Self::UndocumentedConstraints { .. } => {
+                RuleId::MISSING_CONSTRAINTS
+            }
             Self::ConstraintsFormat { .. } => RuleId::CONSTRAINTS_FORMAT,
             Self::ConstraintsPlaceholder { .. } => RuleId::CONSTRAINTS_PLACEHOLDER,
         }
@@ -196,12 +224,15 @@ impl Issue {
                 "`{previous}` comes before `{entry}`; the template orders {} first",
                 entry.label()
             ),
+            Self::UndocumentedConstraints { subject, tag, .. } => {
+                format!("{subject} has no doc comment, so no {tag}")
+            }
             Self::ForbiddenTag { tag, .. } => format!("forbidden tag {tag}"),
             Self::ModuleName {
                 documented, name, ..
             } => format!("{MODULE_TAG} names `{documented}`, but the module is `{name}`"),
             Self::ConstraintsFormat { tag, value, .. } => {
-                format!("{tag} value `{value}` is not `k=<n>, rows=<n>`")
+                format!("{tag} value `{value}` is not `k=<n>, rows=<n> [note]`")
             }
             Self::ConstraintsPlaceholder { tag, value, .. } => {
                 format!("{tag} value `{value}` still holds a placeholder")
@@ -241,7 +272,12 @@ impl Issue {
             Self::MissingConstraints { tag, .. } => format!(
                 "Run compact-lint fill-constraints after adding the tag, or add it as {tag} k=?, rows=? to fill later."
             ),
-            Self::ConstraintsFormat { .. } => "Write the value as k=<n>, rows=<n>.".to_owned(),
+            Self::UndocumentedConstraints { tag, .. } => {
+                format!("Add a doc comment holding {tag} k=?, rows=?, or run compact-lint fix.")
+            }
+            Self::ConstraintsFormat { .. } => {
+                "Write the value as k=<n>, rows=<n>, optionally followed by a note.".to_owned()
+            }
             Self::ConstraintsPlaceholder { .. } => {
                 "Run compact-lint fill-constraints to measure it.".to_owned()
             }
@@ -255,7 +291,8 @@ impl Issue {
             Self::Parse { position, end, .. }
             | Self::MissingDoc { position, end, .. }
             | Self::MissingTag { position, end, .. }
-            | Self::MissingConstraints { position, end, .. } => Span::new(*position, *end),
+            | Self::MissingConstraints { position, end, .. }
+            | Self::UndocumentedConstraints { position, end, .. } => Span::new(*position, *end),
             Self::ForbiddenTag { position, tag, .. }
             | Self::ConstraintsFormat { position, tag, .. }
             | Self::ConstraintsPlaceholder { position, tag, .. } => {
@@ -293,6 +330,9 @@ fn heading_width(tag: &Tag, heading: Option<&str>) -> usize {
         None => tag.as_str().len(),
     }
 }
+
+/// Each declaration's kind and name, in source order.
+pub type Outline = Vec<(DeclKind, Option<String>)>;
 
 /// A reusable parser plus the rules that run over its trees.
 pub struct Linter {
@@ -372,6 +412,27 @@ impl Linter {
             .filter_map(|declaration| constraint_site(declaration, &config.constraints.tag))
             .collect())
     }
+
+    /// The declarations `source` parses into, or `None` when it holds a parse defect.
+    /// # Errors
+    /// Returns an error when tree-sitter produces no tree for `source`.
+    pub fn outline(&mut self, display: &Path, source: &str) -> Result<Option<Outline>, LintError> {
+        let tree = self
+            .parser
+            .parse(source, None)
+            .ok_or_else(|| LintError::NoTree(display.to_owned()))?;
+        let root = tree.root_node();
+
+        if first_defect(root).is_some() {
+            return Ok(None);
+        }
+        Ok(Some(
+            declarations(root, source)
+                .into_iter()
+                .map(|declaration| (declaration.kind, declaration.name))
+                .collect(),
+        ))
+    }
 }
 
 /// The first `ERROR` or `MISSING` node in document order.
@@ -414,6 +475,15 @@ fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Ve
                 offset: declaration.offset,
                 indent: declaration.position.column - 1,
                 constraints: takes_constraints(declaration),
+            });
+        } else if takes_constraints(declaration) {
+            issues.push(Issue::UndocumentedConstraints {
+                position: declaration.position,
+                end: declaration.end,
+                subject: subject(declaration),
+                tag: config.constraints.tag.clone(),
+                offset: declaration.offset,
+                indent: declaration.position.column - 1,
             });
         }
         return;
@@ -641,11 +711,15 @@ fn value_of(occurrence: &crate::doc::TagOccurrence) -> &str {
     occurrence.value.lines().next().unwrap_or_default().trim()
 }
 
-/// Matches `k=<n|?>,<space>*rows=<n|?>`; returns whether either field is a `?` placeholder.
+/// Matches `k=<n|?>,<space>*rows=<n|?>`, optionally followed by whitespace and a note
+/// such as `(zkir-v3)`; returns whether either field is a `?` placeholder.
 fn parse_constraints(value: &str) -> Option<bool> {
     let rest = value.strip_prefix("k=")?;
     let (k, rest) = rest.split_once(',')?;
     let rows = rest.trim_start().strip_prefix("rows=")?;
+    let rows = rows
+        .split_once(char::is_whitespace)
+        .map_or(rows, |(rows, _note)| rows);
 
     let k_placeholder = is_placeholder(k)?;
     let rows_placeholder = is_placeholder(rows)?;
@@ -772,14 +846,29 @@ mod tests {
 
     #[test]
     fn the_constraints_rule_survives_docs_none() {
-        let source =
+        let documented =
             "/** @description Bumps. */\nexport circuit bump(): [] { count.increment(1); }\n";
+        let undocumented = "export circuit bump(): [] { count.increment(1); }\n";
         let mut config = circuit_config();
         config.kinds.circuit.docs = DocsPolicy::None;
 
         assert_eq!(
-            reported(source, &config),
+            reported(documented, &config),
             ["2:1 missing-constraints Circuit `bump` doc comment has no @constraints."]
+        );
+        assert_eq!(
+            reported(undocumented, &config),
+            ["1:1 missing-constraints Circuit `bump` has no doc comment, so no @constraints."]
+        );
+    }
+
+    #[test]
+    fn an_undocumented_circuit_reports_only_missing_doc_when_docs_are_required() {
+        let source = "export circuit bump(): [] { count.increment(1); }\n";
+
+        assert_eq!(
+            reported(source, &circuit_config()),
+            ["1:1 missing-doc Circuit `bump` has no doc comment."]
         );
     }
 
@@ -955,8 +1044,15 @@ mod tests {
         assert_eq!(parse_constraints("k=10, rows=626"), Some(false));
         assert_eq!(parse_constraints("k=10,rows=626"), Some(false));
         assert_eq!(parse_constraints("k=?, rows=626"), Some(true));
-        assert_eq!(parse_constraints("k=10, rows=626 (approx)"), None);
         assert_eq!(parse_constraints("rows=626, k=10"), None);
+    }
+
+    #[test]
+    fn constraints_accept_a_note_after_whitespace() {
+        assert_eq!(parse_constraints("k=6, rows=34 (zkir-v3)"), Some(false));
+        assert_eq!(parse_constraints("k=?, rows=? (zkir-v3)"), Some(true));
+        assert_eq!(parse_constraints("k=6, rows=34(zkir-v3)"), None);
+        assert_eq!(parse_constraints("k=6 (zkir-v3), rows=34"), None);
     }
 
     #[test]

@@ -1,0 +1,10 @@
+Undocumented.compact:5:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` has no doc comment, so no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      5 │ + ··/**
+      6 │ + ···*·@constraints·k=?,·rows=?
+      7 │ + ···*/
+

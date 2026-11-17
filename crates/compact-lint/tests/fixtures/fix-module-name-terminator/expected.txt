@@ -1,0 +1,27 @@
+Terminators.compact:1:5 lint/module-name  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names ``, but the module is `Empty`.
+
+  i Applied fix: Set @module to `Empty`
+
+    1   │ - /**·@module·*/
+      1 │ + /**·@module·Empty·*/
+
+Terminators.compact:5:5 lint/module-name  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Old`, but the module is `Glued`.
+
+  i Applied fix: Set @module to `Glued`
+
+    5   │ - /**·@module·Old*/
+      5 │ + /**·@module·Glued·*/
+
+Terminators.compact:10:4 lint/module-name  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Old`, but the module is `Spaced`.
+
+  i Applied fix: Set @module to `Spaced`
+
+    10    │ - ·*·@module·Old·*/
+       10 │ + ·*·@module·Spaced·*/
+

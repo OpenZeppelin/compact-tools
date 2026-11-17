@@ -19,6 +19,11 @@ source=$1
 output=$2
 name=$(basename "$source")
 
+# A save to the named file while the compile runs.
+if [ -n "$FAKE_COMPACT_EDIT" ]; then
+  echo "// saved during the compile" >> "$FAKE_COMPACT_EDIT"
+fi
+
 # name k rows proof
 case "$name" in
   MockOwnable.compact)
@@ -50,7 +55,14 @@ esac
 count=$(echo "$table" | wc -l | tr -d ' ')
 echo "Compiling $count circuits:"
 
-echo "$table" | while read -r circuit k rows proof; do
+# Like compiler 0.34.0, print no progress lines when `NO_COLOR` is set at all.
+if [ -n "${NO_COLOR+set}" ] || [ -n "$FAKE_COMPACT_SILENT" ]; then
+  table_lines=""
+else
+  table_lines=$table
+fi
+
+echo "$table_lines" | while read -r circuit k rows proof; do
   [ -n "$circuit" ] || continue
   # The real compiler redraws the line, so the same circuit appears without rows first.
   printf '  circuit "%s" (k=%s)\n' "$circuit" "$k"

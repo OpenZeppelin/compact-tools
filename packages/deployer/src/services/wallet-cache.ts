@@ -18,15 +18,19 @@ import {
   WalletSaveStateProvider,
 } from '@midnight-ntwrk/testkit-js';
 import {
+  type DustKeysByEpoch,
   DustWallet,
   type DustWalletAPI,
-} from '@midnight-ntwrk/wallet-sdk-dust-wallet';
-import type { ShieldedWalletAPI } from '@midnight-ntwrk/wallet-sdk-shielded';
+} from '@midnightntwrk/wallet-sdk-dust-wallet';
+import type {
+  ShieldedKeysByEpoch,
+  ShieldedWalletAPI,
+} from '@midnightntwrk/wallet-sdk-shielded';
 import {
   type UnshieldedKeystore,
   UnshieldedWallet,
   type UnshieldedWalletAPI,
-} from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+} from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
 import { WalletError } from '../errors.ts';
 import { formatError } from './error-format.ts';
@@ -159,7 +163,7 @@ export class WalletCache {
     config: ConfigShape;
     seed: Uint8Array;
     skipCache: boolean;
-  }): Promise<ShieldedWalletAPI> {
+  }): Promise<ShieldedWalletAPI<ShieldedKeysByEpoch>> {
     const { config, seed, skipCache } = args;
     const logger = this.#logger;
     const cacheFilePath = this.shieldedCacheFilePath;
@@ -203,7 +207,7 @@ export class WalletCache {
     seed: Uint8Array;
     dustOptions: DustWalletOptions;
     skipCache: boolean;
-  }): Promise<DustWalletAPI> {
+  }): Promise<DustWalletAPI<DustKeysByEpoch>> {
     const { config, seed, dustOptions, skipCache } = args;
     const logger = this.#logger;
     const cacheFilePath = this.dustCacheFilePath;

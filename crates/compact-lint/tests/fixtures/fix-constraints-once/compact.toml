@@ -1,0 +1,9 @@
+[lint]
+include = ["**/*.compact"]
+
+[lint.tags]
+forbid = ["@circuitInfo"]
+rename = { "@circuitInfo" = "@constraints" }
+
+[lint.kinds.circuit]
+tags = ["@description", "@constraints"]

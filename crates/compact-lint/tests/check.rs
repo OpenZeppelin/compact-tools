@@ -263,8 +263,9 @@ fn an_explicit_path_replaces_the_include_globs() {
 
 #[test]
 fn an_exclude_glob_applies_to_an_explicit_path_given_from_a_subdirectory() {
+    let contracts = case("exclude-explicit-dir").join("contracts");
     let output = binary()
-        .current_dir(case("exclude-explicit-dir").join("contracts"))
+        .current_dir(&contracts)
         .args(["check", "--no-format", "--colors=off", "live", "archive"])
         .output()
         .expect("the binary ran");
@@ -274,6 +275,70 @@ fn an_exclude_glob_applies_to_an_explicit_path_given_from_a_subdirectory() {
         expected("exclude-explicit-dir", "expected.txt")
     );
     assert_eq!(output.status.code(), Some(EXIT_FINDINGS));
+
+    for (directory, path) in [
+        (contracts.clone(), "./archive"),
+        (contracts.join("live"), "../archive"),
+    ] {
+        let output = binary()
+            .current_dir(&directory)
+            .args(["check", "--no-format", "--colors=off", path])
+            .output()
+            .expect("the binary ran");
+
+        assert_eq!(
+            String::from_utf8(output.stdout).expect("the report is UTF-8"),
+            "",
+            "{path} from {}",
+            directory.display()
+        );
+        assert_eq!(output.status.code(), Some(0), "{path}");
+    }
+}
+
+#[test]
+fn two_spellings_of_one_file_count_once() {
+    let output = binary()
+        .current_dir(case("exclude-explicit-dir").join("contracts"))
+        .args([
+            "check",
+            "--no-format",
+            "--colors=off",
+            "live/Live.compact",
+            "../contracts/live/Live.compact",
+        ])
+        .output()
+        .expect("the binary ran");
+
+    let stderr = String::from_utf8(output.stderr).expect("the summary is UTF-8");
+    assert_eq!(
+        without_duration(&stderr),
+        "Checked 1 file in <duration>. No fixes applied.\nFound 1 error.\n"
+    );
+}
+
+#[test]
+fn a_file_outside_the_working_directory_prints_its_absolute_path() {
+    let contracts = case("exclude-explicit-dir").join("contracts");
+    let output = binary()
+        .current_dir(contracts.join("archive"))
+        .args([
+            "check",
+            "--no-format",
+            "--colors=off",
+            "--reporter=concise",
+            "../live",
+        ])
+        .output()
+        .expect("the binary ran");
+
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("the report is UTF-8"),
+        format!(
+            "× {}:6:3: lint/missing-doc: Ledger `_owner` has no doc comment.\n",
+            contracts.join("live/Live.compact").display()
+        )
+    );
 }
 
 #[test]

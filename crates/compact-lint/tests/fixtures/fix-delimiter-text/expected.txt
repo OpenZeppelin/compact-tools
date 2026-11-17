@@ -1,0 +1,35 @@
+Delimiters.compact:4:1 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `run` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+    1   │ - /**·@description·First·line
+      1 │ + /**
+      2 │ + ·*·@description·First·line
+    2 3 │    * continuation
+      4 │ + ·*
+      5 │ + ·*·@constraints·k=?,·rows=?
+
+Delimiters.compact:9:1 lint/missing-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `accounts` doc comment has no @description.
+
+  i Applied fix: Insert @description
+
+    6   │ - /**·Approved·accounts
+      6 │ + /**
+      7 │ + ·*·@description·Approved·accounts
+
+Delimiters.compact:14:1 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `send` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+    13    │ - ·*·and·returns.·*/
+       13 │ + ·*·and·returns.
+       14 │ + ·*
+       15 │ + ·*·@constraints·k=?,·rows=?
+       16 │ + ·*/
+

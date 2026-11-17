@@ -19,6 +19,7 @@ import {
   resolveBinary,
   resolveTarget,
   sha256,
+  userCacheDir,
 } from '../src/binary.ts';
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -68,14 +69,21 @@ function checksumsFor(asset: string, body: string): string {
 let install: string;
 let notices: string[];
 
+/** The `checksums.txt` the installed package was published with. */
+function packageChecksums(body: string): void {
+  writeFileSync(join(install, 'checksums.txt'), checksumsFor(ASSET, body));
+}
+
 function options(
   overrides: Partial<Parameters<typeof resolveBinary>[0]> = {},
 ): Parameters<typeof resolveBinary>[0] {
   return {
     packageDir: install,
+    cacheDir: join(install, 'cache'),
     version: '0.1.0',
     platform: 'linux',
     arch: 'x64',
+    musl: false,
     env: {},
     notify: (message) => notices.push(message),
     ...overrides,
@@ -102,6 +110,29 @@ describe('resolveTarget', () => {
   it('returns null for a platform with no release asset', () => {
     expect(resolveTarget('win32', 'x64')).toBeNull();
     expect(resolveTarget('linux', 'ia32')).toBeNull();
+  });
+});
+
+describe('userCacheDir', () => {
+  it('uses XDG_CACHE_HOME on linux when it is absolute', () => {
+    expect(userCacheDir('linux', { XDG_CACHE_HOME: '/xdg' }, '/home/dev')).toBe(
+      '/xdg/compact-linter',
+    );
+  });
+
+  it('falls back to ~/.cache on linux', () => {
+    expect(userCacheDir('linux', {}, '/home/dev')).toBe(
+      '/home/dev/.cache/compact-linter',
+    );
+    expect(
+      userCacheDir('linux', { XDG_CACHE_HOME: 'relative' }, '/home/dev'),
+    ).toBe('/home/dev/.cache/compact-linter');
+  });
+
+  it('uses ~/Library/Caches on macos', () => {
+    expect(
+      userCacheDir('darwin', { XDG_CACHE_HOME: '/xdg' }, '/Users/dev'),
+    ).toBe('/Users/dev/Library/Caches/compact-linter');
   });
 });
 
@@ -145,6 +176,22 @@ describe('resolveBinary', () => {
     );
   });
 
+  it('reports a musl linux host', async () => {
+    await expect(resolveBinary(options({ musl: true }))).rejects.toThrow(
+      'no prebuilt binary for musl Linux, the release binaries need glibc; build from source with cargo (crates/compact-lint) and set COMPACT_LINT_BINARY',
+    );
+  });
+
+  it('runs COMPACT_LINT_BINARY on a musl host', async () => {
+    const binary = await resolveBinary(
+      options({
+        musl: true,
+        env: { COMPACT_LINT_BINARY: '/opt/compact-lint' },
+      }),
+    );
+    expect(binary).toBe('/opt/compact-lint');
+  });
+
   it('returns COMPACT_LINT_BINARY without contacting the origin', async () => {
     const origin = await startOrigin({});
     try {
@@ -165,25 +212,20 @@ describe('resolveBinary', () => {
   });
 
   it('downloads, verifies and caches the release asset', async () => {
-    const origin = await startOrigin({
-      [ASSET]: FAKE_BINARY,
-      'checksums.txt': checksumsFor(ASSET, FAKE_BINARY),
-    });
+    packageChecksums(FAKE_BINARY);
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const binary = await resolveBinary(
         options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
       );
       expect(binary).toBe(
-        join(install, '.cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu'),
+        join(install, 'cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu'),
       );
       expect(statSync(binary).mode & 0o777).toBe(0o755);
       expect(spawnSync(binary, ['check'], { encoding: 'utf8' }).stdout).toBe(
         'fake-lint check\n',
       );
-      expect(origin.requests.toSorted()).toStrictEqual([
-        'checksums.txt',
-        ASSET,
-      ]);
+      expect(origin.requests).toStrictEqual([ASSET]);
       expect(notices).toStrictEqual([
         'downloading compact-lint-x86_64-unknown-linux-gnu (v0.1.0)',
       ]);
@@ -193,10 +235,8 @@ describe('resolveBinary', () => {
   });
 
   it('serves a second run from the cache', async () => {
-    const origin = await startOrigin({
-      [ASSET]: FAKE_BINARY,
-      'checksums.txt': checksumsFor(ASSET, FAKE_BINARY),
-    });
+    packageChecksums(FAKE_BINARY);
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const first = await resolveBinary(
         options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
@@ -205,18 +245,16 @@ describe('resolveBinary', () => {
         options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
       );
       expect(second).toBe(first);
-      expect(origin.requests).toHaveLength(2);
+      expect(origin.requests).toHaveLength(1);
       expect(notices).toHaveLength(1);
     } finally {
       await origin.close();
     }
   });
 
-  it('rejects an asset whose digest does not match checksums.txt', async () => {
-    const origin = await startOrigin({
-      [ASSET]: FAKE_BINARY,
-      'checksums.txt': checksumsFor(ASSET, 'a different binary'),
-    });
+  it('rejects an asset whose digest does not match the package checksums', async () => {
+    packageChecksums('a different binary');
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const expected = sha256(Buffer.from('a different binary'));
       const actual = sha256(Buffer.from(FAKE_BINARY));
@@ -225,14 +263,50 @@ describe('resolveBinary', () => {
           options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(
-        `checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}; delete ${join(install, '.cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu')} and retry`,
+        `checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}`,
       );
     } finally {
       await origin.close();
     }
   });
 
+  it('ignores a checksums.txt replaced on the release', async () => {
+    packageChecksums(FAKE_BINARY);
+    const replaced = '#!/bin/sh\necho replaced\n';
+    const origin = await startOrigin({
+      [ASSET]: replaced,
+      'checksums.txt': checksumsFor(ASSET, replaced),
+    });
+    try {
+      await expect(
+        resolveBinary(
+          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+        ),
+      ).rejects.toThrow(`checksum mismatch for ${ASSET}`);
+      expect(origin.requests).toStrictEqual([ASSET]);
+    } finally {
+      await origin.close();
+    }
+  });
+
+  it('refuses to download without the package checksums', async () => {
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
+    try {
+      await expect(
+        resolveBinary(
+          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+        ),
+      ).rejects.toThrow(
+        `${join(install, 'checksums.txt')} is missing, so a download cannot be verified; set COMPACT_LINT_BINARY`,
+      );
+      expect(origin.requests).toStrictEqual([]);
+    } finally {
+      await origin.close();
+    }
+  });
+
   it('rejects an origin that answers with an http error', async () => {
+    packageChecksums(FAKE_BINARY);
     const origin = await startOrigin({});
     try {
       await expect(
@@ -248,6 +322,7 @@ describe('resolveBinary', () => {
   });
 
   it('rejects an origin that cannot be reached', async () => {
+    packageChecksums(FAKE_BINARY);
     await expect(
       resolveBinary(
         options({

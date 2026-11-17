@@ -2,10 +2,10 @@
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { constants } from 'node:os';
+import { constants, homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBinary } from './binary.ts';
+import { resolveBinary, userCacheDir } from './binary.ts';
 
 // One level up from src/ and from dist/ alike, so both entry points find the manifest.
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -13,6 +13,17 @@ const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 function packageVersion(): string {
   const manifest = readFileSync(join(packageDir, 'package.json'), 'utf8');
   return (JSON.parse(manifest) as { version: string }).version;
+}
+
+/** Node reports a glibc version only when it runs on glibc. */
+function isMusl(): boolean {
+  if (process.platform !== 'linux') {
+    return false;
+  }
+  const report = process.report.getReport() as {
+    header?: { glibcVersionRuntime?: string };
+  };
+  return report.header?.glibcVersionRuntime === undefined;
 }
 
 function fail(message: string): never {
@@ -26,9 +37,11 @@ async function runLint(): Promise<void> {
   try {
     binary = await resolveBinary({
       packageDir,
+      cacheDir: userCacheDir(process.platform, process.env, homedir()),
       version: packageVersion(),
       platform: process.platform,
       arch: process.arch,
+      musl: isMusl(),
       env: process.env,
       notify: (message) =>
         process.stderr.write(`compact-linter: ${message}

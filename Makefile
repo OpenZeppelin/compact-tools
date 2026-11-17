@@ -12,10 +12,10 @@ LOGS_DIR         := $(INTEGRATION_DIR)/logs
 SERVICES         := proof-server indexer node
 PROOF_SERVER_URL := http://127.0.0.1:6300
 
-# The deployer pins compact-runtime 0.16.0; the default compactc (0.34.x)
-# emits code for 0.19.0 and the deploy then fails with `Version mismatch`.
-# See "Supported stack" in packages/deployer/README.md.
-COMPACTC_VERSION := 0.31.1
+# The deployer pins compact-runtime 0.21.0, which is what compactc 0.36.0
+# emits code for. An artifact from an older compiler fails when it loads with
+# `Version mismatch`. See "Supported stack" in packages/deployer/README.md.
+COMPACTC_VERSION := 0.36.0
 
 # One marker file per fixture: Make uses mtime against the .compact
 # source to decide whether a re-compile is needed, so `make compile`
@@ -74,7 +74,10 @@ clean:
 # ── Integration-test docker stack ──────────────────────────────────────
 
 env-up: env-down
-	docker compose -f $(COMPOSE_FILE) up -d --wait
+	docker compose -f $(COMPOSE_FILE) up -d
+	@# proof-server disables its healthcheck, and Docker Compose 2.39+ fails a
+	@# blanket `--wait` on such a service; wait only on the two that expose one.
+	docker compose -f $(COMPOSE_FILE) up -d --wait node indexer
 	@echo "Waiting for the proof server to answer on $(PROOF_SERVER_URL)/version ..."
 	@i=0; until curl -sf $(PROOF_SERVER_URL)/version >/dev/null; do \
 		i=$$((i+1)); \

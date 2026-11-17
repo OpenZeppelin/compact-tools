@@ -37,6 +37,8 @@ pub enum FillError {
         #[source]
         source: std::io::Error,
     },
+    #[error("refusing to write {path}: it changed during the run")]
+    Changed { path: PathBuf },
 }
 
 /// Everything the subcommand needs, already resolved from flags and env.
@@ -155,14 +157,42 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
         checked: target.files.len(),
         unmeasured: 0,
     };
-    for file in &work {
-        fill_file(file, &measured, &tag, &target.config, options, &mut outcome)?;
+    let writes: Vec<(&Work, String)> = work
+        .iter()
+        .filter_map(|file| {
+            fill_file(file, &measured, &tag, &target.config, options, &mut outcome)
+                .map(|fixed| (file, fixed))
+        })
+        .collect();
+
+    if !options.dry_run {
+        // A compile can run for minutes; every file is checked before the first write.
+        for (file, _) in &writes {
+            ensure_unchanged(file)?;
+        }
+        for (file, fixed) in &writes {
+            write_atomically(&file.path, fixed)?;
+        }
     }
     rewrite.stop(
         timings,
         format!("{} values in {} files", outcome.filled, outcome.files),
     );
     Ok(outcome)
+}
+
+fn ensure_unchanged(file: &Work) -> Result<(), FillError> {
+    let current = std::fs::read_to_string(&file.path).map_err(|source| FillError::Read {
+        path: file.path.clone(),
+        source,
+    })?;
+    if current == file.text {
+        Ok(())
+    } else {
+        Err(FillError::Changed {
+            path: file.path.clone(),
+        })
+    }
 }
 
 /// Compiles each distinct source once, or reads its artifact under `--no-compile`.
@@ -227,7 +257,8 @@ fn measure_sources(
     Ok(measured)
 }
 
-/// Rewrites one file's annotations and records what changed and what could not be measured.
+/// Records what changed and what could not be measured, and returns the rewritten text
+/// when an annotation changed.
 fn fill_file(
     file: &Work,
     measured: &BTreeMap<PathBuf, BTreeMap<String, Constraints>>,
@@ -235,7 +266,7 @@ fn fill_file(
     config: &Config,
     options: &Options,
     outcome: &mut Outcome,
-) -> Result<(), FillError> {
+) -> Option<String> {
     let badge = if options.dry_run {
         Badge::Fixable
     } else {
@@ -253,7 +284,7 @@ fn fill_file(
                     .push(unmeasurable(&file.path, tried, level));
                 outcome.unmeasured += file.sites.len();
             }
-            return Ok(());
+            return None;
         }
     };
     let constraints = measured.get(source);
@@ -276,7 +307,7 @@ fn fill_file(
         };
 
         let value = measurement.value();
-        if value == site.value {
+        if value == site.measurement() {
             continue;
         }
 
@@ -315,15 +346,12 @@ fn fill_file(
     }
 
     if edits.is_empty() {
-        return Ok(());
+        return None;
     }
 
     outcome.filled += edits.len();
     outcome.files += 1;
-    if !options.dry_run {
-        write_atomically(&file.path, &apply(&file.text, &edits, newline))?;
-    }
-    Ok(())
+    Some(apply(&file.text, &edits, newline))
 }
 
 /// A tagged circuit whose source compiled but produced no measurement for its name.

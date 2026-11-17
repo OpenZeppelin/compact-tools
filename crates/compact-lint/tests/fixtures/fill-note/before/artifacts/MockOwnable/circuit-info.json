@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "source": "src/access/test/mocks/MockOwnable.compact",
+  "circuits": [
+    {
+      "name": "owner",
+      "k": 7,
+      "rows": 74
+    },
+    {
+      "name": "transferOwnership",
+      "k": 13,
+      "rows": 4871
+    }
+  ]
+}
