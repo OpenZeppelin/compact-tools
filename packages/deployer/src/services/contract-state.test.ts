@@ -7,7 +7,7 @@ import {
   ContractMaintenanceAuthority,
   ContractState as LedgerContractState,
   signatureVerifyingKey,
-} from '@midnight-ntwrk/ledger-v8';
+} from '@midnightntwrk/ledger-v9';
 import { describe, expect, it } from 'vitest';
 import { DeployError } from '../errors.ts';
 import {
@@ -78,7 +78,9 @@ describe('pruneState', () => {
 
   it('should keep a non-default maintenance authority', () => {
     const state = constructorState();
-    const committee = [signatureVerifyingKey('aa'.repeat(32))];
+    const committee = [
+      signatureVerifyingKey({ tag: 'schnorr', value: 'aa'.repeat(32) }),
+    ];
     const full = toLedgerContractState(state);
     full.maintenanceAuthority = new ContractMaintenanceAuthority(
       committee,

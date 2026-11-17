@@ -99,22 +99,9 @@ vi.mock('rxjs', async (importOriginal) => {
   };
 });
 
-vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@midnight-ntwrk/midnight-js-network-id')
-    >();
-  return {
-    ...actual,
-    // Read by `buildInsertTx` for `Transaction.fromParts`, and by
-    // `logWalletAddresses` whose codec mock ignores it.
-    getNetworkId: vi.fn(() => 'undeployed'),
-  };
-});
-
 // Stub the bech32 codec triplet so `logWalletAddresses` reaches its
 // happy-path info logs instead of catching at the encode call.
-vi.mock('@midnight-ntwrk/wallet-sdk-address-format', () => {
+vi.mock('@midnightntwrk/wallet-sdk-address-format', () => {
   const codec = {
     encode: vi.fn(() => ({ toString: () => 'addr1stub' })),
   };
@@ -458,24 +445,19 @@ describe('Deployer', () => {
       await using d = await prepared();
       await expect(d.deploy()).rejects.toThrow(/FailEntirely/);
 
-      expect(
-        providers.privateStateProvider.setContractAddress,
-      ).not.toHaveBeenCalled();
+      expect(providers.privateStateProvider.forContract).not.toHaveBeenCalled();
       expect(
         providers.privateStateProvider.setSigningKey,
       ).not.toHaveBeenCalled();
     });
 
-    it('should store the address and the signing key once the tx succeeds', async () => {
+    it('should store the signing key once the tx succeeds', async () => {
       await using d = await prepared();
       await d.deploy();
 
-      expect(
-        providers.privateStateProvider.setContractAddress,
-      ).toHaveBeenCalledWith('0xCONTRACT');
       expect(providers.privateStateProvider.setSigningKey).toHaveBeenCalledWith(
         '0xCONTRACT',
-        'contract-maintenance-key',
+        { tag: 'schnorr', value: 'contract-maintenance-key' },
       );
       // No [contracts.Counter].private_state_id in the fixture.
       expect(providers.privateStateProvider.set).not.toHaveBeenCalled();

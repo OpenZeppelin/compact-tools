@@ -39,7 +39,7 @@ export function fakeSubWalletStates() {
 /**
  * Emits one already-synced `FacadeState` with a `Proxy` balance map that
  * returns `1n` for any token key, so `syncAndVerifyFunds` passes through
- * without a real Rx pipeline (we don't mock ledger-v8 in this file).
+ * without a real Rx pipeline (we don't mock ledger-v9 in this file).
  */
 export function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
   const anyKeyHasBalance = new Proxy({} as Record<string, bigint>, {
@@ -49,14 +49,12 @@ export function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
     isSynced: true,
     shielded: {
       balances: anyKeyHasBalance,
-      state: {
-        progress: {
-          isStrictlyComplete: () => true,
-          isCompleteWithin: () => true,
-          appliedIndex: 0n,
-          highestIndex: 0n,
-          isConnected: true,
-        },
+      progress: {
+        isStrictlyComplete: () => true,
+        isCompleteWithin: () => true,
+        appliedIndex: 0n,
+        highestIndex: 0n,
+        isConnected: true,
       },
     },
     unshielded: {
@@ -71,18 +69,16 @@ export function fakeProvider(coinKey = '0xCOIN'): FakeProvider {
       },
     },
     dust: {
-      state: {
-        progress: {
-          isStrictlyComplete: () => true,
-          isCompleteWithin: () => true,
-          appliedIndex: 0n,
-          highestIndex: 0n,
-          isConnected: true,
-        },
+      progress: {
+        isStrictlyComplete: () => true,
+        isCompleteWithin: () => true,
+        appliedIndex: 0n,
+        highestIndex: 0n,
+        isConnected: true,
       },
       balance: () => 1n,
     },
-    pending: { all: [] },
+    lifecycle: [],
   };
   const sub = fakeSubWalletStates();
   return {
@@ -170,7 +166,7 @@ export function fakeUnsubmittedDeploy(address = '0xCONTRACT') {
     public: { contractAddress: address },
     private: {
       unprovenTx: { tag: 'unproven' },
-      signingKey: 'contract-maintenance-key',
+      signingKey: { tag: 'schnorr', value: 'contract-maintenance-key' },
       initialPrivateState: { seeded: true },
     },
   };
@@ -186,6 +182,17 @@ export function fakeFinalized(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * A contract-state read as `queryContractState` resolves it: the state as
+ * bytes with a decoder hook. The fake skips the bytes and hands `state` back
+ * from `deserialize`, so a test keeps writing ledger-shaped state stubs.
+ */
+export function fakeStateRead<T>(state: T): {
+  contractState: { deserialize: () => T };
+} {
+  return { contractState: { deserialize: () => state } };
+}
+
 export interface FakeProviders {
   publicDataProvider: {
     watchForTxData: Mock;
@@ -193,15 +200,18 @@ export interface FakeProviders {
     queryContractState: Mock;
   };
   privateStateProvider: {
-    setContractAddress: Mock;
+    /** The per-contract view; `set` below is the view's `set`. */
+    forContract: Mock;
     set: Mock;
     setSigningKey: Mock;
     getSigningKey: Mock;
   };
   zkConfigProvider: { getVerifierKeys: Mock };
+  config: { networkId: string; ttlSeconds: number };
 }
 
 export function fakeProviders(): FakeProviders {
+  const set = vi.fn(async () => undefined);
   return {
     publicDataProvider: {
       watchForTxData: vi.fn(async () => fakeFinalized()),
@@ -209,16 +219,20 @@ export function fakeProviders(): FakeProviders {
       queryContractState: vi.fn(async () => null),
     },
     privateStateProvider: {
-      setContractAddress: vi.fn(),
-      set: vi.fn(async () => undefined),
+      forContract: vi.fn(() => ({ set })),
+      set,
       setSigningKey: vi.fn(async () => undefined),
-      getSigningKey: vi.fn(async () => 'aa'.repeat(32)),
+      getSigningKey: vi.fn(async () => ({
+        tag: 'schnorr',
+        value: 'aa'.repeat(32),
+      })),
     },
     zkConfigProvider: {
       getVerifierKeys: vi.fn(async (ids: string[]) =>
         ids.map((id) => [id, new Uint8Array([1, 2, 3])] as const),
       ),
     },
+    config: { networkId: 'undeployed', ttlSeconds: 3600 },
   };
 }
 

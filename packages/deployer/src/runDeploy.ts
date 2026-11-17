@@ -1,6 +1,10 @@
 import pino, { type Logger } from 'pino';
 import { CompactConfig } from './config/compact-config.ts';
-import { Deployer, type DeployResult } from './deployer.ts';
+import {
+  Deployer,
+  type DeployerOptions,
+  type DeployResult,
+} from './deployer.ts';
 import { DeployError, FragmentDeployError } from './errors.ts';
 import { parseDeployArgv } from './loaders/argv.ts';
 import { resolveContractName } from './loaders/contract-resolve.ts';
@@ -103,6 +107,10 @@ export interface RunDeployOptions<
    * Highest precedence: overrides `compact.toml`'s `args` field.
    */
   args?: Args;
+  /** Initial private state. Overrides `[contracts.X].init_private_state`. */
+  initialPrivateState?: unknown;
+  /** Witness implementations. Override `[contracts.X].witnesses`. */
+  witnesses?: DeployerOptions['witnesses'];
   /** Path to `compact.toml`. Argv: `--config`. Default: walk up from cwd. */
   configPath?: string;
   /** Network name. Argv: `--network`. Default: `[profile].default_network` from `compact.toml`. */
@@ -117,6 +125,8 @@ export interface RunDeployOptions<
   txTimeoutSec?: number;
   /** Replace a pending deploy record for this contract. Argv: `--force`. */
   force?: boolean;
+  /** Keep the deployments ledger. Default `true`. See {@link DeployerOptions.record}. */
+  record?: boolean;
   /** Dust/shielded sync batch size. Argv: `--sync-batch-size`. Default 5000. */
   syncBatchSize?: number;
   /**
@@ -254,10 +264,13 @@ async function runDeployImpl(
       seedFile: opts.seedFile ?? argv.seedFile,
       proofServer: opts.proofServer ?? argv.proofServer,
       args: opts.args,
+      initialPrivateState: opts.initialPrivateState,
+      witnesses: opts.witnesses,
       syncTimeoutMs:
         syncTimeoutSec !== undefined ? syncTimeoutSec * 1000 : undefined,
       txTimeoutMs: txTimeoutSec !== undefined ? txTimeoutSec * 1000 : undefined,
       force: opts.force ?? argv.force,
+      record: opts.record,
       syncBatchSize: opts.syncBatchSize ?? argv.syncBatchSize,
       circuitsPerTx: opts.circuitsPerTx ?? argv.circuitsPerTx,
       skipWalletCache: opts.skipWalletCache ?? argv.noCache,
@@ -313,7 +326,9 @@ function printResult(
   opts.logger.info(`  txId:        ${result.txId}`);
   opts.logger.info(`  txHash:      ${result.txHash}`);
   opts.logger.info(`  blockHeight: ${result.blockHeight}`);
-  opts.logger.info(`  saved to:    ${result.deploymentsFile}`);
+  if (result.deploymentsFile) {
+    opts.logger.info(`  saved to:    ${result.deploymentsFile}`);
+  }
   if (result.explorerUrl) {
     opts.logger.info(`  explorer:    ${result.explorerUrl}`);
   }

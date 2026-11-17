@@ -23,38 +23,25 @@ const __dirname = dirname(__filename);
 const SAMPLE_CONTRACTS_DIR = join(__dirname, 'fixtures', 'sample-contracts');
 const ARTIFACTS_DIR = join(__dirname, 'fixtures', 'artifacts');
 
-/**
- * The fixtures to compile. `zkirV3` opts a fixture into the ZKIR v3 backend,
- * the only one carrying the secp256k1 primitives.
- */
-const CONTRACT_FILES: readonly { file: string; zkirV3?: boolean }[] = [
-  { file: 'Simple.compact' },
-  { file: 'Witness.compact' },
-  { file: 'SampleZOwnable.compact' },
-  { file: 'Ecdsa.compact', zkirV3: true },
+const CONTRACT_FILES: readonly string[] = [
+  'Simple.compact',
+  'Witness.compact',
+  'SampleZOwnable.compact',
+  'Ecdsa.compact',
 ];
 
 // Pin the compiler to the toolchain matching this package's compact-runtime.
 // Generated artifacts assert the runtime minor at load time, so an older
 // compactc emits code the installed runtime rejects.
 // Override via COMPACTC_VERSION if a newer pinned toolchain is installed.
-const COMPILER_VERSION = process.env.COMPACTC_VERSION ?? '0.34.0';
+const COMPILER_VERSION = process.env.COMPACTC_VERSION ?? '0.36.0';
 
-/** Identifies what an artifact was built with, so a change forces a rebuild. */
-const stampFor = (zkirV3: boolean): string =>
-  `${COMPILER_VERSION}${zkirV3 ? '+zkir-v3' : ''}`;
-
-async function compileContract(contract: {
-  file: string;
-  zkirV3?: boolean;
-}): Promise<void> {
-  const { file: contractFile, zkirV3 = false } = contract;
+async function compileContract(contractFile: string): Promise<void> {
   const inputPath = join(SAMPLE_CONTRACTS_DIR, contractFile);
   const contractName = contractFile.replace('.compact', '');
   const outputDir = join(ARTIFACTS_DIR, contractName);
   const contractArtifact = join(outputDir, 'contract', 'index.js');
   const stampPath = join(outputDir, '.compiler-stamp');
-  const stamp = stampFor(zkirV3);
 
   // Skip only if the artifact is newer than the source AND was built by this
   // toolchain. Without the stamp, an existing clone keeps artifacts the current
@@ -63,7 +50,8 @@ async function compileContract(contract: {
     const artifactTime = statSync(contractArtifact).mtime;
     const sourceTime = statSync(inputPath).mtime;
     const stampMatches =
-      existsSync(stampPath) && readFileSync(stampPath, 'utf8').trim() === stamp;
+      existsSync(stampPath) &&
+      readFileSync(stampPath, 'utf8').trim() === COMPILER_VERSION;
     if (artifactTime >= sourceTime && stampMatches) {
       console.log(`✓ ${contractFile} (already compiled)`);
       return;
@@ -84,7 +72,6 @@ async function compileContract(contract: {
   const args = [
     'compile',
     `+${COMPILER_VERSION}`,
-    ...(zkirV3 ? ['--feature-zkir-v3'] : []),
     '--skip-zk',
     inputPath,
     outputDir,
@@ -99,7 +86,7 @@ async function compileContract(contract: {
     throw err;
   }
 
-  writeFileSync(stampPath, `${stamp}\n`);
+  writeFileSync(stampPath, `${COMPILER_VERSION}\n`);
   console.log(`✓ Compiled ${contractFile}`);
 }
 
@@ -107,8 +94,8 @@ async function setup(): Promise<void> {
   mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
   // Compile each contract sequentially
-  for (const contract of CONTRACT_FILES) {
-    await compileContract(contract);
+  for (const contractFile of CONTRACT_FILES) {
+    await compileContract(contractFile);
   }
 }
 

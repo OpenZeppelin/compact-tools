@@ -147,6 +147,16 @@ fn the_constraints_annotation_follows_the_description_block() {
 }
 
 #[test]
+fn a_circuit_ends_with_one_constraints_annotation() {
+    assert_case("constraints-once");
+}
+
+#[test]
+fn an_undocumented_circuit_under_docs_none_takes_a_constraints_only_comment() {
+    assert_case("constraints-undocumented");
+}
+
+#[test]
 fn a_forbidden_tag_with_a_replacement_is_renamed_in_place() {
     assert_case("rename");
 }
@@ -166,6 +176,16 @@ fn a_rename_that_supplies_a_required_tag_suppresses_the_insert() {
 #[test]
 fn a_stale_module_tag_takes_the_module_name() {
     assert_case("module-name");
+}
+
+#[test]
+fn a_module_name_rewrite_keeps_a_closing_delimiter_on_its_line() {
+    assert_case("module-name-terminator");
+}
+
+#[test]
+fn text_on_a_delimiter_line_moves_before_an_insertion() {
+    assert_case("delimiter-text");
 }
 
 #[test]

@@ -117,6 +117,11 @@ export interface FragmentDeployErrorFields {
    * so `txId` may still land.
    */
   timedOut?: boolean;
+  /**
+   * The deploy tx, set only when no deployments record holds it. The message
+   * then names it in place of the resume hint.
+   */
+  deployTxId?: string;
 }
 
 /**
@@ -124,19 +129,33 @@ export interface FragmentDeployErrorFields {
  *
  * The contract exists and is callable with a subset of its circuits. The fields
  * are the whole reconciliation surface, and re-running the same deploy command
- * resumes from chain state. Carries no signing key.
+ * resumes from chain state unless the deploy kept no record. Carries no
+ * signing key.
  */
 export class FragmentDeployError extends DeployError {
   readonly address: string;
   readonly circuitsOnChain: readonly string[];
   readonly circuitsPending: readonly string[];
+  readonly reason: string;
   readonly txId: string | undefined;
   readonly timedOut: boolean;
+  readonly deployTxId: string | undefined;
 
   constructor(fields: FragmentDeployErrorFields, options?: ErrorOptions) {
-    const { address, circuitsOnChain, circuitsPending, reason, txId } = fields;
+    const {
+      address,
+      circuitsOnChain,
+      circuitsPending,
+      reason,
+      txId,
+      deployTxId,
+    } = fields;
+    const next =
+      deployTxId === undefined
+        ? ' The partial record is left in place; re-run the same deploy to resume.'
+        : ` Deploy txId ${deployTxId}.`;
     super(
-      `Fragmented deploy of ${address} is incomplete: ${reason}. On chain: ${list(circuitsOnChain)}. Pending: ${list(circuitsPending)}.${txId ? ` Failed insert txId ${txId}.` : ''} The partial record is left in place; re-run the same deploy to resume.`,
+      `Fragmented deploy of ${address} is incomplete: ${reason}. On chain: ${list(circuitsOnChain)}. Pending: ${list(circuitsPending)}.${txId ? ` Failed insert txId ${txId}.` : ''}${next}`,
       8,
       options,
     );
@@ -144,8 +163,10 @@ export class FragmentDeployError extends DeployError {
     this.address = address;
     this.circuitsOnChain = circuitsOnChain;
     this.circuitsPending = circuitsPending;
+    this.reason = reason;
     this.txId = txId;
     this.timedOut = fields.timedOut === true;
+    this.deployTxId = deployTxId;
   }
 }
 

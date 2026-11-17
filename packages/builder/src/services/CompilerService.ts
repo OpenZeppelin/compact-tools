@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { closeSync, openSync, readFileSync, unlinkSync } from 'node:fs';
 import { platform, tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { parse as parseShellArgs } from 'shell-quote';
 import { CompilationError } from '../types/errors.ts';
 import {
@@ -10,6 +10,7 @@ import {
   DEFAULT_SRC_DIR,
   type ExecFunction,
 } from '../types/options.ts';
+import { artifactDir } from '../utils.ts';
 
 /** Resolved options for CompilerService with defaults applied */
 type ResolvedCompilerServiceOptions = Required<CompilerServiceOptions>;
@@ -172,15 +173,11 @@ export class CompilerService {
     version?: string,
   ): Promise<{ stdout: string; stderr: string }> {
     const inputPath = join(this.options.srcDir, file);
-    const fileDir = dirname(file);
-    const fileName = basename(file, '.compact');
-
-    // Flattened (default): <outDir>/<ContractName>/
-    // Hierarchical: <outDir>/<subdir>/<ContractName>/
-    const outputDir =
-      this.options.hierarchical && fileDir !== '.'
-        ? join(this.options.outDir, fileDir, fileName)
-        : join(this.options.outDir, fileName);
+    const outputDir = artifactDir(
+      this.options.outDir,
+      file,
+      this.options.hierarchical,
+    );
 
     const args: string[] = [
       'compile',

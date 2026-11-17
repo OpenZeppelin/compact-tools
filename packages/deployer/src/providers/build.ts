@@ -18,6 +18,13 @@ import type { ContractConfig } from '../config/schema.ts';
 import { ConfigError } from '../errors.ts';
 import { derivePrivateStatePassword } from './private-state-password.ts';
 
+/**
+ * Lifetime of every intent midnight-js builds for a deploy: one hour, the
+ * fixed value 4.x used and the value `ttlOneHour()` gives the intents this
+ * package builds itself.
+ */
+const TX_TTL_SECONDS = 3600;
+
 export interface BuildProvidersOptions {
   env: EnvironmentConfiguration;
   wallet: MidnightWalletProvider;
@@ -59,11 +66,18 @@ export function buildProviders({
 
   return {
     privateStateProvider: resolvedPrivateStateProvider,
-    publicDataProvider: indexerPublicDataProvider(env.indexer, env.indexerWS),
+    publicDataProvider: indexerPublicDataProvider({
+      queryURL: env.indexer,
+      subscriptionURL: env.indexerWS,
+    }),
     zkConfigProvider,
-    proofProvider: httpClientProofProvider(env.proofServer, zkConfigProvider),
+    proofProvider: httpClientProofProvider({
+      url: env.proofServer,
+      zkConfigProvider,
+    }),
     walletProvider: wallet,
     midnightProvider: wallet,
+    config: { networkId: env.networkId, ttlSeconds: TX_TTL_SECONDS },
   };
 }
 

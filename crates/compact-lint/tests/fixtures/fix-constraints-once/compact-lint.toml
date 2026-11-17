@@ -1,0 +1,9 @@
+version = 1
+include = ["**/*.compact"]
+
+[tags]
+forbid = ["@circuitInfo"]
+rename = { "@circuitInfo" = "@constraints" }
+
+[kinds.circuit]
+tags = ["@description", "@constraints"]

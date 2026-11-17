@@ -1,0 +1,12 @@
+/**
+ * @description Runs.
+ * @circuitInfo k=7, rows=74
+ */
+export circuit run(): [] { }
+
+export circuit bump(): [] { }
+
+/**
+ * @description Sends.
+ */
+export circuit send(): [] { }

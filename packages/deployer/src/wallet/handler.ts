@@ -1,4 +1,3 @@
-import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import {
   DEFAULT_DUST_OPTIONS,
   type DustWalletOptions,
@@ -9,11 +8,11 @@ import {
   WalletFactory,
   WalletSeeds,
 } from '@midnight-ntwrk/testkit-js';
-import type { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
+import type { WalletFacade } from '@midnightntwrk/wallet-sdk-facade';
 import {
   createKeystore,
   type UnshieldedKeystore,
-} from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+} from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import type { Logger } from 'pino';
 import { formatError } from '../services/error-format.ts';
 import type { ConfigShape } from '../services/wallet-cache.ts';
@@ -152,7 +151,8 @@ export class WalletHandler implements AsyncDisposable {
     };
 
     const unshieldedKeystore: UnshieldedKeystore = createKeystore(
-      walletSeeds.unshielded,
+      // Schnorr matches testkit's own builder, so both derive the same address.
+      { kind: 'schnorr', secret: walletSeeds.unshielded },
       env.walletNetworkId as Parameters<typeof createKeystore>[1],
     );
 
@@ -213,7 +213,7 @@ export class WalletHandler implements AsyncDisposable {
     type CreateFacadeArgs = Parameters<typeof WalletFactory.createWalletFacade>;
     const walletFacade: WalletFacade = await WalletFactory.createWalletFacade(
       config as CreateFacadeArgs[0],
-      shieldedWallet as CreateFacadeArgs[1],
+      shieldedWallet,
       unshieldedWallet,
       dustWallet,
     );
@@ -222,11 +222,8 @@ export class WalletHandler implements AsyncDisposable {
       logger,
       env,
       walletFacade,
-      ZswapSecretKeys.fromSeed(walletSeeds.shielded),
-      DustSecretKey.fromSeed(walletSeeds.dust),
-      unshieldedKeystore as Parameters<
-        typeof MidnightWalletProvider.withWallet
-      >[5],
+      walletSeeds,
+      unshieldedKeystore,
     );
 
     return new WalletHandler(provider, unshieldedKeystore, logger, cache);

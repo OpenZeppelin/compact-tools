@@ -1,9 +1,8 @@
 import { Deployer } from '@openzeppelin/compact-deployer/deployer';
 import { ArtifactNotFoundError } from '@openzeppelin/compact-deployer/errors';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { runningAutoProofServers } from '../../_harness/docker.ts';
 import { testLogger } from '../../_harness/logger.ts';
-import { setupLocalNetwork } from '../../_harness/network.ts';
 import { CONFIG_PATH } from '../../_harness/paths.ts';
 import { getSharedPool } from '../../_harness/walletPool.ts';
 
@@ -19,10 +18,6 @@ import { getSharedPool } from '../../_harness/walletPool.ts';
  * Requires Docker.
  */
 describe('compact-deploy — resource cleanup on mid-prepare failure', () => {
-  beforeAll(() => {
-    setupLocalNetwork();
-  });
-
   it('should stop the proof-server container it started before failing', async () => {
     const wallet = await getSharedPool().signerFor('DAVE');
 

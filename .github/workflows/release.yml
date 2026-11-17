@@ -29,7 +29,6 @@ jobs:
   release:
     name: Open release PR for ${{ inputs.package }}
     runs-on: ubuntu-24.04
-    environment: compact-npm-prod # Requires approval before opening the release PR
 
     permissions:
       contents: write       # create the release branch
