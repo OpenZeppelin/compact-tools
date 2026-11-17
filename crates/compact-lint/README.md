@@ -54,8 +54,8 @@ Rule detail:
 - **Export.** "Exported" means the declaration carries the `export` token itself. A
   non-exported circuit inside an exported module is not exported.
 - **Constraints.** The rule applies to exported non-pure circuits only, and that is
-  fixed, not configurable. A missing doc comment reports as `missing-doc`, not
-  `missing-constraints`.
+  fixed, not configurable. A missing doc comment reports as `missing-doc` when the
+  kind's `docs` policy requires one, and as `missing-constraints` when it does not.
 - **`module-name`.** The documented name is the first word of the `@module` value,
   without its generic arguments or trailing punctuation, so `@module Signer<T>` matches
   `module Signer` and `@module Utils.` matches `module Utils`.

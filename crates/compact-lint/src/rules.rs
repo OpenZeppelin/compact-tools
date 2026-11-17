@@ -124,6 +124,8 @@ fn check_declaration(
                 RuleId::MISSING_DOC,
                 format!("{} has no doc comment", subject(declaration)),
             ));
+        } else {
+            check_constraints(declaration, display, config, strict, findings);
         }
         return;
     };
@@ -205,10 +207,16 @@ fn check_constraints(
     if declaration.kind != DeclKind::Circuit || !declaration.exported || declaration.pure {
         return;
     }
+    let tag = &config.constraints.tag;
     let Some(attached) = declaration.doc.as_ref() else {
+        findings.push(Finding::new(
+            display,
+            declaration.position,
+            RuleId::MISSING_CONSTRAINTS,
+            format!("{} has no doc comment, so no {tag}", subject(declaration)),
+        ));
         return;
     };
-    let tag = &config.constraints.tag;
 
     let Some(occurrence) = attached.comment.first(tag) else {
         findings.push(Finding::new(
@@ -344,14 +352,31 @@ mod tests {
 
     #[test]
     fn the_constraints_rule_survives_docs_none() {
-        let source =
+        let documented =
             "/** @description Bumps. */\nexport circuit bump(): [] { count.increment(1); }\n";
+        let undocumented = "export circuit bump(): [] { count.increment(1); }\n";
         let mut config = circuit_config();
         config.kinds.circuit.docs = DocsPolicy::None;
 
         assert_eq!(
-            findings(source, &config, false),
+            findings(documented, &config, false),
             ["a.compact:2:1: missing-constraints: circuit `bump` doc comment has no @constraints"]
+        );
+        assert_eq!(
+            findings(undocumented, &config, false),
+            [
+                "a.compact:1:1: missing-constraints: circuit `bump` has no doc comment, so no @constraints"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_undocumented_circuit_reports_only_missing_doc_when_docs_are_required() {
+        let source = "export circuit bump(): [] { count.increment(1); }\n";
+
+        assert_eq!(
+            findings(source, &circuit_config(), false),
+            ["a.compact:1:1: missing-doc: circuit `bump` has no doc comment"]
         );
     }
 
