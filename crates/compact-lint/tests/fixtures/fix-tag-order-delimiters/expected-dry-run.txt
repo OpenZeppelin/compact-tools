@@ -1,0 +1,43 @@
+Closer.compact:7:4 lint/tag-order  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i `@notice Security` comes before `@notice Privacy`; the template orders Privacy first.
+
+    5 │  * @notice Security:
+    6 │  * - Nonces are spend-critical.
+  > 7 │  * @notice Privacy:
+      │    ^^^^^^^^^^^^^^^^
+    8 │  * - Amounts are public. */
+    9 │ module Closer {
+
+  i Safe fix: Reorder the doc comment blocks
+
+      5 │ + ·*·@notice·Privacy:
+      6 │ + ·*·-·Amounts·are·public.
+    5 7 │    * @notice Security:
+    6 8 │    * - Nonces are spend-critical.
+    7   │ - ·*·@notice·Privacy:
+    8   │ - ·*·-·Amounts·are·public.·*/
+      9 │ + ·*/
+
+Opener.compact:5:4 lint/tag-order  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i `@notice Security` comes before `@module`; the template orders @module first.
+
+    3 │ /** @notice Security:
+    4 │  * - Nonces are spend-critical.
+  > 5 │  * @module Opener
+      │    ^^^^^^^
+    6 │  * @notice Privacy:
+    7 │  * - Amounts are public.
+
+  i Safe fix: Reorder the doc comment blocks
+
+    3   │ - /**·@notice·Security:
+    4   │ - ·*·-·Nonces·are·spend-critical.
+      3 │ + /**
+    5 4 │    * @module Opener
+    6 5 │    * @notice Privacy:
+    7 6 │    * - Amounts are public.
+      7 │ + ·*·@notice·Security:
+      8 │ + ·*·-·Nonces·are·spend-critical.
+

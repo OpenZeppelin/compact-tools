@@ -164,6 +164,11 @@ fn a_section_goes_in_below_every_paragraph_of_the_block_before_it() {
 }
 
 #[test]
+fn a_reorder_moves_text_off_the_delimiter_lines_with_its_section() {
+    assert_case("tag-order-delimiters");
+}
+
+#[test]
 fn the_constraints_annotation_follows_the_description_block() {
     assert_case("constraints");
 }

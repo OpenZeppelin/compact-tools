@@ -100,10 +100,15 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
         issue_count += issues.len();
 
         let started = Instant::now();
-        let repairs: Vec<(&Issue, Edit)> = issues
+        // An edit that leaves the text as it was repairs nothing, so it is not reported.
+        let repairs: Vec<(&Issue, Edit, String)> = issues
             .iter()
             .filter(|issue| !supplied_elsewhere(issue, &issues, &target.config))
             .filter_map(|issue| edit_for(issue, &target.config, newline).map(|edit| (issue, edit)))
+            .filter_map(|(issue, edit)| {
+                let after = apply(&source, std::slice::from_ref(&edit), newline);
+                (after != source).then_some((issue, edit, after))
+            })
             .collect();
 
         if repairs.is_empty() {
@@ -111,11 +116,11 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
             continue;
         }
 
-        for (issue, edit) in &repairs {
-            diagnostics.push(diagnostic(path, issue, edit, &source, newline, badge));
+        for (issue, edit, after) in &repairs {
+            diagnostics.push(diagnostic(path, issue, edit, &source, after, badge));
         }
 
-        let edits: Vec<Edit> = repairs.into_iter().map(|(_, edit)| edit).collect();
+        let edits: Vec<Edit> = repairs.into_iter().map(|(_, edit, _)| edit).collect();
         let fixed = apply(&source, &edits, newline);
         if changes_declarations(&mut linter, path, &source, &fixed)? {
             return Err(FixError::Unsafe { path: path.clone() });
@@ -169,15 +174,13 @@ fn diagnostic(
     issue: &Issue,
     edit: &Edit,
     source: &str,
-    newline: &str,
+    after: &str,
     badge: Badge,
 ) -> Diagnostic {
-    let after = apply(source, std::slice::from_ref(edit), newline);
-
     Diagnostic::new(path, edit.rule, Level::Info, issue.message())
         .at(edit.span)
         .fixed_by(
-            FixPreview::between(title(edit, badge), source, &after),
+            FixPreview::between(title(edit, badge), source, after),
             badge,
         )
 }

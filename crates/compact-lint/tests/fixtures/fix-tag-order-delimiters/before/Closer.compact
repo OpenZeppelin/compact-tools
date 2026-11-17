@@ -1,0 +1,10 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Closer
+ * @notice Security:
+ * - Nonces are spend-critical.
+ * @notice Privacy:
+ * - Amounts are public. */
+module Closer {
+}

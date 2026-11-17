@@ -253,11 +253,15 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
     let margin = " ".repeat(indent);
     let gutter = format!("{margin} * ");
 
-    // Insertions search the body only, so text on the `/**` or `*/` line moves first.
-    let inserts = ops
-        .iter()
-        .any(|op| matches!(op, DocOp::InsertTag { .. } | DocOp::InsertConstraints(_)));
-    let shift = if inserts {
+    // Insertions and reorders work on the body only, so text on the `/**` or `*/` line
+    // moves first.
+    let restructures = ops.iter().any(|op| {
+        matches!(
+            op,
+            DocOp::InsertTag { .. } | DocOp::InsertConstraints(_) | DocOp::ReorderBlocks { .. }
+        )
+    });
+    let shift = if restructures {
         isolate_delimiters(&mut lines, &margin, &gutter)
     } else {
         0
