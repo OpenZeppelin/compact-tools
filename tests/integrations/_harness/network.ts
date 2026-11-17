@@ -1,4 +1,3 @@
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import type { EnvironmentConfiguration } from '@midnight-ntwrk/testkit-js';
 
 /**
@@ -25,15 +24,4 @@ export function localNetworkConfig(): EnvironmentConfiguration {
     proofServer: 'http://127.0.0.1:6300',
     faucet: undefined,
   };
-}
-
-/**
- * Set the process-wide network id once before any provider/wallet is built.
- * Idempotent.
- */
-let networkIdSet = false;
-export function setupLocalNetwork(): void {
-  if (networkIdSet) return;
-  setNetworkId(LOCAL_NETWORK_ID);
-  networkIdSet = true;
 }

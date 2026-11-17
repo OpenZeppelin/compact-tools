@@ -1,6 +1,7 @@
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types';
 import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import { describe, expect, it, type Mock, vi } from 'vitest';
+import { fakeStateRead } from '../deployer.testkit.ts';
 import { ConfigError, FragmentDeployError } from '../errors.ts';
 import {
   type ArtifactKeys,
@@ -60,8 +61,14 @@ function stateStub(
   };
 }
 
+/** Wraps each stubbed state as the bytes-plus-decoder read the provider returns. */
 function provider(queryContractState: Mock): PublicDataProvider {
-  return { queryContractState } as unknown as PublicDataProvider;
+  return {
+    queryContractState: async (address: string) => {
+      const state = await queryContractState(address);
+      return state === null ? null : fakeStateRead(state);
+    },
+  } as unknown as PublicDataProvider;
 }
 
 describe('readSnapshot', () => {

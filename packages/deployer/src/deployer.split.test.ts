@@ -22,6 +22,7 @@ import {
   type FakeProviders,
   type Fixture,
   fakeProviders,
+  fakeStateRead,
   fakeUnsubmittedDeploy,
   fakeVerifierKeys,
   headPath,
@@ -86,14 +87,6 @@ vi.mock('./services/deploy-tx.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('./services/deploy-tx.ts')>();
   return { ...actual, submitDeploy: vi.fn(actual.submitDeploy) };
-});
-
-vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@midnight-ntwrk/midnight-js-network-id')
-    >();
-  return { ...actual, getNetworkId: vi.fn(() => 'undeployed') };
 });
 
 vi.mock('@midnightntwrk/wallet-sdk-address-format', () => {
@@ -171,14 +164,12 @@ function fragmentWallet(dust: DustView): MidnightWalletProvider {
       state: () =>
         Rx.of({
           dust: {
-            state: {
-              progress: {
-                highestRelevantWalletIndex: dust.tip,
-                appliedIndex: dust.applied,
-              },
+            progress: {
+              highestRelevantWalletIndex: dust.tip,
+              appliedIndex: dust.applied,
             },
           },
-          pending: { all: [] },
+          lifecycle: [],
         }),
     },
   } as unknown as MidnightWalletProvider;
@@ -234,7 +225,7 @@ describe('Deployer fragmented deploy', () => {
     declaredCircuits = SPLIT_CIRCUITS;
     providers = fakeProviders();
     providers.publicDataProvider.queryContractState = vi.fn(async () =>
-      chainState(onChain, BigInt(landedInserts)),
+      fakeStateRead(chainState(onChain, BigInt(landedInserts))),
     );
     vi.mocked(buildProviders).mockImplementation(() => providers as never);
     vi.mocked(createUnprovenDeployTx).mockResolvedValue(
@@ -350,14 +341,16 @@ describe('Deployer fragmented deploy', () => {
   });
 
   it('should refuse to insert when the committee needs more than one signature', async () => {
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, BigInt(landedInserts)),
-      maintenanceAuthority: {
-        committee: [FIXTURE_VERIFYING_KEY, otherKey('other')],
-        threshold: 2,
-        counter: 0n,
-      },
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, BigInt(landedInserts)),
+        maintenanceAuthority: {
+          committee: [FIXTURE_VERIFYING_KEY, otherKey('other')],
+          threshold: 2,
+          counter: 0n,
+        },
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
     const thrown = await d.deploy().catch((e: unknown) => e);
@@ -370,14 +363,16 @@ describe('Deployer fragmented deploy', () => {
   });
 
   it('should sign at this key slot when the committee is ordered differently', async () => {
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, BigInt(landedInserts)),
-      maintenanceAuthority: {
-        committee: [otherKey('someone-else'), FIXTURE_VERIFYING_KEY],
-        threshold: 1,
-        counter: BigInt(landedInserts),
-      },
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, BigInt(landedInserts)),
+        maintenanceAuthority: {
+          committee: [otherKey('someone-else'), FIXTURE_VERIFYING_KEY],
+          threshold: 1,
+          counter: BigInt(landedInserts),
+        },
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 4 });
     await d.deploy();
@@ -932,14 +927,16 @@ describe('Deployer fragmented deploy', () => {
   it('should refuse to resume a contract maintained by a foreign committee', async () => {
     onChain = ['approve'];
     seedHead(partialHead(['approve'], ['burn']));
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, 0n),
-      maintenanceAuthority: {
-        committee: [otherKey('SOMEONE-ELSE')],
-        threshold: 1,
-        counter: 1n,
-      },
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, 0n),
+        maintenanceAuthority: {
+          committee: [otherKey('SOMEONE-ELSE')],
+          threshold: 1,
+          counter: 1n,
+        },
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
 
@@ -950,10 +947,12 @@ describe('Deployer fragmented deploy', () => {
   it('should refuse to resume a contract carrying a foreign verifier key', async () => {
     onChain = ['approve'];
     seedHead(partialHead(['approve'], ['burn']));
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, 0n),
-      operation: () => ({ verifierKey: new Uint8Array([9, 9]) }),
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, 0n),
+        operation: () => ({ verifierKey: new Uint8Array([9, 9]) }),
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
 
@@ -1009,14 +1008,17 @@ describe('Deployer fragmented deploy', () => {
     // Chain reports a different key for the last circuit than the artifact has.
     const genuine = providers.publicDataProvider.queryContractState;
     providers.publicDataProvider.queryContractState = vi.fn(async () => {
-      const state = (await genuine()) as ReturnType<typeof chainState>;
-      return {
+      const read = (await genuine()) as ReturnType<
+        typeof fakeStateRead<ReturnType<typeof chainState>>
+      >;
+      const state = read.contractState.deserialize();
+      return fakeStateRead({
         ...state,
         operation: (name: string) =>
           name === 'evict'
             ? { verifierKey: new Uint8Array([0, 0]) }
             : state.operation(name),
-      };
+      });
     });
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });

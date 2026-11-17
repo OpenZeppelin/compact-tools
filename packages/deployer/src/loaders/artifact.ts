@@ -17,8 +17,12 @@ import { LoaderContext } from './context.ts';
  *   <artifact>/contract/index.{cjs,js}   — Contract class
  *   <artifact>/keys/<circuit>.{prover,verifier}
  *   <artifact>/zkir/<circuit>.bzkir
+ *   <artifact>/compiler/contract-manifest.json — digests midnight-js checks keys and zkir against
  * Witnesses live outside the bundle, referenced via `[contracts.X].witnesses`.
  */
+
+/** Written by compactc 0.36.0 and newer; midnight-js checks every key and zkir file against it. */
+const MANIFEST_PATH = 'compiler/contract-manifest.json';
 
 type AnyContract = Contract.Any;
 type AnyWitnesses = Contract.Witnesses<AnyContract>;
@@ -82,7 +86,7 @@ export class Artifact {
     return keys;
   }
 
-  /** Resolve, validate, and import the bundle. Throws {@link ArtifactNotFoundError} on missing dir/entry/keys/zkir. */
+  /** Resolve, validate, and import the bundle. Throws {@link ArtifactNotFoundError} on missing dir/entry/keys/zkir/manifest. */
   static async load(opts: LoadArtifactOptions): Promise<Artifact> {
     const { rootDir, artifactsDir, artifact, contractName, witnesses } = opts;
     const ctx = new LoaderContext(rootDir);
@@ -108,6 +112,14 @@ export class Artifact {
     if (!existsSync(keysDir) || !existsSync(zkirDir)) {
       throw new ArtifactNotFoundError(
         `${artifactPath} (missing keys/ or zkir/ subdirectory)`,
+      );
+    }
+    // midnight-js refuses every key read without the manifest, with a message
+    // that names provider options this package does not expose. Catch it here
+    // as the one thing it is: an artifact an older compiler produced.
+    if (!existsSync(resolve(artifactPath, MANIFEST_PATH))) {
+      throw new ArtifactNotFoundError(
+        `${artifactPath} (missing ${MANIFEST_PATH}; compile with \`compact compile +0.36.0\`, which writes it)`,
       );
     }
 

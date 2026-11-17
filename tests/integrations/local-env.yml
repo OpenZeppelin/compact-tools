@@ -3,8 +3,12 @@ services:
   proof-server:
     # Pinned to a release, not `:latest`, so the stack matches the
     # ledger-v9 versions in "Supported stack" (packages/deployer/README.md)
-    # and does not move under the suite.
-    image: 'midnightntwrk/proof-server:9.0.0-rc.6'
+    # and does not move under the suite. 9.0.0 is the first proof server that
+    # proves the ZKIR 3.1 compactc 0.36.0 emits: rc.6 rejects the IR at
+    # `/check` (`unrecognised discriminant`), rc.8 fails scalar-returning
+    # circuits at `/prove`. Deploys never prove a circuit, so this suite
+    # cannot see the difference; compact-contracts' live suite can.
+    image: 'midnightntwrk/proof-server:9.0.1'
     command: ['midnight-proof-server -v']
     ports:
       - '127.0.0.1:6300:6300'
@@ -16,9 +20,8 @@ services:
 
   indexer:
     # Pinned for the same reason as proof-server above. This is the ledger-9
-    # line matching node 2.0.0-rc.4; `latest` drifted to the Cardano-bridge
-    # indexer, which crash-loops without a Blockfrost id.
-    image: 'midnightntwrk/indexer-standalone:4.4.0-rc.2'
+    # release matching node 2.1.101 (4.4.0-rc.2 cannot read its genesis).
+    image: 'midnightntwrk/indexer-standalone:4.4.101'
     ports:
       - '127.0.0.1:8088:8088'
     environment:
@@ -51,14 +54,27 @@ services:
         max-file: '3'
 
   node:
-    image: 'midnightntwrk/midnight-node:2.0.0-rc.4'
+    # 2.0.0-rc.4 rejects the proofs proof-server 9.0.x makes (`Custom error:
+    # 170` at submission). 2.1.0-rc.4 accepts them but refuses every call
+    # built by midnight-js 5.0.0 ("ran out of gas budget" at mempool
+    # admission); the 2.1.101 release accepts both.
+    image: 'midnightntwrk/midnight-node:2.1.101'
     ports:
       - '127.0.0.1:9944:9944'
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9944/health']
+      # Healthy once a block past genesis is finalized: the indexer's SPO
+      # sub-process fetches block 1 on boot and exits the whole indexer if
+      # only genesis exists.
+      test: >-
+        H=$$(curl -sf -H 'content-type: application/json'
+        -d '{"id":1,"jsonrpc":"2.0","method":"chain_getFinalizedHead","params":[]}'
+        http://localhost:9944 | grep -o '0x[0-9a-f]*')
+        && curl -sf -H 'content-type: application/json'
+        -d "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"chain_getHeader\",\"params\":[\"$$H\"]}"
+        http://localhost:9944 | grep -q '"number":"0x[1-9a-f]'
       interval: 2s
       timeout: 5s
-      retries: 20
+      retries: 30
       start_period: 5s
     environment:
       CFG_PRESET: 'dev'

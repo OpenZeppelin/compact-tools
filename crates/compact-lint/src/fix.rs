@@ -140,6 +140,10 @@ fn supplied_by_a_rename(issue: &Issue, issues: &[Issue], config: &Config) -> boo
 /// `constraints-format` and `constraints-placeholder` need a measurement a rewrite
 /// cannot invent, and `parse` and `format` are not doc-comment issues at all.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a flat dispatch with one arm per rule"
+)]
 pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
     match issue {
         Issue::MissingDoc {
@@ -192,6 +196,21 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
                 range: doc.range.clone(),
                 indent: doc.indent,
                 op: DocOp::InsertConstraints(format!("{tag} {UNMEASURED}")),
+            },
+        }),
+
+        Issue::UndocumentedConstraints {
+            position,
+            tag,
+            offset,
+            indent,
+            ..
+        } => Some(Edit {
+            position: *position,
+            message: format!("inserted {tag} {UNMEASURED}"),
+            kind: EditKind::Insert {
+                offset: *offset,
+                text: doc_comment(&[format!("{tag} {UNMEASURED}")], *indent, newline),
             },
         }),
 
@@ -297,6 +316,11 @@ fn skeleton(
         body.push(config.fix.placeholder.clone());
     }
 
+    doc_comment(&body, indent, newline)
+}
+
+/// Renders body lines as a `/** … */` block inserted before a declaration.
+fn doc_comment(body: &[String], indent: usize, newline: &str) -> String {
     let margin = " ".repeat(indent);
     let mut lines = vec!["/**".to_owned()];
     for line in body {

@@ -147,6 +147,11 @@ fn the_constraints_annotation_follows_the_description_block() {
 }
 
 #[test]
+fn an_undocumented_circuit_under_docs_none_takes_a_constraints_only_comment() {
+    assert_case("constraints-undocumented");
+}
+
+#[test]
 fn a_forbidden_tag_with_a_replacement_is_renamed_in_place() {
     assert_case("rename");
 }

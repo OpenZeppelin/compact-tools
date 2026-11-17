@@ -81,6 +81,17 @@ pub enum Issue {
         tag: Tag,
         doc: DocRef,
     },
+    /// `missing-constraints` on a circuit with no doc comment, where the docs policy
+    /// does not ask for one.
+    UndocumentedConstraints {
+        position: Position,
+        subject: String,
+        tag: Tag,
+        /// Byte offset of the declaration's first token.
+        offset: usize,
+        /// The declaration's start column, reused as the comment's indentation.
+        indent: usize,
+    },
     ConstraintsFormat {
         position: Position,
         tag: Tag,
@@ -103,6 +114,7 @@ impl Issue {
             | Self::ForbiddenTag { position, .. }
             | Self::ModuleName { position, .. }
             | Self::MissingConstraints { position, .. }
+            | Self::UndocumentedConstraints { position, .. }
             | Self::ConstraintsFormat { position, .. }
             | Self::ConstraintsPlaceholder { position, .. } => *position,
         }
@@ -116,7 +128,9 @@ impl Issue {
             Self::MissingTag { .. } => RuleId::MISSING_TAG,
             Self::ForbiddenTag { .. } => RuleId::FORBIDDEN_TAG,
             Self::ModuleName { .. } => RuleId::MODULE_NAME,
-            Self::MissingConstraints { .. } => RuleId::MISSING_CONSTRAINTS,
+            Self::MissingConstraints { .. } | Self::UndocumentedConstraints { .. } => {
+                RuleId::MISSING_CONSTRAINTS
+            }
             Self::ConstraintsFormat { .. } => RuleId::CONSTRAINTS_FORMAT,
             Self::ConstraintsPlaceholder { .. } => RuleId::CONSTRAINTS_PLACEHOLDER,
         }
@@ -139,12 +153,15 @@ impl Issue {
             | Self::MissingConstraints { subject, tag, .. } => {
                 format!("{subject} doc comment has no {tag}")
             }
+            Self::UndocumentedConstraints { subject, tag, .. } => {
+                format!("{subject} has no doc comment, so no {tag}")
+            }
             Self::ForbiddenTag { tag, .. } => format!("forbidden tag {tag}"),
             Self::ModuleName {
                 documented, name, ..
             } => format!("@module names `{documented}`, but the module is `{name}`"),
             Self::ConstraintsFormat { tag, value, .. } => {
-                format!("{tag} value `{value}` is not `k=<n>, rows=<n>`")
+                format!("{tag} value `{value}` is not `k=<n>, rows=<n> [note]`")
             }
             Self::ConstraintsPlaceholder { tag, value, .. } => {
                 format!("{tag} value `{value}` still holds a placeholder")
@@ -265,6 +282,14 @@ fn check_declaration(
                 offset: declaration.offset,
                 indent: declaration.position.column - 1,
                 constraints: takes_constraints(declaration),
+            });
+        } else if takes_constraints(declaration) {
+            issues.push(Issue::UndocumentedConstraints {
+                position: declaration.position,
+                subject: subject(declaration),
+                tag: config.constraints.tag.clone(),
+                offset: declaration.offset,
+                indent: declaration.position.column - 1,
             });
         }
         return;
@@ -396,11 +421,15 @@ fn check_constraints(
     }
 }
 
-/// Matches `k=<n|?>,<space>*rows=<n|?>`; returns whether either field is a `?` placeholder.
+/// Matches `k=<n|?>,<space>*rows=<n|?>`, optionally followed by whitespace and a note
+/// such as `(zkir-v3)`; returns whether either field is a `?` placeholder.
 fn parse_constraints(value: &str) -> Option<bool> {
     let rest = value.strip_prefix("k=")?;
     let (k, rest) = rest.split_once(',')?;
     let rows = rest.trim_start().strip_prefix("rows=")?;
+    let rows = rows
+        .split_once(char::is_whitespace)
+        .map_or(rows, |(rows, _note)| rows);
 
     let k_placeholder = is_placeholder(k)?;
     let rows_placeholder = is_placeholder(rows)?;
@@ -496,14 +525,31 @@ mod tests {
 
     #[test]
     fn the_constraints_rule_survives_docs_none() {
-        let source =
+        let documented =
             "/** @description Bumps. */\nexport circuit bump(): [] { count.increment(1); }\n";
+        let undocumented = "export circuit bump(): [] { count.increment(1); }\n";
         let mut config = circuit_config();
         config.kinds.circuit.docs = DocsPolicy::None;
 
         assert_eq!(
-            findings(source, &config, false),
+            findings(documented, &config, false),
             ["a.compact:2:1: missing-constraints: circuit `bump` doc comment has no @constraints"]
+        );
+        assert_eq!(
+            findings(undocumented, &config, false),
+            [
+                "a.compact:1:1: missing-constraints: circuit `bump` has no doc comment, so no @constraints"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_undocumented_circuit_reports_only_missing_doc_when_docs_are_required() {
+        let source = "export circuit bump(): [] { count.increment(1); }\n";
+
+        assert_eq!(
+            findings(source, &circuit_config(), false),
+            ["a.compact:1:1: missing-doc: circuit `bump` has no doc comment"]
         );
     }
 
@@ -568,8 +614,15 @@ mod tests {
         assert_eq!(parse_constraints("k=10, rows=626"), Some(false));
         assert_eq!(parse_constraints("k=10,rows=626"), Some(false));
         assert_eq!(parse_constraints("k=?, rows=626"), Some(true));
-        assert_eq!(parse_constraints("k=10, rows=626 (approx)"), None);
         assert_eq!(parse_constraints("rows=626, k=10"), None);
+    }
+
+    #[test]
+    fn constraints_accept_a_note_after_whitespace() {
+        assert_eq!(parse_constraints("k=6, rows=34 (zkir-v3)"), Some(false));
+        assert_eq!(parse_constraints("k=?, rows=? (zkir-v3)"), Some(true));
+        assert_eq!(parse_constraints("k=6, rows=34(zkir-v3)"), None);
+        assert_eq!(parse_constraints("k=6 (zkir-v3), rows=34"), None);
     }
 
     #[test]

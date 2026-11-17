@@ -25,19 +25,6 @@ vi.mock('rxjs', async (importOriginal) => {
   };
 });
 
-vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@midnight-ntwrk/midnight-js-network-id')
-    >();
-  return {
-    ...actual,
-    // logWalletAddresses passes whatever this returns to the codec
-    // mock which ignores the arg. Opaque value is fine.
-    getNetworkId: vi.fn(() => 0),
-  };
-});
-
 // Stub the bech32 codec triplet so `logWalletAddresses` reaches its
 // happy-path info logs instead of catching at the encode call.
 vi.mock('@midnightntwrk/wallet-sdk-address-format', () => {
@@ -109,16 +96,17 @@ function facadeState(
   return {
     shielded: {
       balances: opts.shielded ?? anyToken(1n),
-      state: { progress: progress(opts.shieldedProgress) },
+      progress: progress(opts.shieldedProgress),
     },
     unshielded: {
       balances: opts.unshielded ?? anyToken(1n),
       progress: unshieldedProgress(opts.unshieldedProgress),
     },
     dust: {
-      state: { progress: progress(opts.dustProgress) },
+      progress: progress(opts.dustProgress),
       balance: () => 1n,
     },
+    lifecycle: [],
   };
 }
 
@@ -178,7 +166,7 @@ describe('describeProgress', () => {
 describe('logWalletAddresses', () => {
   it('should log the three bech32m addresses on the happy path', async () => {
     const { logger, info } = spyLogger();
-    await logWalletAddresses(fakeWallet(Rx.NEVER), logger);
+    await logWalletAddresses(fakeWallet(Rx.NEVER), logger, 'undeployed');
     expect(info).toHaveBeenCalledWith(
       'Wallet addresses (verify these match your seed):',
     );
@@ -199,7 +187,9 @@ describe('logWalletAddresses', () => {
     wallet.wallet.shielded = {
       state: Rx.throwError(() => new Error('no state')),
     } as never;
-    await expect(logWalletAddresses(wallet, logger)).resolves.toBeUndefined();
+    await expect(
+      logWalletAddresses(wallet, logger, 'undeployed'),
+    ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({ err: 'no state' }),
       'Could not derive wallet addresses for display; continuing',
@@ -411,9 +401,7 @@ describe('readDustTip', () => {
       wallet: {
         state: () =>
           Rx.of({
-            dust: {
-              state: { progress: { highestRelevantWalletIndex: 41n } },
-            },
+            dust: { progress: { highestRelevantWalletIndex: 41n } },
           }),
       },
     } as unknown as MidnightWalletProvider;
@@ -423,21 +411,24 @@ describe('readDustTip', () => {
 });
 
 describe('awaitDustSettled', () => {
+  /** A lifecycle entry at `status`; only the tag is read. */
+  const entry = (status: string) => ({ status: { _tag: status } });
+
   /**
    * Emits one state per entry, so a test can hold the wallet behind the mark.
-   * `null` stands for a facade that exposes no pending set.
+   * `lifecycle` is the facade's record of the wallet's own transactions.
    */
   function walletApplying(
     indices: bigint[],
-    pending: { all: unknown[] } | null = { all: [] },
+    lifecycle: ReturnType<typeof entry>[] = [],
   ): MidnightWalletProvider {
     return {
       wallet: {
         state: () =>
           Rx.from(
             indices.map((appliedIndex) => ({
-              dust: { state: { progress: { appliedIndex } } },
-              pending: pending ?? undefined,
+              dust: { progress: { appliedIndex } },
+              lifecycle,
             })),
           ),
       },
@@ -454,38 +445,30 @@ describe('awaitDustSettled', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('should wait while the wallet still holds a transaction of its own pending', async () => {
-    const thrown = await awaitDustSettled({
-      // The index is past the mark, but the wallet has not resolved its own
-      // transaction, which is the spend we care about.
-      wallet: walletApplying([42n], { all: [{ tx: 'ours' }] }),
-      appliedBeyond: 41n,
-      timeoutMs: 5,
-    }).catch((e: unknown) => e);
+  it.each(['Balanced', 'Finalized', 'Submitted'])(
+    'should wait while a transaction of its own is still %s',
+    async (status) => {
+      const thrown = await awaitDustSettled({
+        // The index is past the mark, but the wallet has not resolved its own
+        // transaction, which is the spend we care about.
+        wallet: walletApplying([42n], [entry(status)]),
+        appliedBeyond: 41n,
+        timeoutMs: 5,
+      }).catch((e: unknown) => e);
 
-    expect(thrown).toBeInstanceOf(WalletError);
-  });
+      expect(thrown).toBeInstanceOf(WalletError);
+    },
+  );
 
   it('should return once the wallet has resolved its own transaction', async () => {
     await expect(
       awaitDustSettled({
-        wallet: walletApplying([42n], {
-          all: [{ tx: 'ours', result: { status: 'SUCCESS', segments: [] } }],
-        }),
+        // An ended entry stays in the lifecycle until its TTL passes.
+        wallet: walletApplying([42n], [entry('Settled')]),
         appliedBeyond: 41n,
         timeoutMs: 1000,
       }),
     ).resolves.toBeUndefined();
-  });
-
-  it('should wait while the wallet exposes no pending set at all', async () => {
-    const thrown = await awaitDustSettled({
-      wallet: walletApplying([42n], null),
-      appliedBeyond: 41n,
-      timeoutMs: 5,
-    }).catch((e: unknown) => e);
-
-    expect(thrown).toBeInstanceOf(WalletError);
   });
 
   it('should fail rather than balancing against a wallet still short of the mark', async () => {

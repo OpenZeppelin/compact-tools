@@ -62,7 +62,7 @@ What each rule's fix does:
 | --- | --- |
 | `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
 | `missing-tag` | Inserts each missing tag after the block of the last tag that precedes it in `kinds.<kind>.tags`, else at the top of the body. A missing `@description` adopts untagged prose that opens the body instead of writing a placeholder. A `/** … */` one-liner expands to the multi-line form first. |
-| `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. |
+| `missing-constraints` | Inserts `<tag> k=?, rows=?` after the `@description` block, with a blank ` *` line before it and, where prose follows, one after. Without a `@description` it opens the body. On a circuit with no doc comment, it inserts a doc comment holding only that line. |
 | `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
 | `module-name` | Replaces the first word of the `@module` value with the module's name, keeping what follows. |
 
@@ -89,7 +89,7 @@ into place, keeping the file's line ending and its trailing newline, or lack of 
 | `forbidden-tag` | A tag listed in `tags.forbid` is present. |
 | `module-name` | `@module <Name>` does not name the module it documents. |
 | `missing-constraints` | An exported non-pure circuit has no constraints tag. |
-| `constraints-format` | The constraints value is not `k=<n>, rows=<n>`. |
+| `constraints-format` | The constraints value is not `k=<n>, rows=<n>`, optionally followed by whitespace and a note such as `(zkir-v3)`. |
 | `constraints-placeholder` | `--strict` only: the constraints value still holds a `?`. |
 | `parse` | The file holds a syntax defect; the first one is reported and the doc rules are skipped for that file. |
 | `format` | `compact format --check` reported the file. |
@@ -102,8 +102,8 @@ Rule detail:
 - **Export.** "Exported" means the declaration carries the `export` token itself. A
   non-exported circuit inside an exported module is not exported.
 - **Constraints.** The rule applies to exported non-pure circuits only, and that is
-  fixed, not configurable. A missing doc comment reports as `missing-doc`, not
-  `missing-constraints`.
+  fixed, not configurable. A missing doc comment reports as `missing-doc` when the
+  kind's `docs` policy requires one, and as `missing-constraints` when it does not.
 - **`module-name`.** The documented name is the first word of the `@module` value,
   without its generic arguments or trailing punctuation, so `@module Signer<T>` matches
   `module Signer` and `@module Utils.` matches `module Utils`.

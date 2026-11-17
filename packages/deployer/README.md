@@ -39,27 +39,30 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 
 | Component | Version |
 |---|---|
-| `@midnight-ntwrk/compact-runtime` | 0.19.0 |
-| `@midnightntwrk/ledger-v9` | 1.0.0-rc.5 |
-| `@midnight-ntwrk/compact-js` | 2.5.5-rc.8 |
-| `@midnight-ntwrk/midnight-js-*` | 5.0.0-beta.7 |
-| `@midnight-ntwrk/testkit-js` | 5.0.0-beta.7 |
-| `@midnightntwrk/wallet-sdk-facade` | 5.0.0-beta.2 |
-| Compact compiler | 0.34.0 |
+| `@midnight-ntwrk/compact-runtime` | 0.21.0 |
+| `@midnightntwrk/ledger-v9` | 1.0.0 |
+| `@midnight-ntwrk/compact-js` | 3.0.0 |
+| `@midnight-ntwrk/midnight-js-*` | 5.0.0 |
+| `@midnight-ntwrk/testkit-js` | 5.0.0 |
+| `@midnightntwrk/wallet-sdk-facade` | 5.0.0 |
+| Compact compiler | 0.36.0 |
+| Proof server (`proof_server = "auto"`) | 9.0.1 |
 
-Compile with `compact compile +0.34.0`. An older artifact fails at submit with `Version mismatch`.
+Compile with `compact compile +0.36.0`. An older artifact fails when it loads with `Version mismatch`. Recompiling changes every verifier key (ZKIR v3, `[v7]` header), so a maintenance update of a contract deployed from 0.34 artifacts rotates all of its keys and invalidates proofs in flight. midnight-js checks every key and circuit it loads against the artifact's `compiler/contract-manifest.json`, which the compiler writes next to `keys/` and `zkir/`, so the deployer refuses an artifact without it at load time; keep the whole artifact directory together.
 
 The ledger and the wallet SDK sit under the `@midnightntwrk` scope, no hyphen. Everything else keeps `@midnight-ntwrk`.
 
-Every package manager needs one pin, because the stack's packages ask for different ledger versions and a second ledger copy breaks every deploy. With npm:
+Every package manager needs three pins, because the stack's packages ask for the protocol packages with ranges and a second copy of any of them breaks every deploy. With npm:
 
 ```json
 "overrides": {
-  "@midnightntwrk/ledger-v9": "1.0.0-rc.5"
+  "@midnightntwrk/ledger-v9": "1.0.0",
+  "@midnightntwrk/onchain-runtime-v4": "4.0.0",
+  "@midnight-ntwrk/platform-js": "3.0.0"
 }
 ```
 
-yarn takes the same entry under `resolutions`, and pnpm under `pnpm.overrides`. Nothing else in the stack floats.
+yarn takes the same entries under `resolutions`, and pnpm under `pnpm.overrides`. Nothing else in the stack floats.
 
 ## CLI
 
@@ -227,7 +230,7 @@ circuits_per_tx  = 8
 
 `proof_server`: a URL pins the server; `"auto"` spawns a `testcontainers`-managed proof-server container for the deploy; omitting it falls back to `PROOF_SERVER_PORT`, then to `http://127.0.0.1:6300`.
 
-`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, pinning `midnightntwrk/proof-server:9.0.0-rc.6`. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; it wins over the packaged one.
+`"auto"` needs Docker and boots the `proof-server.yml` shipped in this package, pinning `midnightntwrk/proof-server:9.0.1`. To boot a different image, put your own `proof-server.yml` in the directory you run `compact-deploy` from; it wins over the packaged one.
 
 ### Patterns
 
@@ -269,7 +272,7 @@ An Ethereum V3 JSON keystore (scrypt + AES-128-CTR) tagged `version: "midnight-1
 
 6. **The root `@midnightntwrk/ledger-v9` resolution is load-bearing.** `compact-js` declares it as a range, so without the pin yarn nests a second ledger copy and deploys fail. Do not drop it on a bump.
 
-7. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.19.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Forcing one `0.19.0` copy with a resolution also deploys, the split path included.
+7. **`@midnight-ntwrk/compact-runtime` resolves to two copies**, `0.19.0-rc.0` under `compact-js` and `midnight-js-protocol` against `0.21.0` everywhere else. The integration suite deploys on that tree, including the pruned constructor path through `compact-js`. Do not force one copy with a resolution. `compact-js` builds circuit contexts with 0.19's positional `createCircuitContext`, and 0.21 takes an options object, so on a single `0.21.0` copy deploys still pass but every circuit call through `midnight-js` fails with `'contractState' parameter undefined has unexpected type`. Cross-contract calls do not run through this stack either way: the context `compact-js` builds carries no `moduleProvider`, so a callee call fails with `ModuleProviderAbsent` until `midnight-js` moves to runtime 0.21.
 
 ## Programmatic API
 

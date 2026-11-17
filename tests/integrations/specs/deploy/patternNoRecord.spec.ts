@@ -6,16 +6,14 @@ import {
   inMemoryPrivateStateProvider,
   syncWallet,
 } from '@midnight-ntwrk/testkit-js';
+import { ContractState } from '@midnightntwrk/ledger-v9';
 import {
   Deployer,
   type DeployResult,
 } from '@openzeppelin/compact-deployer/deployer';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { testLogger } from '../../_harness/logger.ts';
-import {
-  localNetworkConfig,
-  setupLocalNetwork,
-} from '../../_harness/network.ts';
+import { localNetworkConfig } from '../../_harness/network.ts';
 import {
   ARTIFACTS_DIR,
   ROOT_DIR,
@@ -51,7 +49,10 @@ const CIRCUITS = Array.from(
 
 describe('compact-deploy — pattern entry, in-code state, no ledger', () => {
   const env = localNetworkConfig();
-  const provider = indexerPublicDataProvider(env.indexer, env.indexerWS);
+  const provider = indexerPublicDataProvider({
+    queryURL: env.indexer,
+    subscriptionURL: env.indexerWS,
+  });
   const zkConfig = new NodeZkConfigProvider<string>(
     resolve(ARTIFACTS_DIR, 'Fragmented'),
   );
@@ -61,7 +62,6 @@ describe('compact-deploy — pattern entry, in-code state, no ledger', () => {
   beforeAll(async () => {
     requireArtifact('Fragmented');
     rmSync(DEPLOYMENTS_DIR, { recursive: true, force: true });
-    setupLocalNetwork();
     const wallet = await getSharedPool().signerFor('DEPLOYER');
     await syncWallet(wallet.wallet);
     await using deployer = await Deployer.prepare({
@@ -95,8 +95,9 @@ describe('compact-deploy — pattern entry, in-code state, no ledger', () => {
   });
 
   it('should hold exactly the artifact circuits with byte-equal verifier keys', async () => {
-    const state = await provider.queryContractState(result.address);
-    if (state === null) throw new Error(`no contract at ${result.address}`);
+    const read = await provider.queryContractState(result.address);
+    if (read === null) throw new Error(`no contract at ${result.address}`);
+    const state = read.contractState.deserialize({ v9: ContractState });
     const onChain = state
       .operations()
       .map((op) => (typeof op === 'string' ? op : Buffer.from(op).toString()))
@@ -112,7 +113,7 @@ describe('compact-deploy — pattern entry, in-code state, no ledger', () => {
 
   it('should store the in-code private state under the pattern id', async () => {
     await expect(
-      privateStateProvider.get(PRIVATE_STATE_ID),
+      privateStateProvider.forContract(result.address).get(PRIVATE_STATE_ID),
     ).resolves.toStrictEqual(IN_CODE_STATE);
   });
 });

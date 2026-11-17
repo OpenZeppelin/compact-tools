@@ -8,7 +8,6 @@ import {
   WalletFactory,
   WalletSeeds,
 } from '@midnight-ntwrk/testkit-js';
-import { DustSecretKey, ZswapSecretKeys } from '@midnightntwrk/ledger-v9';
 import type { WalletFacade } from '@midnightntwrk/wallet-sdk-facade';
 import {
   createKeystore,
@@ -214,7 +213,7 @@ export class WalletHandler implements AsyncDisposable {
     type CreateFacadeArgs = Parameters<typeof WalletFactory.createWalletFacade>;
     const walletFacade: WalletFacade = await WalletFactory.createWalletFacade(
       config as CreateFacadeArgs[0],
-      shieldedWallet as CreateFacadeArgs[1],
+      shieldedWallet,
       unshieldedWallet,
       dustWallet,
     );
@@ -223,11 +222,8 @@ export class WalletHandler implements AsyncDisposable {
       logger,
       env,
       walletFacade,
-      ZswapSecretKeys.fromSeed(walletSeeds.shielded),
-      DustSecretKey.fromSeed(walletSeeds.dust),
-      unshieldedKeystore as Parameters<
-        typeof MidnightWalletProvider.withWallet
-      >[5],
+      walletSeeds,
+      unshieldedKeystore,
     );
 
     return new WalletHandler(provider, unshieldedKeystore, logger, cache);

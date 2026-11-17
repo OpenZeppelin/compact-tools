@@ -24,6 +24,7 @@ import {
   type Fixture,
   fakeFinalized,
   fakeProviders,
+  fakeStateRead,
   fakeUnsubmittedDeploy,
   fakeVerifierKeys,
   headPath,
@@ -77,14 +78,6 @@ vi.mock('./services/deploy-tx.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('./services/deploy-tx.ts')>();
   return { ...actual, submitDeploy: vi.fn(actual.submitDeploy) };
-});
-
-vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@midnight-ntwrk/midnight-js-network-id')
-    >();
-  return { ...actual, getNetworkId: vi.fn(() => 'undeployed') };
 });
 
 const CIRCUITS = ['approve', 'burn', 'charge', 'deposit', 'evict'];
@@ -186,14 +179,12 @@ function injectedWallet(dust: DustView): MidnightWalletProvider {
       state: () =>
         Rx.of({
           dust: {
-            state: {
-              progress: {
-                highestRelevantWalletIndex: dust.tip,
-                appliedIndex: dust.applied,
-              },
+            progress: {
+              highestRelevantWalletIndex: dust.tip,
+              appliedIndex: dust.applied,
             },
           },
-          pending: { all: [] },
+          lifecycle: [],
         }),
     },
   } as unknown as MidnightWalletProvider;
@@ -258,7 +249,7 @@ describe('Deployer options', () => {
     insertSizes = [];
     providers = fakeProviders();
     providers.publicDataProvider.queryContractState = vi.fn(async () =>
-      chainState(onChain, BigInt(landedInserts)),
+      fakeStateRead(chainState(onChain, BigInt(landedInserts))),
     );
     vi.mocked(buildProviders).mockImplementation(() => providers as never);
     vi.mocked(Artifact.load).mockImplementation(
@@ -475,14 +466,16 @@ describe('Deployer options', () => {
       });
 
       it('should leave --force out of a committee refusal', async () => {
-        providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-          ...chainState(onChain, BigInt(landedInserts)),
-          maintenanceAuthority: {
-            committee: [{ tag: 'schnorr', value: 'someone-else' }],
-            threshold: 1,
-            counter: 0n,
-          },
-        }));
+        providers.publicDataProvider.queryContractState = vi.fn(async () =>
+          fakeStateRead({
+            ...chainState(onChain, BigInt(landedInserts)),
+            maintenanceAuthority: {
+              committee: [{ tag: 'schnorr', value: 'someone-else' }],
+              threshold: 1,
+              counter: 0n,
+            },
+          }),
+        );
 
         const thrown = await deploy({ record: false, circuitsPerTx: 2 }).catch(
           (e: unknown) => e,

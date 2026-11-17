@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import {
   ReplaceAuthority,
   type Signature,
@@ -10,7 +9,7 @@ import {
   VerifierKeyRemove,
   verifySignature,
 } from '@midnightntwrk/ledger-v9';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DeployError } from '../errors.ts';
 import {
   buildInsertTx,
@@ -31,12 +30,6 @@ const fixture = (name: string) =>
  */
 const VERIFIER_KEY = fixture('counter-increment.verifier');
 const ZKIR_V3_VERIFIER_KEY = fixture('counter-increment-zkir-v3.verifier');
-
-// `buildInsertTx` reads the midnight-js network-id singleton, which the
-// deployer sets from `[networks.X].network_id` before any tx is built.
-beforeAll(() => {
-  setNetworkId('undeployed');
-});
 
 const SIGNING_KEY_HEX = 'aa'.repeat(32);
 const SIGNING_KEY: SigningKey = { tag: 'schnorr', value: SIGNING_KEY_HEX };
@@ -244,7 +237,10 @@ describe('buildInsertTx', () => {
       signerIndex: 0,
     });
 
-    const rendered = buildInsertTx({ update }).toString(false);
+    const rendered = buildInsertTx({
+      update,
+      networkId: 'undeployed',
+    }).toString(false);
 
     expect(rendered).toContain('MaintenanceUpdate');
     expect(rendered).toContain('guaranteed_unshielded_offer: None');
@@ -261,9 +257,9 @@ describe('buildInsertTx', () => {
       signerIndex: 0,
     });
 
-    expect(buildInsertTx({ update }).toString(false)).not.toContain(
-      SIGNING_KEY_HEX,
-    );
+    expect(
+      buildInsertTx({ update, networkId: 'undeployed' }).toString(false),
+    ).not.toContain(SIGNING_KEY_HEX);
   });
 });
 

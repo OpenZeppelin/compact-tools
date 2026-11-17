@@ -18,10 +18,14 @@ import {
   WalletSaveStateProvider,
 } from '@midnight-ntwrk/testkit-js';
 import {
+  type DustKeysByEpoch,
   DustWallet,
   type DustWalletAPI,
 } from '@midnightntwrk/wallet-sdk-dust-wallet';
-import type { ShieldedWalletAPI } from '@midnightntwrk/wallet-sdk-shielded';
+import type {
+  ShieldedKeysByEpoch,
+  ShieldedWalletAPI,
+} from '@midnightntwrk/wallet-sdk-shielded';
 import {
   type UnshieldedKeystore,
   UnshieldedWallet,
@@ -159,7 +163,7 @@ export class WalletCache {
     config: ConfigShape;
     seed: Uint8Array;
     skipCache: boolean;
-  }): Promise<ShieldedWalletAPI> {
+  }): Promise<ShieldedWalletAPI<ShieldedKeysByEpoch>> {
     const { config, seed, skipCache } = args;
     const logger = this.#logger;
     const cacheFilePath = this.shieldedCacheFilePath;
@@ -203,7 +207,7 @@ export class WalletCache {
     seed: Uint8Array;
     dustOptions: DustWalletOptions;
     skipCache: boolean;
-  }): Promise<DustWalletAPI> {
+  }): Promise<DustWalletAPI<DustKeysByEpoch>> {
     const { config, seed, dustOptions, skipCache } = args;
     const logger = this.#logger;
     const cacheFilePath = this.dustCacheFilePath;
