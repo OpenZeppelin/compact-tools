@@ -19,6 +19,7 @@
   "type": "module",
   "files": [
     "dist",
+    "checksums.txt",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"

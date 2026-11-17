@@ -137,6 +137,12 @@ carries a native binary as well as an npm package.
   and a `checksums.txt`, and only then publishes to npm. The installed package
   downloads its binary from that release, so the assets must be there first. For
   every other package the GitHub release is still created by hand (step 7 above).
+- The npm package carries the same `checksums.txt` and checks every download against
+  it, so a release asset replaced later fails on install.
+- A re-run never replaces assets. It fails when the version's tag names another
+  commit. When the release already exists, it keeps the release's assets and ships
+  their `checksums.txt`. A release missing an asset has to be deleted before the
+  re-run.
 - Release notes come from the `## <version>` section of `packages/linter/CHANGELOG.md`,
   falling back to the tag name. A `beta` dist-tag marks the release a prerelease.
 - Its first publish takes the `NPM_TOKEN` path above. Right after it, add

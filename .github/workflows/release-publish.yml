@@ -46,6 +46,7 @@ jobs:
       name: ${{ steps.pkg.outputs.name }}
       version: ${{ steps.pkg.outputs.version }}
       dist_tag: ${{ steps.pkg.outputs.dist_tag }}
+      sha: ${{ steps.pkg.outputs.sha }}
 
     steps:
       # For pull_request runs: checkout the merge commit (deterministic view of
@@ -132,6 +133,7 @@ jobs:
             echo "name=$PKG"
             echo "version=$VERSION"
             echo "dist_tag=$DIST_TAG"
+            echo "sha=$(git rev-parse HEAD)"
           } >> $GITHUB_OUTPUT
           {
             echo "### Publishing"
@@ -140,6 +142,21 @@ jobs:
             echo "- npm dist-tag: $DIST_TAG"
             echo "- Trigger: $EVENT"
           } >> $GITHUB_STEP_SUMMARY
+
+      # A re-run from a later commit must not publish or attach assets under a tag
+      # that names another commit. An annotated tag is compared by its peeled commit.
+      - name: Check an existing tag
+        env:
+          TAG: ${{ steps.pkg.outputs.name }}/v${{ steps.pkg.outputs.version }}
+        run: |
+          PEELED=$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)
+          DIRECT=$(git ls-remote origin "refs/tags/$TAG" | cut -f1)
+          TAGGED=${PEELED:-$DIRECT}
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [[ -n "$TAGGED" && "$TAGGED" != "$HEAD_SHA" ]]; then
+            echo "::error::tag $TAG points to $TAGGED, not $HEAD_SHA; dispatch the run from the tag"
+            exit 1
+          fi
 
   # compact-linter ships a native binary per target, built on its own runner. The
   # npm package downloads them, so they must reach the GitHub release first.
@@ -174,7 +191,7 @@ jobs:
       - name: Check out target ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+          ref: ${{ needs.detect.outputs.sha }}
 
       - name: Install the pinned toolchain
         run: |
@@ -230,7 +247,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+          ref: ${{ needs.detect.outputs.sha }}
           token: ${{ steps.gh-app-token.outputs.token }}
 
       - name: Setup Node.js
@@ -295,7 +312,15 @@ jobs:
             NOTES="$TAG"
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+            # A re-run keeps the published assets and ships their checksums.
+            ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+            for NAME in checksums.txt $(cd dist && ls compact-lint-*); do
+              if ! grep -qx "$NAME" <<< "$ASSETS"; then
+                echo "::error::release $TAG has no $NAME; delete the release and re-run"
+                exit 1
+              fi
+            done
+            gh release download "$TAG" --pattern checksums.txt --dir dist --clobber
           else
             ARGS=()
             if [[ "$DIST_TAG" == "beta" ]]; then
@@ -306,6 +331,12 @@ jobs:
               --notes "$NOTES" \
               "${ARGS[@]}"
           fi
+
+      # The launcher verifies a download against the digests it was published with,
+      # so a release asset replaced later fails the check.
+      - name: Add the checksums to the package
+        if: needs.detect.outputs.name == 'compact-linter'
+        run: cp dist/checksums.txt packages/linter/checksums.txt
 
       # Anything but a clean 200 or 404 fails the run, so a flaky registry can
       # never read as "new package" and quietly downgrade an existing package

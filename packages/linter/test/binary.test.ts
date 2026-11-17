@@ -69,6 +69,11 @@ function checksumsFor(asset: string, body: string): string {
 let install: string;
 let notices: string[];
 
+/** The `checksums.txt` the installed package was published with. */
+function packageChecksums(body: string): void {
+  writeFileSync(join(install, 'checksums.txt'), checksumsFor(ASSET, body));
+}
+
 function options(
   overrides: Partial<Parameters<typeof resolveBinary>[0]> = {},
 ): Parameters<typeof resolveBinary>[0] {
@@ -190,10 +195,8 @@ describe('resolveBinary', () => {
   });
 
   it('downloads, verifies and caches the release asset', async () => {
-    const origin = await startOrigin({
-      [ASSET]: FAKE_BINARY,
-      'checksums.txt': checksumsFor(ASSET, FAKE_BINARY),
-    });
+    packageChecksums(FAKE_BINARY);
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const binary = await resolveBinary(
         options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
@@ -205,10 +208,7 @@ describe('resolveBinary', () => {
       expect(spawnSync(binary, ['check'], { encoding: 'utf8' }).stdout).toBe(
         'fake-lint check\n',
       );
-      expect(origin.requests.toSorted()).toStrictEqual([
-        'checksums.txt',
-        ASSET,
-      ]);
+      expect(origin.requests).toStrictEqual([ASSET]);
       expect(notices).toStrictEqual([
         'downloading compact-lint-x86_64-unknown-linux-gnu (v0.1.0)',
       ]);
@@ -218,10 +218,8 @@ describe('resolveBinary', () => {
   });
 
   it('serves a second run from the cache', async () => {
-    const origin = await startOrigin({
-      [ASSET]: FAKE_BINARY,
-      'checksums.txt': checksumsFor(ASSET, FAKE_BINARY),
-    });
+    packageChecksums(FAKE_BINARY);
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const first = await resolveBinary(
         options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
@@ -230,18 +228,16 @@ describe('resolveBinary', () => {
         options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
       );
       expect(second).toBe(first);
-      expect(origin.requests).toHaveLength(2);
+      expect(origin.requests).toHaveLength(1);
       expect(notices).toHaveLength(1);
     } finally {
       await origin.close();
     }
   });
 
-  it('rejects an asset whose digest does not match checksums.txt', async () => {
-    const origin = await startOrigin({
-      [ASSET]: FAKE_BINARY,
-      'checksums.txt': checksumsFor(ASSET, 'a different binary'),
-    });
+  it('rejects an asset whose digest does not match the package checksums', async () => {
+    packageChecksums('a different binary');
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const expected = sha256(Buffer.from('a different binary'));
       const actual = sha256(Buffer.from(FAKE_BINARY));
@@ -250,14 +246,50 @@ describe('resolveBinary', () => {
           options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(
-        `checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}; delete ${join(install, 'cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu')} and retry`,
+        `checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}`,
       );
     } finally {
       await origin.close();
     }
   });
 
+  it('ignores a checksums.txt replaced on the release', async () => {
+    packageChecksums(FAKE_BINARY);
+    const replaced = '#!/bin/sh\necho replaced\n';
+    const origin = await startOrigin({
+      [ASSET]: replaced,
+      'checksums.txt': checksumsFor(ASSET, replaced),
+    });
+    try {
+      await expect(
+        resolveBinary(
+          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+        ),
+      ).rejects.toThrow(`checksum mismatch for ${ASSET}`);
+      expect(origin.requests).toStrictEqual([ASSET]);
+    } finally {
+      await origin.close();
+    }
+  });
+
+  it('refuses to download without the package checksums', async () => {
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
+    try {
+      await expect(
+        resolveBinary(
+          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+        ),
+      ).rejects.toThrow(
+        `${join(install, 'checksums.txt')} is missing, so a download cannot be verified; set COMPACT_LINT_BINARY`,
+      );
+      expect(origin.requests).toStrictEqual([]);
+    } finally {
+      await origin.close();
+    }
+  });
+
   it('rejects an origin that answers with an http error', async () => {
+    packageChecksums(FAKE_BINARY);
     const origin = await startOrigin({});
     try {
       await expect(
@@ -273,6 +305,7 @@ describe('resolveBinary', () => {
   });
 
   it('rejects an origin that cannot be reached', async () => {
+    packageChecksums(FAKE_BINARY);
     await expect(
       resolveBinary(
         options({

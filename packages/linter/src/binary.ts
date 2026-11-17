@@ -3,6 +3,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   renameSync,
   writeFileSync,
 } from 'node:fs';
@@ -24,6 +25,7 @@ const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 /** Where the binary is fetched from and cached, and who is told about a download. */
 export interface ResolveOptions {
+  /** Root of the installed package, which carries the release's `checksums.txt`. */
   packageDir: string;
   /** Per-user directory the binary is cached in, never inside the installed package. */
   cacheDir: string;
@@ -113,22 +115,22 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
     return cached;
   }
 
+  // Digests come from the package, never the release, so a replaced asset fails here.
   const asset = assetName(target);
+  const expected = expectedChecksum(
+    packagedChecksums(options.packageDir),
+    asset,
+  );
   const base =
     options.env.COMPACT_LINT_DOWNLOAD_BASE ??
     `${RELEASE_BASE}/compact-linter/v${options.version}`;
   options.notify(`downloading ${asset} (v${options.version})`);
 
-  const [binary, checksums] = await Promise.all([
-    fetchBytes(`${base}/${asset}`),
-    fetchText(`${base}/checksums.txt`),
-  ]);
-
-  const expected = expectedChecksum(checksums, asset);
+  const binary = await fetchBytes(`${base}/${asset}`);
   const actual = sha256(binary);
   if (actual !== expected) {
     throw new Error(
-      `checksum mismatch for ${asset}: expected ${expected}, got ${actual}; delete ${cached} and retry`,
+      `checksum mismatch for ${asset}: expected ${expected}, got ${actual}`,
     );
   }
 
@@ -139,6 +141,16 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
   chmodSync(staged, 0o755);
   renameSync(staged, cached);
   return cached;
+}
+
+function packagedChecksums(packageDir: string): string {
+  const path = join(packageDir, 'checksums.txt');
+  if (!existsSync(path)) {
+    throw new Error(
+      `${path} is missing, so a download cannot be verified; set COMPACT_LINT_BINARY`,
+    );
+  }
+  return readFileSync(path, 'utf8');
 }
 
 async function fetchOk(url: string): Promise<Response> {
@@ -159,8 +171,4 @@ async function fetchOk(url: string): Promise<Response> {
 
 async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await (await fetchOk(url)).arrayBuffer());
-}
-
-async function fetchText(url: string): Promise<string> {
-  return (await fetchOk(url)).text();
 }
