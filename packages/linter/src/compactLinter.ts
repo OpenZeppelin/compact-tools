@@ -2,10 +2,10 @@
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { constants } from 'node:os';
+import { constants, homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBinary } from './binary.ts';
+import { resolveBinary, userCacheDir } from './binary.ts';
 
 // One level up from src/ and from dist/ alike, so both entry points find the manifest.
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -26,6 +26,7 @@ async function runLint(): Promise<void> {
   try {
     binary = await resolveBinary({
       packageDir,
+      cacheDir: userCacheDir(process.platform, process.env, homedir()),
       version: packageVersion(),
       platform: process.platform,
       arch: process.arch,

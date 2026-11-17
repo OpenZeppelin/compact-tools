@@ -6,7 +6,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 /** npm `platform-arch` pair to the Rust target triple the release assets are named after. */
 const TARGETS: Record<string, string> = {
@@ -24,14 +24,35 @@ const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 /** Where the binary is fetched from and cached, and who is told about a download. */
 export interface ResolveOptions {
-  /** Root of the installed package; the cache lives under `.cache/` inside it. */
   packageDir: string;
+  /** Per-user directory the binary is cached in, never inside the installed package. */
+  cacheDir: string;
   version: string;
   platform: string;
   arch: string;
   env: Record<string, string | undefined>;
   /** Called once, before the first download of a run. */
   notify: (message: string) => void;
+}
+
+/**
+ * `compact-linter` under the user's cache: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME`
+ * or `~/.cache` elsewhere. The installed package can be read-only (Yarn Plug'n'Play, a
+ * global install).
+ */
+export function userCacheDir(
+  platform: string,
+  env: Record<string, string | undefined>,
+  home: string,
+): string {
+  if (platform === 'darwin') {
+    return join(home, 'Library', 'Caches', 'compact-linter');
+  }
+  const xdg = env.XDG_CACHE_HOME;
+  return join(
+    xdg && isAbsolute(xdg) ? xdg : join(home, '.cache'),
+    'compact-linter',
+  );
 }
 
 export function resolveTarget(platform: string, arch: string): string | null {
@@ -84,8 +105,10 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
     );
   }
 
-  const cacheDir = join(options.packageDir, '.cache');
-  const cached = join(cacheDir, `compact-lint-${options.version}-${target}`);
+  const cached = join(
+    options.cacheDir,
+    `compact-lint-${options.version}-${target}`,
+  );
   if (existsSync(cached)) {
     return cached;
   }
@@ -110,7 +133,7 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
   }
 
   // Staged under a unique name so concurrent runs never read a half-written file.
-  mkdirSync(cacheDir, { recursive: true });
+  mkdirSync(options.cacheDir, { recursive: true });
   const staged = `${cached}.${randomUUID()}.tmp`;
   writeFileSync(staged, binary);
   chmodSync(staged, 0o755);

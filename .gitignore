@@ -66,9 +66,6 @@ vendor/
 target/
 .toolkit-cache/
 
-# compact-lint's release binary, cached inside the installed npm package.
-packages/linter/.cache/
-
 coverage
 **/reports
 

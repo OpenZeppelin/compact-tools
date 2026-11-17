@@ -19,6 +19,7 @@ import {
   resolveBinary,
   resolveTarget,
   sha256,
+  userCacheDir,
 } from '../src/binary.ts';
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -73,6 +74,7 @@ function options(
 ): Parameters<typeof resolveBinary>[0] {
   return {
     packageDir: install,
+    cacheDir: join(install, 'cache'),
     version: '0.1.0',
     platform: 'linux',
     arch: 'x64',
@@ -102,6 +104,29 @@ describe('resolveTarget', () => {
   it('returns null for a platform with no release asset', () => {
     expect(resolveTarget('win32', 'x64')).toBeNull();
     expect(resolveTarget('linux', 'ia32')).toBeNull();
+  });
+});
+
+describe('userCacheDir', () => {
+  it('uses XDG_CACHE_HOME on linux when it is absolute', () => {
+    expect(userCacheDir('linux', { XDG_CACHE_HOME: '/xdg' }, '/home/dev')).toBe(
+      '/xdg/compact-linter',
+    );
+  });
+
+  it('falls back to ~/.cache on linux', () => {
+    expect(userCacheDir('linux', {}, '/home/dev')).toBe(
+      '/home/dev/.cache/compact-linter',
+    );
+    expect(
+      userCacheDir('linux', { XDG_CACHE_HOME: 'relative' }, '/home/dev'),
+    ).toBe('/home/dev/.cache/compact-linter');
+  });
+
+  it('uses ~/Library/Caches on macos', () => {
+    expect(
+      userCacheDir('darwin', { XDG_CACHE_HOME: '/xdg' }, '/Users/dev'),
+    ).toBe('/Users/dev/Library/Caches/compact-linter');
   });
 });
 
@@ -174,7 +199,7 @@ describe('resolveBinary', () => {
         options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
       );
       expect(binary).toBe(
-        join(install, '.cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu'),
+        join(install, 'cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu'),
       );
       expect(statSync(binary).mode & 0o777).toBe(0o755);
       expect(spawnSync(binary, ['check'], { encoding: 'utf8' }).stdout).toBe(
@@ -225,7 +250,7 @@ describe('resolveBinary', () => {
           options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(
-        `checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}; delete ${join(install, '.cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu')} and retry`,
+        `checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}; delete ${join(install, 'cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu')} and retry`,
       );
     } finally {
       await origin.close();
