@@ -110,6 +110,9 @@ comment carries `constraints.tag`, whatever its value. A circuit with no annotat
 `fix`'s job and is left alone here. A file holding a parse defect is skipped, so `check`
 stays the place a syntax error is reported.
 
+A note after the value, such as `(zkir-v3)`, stays while the measurement matches and is
+dropped when the value changes.
+
 Changes go to stdout, one per line:
 
 ```text

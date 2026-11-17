@@ -48,6 +48,19 @@ pub struct ConstraintSite {
     pub doc: DocRef,
 }
 
+impl ConstraintSite {
+    /// The value without a trailing note such as `(zkir-v3)`.
+    #[must_use]
+    pub fn measurement(&self) -> &str {
+        let Some(rows) = self.value.find("rows=") else {
+            return &self.value;
+        };
+        self.value[rows..]
+            .find(char::is_whitespace)
+            .map_or(&self.value, |end| &self.value[..rows + end])
+    }
+}
+
 /// One rule violation, carrying what `check` prints and what `fix` needs to repair it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Issue {

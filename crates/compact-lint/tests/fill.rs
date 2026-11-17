@@ -190,6 +190,11 @@ fn a_seeded_cache_fills_without_a_compiler() {
 }
 
 #[test]
+fn a_note_stays_while_the_measurement_matches() {
+    assert_case("note", &["--no-compile"], 0, "");
+}
+
+#[test]
 fn a_circuit_the_report_marks_unproved_stays_unmeasured() {
     let directory = work("basic");
     let (_, stdout) = code_and_stdout(&fill(directory.path(), &[]));

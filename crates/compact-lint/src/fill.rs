@@ -209,7 +209,7 @@ fn fill_file(
         };
 
         let value = measurement.value();
-        if value == site.value {
+        if value == site.measurement() {
             continue;
         }
 
