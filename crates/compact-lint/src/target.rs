@@ -81,7 +81,7 @@ fn absolute_paths(paths: &[PathBuf], cwd: &Path) -> Vec<PathBuf> {
 ///
 /// A `..` with nothing to cancel is kept, so a relative path that climbs out of its own
 /// directory still points where it did.
-fn normalize(path: &Path) -> PathBuf {
+pub(crate) fn normalize(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for component in path.components() {
         match component {
