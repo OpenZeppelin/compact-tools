@@ -1,0 +1,1 @@
+src/access/Ownable.compact:16:6: fill: @constraints k=9, rows=42 (zkir-v3) -> k=13, rows=4871

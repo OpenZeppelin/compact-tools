@@ -53,4 +53,13 @@ export module Clean {
   export circuit initialize(): [] {
     _isInitialized = true;
   }
+
+  /**
+   * @description Marks the module uninitialized.
+   * @constraints k=10, rows=626 (zkir-v3)
+   * @returns {[]} Empty tuple.
+   */
+  export circuit reset(): [] {
+    _isInitialized = false;
+  }
 }

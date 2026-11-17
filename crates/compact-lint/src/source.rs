@@ -3,9 +3,10 @@
 //! A library module does not compile on its own, so its constraints are measured through
 //! the mock contract that exports the same circuit names.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use crate::config::{Config, ConfigError};
+use crate::target::normalize;
 
 /// Where a file's measurements come from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,28 +132,6 @@ fn display(path: &Path) -> String {
     }
 }
 
-/// Resolves `.` and `..` lexically, so two spellings of one path compare equal.
-///
-/// A `..` with nothing to cancel is kept, so a relative path that climbs out of its own
-/// directory still points where it did.
-fn normalize(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => match out.components().next_back() {
-                Some(Component::Normal(_)) => {
-                    out.pop();
-                }
-                Some(Component::RootDir | Component::Prefix(_)) => {}
-                _ => out.push(Component::ParentDir),
-            },
-            other => out.push(other),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::{Resolver, Source};
@@ -259,15 +238,6 @@ mod tests {
             resolve(&config, &work, "Ownable.compact"),
             Source::Found(PathBuf::from("../mocks/Ownable.compact"))
         );
-    }
-
-    #[test]
-    fn normalize_keeps_a_parent_it_cannot_cancel() {
-        assert_eq!(
-            super::normalize(Path::new("../mocks/./Ownable.compact")),
-            PathBuf::from("../mocks/Ownable.compact")
-        );
-        assert_eq!(super::normalize(Path::new("/..")), PathBuf::from("/"));
     }
 
     #[test]

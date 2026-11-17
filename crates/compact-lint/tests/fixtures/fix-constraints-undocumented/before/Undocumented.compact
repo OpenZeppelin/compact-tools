@@ -1,0 +1,10 @@
+/**
+ * @description A module whose circuits need no doc comment.
+ */
+export module Undocumented {
+  export circuit bump(): [] { }
+
+  export pure circuit double(value: Uint<8>): Uint<16> {
+    return value as Uint<16> * 2;
+  }
+}

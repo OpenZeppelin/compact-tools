@@ -77,7 +77,7 @@ describe('compact-deploy — PrivateCounter exercises private-state + witnesses-
 
   it('should store the seeded private state under the configured id', async () => {
     await expect(
-      privateStateProvider.get(PRIVATE_STATE_ID),
+      privateStateProvider.forContract(result.address).get(PRIVATE_STATE_ID),
     ).resolves.toStrictEqual(SEEDED_PRIVATE_STATE);
   });
 

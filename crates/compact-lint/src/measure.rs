@@ -1,8 +1,8 @@
 //! Measuring a circuit's proving key size and row count with `compact compile`.
 //!
 //! `k` and `rows` reach only the compiler's terminal progress output, so the compile runs
-//! under a pty and the transcript is parsed. Results are cached in the
-//! `.circuit-info.json` file the TypeScript builder writes, in the same shape.
+//! under a pty and the transcript is parsed. Results are cached in a
+//! `.circuit-info.json` file beside the compiled source.
 
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
@@ -23,9 +23,10 @@ const CONTRACT_INFO_PATH: [&str; 2] = ["compiler", "contract-info.json"];
 /// Compiler-output lines kept in a failure report.
 const TAIL_LINES: usize = 20;
 
-/// Terminal geometry for the compile; a wide row keeps a progress line off the wrap.
+/// Terminal geometry for the compile. The compiler prints only as many circuit lines as
+/// the terminal has rows, and a wide row keeps a progress line off the wrap.
 const PTY_SIZE: PtySize = PtySize {
-    rows: 60,
+    rows: 500,
     cols: 200,
     pixel_width: 0,
     pixel_height: 0,
@@ -47,6 +48,8 @@ pub enum MeasureError {
     },
     #[error("compiling {file} failed:\n{tail}")]
     Compile { file: PathBuf, tail: String },
+    #[error("compiling {file} printed no measurement for {circuits}")]
+    Silent { file: PathBuf, circuits: String },
     #[error("cannot read {path}")]
     Read {
         path: PathBuf,
@@ -102,7 +105,7 @@ impl Measurement {
     }
 }
 
-/// The `.circuit-info.json` shape, shared with the TypeScript builder.
+/// The `.circuit-info.json` cache: each source file name's measurements.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct CircuitInfo {
     #[serde(rename = "generatedAt")]
@@ -167,6 +170,21 @@ impl Compiler {
 
         let mut measured = parse(&cleaned);
         if let Some(proved) = proved_circuits(&output)? {
+            let silent: Vec<&str> = proved
+                .iter()
+                .filter(|name| {
+                    !measured
+                        .iter()
+                        .any(|measurement| &measurement.name == *name)
+                })
+                .map(String::as_str)
+                .collect();
+            if !silent.is_empty() {
+                return Err(MeasureError::Silent {
+                    file: source.to_owned(),
+                    circuits: silent.join(", "),
+                });
+            }
             measured.retain(|measurement| proved.contains(&measurement.name));
         }
         Ok(measured)
@@ -187,6 +205,8 @@ impl Compiler {
         command.arg(source);
         command.arg(output);
         command.env("TERM", "xterm-256color");
+        // Under `NO_COLOR` the compiler prints no progress lines, so nothing is measured.
+        command.env_remove("NO_COLOR");
         command.cwd(&self.cwd);
 
         let mut child = pair
@@ -451,7 +471,7 @@ pub fn tail(cleaned: &str, keep: usize) -> String {
     lines[start..].join("\n")
 }
 
-/// An RFC 3339 UTC timestamp, the spelling the TypeScript builder writes.
+/// An RFC 3339 UTC timestamp.
 fn timestamp(now: SystemTime) -> String {
     let seconds = now
         .duration_since(UNIX_EPOCH)

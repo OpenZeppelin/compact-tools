@@ -35,6 +35,8 @@ pub enum FixError {
     },
     #[error(transparent)]
     Write(#[from] WriteError),
+    #[error("refusing to write {path}: the edits would change its declarations")]
+    Unsafe { path: PathBuf },
 }
 
 /// Everything the `fix` subcommand needs, already resolved from flags.
@@ -86,7 +88,7 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
         let issues = linter.issues(path, &source, &target.config, false)?;
         let edits: Vec<Edit> = issues
             .iter()
-            .filter(|issue| !supplied_by_a_rename(issue, &issues, &target.config))
+            .filter(|issue| !supplied_elsewhere(issue, &issues, &target.config))
             .filter_map(|issue| edit_for(issue, &target.config, newline))
             .collect();
 
@@ -94,8 +96,12 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
             continue;
         }
 
+        let fixed = apply(&source, &edits, newline);
+        if changes_declarations(&mut linter, path, &source, &fixed)? {
+            return Err(FixError::Unsafe { path: path.clone() });
+        }
         if !options.dry_run {
-            write_atomically(path, &apply(&source, &edits, newline))?;
+            write_atomically(path, &fixed)?;
         }
         files.push(FileEdits {
             path: path.clone(),
@@ -106,24 +112,39 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
     Ok(Outcome { files })
 }
 
-/// Whether a forbidden tag in the same doc comment is renamed to the tag this
-/// `missing-tag` issue reports.
+/// Whether `after` parses into other declarations than `before`. Doc edits never should,
+/// so a difference means an edit broke a comment delimiter.
+fn changes_declarations(
+    linter: &mut Linter,
+    path: &Path,
+    before: &str,
+    after: &str,
+) -> Result<bool, LintError> {
+    Ok(linter.outline(path, before)? != linter.outline(path, after)?)
+}
+
+/// Whether another edit on the same doc comment already writes the tag this
+/// `missing-tag` or `missing-constraints` issue would insert: a rename to it, or, for
+/// the constraints tag, the constraints line.
 ///
 /// Inserting it as well would leave the comment carrying the tag twice.
-fn supplied_by_a_rename(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
-    let Issue::MissingTag { tag, doc, .. } = issue else {
+fn supplied_elsewhere(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
+    let (Issue::MissingTag { tag, doc, .. } | Issue::MissingConstraints { tag, doc, .. }) = issue
+    else {
         return false;
     };
+    let inserts_tag = matches!(issue, Issue::MissingTag { .. });
 
-    issues.iter().any(|other| {
-        matches!(
-            other,
-            Issue::ForbiddenTag {
-                tag: forbidden,
-                doc: other_doc,
-                ..
-            } if other_doc == doc && config.rename_of(forbidden) == Some(tag)
-        )
+    issues.iter().any(|other| match other {
+        Issue::ForbiddenTag {
+            tag: forbidden,
+            doc: other_doc,
+            ..
+        } => other_doc == doc && config.rename_of(forbidden) == Some(tag),
+        Issue::MissingConstraints { doc: other_doc, .. } => {
+            inserts_tag && other_doc == doc && *tag == config.constraints.tag
+        }
+        _ => false,
     })
 }
 
@@ -132,6 +153,10 @@ fn supplied_by_a_rename(issue: &Issue, issues: &[Issue], config: &Config) -> boo
 /// `constraints-format` and `constraints-placeholder` need a measurement a rewrite
 /// cannot invent, and `parse` and `format` are not doc-comment issues at all.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a flat dispatch with one arm per rule"
+)]
 pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
     match issue {
         Issue::MissingDoc {
@@ -184,6 +209,21 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
                 range: doc.range.clone(),
                 indent: doc.indent,
                 op: DocOp::InsertConstraints(format!("{tag} {UNMEASURED}")),
+            },
+        }),
+
+        Issue::UndocumentedConstraints {
+            position,
+            tag,
+            offset,
+            indent,
+            ..
+        } => Some(Edit {
+            position: *position,
+            message: format!("inserted {tag} {UNMEASURED}"),
+            kind: EditKind::Insert {
+                offset: *offset,
+                text: doc_comment(&[format!("{tag} {UNMEASURED}")], *indent, newline),
             },
         }),
 
@@ -262,7 +302,8 @@ fn tag_line(tag: &Tag, name: Option<&str>, config: &Config) -> String {
 /// The doc comment `fix` writes above an undocumented declaration.
 ///
 /// Body lines come from `kinds.<kind>.tags` in config order, then the constraints
-/// annotation where the declaration takes one.
+/// annotation where the declaration takes one. That annotation is the only line the
+/// constraints tag gets, even when `kinds.<kind>.tags` lists it.
 fn skeleton(
     kind: DeclKind,
     name: Option<&str>,
@@ -276,6 +317,7 @@ fn skeleton(
         .get(kind)
         .tags
         .iter()
+        .filter(|tag| !constraints || **tag != config.constraints.tag)
         .map(|tag| tag_line(tag, name, config))
         .collect();
 
@@ -289,6 +331,11 @@ fn skeleton(
         body.push(config.fix.placeholder.clone());
     }
 
+    doc_comment(&body, indent, newline)
+}
+
+/// Renders body lines as a `/** … */` block inserted before a declaration.
+fn doc_comment(body: &[String], indent: usize, newline: &str) -> String {
     let margin = " ".repeat(indent);
     let mut lines = vec!["/**".to_owned()];
     for line in body {
@@ -317,10 +364,12 @@ pub fn line(path: &Path, position: Position, message: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::skeleton;
+    use super::{changes_declarations, skeleton};
     use crate::config::Config;
     use crate::doc::Tag;
     use crate::model::DeclKind;
+    use crate::rules::Linter;
+    use std::path::Path;
 
     fn config() -> Config {
         let mut config = Config::default();
@@ -346,6 +395,17 @@ mod tests {
     }
 
     #[test]
+    fn a_required_constraints_tag_is_written_once() {
+        let mut config = config();
+        config.kinds.circuit.tags = vec![Tag::new("@description"), Tag::new("@constraints")];
+
+        assert_eq!(
+            skeleton(DeclKind::Circuit, Some("run"), true, &config, 0, "\n"),
+            "/**\n * @description TODO\n *\n * @constraints k=?, rows=?\n */\n"
+        );
+    }
+
+    #[test]
     fn a_pure_circuit_skeleton_stops_at_the_tag_lines() {
         assert_eq!(
             skeleton(DeclKind::Circuit, Some("double"), false, &config(), 2, "\n"),
@@ -359,6 +419,18 @@ mod tests {
             skeleton(DeclKind::Type, Some("RoleId"), false, &config(), 2, "\n"),
             "/**\n   * TODO\n   */\n  "
         );
+    }
+
+    #[test]
+    fn an_unterminated_comment_counts_as_a_declaration_change() {
+        let mut linter = Linter::new().expect("the bundled grammar loads");
+        let path = Path::new("a.compact");
+        let before = "/** @module Old */\nmodule Access {\n}\n";
+
+        let closed = "/** @module Access */\nmodule Access {\n}\n";
+        let unclosed = "/** @module Access\nmodule Access {\n}\n";
+        assert!(!changes_declarations(&mut linter, path, before, closed).expect("parses"));
+        assert!(changes_declarations(&mut linter, path, before, unclosed).expect("parses"));
     }
 
     #[test]

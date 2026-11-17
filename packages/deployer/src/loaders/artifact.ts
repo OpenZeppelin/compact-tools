@@ -17,8 +17,12 @@ import { LoaderContext } from './context.ts';
  *   <artifact>/contract/index.{cjs,js}   — Contract class
  *   <artifact>/keys/<circuit>.{prover,verifier}
  *   <artifact>/zkir/<circuit>.bzkir
+ *   <artifact>/compiler/contract-manifest.json — digests midnight-js checks keys and zkir against
  * Witnesses live outside the bundle, referenced via `[contracts.X].witnesses`.
  */
+
+/** Written by compactc 0.36.0 and newer; midnight-js checks every key and zkir file against it. */
+const MANIFEST_PATH = 'compiler/contract-manifest.json';
 
 type AnyContract = Contract.Any;
 type AnyWitnesses = Contract.Witnesses<AnyContract>;
@@ -35,6 +39,8 @@ export interface LoadArtifactOptions {
   artifact: string;
   contractName: string;
   witnesses?: FileOrModuleRef;
+  /** In-code witnesses. They win, and {@link witnesses} is then never imported. */
+  witnessImpls?: object;
 }
 
 /** Verifier key bytes per circuit, as read from `keys/<circuit>.verifier`. */
@@ -80,7 +86,7 @@ export class Artifact {
     return keys;
   }
 
-  /** Resolve, validate, and import the bundle. Throws {@link ArtifactNotFoundError} on missing dir/entry/keys/zkir. */
+  /** Resolve, validate, and import the bundle. Throws {@link ArtifactNotFoundError} on missing dir/entry/keys/zkir/manifest. */
   static async load(opts: LoadArtifactOptions): Promise<Artifact> {
     const { rootDir, artifactsDir, artifact, contractName, witnesses } = opts;
     const ctx = new LoaderContext(rootDir);
@@ -108,12 +114,20 @@ export class Artifact {
         `${artifactPath} (missing keys/ or zkir/ subdirectory)`,
       );
     }
+    // midnight-js refuses every key read without the manifest, with a message
+    // that names provider options this package does not expose. Catch it here
+    // as the one thing it is: an artifact an older compiler produced.
+    if (!existsSync(resolve(artifactPath, MANIFEST_PATH))) {
+      throw new ArtifactNotFoundError(
+        `${artifactPath} (missing ${MANIFEST_PATH}; compile with \`compact compile +0.36.0\`, which writes it)`,
+      );
+    }
 
     const circuitNames = collectCircuitNames(zkirDir);
     const Ctor = await importContractCtor(ctx, entry);
-    const witnessImpls = witnesses
-      ? await importWitnesses(ctx, witnesses)
-      : undefined;
+    const witnessImpls =
+      opts.witnessImpls ??
+      (witnesses ? await importWitnesses(ctx, witnesses) : undefined);
 
     const compiledContract = buildCompiledContract({
       contractName,
@@ -149,7 +163,7 @@ async function importContractCtor(
 async function importWitnesses(
   ctx: LoaderContext,
   ref: FileOrModuleRef,
-): Promise<AnyWitnesses> {
+): Promise<object> {
   if (isFileRef(ref)) {
     throw new ConfigError(
       'witnesses must be a { module, export } reference; JSON file refs are not supported (witnesses are functions)',
@@ -169,18 +183,20 @@ async function importWitnesses(
       `witnesses: module ${path} export "${ref.export}" must resolve to an object`,
     );
   }
-  return resolved as AnyWitnesses;
+  return resolved;
 }
 
 function buildCompiledContract(input: {
   contractName: string;
   Ctor: Types.Ctor<AnyContract>;
-  witnessImpls: AnyWitnesses | undefined;
+  witnessImpls: object | undefined;
   contractDir: string;
 }): AnyCompiledContract {
   const base = CompiledContract.make(input.contractName, input.Ctor);
+  // Only the caller knows the artifact's witness types, and an interface-typed
+  // set has no index signature to satisfy the SDK's `Witnesses`.
   const withWit = input.witnessImpls
-    ? CompiledContract.withWitnesses(base, input.witnessImpls)
+    ? CompiledContract.withWitnesses(base, input.witnessImpls as AnyWitnesses)
     : CompiledContract.withVacantWitnesses(base);
   return CompiledContract.withCompiledFileAssets(withWit, input.contractDir);
 }

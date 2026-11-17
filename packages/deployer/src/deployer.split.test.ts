@@ -2,16 +2,19 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  type MaintenanceUpdate,
-  signatureVerifyingKey,
-  type VerifierKeyInsert,
-  verifySignature,
-} from '@midnight-ntwrk/ledger-v8';
-import {
   createUnprovenDeployTx,
   submitTxAsync,
 } from '@midnight-ntwrk/midnight-js-contracts';
 import type { MidnightWalletProvider } from '@midnight-ntwrk/testkit-js';
+import {
+  type MaintenanceUpdate,
+  type Signature,
+  type SignatureVerifyingKey,
+  type SigningKey,
+  signatureVerifyingKey,
+  type VerifierKeyInsert,
+  verifySignature,
+} from '@midnightntwrk/ledger-v9';
 import type { Logger } from 'pino';
 import * as Rx from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +22,7 @@ import {
   type FakeProviders,
   type Fixture,
   fakeProviders,
+  fakeStateRead,
   fakeUnsubmittedDeploy,
   fakeVerifierKeys,
   headPath,
@@ -39,7 +43,10 @@ import { Artifact } from './loaders/artifact.ts';
 import { buildProviders } from './providers/build.ts';
 import { ProofServer } from './providers/proof-server.ts';
 import { submitDeploy } from './services/deploy-tx.ts';
-import { buildInsertUpdate } from './services/maintenance-tx.ts';
+import {
+  buildInsertUpdate,
+  formatVerifyingKey,
+} from './services/maintenance-tx.ts';
 
 vi.mock('./loaders/artifact.ts', () => ({
   Artifact: { load: vi.fn() },
@@ -82,15 +89,7 @@ vi.mock('./services/deploy-tx.ts', async (importOriginal) => {
   return { ...actual, submitDeploy: vi.fn(actual.submitDeploy) };
 });
 
-vi.mock('@midnight-ntwrk/midnight-js-network-id', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@midnight-ntwrk/midnight-js-network-id')
-    >();
-  return { ...actual, getNetworkId: vi.fn(() => 'undeployed') };
-});
-
-vi.mock('@midnight-ntwrk/wallet-sdk-address-format', () => {
+vi.mock('@midnightntwrk/wallet-sdk-address-format', () => {
   const codec = { encode: vi.fn(() => ({ toString: () => 'addr1stub' })) };
   return {
     ShieldedAddress: { codec },
@@ -106,7 +105,16 @@ const SPLIT_ADDRESS = 'cd'.repeat(32);
 
 /** The signing key `writeFixture` writes, and the committee member it implies. */
 const FIXTURE_SIGNING_KEY = 'aa'.repeat(32);
-const FIXTURE_VERIFYING_KEY = signatureVerifyingKey(FIXTURE_SIGNING_KEY);
+const FIXTURE_LEDGER_KEY: SigningKey = {
+  tag: 'schnorr',
+  value: FIXTURE_SIGNING_KEY,
+};
+const FIXTURE_VERIFYING_KEY = signatureVerifyingKey(FIXTURE_LEDGER_KEY);
+
+/** A committee member other than ours, named rather than hex for readability. */
+function otherKey(value: string): SignatureVerifyingKey {
+  return { tag: 'schnorr', value };
+}
 
 /**
  * A real compiler-emitted key. The ledger checks its header when an insert is
@@ -156,14 +164,12 @@ function fragmentWallet(dust: DustView): MidnightWalletProvider {
       state: () =>
         Rx.of({
           dust: {
-            state: {
-              progress: {
-                highestRelevantWalletIndex: dust.tip,
-                appliedIndex: dust.applied,
-              },
+            progress: {
+              highestRelevantWalletIndex: dust.tip,
+              appliedIndex: dust.applied,
             },
           },
-          pending: { all: [] },
+          lifecycle: [],
         }),
     },
   } as unknown as MidnightWalletProvider;
@@ -219,7 +225,7 @@ describe('Deployer fragmented deploy', () => {
     declaredCircuits = SPLIT_CIRCUITS;
     providers = fakeProviders();
     providers.publicDataProvider.queryContractState = vi.fn(async () =>
-      chainState(onChain, BigInt(landedInserts)),
+      fakeStateRead(chainState(onChain, BigInt(landedInserts))),
     );
     vi.mocked(buildProviders).mockImplementation(() => providers as never);
     vi.mocked(createUnprovenDeployTx).mockResolvedValue(
@@ -326,7 +332,7 @@ describe('Deployer fragmented deploy', () => {
       const update = insertedUpdate(n);
       expect(update.address).toBe(SPLIT_ADDRESS);
       expect(update.counter).toBe(BigInt(n));
-      const [slot, signature] = update.signatures[0] as [bigint, string];
+      const [slot, signature] = update.signatures[0] as [bigint, Signature];
       expect(slot).toBe(0n);
       expect(
         verifySignature(FIXTURE_VERIFYING_KEY, update.dataToSign, signature),
@@ -335,14 +341,16 @@ describe('Deployer fragmented deploy', () => {
   });
 
   it('should refuse to insert when the committee needs more than one signature', async () => {
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, BigInt(landedInserts)),
-      maintenanceAuthority: {
-        committee: [FIXTURE_VERIFYING_KEY, 'other'],
-        threshold: 2,
-        counter: 0n,
-      },
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, BigInt(landedInserts)),
+        maintenanceAuthority: {
+          committee: [FIXTURE_VERIFYING_KEY, otherKey('other')],
+          threshold: 2,
+          counter: 0n,
+        },
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
     const thrown = await d.deploy().catch((e: unknown) => e);
@@ -355,14 +363,16 @@ describe('Deployer fragmented deploy', () => {
   });
 
   it('should sign at this key slot when the committee is ordered differently', async () => {
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, BigInt(landedInserts)),
-      maintenanceAuthority: {
-        committee: ['someone-else', FIXTURE_VERIFYING_KEY],
-        threshold: 1,
-        counter: BigInt(landedInserts),
-      },
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, BigInt(landedInserts)),
+        maintenanceAuthority: {
+          committee: [otherKey('someone-else'), FIXTURE_VERIFYING_KEY],
+          threshold: 1,
+          counter: BigInt(landedInserts),
+        },
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 4 });
     await d.deploy();
@@ -643,7 +653,7 @@ describe('Deployer fragmented deploy', () => {
 
     expect(providers.privateStateProvider.setSigningKey).toHaveBeenCalledWith(
       SPLIT_ADDRESS,
-      FIXTURE_SIGNING_KEY,
+      FIXTURE_LEDGER_KEY,
     );
   });
 
@@ -917,14 +927,16 @@ describe('Deployer fragmented deploy', () => {
   it('should refuse to resume a contract maintained by a foreign committee', async () => {
     onChain = ['approve'];
     seedHead(partialHead(['approve'], ['burn']));
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, 0n),
-      maintenanceAuthority: {
-        committee: ['SOMEONE-ELSE'],
-        threshold: 1,
-        counter: 1n,
-      },
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, 0n),
+        maintenanceAuthority: {
+          committee: [otherKey('SOMEONE-ELSE')],
+          threshold: 1,
+          counter: 1n,
+        },
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
 
@@ -935,10 +947,12 @@ describe('Deployer fragmented deploy', () => {
   it('should refuse to resume a contract carrying a foreign verifier key', async () => {
     onChain = ['approve'];
     seedHead(partialHead(['approve'], ['burn']));
-    providers.publicDataProvider.queryContractState = vi.fn(async () => ({
-      ...chainState(onChain, 0n),
-      operation: () => ({ verifierKey: new Uint8Array([9, 9]) }),
-    }));
+    providers.publicDataProvider.queryContractState = vi.fn(async () =>
+      fakeStateRead({
+        ...chainState(onChain, 0n),
+        operation: () => ({ verifierKey: new Uint8Array([9, 9]) }),
+      }),
+    );
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
 
@@ -994,14 +1008,17 @@ describe('Deployer fragmented deploy', () => {
     // Chain reports a different key for the last circuit than the artifact has.
     const genuine = providers.publicDataProvider.queryContractState;
     providers.publicDataProvider.queryContractState = vi.fn(async () => {
-      const state = (await genuine()) as ReturnType<typeof chainState>;
-      return {
+      const read = (await genuine()) as ReturnType<
+        typeof fakeStateRead<ReturnType<typeof chainState>>
+      >;
+      const state = read.contractState.deserialize();
+      return fakeStateRead({
         ...state,
         operation: (name: string) =>
           name === 'evict'
             ? { verifierKey: new Uint8Array([0, 0]) }
             : state.operation(name),
-      };
+      });
     });
 
     await using d = await splitDeployer({ circuitsPerTx: 2 });
@@ -1077,7 +1094,7 @@ describe('Deployer fragmented deploy', () => {
     await using d = await splitDeployer({ circuitsPerTx: 2, logger });
     await d.deploy();
 
-    expect(lines()).toContain(FIXTURE_VERIFYING_KEY);
+    expect(lines()).toContain(formatVerifyingKey(FIXTURE_VERIFYING_KEY));
     expect(lines()).not.toContain(FIXTURE_SIGNING_KEY);
   });
 

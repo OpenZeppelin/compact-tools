@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  type CircuitInfoFile,
+  artifactDir,
+  type CircuitInfo,
   cleanCompileOutput,
   cleanForDisplay,
   parseCircuitConstraints,
-  writeCircuitInfoJson,
+  writeCircuitInfo,
 } from '../src/utils.js';
 
 describe('cleanCompileOutput', () => {
@@ -217,7 +218,27 @@ Overall progress [====================] 7/7`;
   });
 });
 
-describe('writeCircuitInfoJson', () => {
+describe('artifactDir', () => {
+  it('flattens a contract into <outDir>/<Contract>', () => {
+    expect(artifactDir('artifacts', 'access/MockOwnable.compact', false)).toBe(
+      join('artifacts', 'MockOwnable'),
+    );
+  });
+
+  it('mirrors the source subdirectory when hierarchical', () => {
+    expect(
+      artifactDir('artifacts', 'access/test/mocks/MockOwnable.compact', true),
+    ).toBe(join('artifacts', 'access', 'test', 'mocks', 'MockOwnable'));
+  });
+
+  it('flattens a source at the srcDir root when hierarchical', () => {
+    expect(artifactDir('artifacts', 'MockOwnable.compact', true)).toBe(
+      join('artifacts', 'MockOwnable'),
+    );
+  });
+});
+
+describe('writeCircuitInfo', () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -228,126 +249,89 @@ describe('writeCircuitInfoJson', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('creates a new .circuit-info.json when none exists', () => {
+  it('writes circuit-info.json into the artifact directory', () => {
     const circuits = [
       { name: 'owner', k: 7, rows: 76 },
       { name: 'transfer', k: 10, rows: 970 },
     ];
+    const outputDir = join(tmpDir, 'MockOwnable');
 
-    const jsonPath = writeCircuitInfoJson('Token.compact', tmpDir, circuits);
-
-    expect(existsSync(jsonPath)).toBe(true);
-    expect(jsonPath).toMatch(/\.circuit-info\.json$/);
-
-    const content: CircuitInfoFile = JSON.parse(
-      readFileSync(jsonPath, 'utf-8'),
-    );
-    expect(content.files['Token.compact']).toEqual(circuits);
-    expect(new Date(content.generatedAt).getTime()).not.toBeNaN();
-  });
-
-  it('merges into an existing .circuit-info.json', () => {
-    const firstCircuits = [{ name: 'owner', k: 7, rows: 76 }];
-    const secondCircuits = [{ name: 'pause', k: 6, rows: 29 }];
-
-    writeCircuitInfoJson('Token.compact', tmpDir, firstCircuits);
-    writeCircuitInfoJson('Pausable.compact', tmpDir, secondCircuits);
-
-    const jsonPath = join(tmpDir, '.circuit-info.json');
-    const content: CircuitInfoFile = JSON.parse(
-      readFileSync(jsonPath, 'utf-8'),
-    );
-
-    expect(Object.keys(content.files)).toHaveLength(2);
-    expect(content.files['Token.compact']).toEqual(firstCircuits);
-    expect(content.files['Pausable.compact']).toEqual(secondCircuits);
-  });
-
-  it('updates existing entry for the same file', () => {
-    const oldCircuits = [{ name: 'owner', k: 7, rows: 76 }];
-    const newCircuits = [{ name: 'owner', k: 8, rows: 100 }];
-
-    writeCircuitInfoJson('Token.compact', tmpDir, oldCircuits);
-    writeCircuitInfoJson('Token.compact', tmpDir, newCircuits);
-
-    const jsonPath = join(tmpDir, '.circuit-info.json');
-    const content: CircuitInfoFile = JSON.parse(
-      readFileSync(jsonPath, 'utf-8'),
-    );
-
-    expect(Object.keys(content.files)).toHaveLength(1);
-    expect(content.files['Token.compact']).toEqual(newCircuits);
-  });
-
-  it('creates intermediate directories for nested paths', () => {
-    const circuits = [{ name: 'init', k: 6, rows: 26 }];
-
-    const jsonPath = writeCircuitInfoJson(
-      'test/mocks/MockInit.compact',
-      tmpDir,
+    const jsonPath = writeCircuitInfo(
+      outputDir,
+      'access/test/mocks/MockOwnable.compact',
       circuits,
     );
 
-    expect(jsonPath).toBe(join(tmpDir, 'test', 'mocks', '.circuit-info.json'));
+    expect(jsonPath).toBe(join(outputDir, 'circuit-info.json'));
     expect(existsSync(jsonPath)).toBe(true);
 
-    const content: CircuitInfoFile = JSON.parse(
-      readFileSync(jsonPath, 'utf-8'),
-    );
-    expect(content.files['MockInit.compact']).toEqual(circuits);
+    const content: CircuitInfo = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+    expect(content.source).toBe('access/test/mocks/MockOwnable.compact');
+    expect(content.circuits).toEqual(circuits);
+    expect(new Date(content.generatedAt).getTime()).not.toBeNaN();
   });
 
-  it('updates generatedAt timestamp on subsequent writes', async () => {
-    const circuits = [{ name: 'owner', k: 7, rows: 76 }];
-    const jsonPath = join(tmpDir, '.circuit-info.json');
+  it('keeps the circuits in compiler output order', () => {
+    const circuits = [
+      { name: 'z', k: 5, rows: 10 },
+      { name: 'a', k: 6, rows: 20 },
+    ];
 
-    writeCircuitInfoJson('Token.compact', tmpDir, circuits);
-    const firstTimestamp = JSON.parse(
-      readFileSync(jsonPath, 'utf-8'),
-    ).generatedAt;
+    const jsonPath = writeCircuitInfo(tmpDir, 'Token.compact', circuits);
 
-    // Ensure at least 1ms passes so the timestamp differs
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    const content: CircuitInfo = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+    expect(content.circuits.map((circuit) => circuit.name)).toEqual(['z', 'a']);
+  });
 
-    writeCircuitInfoJson('Token.compact', tmpDir, circuits);
-    const secondTimestamp = JSON.parse(
-      readFileSync(jsonPath, 'utf-8'),
-    ).generatedAt;
+  it('creates the artifact directory when it does not exist', () => {
+    const outputDir = join(tmpDir, 'nested', 'MockInit');
 
-    expect(new Date(secondTimestamp).getTime()).toBeGreaterThan(
-      new Date(firstTimestamp).getTime(),
+    const jsonPath = writeCircuitInfo(outputDir, 'MockInit.compact', [
+      { name: 'init', k: 6, rows: 26 },
+    ]);
+
+    expect(existsSync(jsonPath)).toBe(true);
+  });
+
+  it('overwrites a previous run instead of merging', () => {
+    writeCircuitInfo(tmpDir, 'Token.compact', [
+      { name: 'owner', k: 7, rows: 76 },
+    ]);
+    const jsonPath = writeCircuitInfo(tmpDir, 'Pausable.compact', [
+      { name: 'pause', k: 6, rows: 29 },
+    ]);
+
+    const content: CircuitInfo = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+    expect(content.source).toBe('Pausable.compact');
+    expect(content.circuits).toEqual([{ name: 'pause', k: 6, rows: 29 }]);
+    expect(Object.keys(content)).toEqual(['generatedAt', 'source', 'circuits']);
+  });
+
+  it('records the source path with forward slashes', () => {
+    const jsonPath = writeCircuitInfo(
+      tmpDir,
+      'token/test/mocks/MockFungibleToken.compact',
+      [],
     );
+
+    const content: CircuitInfo = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+    expect(content.source).toBe('token/test/mocks/MockFungibleToken.compact');
   });
 
   it('handles empty circuits array', () => {
-    const jsonPath = writeCircuitInfoJson('Token.compact', tmpDir, []);
+    const jsonPath = writeCircuitInfo(tmpDir, 'Token.compact', []);
 
-    const content: CircuitInfoFile = JSON.parse(
-      readFileSync(jsonPath, 'utf-8'),
-    );
-    expect(content.files['Token.compact']).toEqual([]);
+    const content: CircuitInfo = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+    expect(content.circuits).toEqual([]);
   });
 
   it('writes valid JSON with trailing newline', () => {
-    writeCircuitInfoJson('Token.compact', tmpDir, [
+    writeCircuitInfo(tmpDir, 'Token.compact', [
       { name: 'foo', k: 5, rows: 100 },
     ]);
 
-    const raw = readFileSync(join(tmpDir, '.circuit-info.json'), 'utf-8');
+    const raw = readFileSync(join(tmpDir, 'circuit-info.json'), 'utf-8');
     expect(raw.endsWith('\n')).toBe(true);
     expect(() => JSON.parse(raw)).not.toThrow();
-  });
-
-  it('preserves unrelated entries when updating one file', () => {
-    writeCircuitInfoJson('A.compact', tmpDir, [{ name: 'a', k: 1, rows: 10 }]);
-    writeCircuitInfoJson('B.compact', tmpDir, [{ name: 'b', k: 2, rows: 20 }]);
-    writeCircuitInfoJson('A.compact', tmpDir, [{ name: 'a', k: 3, rows: 30 }]);
-
-    const content: CircuitInfoFile = JSON.parse(
-      readFileSync(join(tmpDir, '.circuit-info.json'), 'utf-8'),
-    );
-
-    expect(content.files['A.compact']).toEqual([{ name: 'a', k: 3, rows: 30 }]);
-    expect(content.files['B.compact']).toEqual([{ name: 'b', k: 2, rows: 20 }]);
   });
 });

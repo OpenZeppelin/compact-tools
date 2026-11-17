@@ -32,6 +32,7 @@ function makeArtifactDir(
     contractEntry?: 'cjs' | 'js' | 'top-level-cjs' | 'top-level-js' | 'none';
     keys?: boolean;
     zkir?: boolean;
+    manifest?: boolean;
     circuits?: string[];
     contractExport?: 'named' | 'default' | 'none';
   } = {},
@@ -40,6 +41,7 @@ function makeArtifactDir(
     contractEntry = 'cjs',
     keys = true,
     zkir = true,
+    manifest = true,
     circuits = ['inc', 'dec'],
     contractExport = 'named',
   } = opts;
@@ -71,6 +73,11 @@ function makeArtifactDir(
     for (const c of circuits) {
       writeFileSync(join(dir, 'zkir', `${c}.bzkir`), '');
     }
+  }
+
+  if (manifest) {
+    mkdirSync(join(dir, 'compiler'), { recursive: true });
+    writeFileSync(join(dir, 'compiler', 'contract-manifest.json'), '{}');
   }
 
   return dir;
@@ -168,6 +175,22 @@ describe('Artifact.load — error paths', () => {
         contractName: 'NoZkir',
       }),
     ).rejects.toThrow(/missing keys\/ or zkir\//);
+  });
+
+  it('should throw ArtifactNotFoundError when compiler/contract-manifest.json is missing', async () => {
+    makeArtifactDir(root, 'NoManifest', { manifest: false });
+    const thrown = await Artifact.load({
+      rootDir: root,
+      artifactsDir: 'src/artifacts',
+      artifact: 'NoManifest',
+      contractName: 'NoManifest',
+    }).catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(ArtifactNotFoundError);
+    expect((thrown as Error).message).toContain(
+      'missing compiler/contract-manifest.json',
+    );
+    expect((thrown as Error).message).toContain('compact compile +0.36.0');
   });
 
   it('should throw ConfigError when index does not export a Contract class', async () => {
@@ -270,6 +293,22 @@ describe('Artifact.load — witnesses module ref', () => {
       witnesses: { module: 'w.mjs', export: 'witnesses' },
     });
     expect(art.artifactPath).toBe(join(root, 'WithWitnesses'));
+  });
+
+  it('should use in-code witnesses without importing the witnesses ref', async () => {
+    makeArtifactDir(root, 'InCodeWitnesses');
+    const witnessImpls = { add: () => [undefined, 1] as [unknown, number] };
+    const art = await Artifact.load({
+      rootDir: root,
+      artifactsDir: 'src/artifacts',
+      artifact: 'InCodeWitnesses',
+      contractName: 'InCodeWitnesses',
+      witnesses: { module: 'missing.mjs', export: 'witnesses' },
+      witnessImpls,
+    });
+    expect((art.compiledContract as unknown as { w: unknown }).w).toBe(
+      witnessImpls,
+    );
   });
 });
 

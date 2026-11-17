@@ -1,0 +1,3 @@
+Once.compact:3:4: fix: renamed @circuitInfo to @constraints
+Once.compact:7:1: fix: inserted doc skeleton for circuit `bump`
+Once.compact:12:1: fix: inserted @constraints k=?, rows=?

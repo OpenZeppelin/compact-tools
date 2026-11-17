@@ -99,11 +99,16 @@ fn expected(name: &str) -> String {
 
 /// Runs `fill-constraints` inside `directory`, pointed at the fake compiler.
 fn fill(directory: &Path, extra: &[&str]) -> Output {
+    fill_with_env(directory, extra, &[])
+}
+
+fn fill_with_env(directory: &Path, extra: &[&str], env: &[(&str, &str)]) -> Output {
     binary()
         .current_dir(directory)
         .args(["fill-constraints", "--compact-bin"])
         .arg(fake_compact())
         .args(extra)
+        .envs(env.iter().copied())
         .output()
         .expect("the binary ran")
 }
@@ -190,6 +195,11 @@ fn a_seeded_cache_fills_without_a_compiler() {
 }
 
 #[test]
+fn a_note_stays_while_the_measurement_matches() {
+    assert_case("note", &["--no-compile"], 0, "");
+}
+
+#[test]
 fn a_circuit_the_report_marks_unproved_stays_unmeasured() {
     let directory = work("basic");
     let (_, stdout) = code_and_stdout(&fill(directory.path(), &[]));
@@ -227,6 +237,57 @@ fn a_failed_compile_exits_two_with_the_output_tail() {
 }
 
 #[test]
+fn a_source_saved_during_the_compile_is_not_overwritten() {
+    let directory = work("basic");
+    let file = directory.path().join("src/access/Ownable.compact");
+    let output = fill_with_env(
+        directory.path(),
+        &[],
+        &[(
+            "FAKE_COMPACT_EDIT",
+            file.to_str().expect("the path is UTF-8"),
+        )],
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let text = std::fs::read_to_string(&file).expect("the source is readable");
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(stderr.contains("Ownable.compact"), "{stderr}");
+    assert!(text.ends_with("// saved during the compile\n"), "{text}");
+    assert!(text.contains("@constraints k=?, rows=?"), "{text}");
+}
+
+#[test]
+fn no_color_in_the_environment_still_measures() {
+    let directory = work("basic");
+    let (code, stdout) =
+        code_and_stdout(&fill_with_env(directory.path(), &[], &[("NO_COLOR", "1")]));
+
+    assert_eq!(stdout, expected("basic"));
+    assert_eq!(code, EXIT_UNMEASURED);
+}
+
+#[test]
+fn a_compile_with_no_progress_lines_exits_two_and_keeps_the_cache() {
+    let directory = work("no-compile");
+    let cache = directory
+        .path()
+        .join("src/access/test/mocks/.circuit-info.json");
+    let before = std::fs::read(&cache).expect("the seeded cache is readable");
+
+    let output = fill_with_env(directory.path(), &[], &[("FAKE_COMPACT_SILENT", "1")]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(stderr.contains("MockOwnable.compact"), "{stderr}");
+    assert!(stderr.contains("owner"), "{stderr}");
+    assert_eq!(
+        std::fs::read(&cache).expect("the cache is still readable"),
+        before
+    );
+}
+
+#[test]
 fn a_missing_cache_entry_exits_two_and_names_the_flag() {
     let directory = work("basic");
     let output = fill(directory.path(), &["--no-compile"]);
@@ -238,7 +299,7 @@ fn a_missing_cache_entry_exits_two_and_names_the_flag() {
 }
 
 #[test]
-fn a_compile_writes_the_cache_the_builder_shares() {
+fn a_compile_writes_the_measurement_cache() {
     let directory = work("override");
     fill(directory.path(), &[]);
 

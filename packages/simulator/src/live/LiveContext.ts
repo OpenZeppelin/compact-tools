@@ -71,7 +71,7 @@ export interface LiveContext<P> {
    * Optional: writes the whole private state to the harness's private-state
    * provider, so the NEXT impure `callTx` proves against it. Each `callTx`
    * reads private state fresh from the provider (midnight-js `getStates` →
-   * `privateStateProvider.get`), so no handle invalidation is needed.
+   * `privateStateProvider.forContract(address).get`), so no handle invalidation is needed.
    *
    * Omit to opt out of mutation — {@link LiveBackend} then throws
    * `PRIVATE_STATE_MUTATION_UNSUPPORTED`, so a spec that mutates fails loudly

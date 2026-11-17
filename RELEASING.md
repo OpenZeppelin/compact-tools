@@ -41,13 +41,14 @@ release notes agree.
    - **Prerelease** - Advance the current beta cycle (`0.4.0-beta.0` ->
      `0.4.0-beta.1`). From a stable version it behaves like prepatch.
 
-5. A maintainer must approve the release before it proceeds.
-6. Once approved, the CI will automatically:
+5. The CI will automatically:
    - Run tests.
    - Bump the version.
    - Open a release PR against the branch you ran from, and auto-merge it.
-   - Create a git tag.
-   - Publish the package to npm under the channel's dist-tag.
+6. Once the release PR merges, a maintainer must approve the publish. The CI
+   then:
+   - Creates a git tag.
+   - Publishes the package to npm under the channel's dist-tag.
 7. Once published, go to "Releases" and create a GitHub release using the
    generated tag. Mark beta tags as prereleases. `compact-linter` is the
    exception: the workflow creates its release itself (see below).
@@ -107,6 +108,12 @@ each dependent finds its deps already on npm:
 After the first release, the five packages version independently — bump any
 one of them in isolation without re-publishing the others.
 
+A package's first publish authenticates with the `NPM_TOKEN` secret from the
+`compact-npm-prod` environment, since a Trusted Publisher can only be
+registered against a package npm already knows. Register it on npmjs.org right
+after that publish; the workflow then takes the OIDC path for every later
+version on its own.
+
 ## compact-linter
 
 `compact-linter` is a bin wrapper around the `compact-lint` crate, so its release
@@ -132,6 +139,6 @@ carries a native binary as well as an npm package.
   every other package the GitHub release is still created by hand (step 7 above).
 - Release notes come from the `## <version>` section of `packages/linter/CHANGELOG.md`,
   falling back to the tag name. A `beta` dist-tag marks the release a prerelease.
-- Before the first release, add `@openzeppelin/compact-linter` as a Trusted Publisher
-  on npmjs.org, naming this repo and `.github/workflows/release-publish.yml`. Every
-  new npm package needs this once, or the publish step cannot authenticate.
+- Its first publish takes the `NPM_TOKEN` path above. Right after it, add
+  `@openzeppelin/compact-linter` as a Trusted Publisher on npmjs.org, naming this repo
+  and `.github/workflows/release-publish.yml`.
