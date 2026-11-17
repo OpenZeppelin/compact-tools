@@ -1,0 +1,19 @@
+/**
+ * @module Vault
+ * @description Test fixture.
+ */
+export module Vault {
+  /**
+   * @description Deposits a coin.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit deposit(): [] { }
+
+  /**
+   * @description Withdraws a coin.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit withdraw(): [] { }
+}

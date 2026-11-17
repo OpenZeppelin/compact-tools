@@ -1,0 +1,33 @@
+/**
+ * @module Ownable
+ * @description Test fixture.
+ */
+export module Ownable {
+  /**
+   * @description Returns the owner.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit owner(): [] { }
+
+  /**
+   * @description Transfers ownership.
+   *
+   * @constraints k=9, rows=42
+   */
+  export circuit transferOwnership(): [] { }
+
+  /**
+   * @description Renounces ownership.
+   *
+   * @constraints k=13, rows=4277
+   */
+  export circuit renounceOwnership(): [] { }
+
+  /**
+   * @description Sets the first owner.
+   *
+   * @constraints k=5, rows=10
+   */
+  export circuit initialize(): [] { }
+}

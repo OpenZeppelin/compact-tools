@@ -9,10 +9,11 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use tempfile::TempDir;
 
 use compact_lint::check::{self, Outcome};
-use compact_lint::fix;
 use compact_lint::format::{COMPACT_BIN_ENV, DEFAULT_COMPACT_BIN};
+use compact_lint::{fill, fix};
 
 /// Exit code for a run that produced findings, or a `--dry-run` that would edit.
 const EXIT_FINDINGS: u8 = 1;
@@ -37,6 +38,8 @@ enum Command {
     Check(CheckArgs),
     /// Rewrite doc comments so the rules `fix` covers stop reporting.
     Fix(FixArgs),
+    /// Measure every tagged circuit and write the values into its constraints tag.
+    FillConstraints(FillArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -75,6 +78,32 @@ struct FixArgs {
     dry_run: bool,
 }
 
+#[derive(Debug, clap::Args)]
+struct FillArgs {
+    /// Files or directories to fill; defaults to the config's include globs.
+    paths: Vec<PathBuf>,
+
+    /// Config file to use instead of searching upward for compact-lint.toml.
+    #[arg(long, value_name = "FILE")]
+    config: Option<PathBuf>,
+
+    /// Report the changes without writing them.
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Read the .circuit-info.json caches instead of compiling.
+    #[arg(long)]
+    no_compile: bool,
+
+    /// Path to the `compact` binary.
+    #[arg(long, value_name = "PATH", env = COMPACT_BIN_ENV)]
+    compact_bin: Option<OsString>,
+
+    /// Directory the compiler writes to; kept after the run when given.
+    #[arg(long, value_name = "DIR")]
+    artifacts: Option<PathBuf>,
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
@@ -92,6 +121,7 @@ fn run() -> Result<ExitCode> {
     match cli.command {
         Command::Check(args) => run_check(args, &cwd),
         Command::Fix(args) => run_fix(args, &cwd),
+        Command::FillConstraints(args) => run_fill(args, &cwd),
     }
 }
 
@@ -131,6 +161,53 @@ fn run_fix(args: FixArgs, cwd: &std::path::Path) -> Result<ExitCode> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+fn run_fill(args: FillArgs, cwd: &std::path::Path) -> Result<ExitCode> {
+    let (artifacts, temporary) = artifacts_dir(args.artifacts)?;
+
+    let options = fill::Options {
+        paths: args.paths,
+        config_path: args.config,
+        dry_run: args.dry_run,
+        no_compile: args.no_compile,
+        compact_bin: args
+            .compact_bin
+            .unwrap_or_else(|| OsString::from(DEFAULT_COMPACT_BIN)),
+        artifacts,
+    };
+
+    let outcome = fill::run(&options, cwd).context("filling the constraints")?;
+    emit_lines(&outcome.lines, &outcome.summary()).context("writing the report")?;
+
+    drop(temporary);
+    Ok(if outcome.unmeasured == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(EXIT_FINDINGS)
+    })
+}
+
+/// The artifacts directory, plus the temporary one to remove once the run ends.
+fn artifacts_dir(given: Option<PathBuf>) -> Result<(PathBuf, Option<TempDir>)> {
+    if let Some(path) = given {
+        return Ok((path, None));
+    }
+
+    let directory = tempfile::tempdir().context("creating the artifacts directory")?;
+    Ok((directory.path().to_owned(), Some(directory)))
+}
+
+fn emit_lines(lines: &[String], summary: &str) -> std::io::Result<()> {
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    for line in lines {
+        writeln!(out, "{line}")?;
+    }
+    out.flush()?;
+
+    eprintln!("{summary}");
+    Ok(())
 }
 
 fn emit_findings(outcome: &Outcome) -> std::io::Result<()> {

@@ -33,6 +33,11 @@ managed/
 # never gets committed — including under examples/, where the walkthrough
 # expects you to compile the contract yourself before deploying.
 artifacts/
+# compact-lint's measurement cache, written next to the .compact sources
+# it measures.
+.circuit-info.json
+# Except the seeded cache the fill-constraints tests read.
+!crates/compact-lint/tests/fixtures/**/.circuit-info.json
 midnight-level-db
 compactc
 

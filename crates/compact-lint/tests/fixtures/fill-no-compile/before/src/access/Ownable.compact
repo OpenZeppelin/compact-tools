@@ -1,0 +1,12 @@
+/**
+ * @module Ownable
+ * @description Test fixture.
+ */
+export module Ownable {
+  /**
+   * @description Returns the owner.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit owner(): [] { }
+}

@@ -1,0 +1,19 @@
+Compiling 7 circuits:
+  circuit "_transferOwnership" [32m[1m|[0m                                                [2K  circuit "_transferOwnership" (k=10) [32m[1m|[0m                                         [2K  circuit "_transferOwnership" (k=10, rows=598) [32m[1m|[0m                               [2K  circuit "_transferOwnership" (k=10, rows=598) [32m[1m|[0m
+  circuit "_unsafeTransferOwnership" [32m[1m|[0m                                          [1A[2K[1B[2K[1A  circuit "_transferOwnership" (k=10, rows=598) [32m[1m|[0m
+  circuit "_unsafeTransferOwnership" (k=13) [32m[1m|[0m                                   [1A[2K[1B[2K[1A  circuit "_transferOwnership" (k=10, rows=598) [32m[1m|[0m
+  circuit "_unsafeTransferOwnership" (k=13, rows=4868) [32m[1m|[0m                        [1A[2K[1B[2K[1A  circuit "_transferOwnership" (k=10, rows=598) [32m[1m|[0m
+  circuit "_unsafeTransferOwnership" (k=13, rows=4868) [32m[1m|[0m
+  circuit "_unsafeUncheckedTransferOwnership" [32m[1m|[0m                                 [2A[2K[1B[2K  circuit "_unsafeUncheckedTransferOwnership" (k=10, rows=595) [32m[1m [0m
+  circuit "assertOnlyOwner" (k=13, rows=4273) [32m[1m [0m
+  circuit "owner" (k=7, rows=74) [32m[1m [0m
+  circuit "renounceOwnership" (k=13, rows=4277) [32m[1m [0m
+  circuit "transferOwnership" (k=13, rows=4871) [32m[1m [0m
+Overall progress [[32m[1m====================[0m] 7/7                                     [7A[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[7A  circuit "_transferOwnership" (k=10, rows=598) [32m[1m [0m
+  circuit "_unsafeTransferOwnership" (k=13, rows=4868) [32m[1m [0m
+  circuit "_unsafeUncheckedTransferOwnership" (k=10, rows=595) [32m[1m [0m
+  circuit "assertOnlyOwner" (k=13, rows=4273) [32m[1m [0m
+  circuit "owner" (k=7, rows=74) [32m[1m [0m
+  circuit "renounceOwnership" (k=13, rows=4277) [32m[1m [0m
+  circuit "transferOwnership" (k=13, rows=4871) [32m[1m [0m
+Overall progress [[32m[1m====================[0m] 7/7                                     

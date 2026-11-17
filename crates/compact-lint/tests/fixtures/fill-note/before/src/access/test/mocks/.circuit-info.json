@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "files": {
+    "MockOwnable.compact": [
+      {
+        "name": "owner",
+        "k": 7,
+        "rows": 74
+      },
+      {
+        "name": "transferOwnership",
+        "k": 13,
+        "rows": 4871
+      }
+    ]
+  }
+}

@@ -8,6 +8,9 @@ exclude = ["**/test/mocks/**", "**/archive/**"]
 # `@constraints` is the default; set `tag` to point the rule at another annotation.
 [constraints]
 tag = "@constraints"
+# Presets are contracts, so fill-constraints compiles them directly. Everything else is
+# measured through the mock beside it or in its parent, the default `sources` templates.
+self = ["**/presets/**"]
 
 [tags]
 forbid = ["@return"]

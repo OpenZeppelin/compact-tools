@@ -15,10 +15,12 @@ pub enum TargetError {
     Discover(#[from] DiscoverError),
 }
 
-/// The config and the files it selects, shared by `check` and `fix`.
+/// The config and the files it selects, shared by every subcommand.
 pub struct Target {
     pub config: Config,
     pub files: Vec<PathBuf>,
+    /// Directory the config's own relative paths and globs are anchored at.
+    pub base: PathBuf,
 }
 
 /// Resolves the config and the file list for one run.
@@ -57,7 +59,11 @@ pub fn resolve(
     };
 
     let files = files.iter().map(|path| display_path(path, cwd)).collect();
-    Ok(Target { config, files })
+    Ok(Target {
+        config,
+        files,
+        base,
+    })
 }
 
 /// Discovery matches the exclude globs against paths relative to the config's
@@ -75,7 +81,7 @@ fn absolute_paths(paths: &[PathBuf], cwd: &Path) -> Vec<PathBuf> {
 ///
 /// A `..` with nothing to cancel is kept, so a relative path that climbs out of its own
 /// directory still points where it did.
-fn normalize(path: &Path) -> PathBuf {
+pub(crate) fn normalize(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for component in path.components() {
         match component {

@@ -1,0 +1,10 @@
+version = 1
+
+[constraints]
+self = ["**/presets/**"]
+
+[kinds.module]
+tags = ["@module", "@description"]
+
+[kinds.circuit]
+tags = ["@description"]
