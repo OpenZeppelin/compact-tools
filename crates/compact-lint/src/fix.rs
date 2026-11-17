@@ -96,7 +96,7 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
         let issues = linter.issues(path, &source, &target.config, false)?;
         let edits: Vec<Edit> = issues
             .iter()
-            .filter(|issue| !supplied_by_a_rename(issue, &issues, &target.config))
+            .filter(|issue| !supplied_elsewhere(issue, &issues, &target.config))
             .filter_map(|issue| edit_for(issue, &target.config, newline))
             .collect();
 
@@ -131,24 +131,28 @@ fn changes_declarations(
     Ok(linter.outline(path, before)? != linter.outline(path, after)?)
 }
 
-/// Whether a forbidden tag in the same doc comment is renamed to the tag this
-/// `missing-tag` issue reports.
+/// Whether another edit on the same doc comment already writes the tag this
+/// `missing-tag` or `missing-constraints` issue would insert: a rename to it, or, for
+/// the constraints tag, the constraints line.
 ///
 /// Inserting it as well would leave the comment carrying the tag twice.
-fn supplied_by_a_rename(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
-    let Issue::MissingTag { tag, doc, .. } = issue else {
+fn supplied_elsewhere(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
+    let (Issue::MissingTag { tag, doc, .. } | Issue::MissingConstraints { tag, doc, .. }) = issue
+    else {
         return false;
     };
+    let inserts_tag = matches!(issue, Issue::MissingTag { .. });
 
-    issues.iter().any(|other| {
-        matches!(
-            other,
-            Issue::ForbiddenTag {
-                tag: forbidden,
-                doc: other_doc,
-                ..
-            } if other_doc == doc && config.rename_of(forbidden) == Some(tag)
-        )
+    issues.iter().any(|other| match other {
+        Issue::ForbiddenTag {
+            tag: forbidden,
+            doc: other_doc,
+            ..
+        } => other_doc == doc && config.rename_of(forbidden) == Some(tag),
+        Issue::MissingConstraints { doc: other_doc, .. } => {
+            inserts_tag && other_doc == doc && *tag == config.constraints.tag
+        }
+        _ => false,
     })
 }
 
@@ -306,7 +310,8 @@ fn tag_line(tag: &Tag, name: Option<&str>, config: &Config) -> String {
 /// The doc comment `fix` writes above an undocumented declaration.
 ///
 /// Body lines come from `kinds.<kind>.tags` in config order, then the constraints
-/// annotation where the declaration takes one.
+/// annotation where the declaration takes one. That annotation is the only line the
+/// constraints tag gets, even when `kinds.<kind>.tags` lists it.
 fn skeleton(
     kind: DeclKind,
     name: Option<&str>,
@@ -320,6 +325,7 @@ fn skeleton(
         .get(kind)
         .tags
         .iter()
+        .filter(|tag| !constraints || **tag != config.constraints.tag)
         .map(|tag| tag_line(tag, name, config))
         .collect();
 
@@ -458,6 +464,17 @@ mod tests {
         assert_eq!(
             skeleton(DeclKind::Circuit, Some("run"), true, &config(), 2, "\n"),
             "/**\n   * @description TODO\n   *\n   * @constraints k=?, rows=?\n   */\n  "
+        );
+    }
+
+    #[test]
+    fn a_required_constraints_tag_is_written_once() {
+        let mut config = config();
+        config.kinds.circuit.tags = vec![Tag::new("@description"), Tag::new("@constraints")];
+
+        assert_eq!(
+            skeleton(DeclKind::Circuit, Some("run"), true, &config, 0, "\n"),
+            "/**\n * @description TODO\n *\n * @constraints k=?, rows=?\n */\n"
         );
     }
 

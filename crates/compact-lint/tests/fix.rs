@@ -147,6 +147,11 @@ fn the_constraints_annotation_follows_the_description_block() {
 }
 
 #[test]
+fn a_circuit_ends_with_one_constraints_annotation() {
+    assert_case("constraints-once");
+}
+
+#[test]
 fn an_undocumented_circuit_under_docs_none_takes_a_constraints_only_comment() {
     assert_case("constraints-undocumented");
 }
