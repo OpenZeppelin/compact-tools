@@ -174,6 +174,11 @@ fn the_constraints_annotation_follows_the_description_block() {
 }
 
 #[test]
+fn the_constraints_annotation_follows_every_paragraph_but_a_labelled_list() {
+    assert_case("constraints-paragraphs");
+}
+
+#[test]
 fn a_circuit_ends_with_one_constraints_annotation() {
     assert_case("constraints-once");
 }

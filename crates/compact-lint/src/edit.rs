@@ -457,7 +457,8 @@ fn reorder_blocks(lines: &mut Vec<String>, entries: &[TagSpec]) {
     *lines = rebuilt;
 }
 
-/// The constraints line follows the `@description` block, or opens the body without one.
+/// The constraints line follows the `@description` block, above a labelled list such as
+/// `Requirements:`, or opens the body without a `@description`.
 fn insert_constraints(lines: &mut Vec<String>, margin: &str, gutter: &str, body: &str) {
     let closer = lines.len().saturating_sub(1);
     let blank = format!("{margin} *");
@@ -478,9 +479,24 @@ fn insert_constraints(lines: &mut Vec<String>, margin: &str, gutter: &str, body:
     }
 }
 
-/// The last line of the `@description` block: its tag line plus every continuation.
+/// The last line of the `@description` block that the constraints line goes under: every
+/// paragraph up to one opening with a label, a line that ends in a colon.
 fn description_end(lines: &[String], closer: usize) -> Option<usize> {
-    tag_block_end(lines, closer, &[TagSpec::bare(Tag::new(DESCRIPTION_TAG))])
+    let start = last_occurrence(lines, closer, &[TagSpec::bare(Tag::new(DESCRIPTION_TAG))])?;
+
+    let mut end = start;
+    let mut opens_paragraph = false;
+    for (index, line) in lines.iter().enumerate().take(closer).skip(start + 1) {
+        let text = content(line);
+        if starts_tag(text) || (opens_paragraph && text.ends_with(':')) {
+            break;
+        }
+        opens_paragraph = text.is_empty();
+        if !opens_paragraph {
+            end = index;
+        }
+    }
+    Some(end)
 }
 
 /// The line holding the last occurrence of any entry in `entries`.
@@ -501,22 +517,6 @@ fn paragraphs_end(lines: &[String], closer: usize, entries: &[TagSpec]) -> Optio
     (start..next_tag)
         .rev()
         .find(|index| !is_blank(&lines[*index]))
-}
-
-/// The last line of the first paragraph of the block opened by the last occurrence of any
-/// entry in `entries`.
-fn tag_block_end(lines: &[String], closer: usize, entries: &[TagSpec]) -> Option<usize> {
-    let start = last_occurrence(lines, closer, entries)?;
-
-    let mut end = start;
-    while end + 1 < closer {
-        let next = content(&lines[end + 1]);
-        if next.is_empty() || starts_tag(next) {
-            break;
-        }
-        end += 1;
-    }
-    Some(end)
 }
 
 /// A comment line without its indentation, its `*` and the space after it.
@@ -892,6 +892,55 @@ mod tests {
                 )]
             ),
             "/**\n * @description Sends a coin\n * to the recipient.\n *\n * @constraints k=?, rows=?\n *\n * @param {Coin} coin - The coin.\n */"
+        );
+    }
+
+    #[test]
+    fn constraints_follow_every_paragraph_of_the_description() {
+        let doc =
+            "/**\n * @description First paragraph.\n *\n * Second paragraph about privacy.\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::InsertConstraints(
+                    "@constraints k=?, rows=?".to_owned()
+                )]
+            ),
+            "/**\n * @description First paragraph.\n *\n * Second paragraph about privacy.\n *\n * @constraints k=?, rows=?\n */"
+        );
+    }
+
+    #[test]
+    fn constraints_stay_above_a_labelled_list() {
+        let doc = "/**\n * @description First paragraph.\n *\n * Second paragraph.\n *\n * Requirements:\n *\n * - Caller is the owner.\n *\n * @param {T} a - A.\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::InsertConstraints(
+                    "@constraints k=?, rows=?".to_owned()
+                )]
+            ),
+            "/**\n * @description First paragraph.\n *\n * Second paragraph.\n *\n * @constraints k=?, rows=?\n *\n * Requirements:\n *\n * - Caller is the owner.\n *\n * @param {T} a - A.\n */"
+        );
+    }
+
+    #[test]
+    fn a_colon_closing_a_line_inside_a_paragraph_is_not_a_label() {
+        let doc = "/**\n * @description Transfers ownership. Two cases:\n * the owner calls, or nobody does.\n */";
+
+        assert_eq!(
+            rendered(
+                doc,
+                0,
+                &[DocOp::InsertConstraints(
+                    "@constraints k=?, rows=?".to_owned()
+                )]
+            ),
+            "/**\n * @description Transfers ownership. Two cases:\n * the owner calls, or nobody does.\n *\n * @constraints k=?, rows=?\n */"
         );
     }
 
