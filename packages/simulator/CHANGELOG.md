@@ -9,6 +9,8 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 
 ## Unreleased
 
+## 0.6.0 (2026-11-16)
+
 ### Changed (breaking)
 
 - The live peers move to `@midnight-ntwrk/midnight-js-contracts` and `@midnight-ntwrk/midnight-js-types` `^5.0.0`. `createLiveContext` decodes the contract state the public data provider now returns as bytes, and reads and writes private state through `privateStateProvider.forContract(contractAddress)`, so a live harness has to hand it 5.0.0 providers (#219)
