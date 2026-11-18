@@ -32,6 +32,12 @@ function tokenizeFlags(flags: string): string[] {
 }
 
 /**
+ * Sizes the PTY before the compiler starts. `script` opens it 0x0 when stdin
+ * is not a terminal, and `compactc` draws no progress row below the last line.
+ */
+const SIZE_PTY = 'stty rows 500 cols 200 2>/dev/null';
+
+/**
  * Spawn `compact` under a pseudo-terminal using the `script` command so that
  * `compactc` emits its full progress UI (circuit constraint lines with k/rows
  * values).
@@ -41,7 +47,7 @@ function tokenizeFlags(flags: string): string[] {
  * a temp file, which is read after the process exits.
  *
  * Handles both macOS and Linux `script` syntax:
- * - macOS: `script -q <file> <command> [args...]`
+ * - macOS: `script -q <file> sh -c "<command>" sh [args...]`
  * - Linux: `script -qec "<command> [args...]" <file>`
  *
  * util-linux `script` exits 0 whatever the child did unless `-e` is given.
@@ -62,14 +68,22 @@ async function spawnWithPty(
     let scriptArgs: string[];
 
     if (platform() === 'darwin') {
-      // macOS: script -q <file> <command> [args...]
-      scriptArgs = ['-q', tmpFile, 'compact', ...args];
+      // macOS: script -q <file> sh -c "<command>" sh [args...]
+      scriptArgs = [
+        '-q',
+        tmpFile,
+        'sh',
+        '-c',
+        `${SIZE_PTY}; exec compact "$@"`,
+        'sh',
+        ...args,
+      ];
     } else {
       // Linux: script -qec "<command>" <file>
       const cmd = ['compact', ...args]
         .map((a) => (a.includes(' ') ? `'${a}'` : a))
         .join(' ');
-      scriptArgs = ['-qec', cmd, tmpFile];
+      scriptArgs = ['-qec', `${SIZE_PTY}; ${cmd}`, tmpFile];
     }
 
     const proc = spawn('script', scriptArgs, {
