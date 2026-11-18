@@ -306,6 +306,19 @@ fn no_color_in_the_environment_still_measures() {
 }
 
 #[test]
+fn rows_the_compiler_wraps_onto_one_line_are_all_measured() {
+    let directory = work("basic");
+    let (code, stdout) = code_and_stdout(&fill_with_env(
+        directory.path(),
+        &[],
+        &[("FAKE_COMPACT_WRAP", "1")],
+    ));
+
+    assert_eq!(stdout, expected("basic", "expected.txt"));
+    assert_eq!(code, 0);
+}
+
+#[test]
 fn a_compile_with_no_progress_lines_exits_two_without_writing_circuit_info() {
     let directory = work("no-compile");
     let artifact = directory

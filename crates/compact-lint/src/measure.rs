@@ -24,6 +24,9 @@ const CONTRACT_INFO_PATH: [&str; 2] = ["compiler", "contract-info.json"];
 /// A dependency tree carries its own artifacts, so the search never descends into one.
 const SKIPPED_DIR: &str = "node_modules";
 
+/// Opens the compiler's per-circuit progress row, `circuit "<name>" (k=<n>, rows=<n>)`.
+const ROW_MARKER: &str = "circuit ";
+
 /// Compiler-output lines kept in a failure report.
 const TAIL_LINES: usize = 20;
 
@@ -472,22 +475,28 @@ fn strip_escapes(raw: &str) -> String {
     out
 }
 
-/// Every measured circuit in a cleaned transcript; the last line for a name wins.
+/// Every measured circuit in a cleaned transcript; the last row for a name wins.
 #[must_use]
 pub fn parse(cleaned: &str) -> Vec<Measurement> {
     let mut found: BTreeMap<String, Measurement> = BTreeMap::new();
     for line in cleaned.lines() {
-        if let Some(measurement) = parse_line(line) {
+        for measurement in parse_line(line) {
             found.insert(measurement.name.clone(), measurement);
         }
     }
     found.into_values().collect()
 }
 
-/// Matches `circuit "<name>" (k=<n>, rows=<n>)`, the compiler's per-circuit progress line.
-fn parse_line(line: &str) -> Option<Measurement> {
-    let after = line.split_once("circuit ")?.1.trim_start();
-    let (name, rest) = after.strip_prefix('"')?.split_once('"')?;
+/// Every progress row on a line. A compiler that pads a row to the terminal width in
+/// place of ending it puts all its rows on one line.
+fn parse_line(line: &str) -> impl Iterator<Item = Measurement> + '_ {
+    line.match_indices(ROW_MARKER)
+        .filter_map(|(start, marker)| parse_row(&line[start + marker.len()..]))
+}
+
+/// Matches `"<name>" (k=<n>, rows=<n>)`, the rest of a row after [`ROW_MARKER`].
+fn parse_row(after: &str) -> Option<Measurement> {
+    let (name, rest) = after.trim_start().strip_prefix('"')?.split_once('"')?;
     let fields = rest.trim_start().strip_prefix('(')?.split_once(')')?.0;
     let (k, rows) = fields.split_once(',')?;
 
@@ -600,6 +609,32 @@ mod tests {
                 measurement("renounceOwnership", 13, 4277),
                 measurement("transferOwnership", 13, 4871),
             ]
+        );
+    }
+
+    #[test]
+    fn rows_sharing_one_line_each_yield_a_measurement() {
+        let wrapped = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/fill-transcript/pty-0.36.0.txt"),
+        )
+        .expect("the captured transcript is readable");
+        let cleaned = clean(&wrapped);
+
+        assert_eq!(cleaned.lines().count(), 2, "{cleaned}");
+        assert_eq!(
+            parse(&cleaned),
+            [measurement("bump", 6, 31), measurement("read", 6, 34)]
+        );
+    }
+
+    #[test]
+    fn a_row_still_missing_a_field_does_not_hide_the_rows_after_it() {
+        let line = "circuit \"bump\" (k=6) circuit \"read\" (k=6, rows=34) circuit \"bump\" (k=6, rows=31)";
+
+        assert_eq!(
+            parse(line),
+            [measurement("bump", 6, 31), measurement("read", 6, 34)]
         );
     }
 
