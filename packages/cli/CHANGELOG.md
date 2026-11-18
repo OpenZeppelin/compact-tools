@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before this file see the `compact-cli/v*` tags.
 
+## Unreleased
+
+### Added
+
+- `compact-builder --skip-tsc` skips the `tsc --project tsconfig.build.json` step, for packages that only ship `.compact` modules (#94)
+
 ## 0.2.0 (2026-11-05)
 
 ### Changed
