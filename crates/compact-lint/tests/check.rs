@@ -141,6 +141,23 @@ fn an_unannotated_exported_circuit_reports_missing_constraints() {
 }
 
 #[test]
+fn an_undocumented_circuit_fails_on_missing_constraints_whatever_the_missing_doc_level() {
+    assert_case("missing-doc-level", &["--strict"], EXIT_FINDINGS);
+    assert_expectation(
+        "missing-doc-level",
+        "expected-warn.txt",
+        &["--strict", "--config", "warn.toml"],
+        EXIT_FINDINGS,
+    );
+
+    let (_, _, stderr) = run("missing-doc-level", &["--config", "warn.toml"]);
+    assert!(
+        stderr.ends_with("Found 1 error.\nFound 2 warnings.\n"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn a_malformed_constraints_value_reports_constraints_format() {
     assert_case("constraints-format", &[], EXIT_FINDINGS);
 }

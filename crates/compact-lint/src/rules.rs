@@ -134,8 +134,7 @@ pub enum Issue {
         tag: Tag,
         doc: DocRef,
     },
-    /// `missing-constraints` on a circuit with no doc comment, where the docs policy
-    /// does not ask for one.
+    /// `missing-constraints` on a circuit with no doc comment.
     UndocumentedConstraints {
         position: Position,
         end: Position,
@@ -476,7 +475,9 @@ fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Ve
                 indent: declaration.position.column - 1,
                 constraints: takes_constraints(declaration),
             });
-        } else if takes_constraints(declaration) {
+        }
+        // Reported beside `missing-doc`, so each rule keeps its own level.
+        if takes_constraints(declaration) {
             issues.push(Issue::UndocumentedConstraints {
                 position: declaration.position,
                 end: declaration.end,
@@ -863,12 +864,27 @@ mod tests {
     }
 
     #[test]
-    fn an_undocumented_circuit_reports_only_missing_doc_when_docs_are_required() {
+    fn an_undocumented_circuit_reports_missing_constraints_beside_missing_doc() {
         let source = "export circuit bump(): [] { count.increment(1); }\n";
 
         assert_eq!(
             reported(source, &circuit_config()),
-            ["1:1 missing-doc Circuit `bump` has no doc comment."]
+            [
+                "1:1 missing-constraints Circuit `bump` has no doc comment, so no @constraints.",
+                "1:1 missing-doc Circuit `bump` has no doc comment."
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_doc_turned_off_leaves_missing_constraints_on_an_undocumented_circuit() {
+        let source = "export circuit bump(): [] { count.increment(1); }\n";
+        let mut config = circuit_config();
+        config.rules.missing_doc = Level::Off;
+
+        assert_eq!(
+            reported(source, &config),
+            ["1:1 missing-constraints Circuit `bump` has no doc comment, so no @constraints."]
         );
     }
 

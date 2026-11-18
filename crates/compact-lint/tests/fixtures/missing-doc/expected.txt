@@ -36,6 +36,25 @@ Gaps.compact:8:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━
        9 │ + ···*·@description·TODO
       10 │ + ···*/
 
+Gaps.compact:17:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Circuit `run` has no doc comment, so no @constraints.
+
+    15 │    */
+    16 │   // The comment that breaks the attachment.
+  > 17 │   export circuit run(): [] {
+       │   ^^^^^^^^^^^^^^^^^^
+    18 │     _owner = default<Bytes<32>>;
+    19 │   }
+
+  i Add a doc comment holding @constraints k=?, rows=?, or run compact-lint fix.
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      17 │ + ··/**
+      18 │ + ···*·@constraints·k=?,·rows=?
+      19 │ + ···*/
+
 Gaps.compact:17:3 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   × Circuit `run` has no doc comment.

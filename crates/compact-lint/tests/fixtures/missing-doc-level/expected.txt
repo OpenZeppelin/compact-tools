@@ -1,0 +1,17 @@
+Undocumented.compact:4:1 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Circuit `deposit` has no doc comment, so no @constraints.
+
+    2 │ import CompactStandardLibrary;
+    3 │ export ledger n: Counter;
+  > 4 │ export circuit deposit(): [] { n.increment(1); }
+      │ ^^^^^^^^^^^^^^^^^^^^^^
+
+  i Add a doc comment holding @constraints k=?, rows=?, or run compact-lint fix.
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      4 │ + /**
+      5 │ + ·*·@constraints·k=?,·rows=?
+      6 │ + ·*/
+

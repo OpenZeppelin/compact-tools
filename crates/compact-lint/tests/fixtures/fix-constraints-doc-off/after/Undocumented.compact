@@ -1,0 +1,7 @@
+pragma language_version >= 0.22.0;
+import CompactStandardLibrary;
+export ledger n: Counter;
+/**
+ * @constraints k=?, rows=?
+ */
+export circuit deposit(): [] { n.increment(1); }

@@ -196,13 +196,22 @@ fn changes_declarations(
     Ok(linter.outline(path, before)? != linter.outline(path, after)?)
 }
 
-/// Whether another edit on the same doc comment already writes the tag this
-/// `missing-tag` or `missing-constraints` issue would insert: a rename to it, or, for
-/// the constraints tag, the constraints line.
+/// Whether another edit already writes the tag this `missing-tag` or
+/// `missing-constraints` issue would insert: a rename to it, the constraints line, or,
+/// for a circuit with no doc comment, the skeleton carrying that line.
 ///
 /// Inserting it as well would leave the comment carrying the tag twice. A headed entry
 /// is exempt: a rename writes a bare tag, which is not the section that is missing.
 fn supplied_elsewhere(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
+    if let Issue::UndocumentedConstraints { offset, .. } = issue {
+        return issues.iter().any(|other| {
+            matches!(
+                other,
+                Issue::MissingDoc { offset: skeleton, constraints: true, .. } if skeleton == offset
+            )
+        });
+    }
+
     let (tag, doc, inserts_tag) = match issue {
         Issue::MissingTag { entry, doc, .. } if entry.heading.is_none() => (&entry.tag, doc, true),
         Issue::MissingConstraints { tag, doc, .. } => (tag, doc, false),
