@@ -1,7 +1,6 @@
-//! Findings and the one-line `path:line:col: rule: message` rendering.
+//! Rule identifiers and source positions.
 
 use std::fmt;
-use std::path::{Path, PathBuf};
 
 /// A lint rule's stable identifier, as printed in the output and matched by CI greps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -10,23 +9,34 @@ pub struct RuleId(&'static str);
 impl RuleId {
     pub const MISSING_DOC: Self = Self("missing-doc");
     pub const MISSING_TAG: Self = Self("missing-tag");
+    pub const UNKNOWN_SECTION: Self = Self("unknown-section");
+    pub const TAG_ORDER: Self = Self("tag-order");
     pub const FORBIDDEN_TAG: Self = Self("forbidden-tag");
     pub const MODULE_NAME: Self = Self("module-name");
     pub const MISSING_CONSTRAINTS: Self = Self("missing-constraints");
     pub const CONSTRAINTS_FORMAT: Self = Self("constraints-format");
     pub const CONSTRAINTS_PLACEHOLDER: Self = Self("constraints-placeholder");
+    pub const CONSTRAINTS_UNMEASURED: Self = Self("constraints-unmeasured");
+    pub const CONSTRAINTS_UNMEASURABLE: Self = Self("constraints-unmeasurable");
     pub const PARSE: Self = Self("parse");
     pub const FORMAT: Self = Self("format");
 
-    /// Every rule this build can emit, in the order the README lists them.
-    pub const ALL: [Self; 9] = [
+    /// A value `fill-constraints` wrote. It reports what changed, so it takes no level.
+    pub const FILL: Self = Self("fill");
+
+    /// Every rule a `[rules]` table can set a level for, in the order the README lists them.
+    pub const ALL: [Self; 13] = [
         Self::MISSING_DOC,
         Self::MISSING_TAG,
+        Self::UNKNOWN_SECTION,
+        Self::TAG_ORDER,
         Self::FORBIDDEN_TAG,
         Self::MODULE_NAME,
         Self::MISSING_CONSTRAINTS,
         Self::CONSTRAINTS_FORMAT,
         Self::CONSTRAINTS_PLACEHOLDER,
+        Self::CONSTRAINTS_UNMEASURED,
+        Self::CONSTRAINTS_UNMEASURABLE,
         Self::PARSE,
         Self::FORMAT,
     ];
@@ -67,69 +77,9 @@ impl Position {
     }
 }
 
-/// One lint violation at one source position.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Finding {
-    pub path: PathBuf,
-    pub position: Position,
-    pub rule: RuleId,
-    pub message: String,
-}
-
-impl Finding {
-    pub fn new(
-        path: impl Into<PathBuf>,
-        position: Position,
-        rule: RuleId,
-        message: String,
-    ) -> Self {
-        Self {
-            path: path.into(),
-            position,
-            rule,
-            message,
-        }
-    }
-
-    /// Sorts findings by file, then position, then rule, so output is stable across runs.
-    #[must_use]
-    pub fn sort_key(&self) -> (&Path, Position, RuleId) {
-        (self.path.as_path(), self.position, self.rule)
-    }
-}
-
-impl fmt::Display for Finding {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{}:{}:{}: {}: {}",
-            self.path.display(),
-            self.position.line,
-            self.position.column,
-            self.rule,
-            self.message
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Finding, Position, RuleId};
-
-    #[test]
-    fn finding_renders_as_path_line_col_rule_message() {
-        let finding = Finding::new(
-            "contracts/src/access/Ownable.compact",
-            Position::from_zero_based(41, 0),
-            RuleId::MISSING_DOC,
-            "circuit `assertOnlyOwner` has no doc comment".to_owned(),
-        );
-
-        assert_eq!(
-            finding.to_string(),
-            "contracts/src/access/Ownable.compact:42:1: missing-doc: circuit `assertOnlyOwner` has no doc comment"
-        );
-    }
+    use super::RuleId;
 
     #[test]
     fn rule_ids_are_unique() {

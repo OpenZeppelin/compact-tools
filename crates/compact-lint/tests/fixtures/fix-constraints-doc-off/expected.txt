@@ -1,0 +1,10 @@
+Undocumented.compact:4:1 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `deposit` has no doc comment, so no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      4 │ + /**
+      5 │ + ·*·@constraints·k=?,·rows=?
+      6 │ + ·*/
+

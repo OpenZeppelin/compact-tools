@@ -1,0 +1,18 @@
+Paragraphs.compact:11:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `deposit` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      10 │ + ···*
+      11 │ + ···*·@constraints·k=?,·rows=?
+
+Paragraphs.compact:26:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `transfer` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      18 │ + ···*·@constraints·k=?,·rows=?
+      19 │ + ···*
+

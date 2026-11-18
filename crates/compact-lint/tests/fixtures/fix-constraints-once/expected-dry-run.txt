@@ -1,0 +1,49 @@
+Once.compact:3:4 lint/forbidden-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Forbidden tag @circuitInfo.
+
+    1 │ /**
+    2 │  * @description Runs.
+  > 3 │  * @circuitInfo k=7, rows=74
+      │    ^^^^^^^^^^^^
+    4 │  */
+    5 │ export circuit run(): [] { }
+
+  i Safe fix: Rename @circuitInfo to @constraints
+
+    3   │ - ·*·@circuitInfo·k=7,·rows=74
+      3 │ + ·*·@constraints·k=7,·rows=74
+
+Once.compact:7:1 lint/missing-doc  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` has no doc comment.
+
+    5 │ export circuit run(): [] { }
+    6 │ 
+  > 7 │ export circuit bump(): [] { }
+      │ ^^^^^^^^^^^^^^^^^^^
+    8 │ 
+    9 │ /**
+
+  i Unsafe fix: Insert a doc skeleton for circuit `bump`
+
+       7 │ + /**
+       8 │ + ·*·@description·TODO
+       9 │ + ·*
+      10 │ + ·*·@constraints·k=?,·rows=?
+      11 │ + ·*/
+
+Once.compact:12:1 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `send` doc comment has no @constraints.
+
+    10 │  * @description Sends.
+    11 │  */
+  > 12 │ export circuit send(): [] { }
+       │ ^^^^^^^^^^^^^^^^^^^
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      11 │ + ·*
+      12 │ + ·*·@constraints·k=?,·rows=?
+

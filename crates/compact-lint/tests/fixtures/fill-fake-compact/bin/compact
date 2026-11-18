@@ -62,11 +62,19 @@ else
   table_lines=$table
 fi
 
+# With FAKE_COMPACT_WRAP, pad a row to the terminal width in place of ending it, the way
+# a compiler that leaves the line break to the terminal does.
+if [ -n "$FAKE_COMPACT_WRAP" ]; then
+  row='%-200s'
+else
+  row='%s\n'
+fi
+
 echo "$table_lines" | while read -r circuit k rows proof; do
   [ -n "$circuit" ] || continue
   # The real compiler redraws the line, so the same circuit appears without rows first.
-  printf '  circuit "%s" (k=%s)\n' "$circuit" "$k"
-  printf '  circuit "%s" (k=%s, rows=%s)\n' "$circuit" "$k" "$rows"
+  printf "$row" "  circuit \"$circuit\" (k=$k)"
+  printf "$row" "  circuit \"$circuit\" (k=$k, rows=$rows)"
 done
 
 mkdir -p "$output/compiler"

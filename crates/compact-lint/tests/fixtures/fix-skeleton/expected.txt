@@ -1,8 +1,83 @@
-Bare.compact:3:1: fix: inserted doc skeleton for module `Bare`
-Bare.compact:6:3: fix: inserted doc skeleton for ledger `_count`
-Bare.compact:8:3: fix: inserted doc skeleton for witness `wit_Secret`
-Bare.compact:10:3: fix: inserted doc skeleton for struct `Reading`
-Bare.compact:14:3: fix: inserted doc skeleton for enum `Direction`
-Bare.compact:19:3: fix: inserted doc skeleton for type `Alias`
-Bare.compact:25:3: fix: inserted doc skeleton for circuit `double`
-Bare.compact:29:3: fix: inserted doc skeleton for circuit `bump`
+Bare.compact:3:1 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Bare` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for module `Bare`
+
+      3 │ + /**
+      4 │ + ·*·@module·Bare
+      5 │ + ·*·@description·TODO
+      6 │ + ·*/
+
+Bare.compact:6:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `_count` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for ledger `_count`
+
+      6 │ + ··/**
+      7 │ + ···*·@description·TODO
+      8 │ + ···*/
+
+Bare.compact:8:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Witness `wit_Secret` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for witness `wit_Secret`
+
+       8 │ + ··/**
+       9 │ + ···*·@description·TODO
+      10 │ + ···*/
+
+Bare.compact:10:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Struct `Reading` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for struct `Reading`
+
+      10 │ + ··/**
+      11 │ + ···*·@description·TODO
+      12 │ + ···*/
+
+Bare.compact:14:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Enum `Direction` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for enum `Direction`
+
+      14 │ + ··/**
+      15 │ + ···*·@description·TODO
+      16 │ + ···*/
+
+Bare.compact:19:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Type `Alias` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for type `Alias`
+
+      19 │ + ··/**
+      20 │ + ···*·TODO
+      21 │ + ···*/
+
+Bare.compact:25:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `double` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for circuit `double`
+
+      25 │ + ··/**
+      26 │ + ···*·@description·TODO
+      27 │ + ···*/
+
+Bare.compact:29:3 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for circuit `bump`
+
+      29 │ + ··/**
+      30 │ + ···*·@description·TODO
+      31 │ + ···*
+      32 │ + ···*·@constraints·k=?,·rows=?
+      33 │ + ···*/
+

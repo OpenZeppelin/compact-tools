@@ -1,8 +1,0 @@
-version = 1
-include = ["**/*.compact"]
-
-[kinds.circuit]
-tags = ["@description"]
-
-[kinds.ledger]
-tags = ["@description"]

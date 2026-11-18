@@ -1,7 +1,0 @@
-version = 1
-
-[kinds.module]
-tags = ["@module", "@description"]
-
-[kinds.circuit]
-tags = ["@description"]

@@ -1,0 +1,8 @@
+[lint]
+include = ["**/*.compact"]
+
+[lint.kinds.circuit]
+tags = ["@description"]
+
+[lint.kinds.ledger]
+tags = ["@description"]

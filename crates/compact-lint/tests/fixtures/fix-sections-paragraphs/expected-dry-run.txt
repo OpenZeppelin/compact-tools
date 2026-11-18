@@ -1,0 +1,15 @@
+Paragraphs.compact:12:1 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Paragraphs` doc comment has no `@notice Privacy` section.
+
+    10 │  * - Nonces are spend-critical.
+    11 │  */
+  > 12 │ export module Paragraphs {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^
+    13 │ }
+
+  i Unsafe fix: Insert @notice Privacy
+
+      8 │ + ·*·@notice·Privacy:
+      9 │ + ·*·TODO
+

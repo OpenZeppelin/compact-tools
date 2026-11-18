@@ -1,16 +1,19 @@
 //! The `fix` subcommand: turn the fixable issues into edits and rewrite the files.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
 use crate::config::Config;
-use crate::doc::Tag;
+use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level, Span, capitalise};
+use crate::doc::TagSpec;
 use crate::edit::{DocOp, Edit, EditKind, WriteError, apply, newline_of, write_atomically};
 use crate::model::DeclKind;
-use crate::report::Position;
-use crate::rules::{Issue, LintError, Linter};
+use crate::report::RuleId;
+use crate::rules::{DocRef, Issue, LintError, Linter};
 use crate::target::{self, TargetError};
+use crate::timing::{Phase, Timings};
 
 /// The value written into an inserted constraints annotation.
 const UNMEASURED: &str = "k=?, rows=?";
@@ -46,70 +49,140 @@ pub struct Options {
     pub dry_run: bool,
 }
 
-/// The edits one file took.
-pub struct FileEdits {
-    pub path: PathBuf,
-    pub edits: Vec<Edit>,
-}
-
-/// Every file the run changed, in the order they were visited.
+/// What the run changed, and the diagnostic for every edit.
 pub struct Outcome {
-    pub files: Vec<FileEdits>,
+    pub diagnostics: Vec<Diagnostic>,
+    /// Files the run visited, changed or not.
+    pub checked: usize,
+    /// Files that took at least one edit.
+    pub changed: usize,
 }
 
 impl Outcome {
     #[must_use]
     pub fn edits(&self) -> usize {
-        self.files.iter().map(|file| file.edits.len()).sum()
-    }
-
-    #[must_use]
-    pub fn summary(&self) -> String {
-        format!("{} edits in {} files", self.edits(), self.files.len())
+        self.diagnostics.len()
     }
 }
 
 /// Runs the subcommand with `cwd` as the working directory.
 /// # Errors
 /// Returns an error when the config, the file walk, the parser or a write fails.
-pub fn run(options: &Options, cwd: &Path) -> Result<Outcome, FixError> {
+pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outcome, FixError> {
+    let walk = Phase::start("config and walk");
     let target = target::resolve(&options.paths, options.config_path.as_deref(), cwd)?;
+    walk.stop(timings, format!("{} files matched", target.files.len()));
+
+    let badge = if options.dry_run {
+        Badge::Fixable
+    } else {
+        Badge::Fixed
+    };
 
     let mut linter = Linter::new()?;
-    let mut files = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut changed = 0;
+    let mut parsing = Duration::ZERO;
+    let mut editing = Duration::ZERO;
+    let mut writing = Duration::ZERO;
+    let mut issue_count = 0;
 
     for path in &target.files {
+        let started = Instant::now();
         let source = std::fs::read_to_string(path).map_err(|source| FixError::Read {
             path: path.clone(),
             source,
         })?;
 
         let newline = newline_of(&source);
-        let issues = linter.issues(path, &source, &target.config, false)?;
-        let edits: Vec<Edit> = issues
+        let issues = linter.issues(path, &source, &target.config)?;
+        parsing += started.elapsed();
+        issue_count += issues.len();
+
+        let started = Instant::now();
+        // An edit that leaves the text as it was repairs nothing, so it is not reported.
+        let repairs: Vec<(&Issue, Edit, String)> = issues
             .iter()
             .filter(|issue| !supplied_elsewhere(issue, &issues, &target.config))
-            .filter_map(|issue| edit_for(issue, &target.config, newline))
+            .filter_map(|issue| edit_for(issue, &target.config, newline).map(|edit| (issue, edit)))
+            .filter_map(|(issue, edit)| {
+                let after = apply(&source, std::slice::from_ref(&edit), newline);
+                (after != source).then_some((issue, edit, after))
+            })
             .collect();
 
-        if edits.is_empty() {
+        if repairs.is_empty() {
+            editing += started.elapsed();
             continue;
         }
 
+        for (issue, edit, after) in &repairs {
+            diagnostics.push(diagnostic(path, issue, edit, &source, after, badge));
+        }
+
+        let edits: Vec<Edit> = repairs.into_iter().map(|(_, edit, _)| edit).collect();
         let fixed = apply(&source, &edits, newline);
         if changes_declarations(&mut linter, path, &source, &fixed)? {
             return Err(FixError::Unsafe { path: path.clone() });
         }
+        editing += started.elapsed();
+
+        let started = Instant::now();
         if !options.dry_run {
             write_atomically(path, &fixed)?;
         }
-        files.push(FileEdits {
-            path: path.clone(),
-            edits,
-        });
+        writing += started.elapsed();
+        changed += 1;
     }
 
-    Ok(Outcome { files })
+    timings.record(
+        "parse and rules",
+        parsing,
+        format!("{} files, {issue_count} issues", target.files.len()),
+    );
+    timings.record("edits", editing, format!("{} edits", diagnostics.len()));
+    if options.dry_run {
+        timings.record("dry run", writing, format!("{changed} files would change"));
+    } else {
+        timings.record("write", writing, format!("{changed} files"));
+    }
+
+    Ok(Outcome {
+        diagnostics,
+        checked: target.files.len(),
+        changed,
+    })
+}
+
+/// The `i` line above a fix diff: what it does, and whether it is already done.
+///
+/// An offered fix that writes a placeholder is `Unsafe`, the way Biome marks a fix the
+/// reader still has to finish.
+#[must_use]
+pub fn title(edit: &Edit, badge: Badge) -> String {
+    let what = capitalise(&edit.message);
+    match badge {
+        Badge::Fixed => format!("Applied fix: {what}"),
+        Badge::Fixable if edit.kind.is_safe() => format!("Safe fix: {what}"),
+        Badge::Fixable => format!("Unsafe fix: {what}"),
+    }
+}
+
+/// One repair as a diagnostic: the issue states the problem, the title states the fix.
+fn diagnostic(
+    path: &Path,
+    issue: &Issue,
+    edit: &Edit,
+    source: &str,
+    after: &str,
+    badge: Badge,
+) -> Diagnostic {
+    Diagnostic::new(path, edit.rule, Level::Info, issue.message())
+        .at(edit.span)
+        .fixed_by(
+            FixPreview::between(title(edit, badge), source, after),
+            badge,
+        )
 }
 
 /// Whether `after` parses into other declarations than `before`. Doc edits never should,
@@ -123,17 +196,27 @@ fn changes_declarations(
     Ok(linter.outline(path, before)? != linter.outline(path, after)?)
 }
 
-/// Whether another edit on the same doc comment already writes the tag this
-/// `missing-tag` or `missing-constraints` issue would insert: a rename to it, or, for
-/// the constraints tag, the constraints line.
+/// Whether another edit already writes the tag this `missing-tag` or
+/// `missing-constraints` issue would insert: a rename to it, the constraints line, or,
+/// for a circuit with no doc comment, the skeleton carrying that line.
 ///
-/// Inserting it as well would leave the comment carrying the tag twice.
+/// Inserting it as well would leave the comment carrying the tag twice. A headed entry
+/// is exempt: a rename writes a bare tag, which is not the section that is missing.
 fn supplied_elsewhere(issue: &Issue, issues: &[Issue], config: &Config) -> bool {
-    let (Issue::MissingTag { tag, doc, .. } | Issue::MissingConstraints { tag, doc, .. }) = issue
-    else {
-        return false;
+    if let Issue::UndocumentedConstraints { offset, .. } = issue {
+        return issues.iter().any(|other| {
+            matches!(
+                other,
+                Issue::MissingDoc { offset: skeleton, constraints: true, .. } if skeleton == offset
+            )
+        });
+    }
+
+    let (tag, doc, inserts_tag) = match issue {
+        Issue::MissingTag { entry, doc, .. } if entry.heading.is_none() => (&entry.tag, doc, true),
+        Issue::MissingConstraints { tag, doc, .. } => (tag, doc, false),
+        _ => return false,
     };
-    let inserts_tag = matches!(issue, Issue::MissingTag { .. });
 
     issues.iter().any(|other| match other {
         Issue::ForbiddenTag {
@@ -158,18 +241,20 @@ fn supplied_elsewhere(issue: &Issue, issues: &[Issue], config: &Config) -> bool 
     reason = "a flat dispatch with one arm per rule"
 )]
 pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
+    let span = issue.span();
     match issue {
         Issue::MissingDoc {
-            position,
             subject,
             kind,
             name,
             offset,
             indent,
             constraints,
+            ..
         } => Some(Edit {
-            position: *position,
-            message: format!("inserted doc skeleton for {subject}"),
+            span,
+            rule: RuleId::MISSING_DOC,
+            message: format!("insert a doc skeleton for {subject}"),
             kind: EditKind::Insert {
                 offset: *offset,
                 text: skeleton(
@@ -184,43 +269,46 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
         }),
 
         Issue::MissingTag {
-            position,
             kind,
-            tag,
+            entry,
             name,
             doc,
             ..
-        } => Some(Edit {
-            position: *position,
-            message: format!("inserted {tag}"),
-            kind: EditKind::Doc {
-                range: doc.range.clone(),
-                indent: doc.indent,
-                op: missing_tag_op(*kind, tag, name.as_deref(), config),
-            },
-        }),
+        } => Some(doc_edit(
+            span,
+            RuleId::MISSING_TAG,
+            format!("insert {entry}"),
+            doc,
+            missing_tag_op(*kind, entry, name.as_deref(), config),
+        )),
 
-        Issue::MissingConstraints {
-            position, tag, doc, ..
-        } => Some(Edit {
-            position: *position,
-            message: format!("inserted {tag} {UNMEASURED}"),
-            kind: EditKind::Doc {
-                range: doc.range.clone(),
-                indent: doc.indent,
-                op: DocOp::InsertConstraints(format!("{tag} {UNMEASURED}")),
+        Issue::TagOrder { kind, doc, .. } => Some(doc_edit(
+            span,
+            RuleId::TAG_ORDER,
+            "reorder the doc comment blocks".to_owned(),
+            doc,
+            DocOp::ReorderBlocks {
+                entries: config.kinds.get(*kind).entries().cloned().collect(),
             },
-        }),
+        )),
+
+        Issue::MissingConstraints { tag, doc, .. } => Some(doc_edit(
+            span,
+            RuleId::MISSING_CONSTRAINTS,
+            format!("insert {tag} {UNMEASURED}"),
+            doc,
+            DocOp::InsertConstraints(format!("{tag} {UNMEASURED}")),
+        )),
 
         Issue::UndocumentedConstraints {
-            position,
             tag,
             offset,
             indent,
             ..
         } => Some(Edit {
-            position: *position,
-            message: format!("inserted {tag} {UNMEASURED}"),
+            span,
+            rule: RuleId::MISSING_CONSTRAINTS,
+            message: format!("insert {tag} {UNMEASURED}"),
             kind: EditKind::Insert {
                 offset: *offset,
                 text: doc_comment(&[format!("{tag} {UNMEASURED}")], *indent, newline),
@@ -228,74 +316,91 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
         }),
 
         Issue::ForbiddenTag {
-            position,
             tag,
             line_offset,
             doc,
+            ..
         } => {
             let replacement = config.rename_of(tag)?;
-            Some(Edit {
-                position: *position,
-                message: format!("renamed {tag} to {replacement}"),
-                kind: EditKind::Doc {
-                    range: doc.range.clone(),
-                    indent: doc.indent,
-                    op: DocOp::RenameTag {
-                        line: *line_offset,
-                        from: tag.to_string(),
-                        to: replacement.to_string(),
-                    },
+            Some(doc_edit(
+                span,
+                RuleId::FORBIDDEN_TAG,
+                format!("rename {tag} to {replacement}"),
+                doc,
+                DocOp::RenameTag {
+                    line: *line_offset,
+                    from: tag.to_string(),
+                    to: replacement.to_string(),
                 },
-            })
+            ))
         }
 
         Issue::ModuleName {
-            position,
             name,
             line_offset,
             doc,
             ..
-        } => Some(Edit {
-            position: *position,
-            message: format!("set {MODULE_TAG} to `{name}`"),
-            kind: EditKind::Doc {
-                range: doc.range.clone(),
-                indent: doc.indent,
-                op: DocOp::SetModuleName {
-                    line: *line_offset,
-                    name: name.clone(),
-                },
+        } => Some(doc_edit(
+            span,
+            RuleId::MODULE_NAME,
+            format!("set {MODULE_TAG} to `{name}`"),
+            doc,
+            DocOp::SetModuleName {
+                line: *line_offset,
+                name: name.clone(),
             },
-        }),
+        )),
 
         Issue::Parse { .. }
+        | Issue::UnknownSection { .. }
         | Issue::ConstraintsFormat { .. }
         | Issue::ConstraintsPlaceholder { .. } => None,
     }
 }
 
-/// The tag line lands after the tags that precede it in config order; `@description`
-/// adopts prose that opens the body.
-fn missing_tag_op(kind: DeclKind, tag: &Tag, name: Option<&str>, config: &Config) -> DocOp {
-    DocOp::InsertTag {
-        line: tag_line(tag, name, config),
-        after: config
-            .kinds
-            .get(kind)
-            .tags
-            .iter()
-            .take_while(|required| *required != tag)
-            .map(ToString::to_string)
-            .collect(),
-        adopts_prose: tag.as_str() == DESCRIPTION_TAG,
+/// One rewrite of the doc comment the issue points at.
+fn doc_edit(span: Span, rule: RuleId, message: String, doc: &DocRef, op: DocOp) -> Edit {
+    Edit {
+        span,
+        rule,
+        message,
+        kind: EditKind::Doc {
+            range: doc.range.clone(),
+            indent: doc.indent,
+            op,
+        },
     }
 }
 
+/// The block lands after the entries that precede it in template order, optional ones
+/// included, so it follows whichever neighbour the comment carries; a bare `@description`
+/// adopts prose that opens the body.
+fn missing_tag_op(kind: DeclKind, entry: &TagSpec, name: Option<&str>, config: &Config) -> DocOp {
+    DocOp::InsertTag {
+        lines: entry_lines(entry, name, config),
+        after: config
+            .kinds
+            .get(kind)
+            .entries()
+            .take_while(|listed| *listed != entry)
+            .cloned()
+            .collect(),
+        adopts_prose: entry.heading.is_none() && entry.tag.as_str() == DESCRIPTION_TAG,
+    }
+}
+
+/// A section opens its own block, with the placeholder on the line under its heading.
 /// `@module` takes the declaration's own name; every other tag takes the placeholder.
-fn tag_line(tag: &Tag, name: Option<&str>, config: &Config) -> String {
-    match name {
-        Some(name) if tag.as_str() == MODULE_TAG => format!("{tag} {name}"),
-        _ => format!("{tag} {}", config.fix.placeholder),
+fn entry_lines(entry: &TagSpec, name: Option<&str>, config: &Config) -> Vec<String> {
+    match (&entry.heading, name) {
+        (Some(heading), _) => vec![
+            format!("{} {heading}:", entry.tag),
+            config.fix.placeholder.clone(),
+        ],
+        (None, Some(name)) if entry.tag.as_str() == MODULE_TAG => {
+            vec![format!("{} {name}", entry.tag)]
+        }
+        (None, _) => vec![format!("{} {}", entry.tag, config.fix.placeholder)],
     }
 }
 
@@ -317,8 +422,10 @@ fn skeleton(
         .get(kind)
         .tags
         .iter()
-        .filter(|tag| !constraints || **tag != config.constraints.tag)
-        .map(|tag| tag_line(tag, name, config))
+        .filter(|entry| {
+            !(constraints && entry.heading.is_none() && entry.tag == config.constraints.tag)
+        })
+        .flat_map(|entry| entry_lines(entry, name, config))
         .collect();
 
     if constraints {
@@ -351,31 +458,59 @@ fn doc_comment(body: &[String], indent: usize, newline: &str) -> String {
     format!("{}{newline}{margin}", lines.join(newline))
 }
 
-/// The line `fix` prints for one edit.
-#[must_use]
-pub fn line(path: &Path, position: Position, message: &str) -> String {
-    format!(
-        "{}:{}:{}: fix: {message}",
-        path.display(),
-        position.line,
-        position.column
-    )
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{changes_declarations, skeleton};
+    use super::{changes_declarations, skeleton, supplied_elsewhere};
     use crate::config::Config;
-    use crate::doc::Tag;
+    use crate::doc::{Tag, TagSpec};
     use crate::model::DeclKind;
-    use crate::rules::Linter;
+    use crate::rules::{Issue, Linter};
     use std::path::Path;
+
+    /// The messages of the issues that still become edits after the duplicate filter.
+    fn kept(source: &str, config: &Config) -> Vec<String> {
+        let issues = Linter::new()
+            .expect("the bundled grammar loads")
+            .issues(Path::new("a.compact"), source, config)
+            .expect("the source produced a tree");
+
+        issues
+            .iter()
+            .filter(|issue| !supplied_elsewhere(issue, &issues, config))
+            .map(Issue::message)
+            .collect()
+    }
 
     fn config() -> Config {
         let mut config = Config::default();
-        config.kinds.module.tags = vec![Tag::new("@module"), Tag::new("@description")];
-        config.kinds.circuit.tags = vec![Tag::new("@description")];
+        config.kinds.module.tags = vec![TagSpec::parse("@module"), TagSpec::parse("@description")];
+        config.kinds.circuit.tags = vec![TagSpec::parse("@description")];
         config
+    }
+
+    #[test]
+    fn a_rename_supplies_the_bare_tag_but_not_the_section_of_the_same_name() {
+        let source = "/**\n * @note Something.\n */\nexport circuit run(): [] { }\n";
+        let mut config = Config::default();
+        config.tags.forbid = vec![Tag::new("@note")];
+        config
+            .tags
+            .rename
+            .insert(Tag::new("@note"), Tag::new("@notice"));
+        config.kinds.circuit.tags = vec![
+            TagSpec::parse("@notice"),
+            TagSpec::parse("@notice Security"),
+        ];
+
+        // The bare `@notice` is gone: the rename writes it. The section is not.
+        assert_eq!(
+            kept(source, &config),
+            [
+                "Forbidden tag @note.",
+                "Circuit `run` doc comment has no @constraints.",
+                "Circuit `run` doc comment has no `@notice Security` section.",
+            ]
+        );
     }
 
     #[test]
@@ -383,6 +518,21 @@ mod tests {
         assert_eq!(
             skeleton(DeclKind::Module, Some("Ownable"), false, &config(), 0, "\n"),
             "/**\n * @module Ownable\n * @description TODO\n */\n"
+        );
+    }
+
+    #[test]
+    fn a_skeleton_gives_every_section_a_heading_line_and_a_placeholder_under_it() {
+        let mut config = config();
+        config
+            .kinds
+            .module
+            .tags
+            .push(TagSpec::parse("@notice Privacy"));
+
+        assert_eq!(
+            skeleton(DeclKind::Module, Some("Token"), false, &config, 0, "\n"),
+            "/**\n * @module Token\n * @description TODO\n * @notice Privacy:\n * TODO\n */\n"
         );
     }
 
@@ -397,7 +547,10 @@ mod tests {
     #[test]
     fn a_required_constraints_tag_is_written_once() {
         let mut config = config();
-        config.kinds.circuit.tags = vec![Tag::new("@description"), Tag::new("@constraints")];
+        config.kinds.circuit.tags = vec![
+            TagSpec::parse("@description"),
+            TagSpec::parse("@constraints"),
+        ];
 
         assert_eq!(
             skeleton(DeclKind::Circuit, Some("run"), true, &config, 0, "\n"),

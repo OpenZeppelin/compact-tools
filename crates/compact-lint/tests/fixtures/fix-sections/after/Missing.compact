@@ -1,0 +1,16 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Missing
+ * @description A module whose header stops before its security section.
+ *
+ * @notice Privacy:
+ * - Amounts stay private.
+ *
+ * @dev Notation:
+ * - `H(...)`: a `Bytes<32>` digest.
+ * @notice Security:
+ * TODO
+ */
+export module Missing {
+}

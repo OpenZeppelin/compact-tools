@@ -1,0 +1,13 @@
+src/access/Ownable.compact:30:6 lint/constraints-unmeasured ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Circuit `initialize` has no measurement.
+
+    28 │    * @description Sets the first owner.
+    29 │    *
+  > 30 │    * @constraints k=5, rows=10
+       │      ^^^^^^^^^^^^
+    31 │    */
+    32 │   export circuit initialize(): [] { }
+
+  i It is measured through src/access/test/mocks/MockOwnable.compact, which exports no circuit of that name.
+

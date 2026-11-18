@@ -1,0 +1,5 @@
+[lint]
+
+[lint.rules]
+missing-doc = "warn"
+missing-constraints = "error"

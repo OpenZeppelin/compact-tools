@@ -1,3 +1,27 @@
-Unmeasured.compact:9:3: fix: inserted @constraints k=?, rows=?
-Unmeasured.compact:18:3: fix: inserted @constraints k=?, rows=?
-Unmeasured.compact:23:3: fix: inserted @constraints k=?, rows=?
+Unmeasured.compact:9:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      8 │ + ···*
+      9 │ + ···*·@constraints·k=?,·rows=?
+
+Unmeasured.compact:18:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `send` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      15 │ + ···*·@constraints·k=?,·rows=?
+      16 │ + ···*
+
+Unmeasured.compact:23:3 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `run` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      21 │ + ···*·@constraints·k=?,·rows=?
+      22 │ + ···*
+

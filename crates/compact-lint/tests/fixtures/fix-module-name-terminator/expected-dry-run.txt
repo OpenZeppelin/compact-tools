@@ -1,0 +1,46 @@
+Terminators.compact:1:5 lint/module-name  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names ``, but the module is `Empty`.
+
+  > 1 │ /** @module */
+      │     ^^^^^^^
+    2 │ module Empty {
+    3 │ }
+
+  i Safe fix: Set @module to `Empty`
+
+    1   │ - /**·@module·*/
+      1 │ + /**·@module·Empty·*/
+
+Terminators.compact:5:5 lint/module-name  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Old`, but the module is `Glued`.
+
+    3 │ }
+    4 │ 
+  > 5 │ /** @module Old*/
+      │     ^^^^^^^
+    6 │ module Glued {
+    7 │ }
+
+  i Safe fix: Set @module to `Glued`
+
+    5   │ - /**·@module·Old*/
+      5 │ + /**·@module·Glued·*/
+
+Terminators.compact:10:4 lint/module-name  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Old`, but the module is `Spaced`.
+
+     8 │ 
+     9 │ /**
+  > 10 │  * @module Old */
+       │    ^^^^^^^
+    11 │ module Spaced {
+    12 │ }
+
+  i Safe fix: Set @module to `Spaced`
+
+    10    │ - ·*·@module·Old·*/
+       10 │ + ·*·@module·Spaced·*/
+

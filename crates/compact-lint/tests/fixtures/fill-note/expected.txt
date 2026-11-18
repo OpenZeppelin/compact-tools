@@ -1,1 +1,9 @@
-src/access/Ownable.compact:16:6: fill: @constraints k=9, rows=42 (zkir-v3) -> k=13, rows=4871
+src/access/Ownable.compact:16:6 fill  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `transferOwnership` measures k=13, rows=4871.
+
+  i Applied fix: Set @constraints to k=13, rows=4871
+
+    16    │ - ···*·@constraints·k=9,·rows=42·(zkir-v3)
+       16 │ + ···*·@constraints·k=13,·rows=4871
+

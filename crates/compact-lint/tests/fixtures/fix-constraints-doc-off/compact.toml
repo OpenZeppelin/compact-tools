@@ -1,0 +1,5 @@
+[lint]
+include = ["**/*.compact"]
+
+[lint.rules]
+missing-doc = "off"

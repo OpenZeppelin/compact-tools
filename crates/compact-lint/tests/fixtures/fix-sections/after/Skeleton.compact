@@ -1,0 +1,12 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Skeleton
+ * @description TODO
+ * @notice Privacy:
+ * TODO
+ * @notice Security:
+ * TODO
+ */
+export module Skeleton {
+}

@@ -1,0 +1,14 @@
+[lint]
+include = ["**/*.compact"]
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.circuit]
+tags = ["@description"]
+
+[lint.kinds.ledger]
+tags = ["@description"]
+
+[lint.kinds.constructor]
+docs = "none"

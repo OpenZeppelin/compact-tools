@@ -1,2 +1,26 @@
-Returns.compact:9:6: forbidden-tag: forbidden tag @return
-Returns.compact:15:6: forbidden-tag: forbidden tag @return
+Returns.compact:9:6 lint/forbidden-tag ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Forbidden tag @return.
+
+     7 │    * @description Does nothing.
+     8 │    * @constraints k=6, rows=28
+  >  9 │    * @return {[]} - Empty tuple.
+       │      ^^^^^^^
+    10 │    */
+    11 │   export circuit run(): [] { }
+
+  i Remove it from the doc comment.
+
+Returns.compact:15:6 lint/forbidden-tag ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Forbidden tag @return.
+
+    13 │   /**
+    14 │    * @description Not exported, so its docs are optional, but the tag is not.
+  > 15 │    * @return {[]} - Empty tuple.
+       │      ^^^^^^^
+    16 │    */
+    17 │   circuit helper(): [] { }
+
+  i Remove it from the doc comment.
+

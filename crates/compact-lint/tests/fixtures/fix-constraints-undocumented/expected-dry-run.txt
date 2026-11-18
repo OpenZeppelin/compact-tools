@@ -1,0 +1,17 @@
+Undocumented.compact:5:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` has no doc comment, so no @constraints.
+
+    3 │  */
+    4 │ export module Undocumented {
+  > 5 │   export circuit bump(): [] { }
+      │   ^^^^^^^^^^^^^^^^^^^
+    6 │ 
+    7 │   export pure circuit double(value: Uint<8>): Uint<16> {
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      5 │ + ··/**
+      6 │ + ···*·@constraints·k=?,·rows=?
+      7 │ + ···*/
+

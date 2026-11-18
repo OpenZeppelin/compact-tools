@@ -1,0 +1,51 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Template
+ * @description
+ * A tally kept as one public counter, with the caller hidden.
+ *
+ * @dev Notation:
+ * - `tally`: the public counter this module owns.
+ *
+ * @dev Compatibility:
+ * The wire format is the counter alone; nothing here is versioned.
+ *
+ * @notice Privacy:
+ * - Public: the entry point, and the counter itself.
+ * - Private: which account called, and how often.
+ *
+ * @notice Security:
+ * - `bump` is ungated: re-exporting it is a permissionless write.
+ * - A failed assert rejects the whole tx and the caller pays no fee.
+ *
+ * @notice Concurrency:
+ * - `increment` commutes, so two calls in one block both land.
+ *
+ * @notice Scope:
+ * Counting only: no roles, no initialization, no supply.
+ *
+ * @notice Scalability:
+ * - State growth is one counter, whatever the number of calls.
+ *
+ * @dev Performance:
+ * - Cost is one counter write per call; per-circuit `k` and rows are on each
+ *   `@constraints` line.
+ */
+export module Template {
+  import CompactStandardLibrary;
+
+  /**
+   * @description The number of bumps the module has seen.
+   */
+  export ledger tally: Counter;
+
+  /**
+   * @description Adds one to the tally.
+   * @constraints k=10, rows=626
+   * @returns {[]} Empty tuple.
+   */
+  export circuit bump(): [] {
+    tally.increment(1);
+  }
+}

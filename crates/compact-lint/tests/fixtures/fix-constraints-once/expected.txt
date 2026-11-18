@@ -1,3 +1,30 @@
-Once.compact:3:4: fix: renamed @circuitInfo to @constraints
-Once.compact:7:1: fix: inserted doc skeleton for circuit `bump`
-Once.compact:12:1: fix: inserted @constraints k=?, rows=?
+Once.compact:3:4 lint/forbidden-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Forbidden tag @circuitInfo.
+
+  i Applied fix: Rename @circuitInfo to @constraints
+
+    3   │ - ·*·@circuitInfo·k=7,·rows=74
+      3 │ + ·*·@constraints·k=7,·rows=74
+
+Once.compact:7:1 lint/missing-doc  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `bump` has no doc comment.
+
+  i Applied fix: Insert a doc skeleton for circuit `bump`
+
+       7 │ + /**
+       8 │ + ·*·@description·TODO
+       9 │ + ·*
+      10 │ + ·*·@constraints·k=?,·rows=?
+      11 │ + ·*/
+
+Once.compact:12:1 lint/missing-constraints  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `send` doc comment has no @constraints.
+
+  i Applied fix: Insert @constraints k=?, rows=?
+
+      11 │ + ·*
+      12 │ + ·*·@constraints·k=?,·rows=?
+

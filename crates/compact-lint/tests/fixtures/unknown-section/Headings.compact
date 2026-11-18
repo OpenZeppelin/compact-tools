@@ -1,0 +1,23 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Headings
+ * @description A module carrying one section the template does not list.
+ *
+ * @notice Privacy:
+ * - Amounts stay private.
+ *
+ * @notice Gotchas:
+ * - The nonce is spend-critical.
+ *
+ * @dev Notation:
+ * - `H(...)`: a `Bytes<32>` digest.
+ */
+export module Headings {
+  /**
+   * @description A helper: it doubles its argument.
+   */
+  export pure circuit double(value: Uint<8>): Uint<16> {
+    return value as Uint<16> * 2;
+  }
+}

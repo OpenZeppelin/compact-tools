@@ -1,1 +1,13 @@
-Unfilled.compact:8:6: constraints-placeholder: @constraints value `k=?, rows=?` still holds a placeholder
+Unfilled.compact:8:6 lint/constraints-placeholder ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! @constraints value `k=?, rows=?` still holds a placeholder.
+
+     6 │   /**
+     7 │    * @description Not measured yet.
+  >  8 │    * @constraints k=?, rows=?
+       │      ^^^^^^^^^^^^
+     9 │    */
+    10 │   export circuit run(): [] { }
+
+  i Run compact-lint fill-constraints to measure it.
+

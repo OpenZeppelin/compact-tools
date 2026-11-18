@@ -1,0 +1,27 @@
+/**
+ * @module Paragraphs
+ * @description A module whose circuit descriptions run over several paragraphs.
+ */
+export module Paragraphs {
+  /**
+   * @description Deposits a coin.
+   *
+   * The amount stays public.
+   */
+  export circuit deposit(): [] { }
+
+  /**
+   * @description Transfers ownership to `newOwner`.
+   *
+   * The previous owner keeps no rights.
+   *
+   * Requirements:
+   *
+   * - The caller is the owner.
+   * - `newOwner` is not the zero address.
+   *
+   * @param {Bytes<32>} newOwner - The new owner.
+   * @returns {[]} Empty tuple.
+   */
+  export circuit transfer(newOwner: Bytes<32>): [] { }
+}

@@ -1,0 +1,11 @@
+[lint]
+include = ["**/*.compact"]
+
+[lint.kinds.module]
+docs = "all"
+tags = ["@module", "@description", "@notice Privacy"]
+sections = ["@module", "@description", "@notice Privacy", "@dev Notation"]
+
+# No headed `@description` entry, so a heading on that tag is nobody's business.
+[lint.kinds.circuit]
+tags = ["@description"]

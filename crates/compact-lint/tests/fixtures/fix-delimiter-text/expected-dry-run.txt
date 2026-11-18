@@ -1,0 +1,54 @@
+Delimiters.compact:4:1 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `run` doc comment has no @constraints.
+
+    2 │  * continuation
+    3 │  */
+  > 4 │ export circuit run(): [] { }
+      │ ^^^^^^^^^^^^^^^^^^
+    5 │ 
+    6 │ /** Approved accounts
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+    1   │ - /**·@description·First·line
+      1 │ + /**
+      2 │ + ·*·@description·First·line
+    2 3 │    * continuation
+      4 │ + ·*
+      5 │ + ·*·@constraints·k=?,·rows=?
+
+Delimiters.compact:9:1 lint/missing-tag  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Ledger `accounts` doc comment has no @description.
+
+     7 │  * across every shard.
+     8 │  */
+  >  9 │ export ledger accounts: Uint<64>;
+       │ ^^^^^^^^^^^^^^^^^^^^^^
+    10 │ 
+    11 │ /**
+
+  i Unsafe fix: Insert @description
+
+    6   │ - /**·Approved·accounts
+      6 │ + /**
+      7 │ + ·*·@description·Approved·accounts
+
+Delimiters.compact:14:1 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `send` doc comment has no @constraints.
+
+    12 │  * @description Sends
+    13 │  * and returns. */
+  > 14 │ export circuit send(): [] { }
+       │ ^^^^^^^^^^^^^^^^^^^
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+    13    │ - ·*·and·returns.·*/
+       13 │ + ·*·and·returns.
+       14 │ + ·*
+       15 │ + ·*·@constraints·k=?,·rows=?
+       16 │ + ·*/
+

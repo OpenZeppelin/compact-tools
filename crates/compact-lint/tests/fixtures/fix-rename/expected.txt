@@ -1,2 +1,18 @@
-Returns.compact:9:6: fix: renamed @return to @returns
-Returns.compact:15:6: fix: renamed @return to @returns
+Returns.compact:9:6 lint/forbidden-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Forbidden tag @return.
+
+  i Applied fix: Rename @return to @returns
+
+    9   │ - ···*·@return·{[]}·-·Empty·tuple.
+      9 │ + ···*·@returns·{[]}·-·Empty·tuple.
+
+Returns.compact:15:6 lint/forbidden-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Forbidden tag @return.
+
+  i Applied fix: Rename @return to @returns
+
+    15    │ - ···*·@return·{[]}·-·Empty·tuple.
+       15 │ + ···*·@returns·{[]}·-·Empty·tuple.
+

@@ -1,0 +1,31 @@
+Renamed.compact:2:4 lint/module-name  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Stale`, but the module is `Renamed`.
+
+    1 │ /**
+  > 2 │  * @module Stale<T> (archived)
+      │    ^^^^^^^
+    3 │  * @description The tag still names the module's old name.
+    4 │  */
+
+  i Safe fix: Set @module to `Renamed`
+
+    2   │ - ·*·@module·Stale<T>·(archived)
+      2 │ + ·*·@module·Renamed·(archived)
+
+Renamed.compact:7:6 lint/module-name  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i @module names `Inner`, but the module is `Nested`.
+
+    5 │ export module Renamed {
+    6 │   /**
+  > 7 │    * @module Inner.
+      │      ^^^^^^^
+    8 │    * @description The inner tag names nothing that exists.
+    9 │    */
+
+  i Safe fix: Set @module to `Nested`
+
+    7   │ - ···*·@module·Inner.
+      7 │ + ···*·@module·Nested
+

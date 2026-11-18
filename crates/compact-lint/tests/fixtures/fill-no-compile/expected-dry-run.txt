@@ -1,0 +1,16 @@
+src/access/Ownable.compact:9:6 fill  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `owner` measures k=7, rows=74.
+
+     7 │    * @description Returns the owner.
+     8 │    *
+  >  9 │    * @constraints k=?, rows=?
+       │      ^^^^^^^^^^^^
+    10 │    */
+    11 │   export circuit owner(): [] { }
+
+  i Safe fix: Set @constraints to k=7, rows=74
+
+    9   │ - ···*·@constraints·k=?,·rows=?
+      9 │ + ···*·@constraints·k=7,·rows=74
+

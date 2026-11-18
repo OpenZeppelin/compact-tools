@@ -11,8 +11,8 @@ use std::process::{Command, Output};
 use assert_cmd::prelude::*;
 use tempfile::TempDir;
 
-/// Exit code for a run that left a tagged circuit unmeasured.
-const EXIT_UNMEASURED: i32 = 1;
+/// Exit code for an error-level diagnostic, or a warning under `--error-on-warnings`.
+const EXIT_FINDINGS: i32 = 1;
 
 /// Exit code for a config, IO or compiler error.
 const EXIT_ERROR: i32 = 2;
@@ -45,8 +45,8 @@ fn work(name: &str) -> TempDir {
     let root = case(name);
 
     std::fs::copy(
-        root.join("compact-lint.toml"),
-        directory.path().join("compact-lint.toml"),
+        root.join("compact.toml"),
+        directory.path().join("compact.toml"),
     )
     .expect("the case has a config");
     copy_tree(&root.join("before"), directory.path());
@@ -70,19 +70,32 @@ fn copy_tree(from: &Path, to: &Path) {
 /// Every `.compact` file under `root`, keyed by its path relative to it.
 fn sources(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     let mut found = BTreeMap::new();
-    collect(root, root, &mut found);
+    collect(root, root, true, &mut found);
     found
 }
 
-fn collect(root: &Path, directory: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+/// Every file under `root`, artifacts included, keyed by its path relative to it.
+fn tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    let mut found = BTreeMap::new();
+    collect(root, root, false, &mut found);
+    found
+}
+
+fn collect(
+    root: &Path,
+    directory: &Path,
+    only_sources: bool,
+    out: &mut BTreeMap<PathBuf, Vec<u8>>,
+) {
     for entry in std::fs::read_dir(directory).expect("the tree is readable") {
         let entry = entry.expect("the entry is readable");
         let path = entry.path();
         if path.is_dir() {
-            collect(root, &path, out);
-        } else if path
-            .extension()
-            .is_some_and(|extension| extension == "compact")
+            collect(root, &path, only_sources, out);
+        } else if !only_sources
+            || path
+                .extension()
+                .is_some_and(|extension| extension == "compact")
         {
             let relative = path.strip_prefix(root).expect("the path is under the root");
             out.insert(
@@ -93,8 +106,8 @@ fn collect(root: &Path, directory: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) 
     }
 }
 
-fn expected(name: &str) -> String {
-    std::fs::read_to_string(case(name).join("expected.txt")).expect("the case has an expectation")
+fn expected(name: &str, file: &str) -> String {
+    std::fs::read_to_string(case(name).join(file)).expect("the case has an expectation")
 }
 
 /// Runs `fill-constraints` inside `directory`, pointed at the fake compiler.
@@ -105,7 +118,7 @@ fn fill(directory: &Path, extra: &[&str]) -> Output {
 fn fill_with_env(directory: &Path, extra: &[&str], env: &[(&str, &str)]) -> Output {
     binary()
         .current_dir(directory)
-        .args(["fill-constraints", "--compact-bin"])
+        .args(["fill-constraints", "--colors=off", "--compact-bin"])
         .arg(fake_compact())
         .args(extra)
         .envs(env.iter().copied())
@@ -125,6 +138,7 @@ fn run(directory: &Path, args: &[&str]) -> (i32, String) {
     let output = binary()
         .current_dir(directory)
         .args(args)
+        .arg("--colors=off")
         .output()
         .expect("the binary ran");
     code_and_stdout(&output)
@@ -132,13 +146,18 @@ fn run(directory: &Path, args: &[&str]) -> (i32, String) {
 
 /// The whole contract of a measurable case: it fills, it lands, it settles, it previews.
 ///
-/// `settled` is what a second run still reports, which is the unmeasured circuits.
-fn assert_case(name: &str, extra: &[&str], exit: i32, settled: &str) {
+/// A case holds `expected.txt` for the write run, `expected-settled.txt` for what a
+/// second run still reports, and `expected-dry-run.txt` for the preview.
+fn assert_case(name: &str, extra: &[&str], exit: i32) {
     let directory = work(name);
     let root = directory.path();
 
     let (code, stdout) = code_and_stdout(&fill(root, extra));
-    assert_eq!(stdout, expected(name), "stdout for case {name}");
+    assert_eq!(
+        stdout,
+        expected(name, "expected.txt"),
+        "stdout for case {name}"
+    );
     assert_eq!(code, exit, "exit code for case {name}");
     assert_eq!(
         sources(root),
@@ -151,52 +170,50 @@ fn assert_case(name: &str, extra: &[&str], exit: i32, settled: &str) {
     assert_eq!(code, 0, "check exit code after filling case {name}");
 
     let (code, stdout) = code_and_stdout(&fill(root, extra));
-    assert_eq!(stdout, settled, "a second run on case {name}");
+    assert_eq!(
+        stdout,
+        expected(name, "expected-settled.txt"),
+        "a second run on case {name}"
+    );
     assert_eq!(code, exit, "second run exit code for case {name}");
 
     let preview = work(name);
-    let before = sources(preview.path());
+    let before = tree(preview.path());
     let mut arguments = extra.to_vec();
     arguments.push("--dry-run");
     let (code, stdout) = code_and_stdout(&fill(preview.path(), &arguments));
-    assert_eq!(stdout, expected(name), "dry-run stdout for case {name}");
-    assert_eq!(code, exit, "dry-run exit code for case {name}");
     assert_eq!(
-        sources(preview.path()),
-        before,
-        "dry-run wrote to case {name}"
+        stdout,
+        expected(name, "expected-dry-run.txt"),
+        "dry-run stdout for case {name}"
     );
+    assert_eq!(code, exit, "dry-run exit code for case {name}");
+    assert_eq!(tree(preview.path()), before, "dry-run wrote to case {name}");
 }
 
 #[test]
 fn placeholders_and_stale_values_take_the_measurement() {
-    let unmeasured = expected("basic")
-        .lines()
-        .filter(|line| line.contains("constraints-unmeasured"))
-        .collect::<Vec<&str>>()
-        .join("\n");
-
-    assert_case("basic", &[], EXIT_UNMEASURED, &format!("{unmeasured}\n"));
+    assert_case("basic", &[], 0);
 }
 
 #[test]
 fn a_preset_matching_a_self_glob_compiles_itself() {
-    assert_case("self", &[], 0, "");
+    assert_case("self", &[], 0);
 }
 
 #[test]
 fn an_override_names_the_contract_that_measures_a_file() {
-    assert_case("override", &[], 0, "");
+    assert_case("override", &[], 0);
 }
 
 #[test]
-fn a_seeded_cache_fills_without_a_compiler() {
-    assert_case("no-compile", &["--no-compile"], 0, "");
+fn a_seeded_artifact_fills_without_a_compiler() {
+    assert_case("no-compile", &["--no-compile"], 0);
 }
 
 #[test]
 fn a_note_stays_while_the_measurement_matches() {
-    assert_case("note", &["--no-compile"], 0, "");
+    assert_case("note", &["--no-compile"], 0);
 }
 
 #[test]
@@ -205,23 +222,44 @@ fn a_circuit_the_report_marks_unproved_stays_unmeasured() {
     let (_, stdout) = code_and_stdout(&fill(directory.path(), &[]));
 
     assert!(
-        stdout.contains("circuit `initialize` has no measurement"),
+        stdout.contains("Circuit `initialize` has no measurement."),
         "{stdout}"
     );
-    assert!(!stdout.contains("k=5, rows=10"), "{stdout}");
+    assert!(
+        !stdout.contains("Set @constraints to k=5, rows=10"),
+        "{stdout}"
+    );
 }
 
 #[test]
-fn a_file_with_no_measurement_source_reports_once_and_exits_one() {
+fn a_file_with_no_measurement_source_reports_once() {
     let directory = work("missing-source");
     let root = directory.path();
     let before = sources(root);
 
     let (code, stdout) = code_and_stdout(&fill(root, &[]));
 
-    assert_eq!(stdout, expected("missing-source"));
-    assert_eq!(code, EXIT_UNMEASURED);
+    assert_eq!(stdout, expected("missing-source", "expected.txt"));
+    assert_eq!(code, 0);
     assert_eq!(sources(root), before);
+}
+
+#[test]
+fn an_unmeasured_circuit_fails_the_run_only_at_error_level_or_with_error_on_warnings() {
+    let directory = work("basic");
+    let root = directory.path();
+    let (code, _) = code_and_stdout(&fill(root, &["--dry-run"]));
+    assert_eq!(code, 0, "at the default warn level");
+
+    let (code, _) = code_and_stdout(&fill(root, &["--dry-run", "--error-on-warnings"]));
+    assert_eq!(code, EXIT_FINDINGS, "with --error-on-warnings");
+
+    let config = root.join("compact.toml");
+    let mut text = std::fs::read_to_string(&config).expect("the config is readable");
+    text.push_str("\n[lint.rules]\nconstraints-unmeasured = \"error\"\n");
+    std::fs::write(&config, text).expect("the config is writable");
+    let (code, _) = code_and_stdout(&fill(root, &["--dry-run"]));
+    assert_eq!(code, EXIT_FINDINGS, "at the error level");
 }
 
 #[test]
@@ -263,17 +301,30 @@ fn no_color_in_the_environment_still_measures() {
     let (code, stdout) =
         code_and_stdout(&fill_with_env(directory.path(), &[], &[("NO_COLOR", "1")]));
 
-    assert_eq!(stdout, expected("basic"));
-    assert_eq!(code, EXIT_UNMEASURED);
+    assert_eq!(stdout, expected("basic", "expected.txt"));
+    assert_eq!(code, 0);
 }
 
 #[test]
-fn a_compile_with_no_progress_lines_exits_two_and_keeps_the_cache() {
+fn rows_the_compiler_wraps_onto_one_line_are_all_measured() {
+    let directory = work("basic");
+    let (code, stdout) = code_and_stdout(&fill_with_env(
+        directory.path(),
+        &[],
+        &[("FAKE_COMPACT_WRAP", "1")],
+    ));
+
+    assert_eq!(stdout, expected("basic", "expected.txt"));
+    assert_eq!(code, 0);
+}
+
+#[test]
+fn a_compile_with_no_progress_lines_exits_two_without_writing_circuit_info() {
     let directory = work("no-compile");
-    let cache = directory
+    let artifact = directory
         .path()
-        .join("src/access/test/mocks/.circuit-info.json");
-    let before = std::fs::read(&cache).expect("the seeded cache is readable");
+        .join("artifacts/MockOwnable/circuit-info.json");
+    let before = std::fs::read(&artifact).expect("the seeded artifact is readable");
 
     let output = fill_with_env(directory.path(), &[], &[("FAKE_COMPACT_SILENT", "1")]);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -282,50 +333,106 @@ fn a_compile_with_no_progress_lines_exits_two_and_keeps_the_cache() {
     assert!(stderr.contains("MockOwnable.compact"), "{stderr}");
     assert!(stderr.contains("owner"), "{stderr}");
     assert_eq!(
-        std::fs::read(&cache).expect("the cache is still readable"),
+        std::fs::read(&artifact).expect("the artifact is still readable"),
         before
     );
 }
 
 #[test]
-fn a_missing_cache_entry_exits_two_and_names_the_flag() {
+fn a_missing_artifact_exits_two_and_names_the_flag() {
     let directory = work("basic");
     let output = fill(directory.path(), &["--no-compile"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert_eq!(output.status.code(), Some(EXIT_ERROR));
-    assert!(stderr.contains(".circuit-info.json"), "{stderr}");
+    assert!(
+        stderr.contains("artifacts/MockOwnable/circuit-info.json"),
+        "{stderr}"
+    );
     assert!(stderr.contains("--no-compile"), "{stderr}");
 }
 
 #[test]
-fn a_compile_writes_the_measurement_cache() {
+fn a_compile_writes_the_artifact_circuit_info() {
     let directory = work("override");
     fill(directory.path(), &[]);
 
-    let cache = std::fs::read_to_string(
+    let artifact = std::fs::read_to_string(
         directory
             .path()
-            .join("src/utils/test/mocks/.circuit-info.json"),
+            .join("artifacts/MockUtilities/circuit-info.json"),
     )
-    .expect("the cache was written");
+    .expect("the artifact was written");
 
-    assert!(cache.contains("\"generatedAt\""), "{cache}");
-    assert!(cache.contains("\"MockUtilities.compact\""), "{cache}");
-    assert!(cache.contains("\"rows\": 310"), "{cache}");
+    assert!(artifact.contains("\"generatedAt\""), "{artifact}");
+    assert!(
+        artifact.contains("\"source\": \"src/utils/test/mocks/MockUtilities.compact\""),
+        "{artifact}"
+    );
+    assert!(artifact.contains("\"rows\": 310"), "{artifact}");
+    assert!(
+        directory
+            .path()
+            .join("artifacts/MockUtilities/compiler/contract-info.json")
+            .is_file(),
+        "the compiler's own report sits beside it"
+    );
+}
+
+#[test]
+fn a_hierarchical_artifact_tree_is_found_by_stem() {
+    let directory = work("no-compile");
+    let artifacts = directory.path().join("artifacts");
+    std::fs::create_dir_all(artifacts.join("access")).expect("the tree is writable");
+    std::fs::rename(
+        artifacts.join("MockOwnable"),
+        artifacts.join("access/MockOwnable"),
+    )
+    .expect("the contract directory is movable");
+
+    let (code, stdout) = code_and_stdout(&fill(directory.path(), &["--no-compile"]));
+
+    assert_eq!(stdout, expected("no-compile", "expected.txt"));
+    assert_eq!(code, 0);
+}
+
+#[test]
+fn two_artifacts_with_one_stem_are_an_error() {
+    let directory = work("no-compile");
+    let artifacts = directory.path().join("artifacts");
+    for subdirectory in ["access", "token"] {
+        let target = artifacts.join(subdirectory).join("MockOwnable");
+        std::fs::create_dir_all(&target).expect("the tree is writable");
+        std::fs::copy(
+            artifacts.join("MockOwnable/circuit-info.json"),
+            target.join("circuit-info.json"),
+        )
+        .expect("the artifact is copyable");
+    }
+    std::fs::remove_dir_all(artifacts.join("MockOwnable")).expect("the tree is writable");
+
+    let output = fill(directory.path(), &["--no-compile"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(stderr.contains("named MockOwnable"), "{stderr}");
+    assert!(stderr.contains("access/MockOwnable"), "{stderr}");
+    assert!(stderr.contains("token/MockOwnable"), "{stderr}");
 }
 
 #[test]
 fn the_summary_goes_to_stderr_and_the_changes_to_stdout() {
     let directory = work("basic");
     let output = fill(directory.path(), &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr).trim_end(),
-        "2 values filled in 1 files, 1 unmeasured"
+    assert!(stderr.starts_with("Checked 1 file in "), "{stderr}");
+    assert!(
+        stderr.ends_with(". Filled 2 values in 1 file.\nFound 1 warning.\n"),
+        "{stderr}"
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains(": fill: "),
+        String::from_utf8_lossy(&output.stdout).contains(" fill  FIXED  "),
         "the changes belong on stdout"
     );
 }

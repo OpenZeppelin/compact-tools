@@ -1,0 +1,15 @@
+pragma language_version >= 0.23.0;
+
+/**
+ * @module Paragraphs
+ * @description A module whose description runs over two paragraphs.
+ *
+ * The second paragraph still describes the module.
+ * @notice Privacy:
+ * TODO
+ *
+ * @notice Security:
+ * - Nonces are spend-critical.
+ */
+export module Paragraphs {
+}

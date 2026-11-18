@@ -1,1 +1,9 @@
-src/utils/Utils.compact:9:6: fill: @constraints k=?, rows=? -> k=9, rows=310
+src/utils/Utils.compact:9:6 fill  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `hash` measures k=9, rows=310.
+
+  i Applied fix: Set @constraints to k=9, rows=310
+
+    9   │ - ···*·@constraints·k=?,·rows=?
+      9 │ + ···*·@constraints·k=9,·rows=310
+

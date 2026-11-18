@@ -1,0 +1,31 @@
+Paragraphs.compact:11:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `deposit` doc comment has no @constraints.
+
+     9 │    * The amount stays public.
+    10 │    */
+  > 11 │   export circuit deposit(): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^^^^
+    12 │ 
+    13 │   /**
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      10 │ + ···*
+      11 │ + ···*·@constraints·k=?,·rows=?
+
+Paragraphs.compact:26:3 lint/missing-constraints  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `transfer` doc comment has no @constraints.
+
+    24 │    * @returns {[]} Empty tuple.
+    25 │    */
+  > 26 │   export circuit transfer(newOwner: Bytes<32>): [] { }
+       │   ^^^^^^^^^^^^^^^^^^^^^^^
+    27 │ }
+
+  i Unsafe fix: Insert @constraints k=?, rows=?
+
+      18 │ + ···*·@constraints·k=?,·rows=?
+      19 │ + ···*
+

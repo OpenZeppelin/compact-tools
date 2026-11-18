@@ -1,0 +1,13 @@
+Headings.compact:10:4 lint/unknown-section ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! `@notice Gotchas` is not a section the template lists.
+
+     8 │  * - Amounts stay private.
+     9 │  *
+  > 10 │  * @notice Gotchas:
+       │    ^^^^^^^^^^^^^^^^
+    11 │  * - The nonce is spend-critical.
+    12 │  *
+
+  i Add it to kinds.module.sections, or fold it into a listed section.
+

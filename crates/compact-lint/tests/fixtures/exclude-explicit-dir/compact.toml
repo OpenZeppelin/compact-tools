@@ -1,0 +1,9 @@
+[lint]
+include = ["contracts/**/*.compact"]
+exclude = ["contracts/archive/**"]
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.ledger]
+tags = ["@description"]

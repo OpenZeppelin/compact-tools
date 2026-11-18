@@ -1,0 +1,5 @@
+[lint]
+include = ["**/*.compact"]
+
+[lint.kinds.circuit]
+docs = "none"

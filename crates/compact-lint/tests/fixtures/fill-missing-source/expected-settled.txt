@@ -1,0 +1,11 @@
+src/orphan/Orphan.compact:1:1 lint/constraints-unmeasurable ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! No measurement source for src/orphan/Orphan.compact.
+
+  > 1 │ /**
+      │ ^
+    2 │  * @module Orphan
+    3 │  * @description Test fixture.
+
+  i Tried src/orphan/test/mocks/MockOrphan.compact, src/test/mocks/MockOrphan.compact; add one, or name it in constraints.overrides.
+

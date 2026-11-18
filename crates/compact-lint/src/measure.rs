@@ -1,8 +1,8 @@
 //! Measuring a circuit's proving key size and row count with `compact compile`.
 //!
 //! `k` and `rows` reach only the compiler's terminal progress output, so the compile runs
-//! under a pty and the transcript is parsed. Results are cached in a
-//! `.circuit-info.json` file beside the compiled source.
+//! under a pty and the transcript is parsed. Results go to the `circuit-info.json` the
+//! TypeScript builder writes in a contract's artifact directory, in the same shape.
 
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
@@ -13,12 +13,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use walkdir::WalkDir;
 
-/// The measurement cache, written beside the compiled source.
-pub const CACHE_FILE_NAME: &str = ".circuit-info.json";
+/// One contract's measurements, beside the compiler's own output in its artifact directory.
+pub const ARTIFACT_FILE_NAME: &str = "circuit-info.json";
 
 /// The compiler's own report of the circuits it built, under the artifacts directory.
 const CONTRACT_INFO_PATH: [&str; 2] = ["compiler", "contract-info.json"];
+
+/// A dependency tree carries its own artifacts, so the search never descends into one.
+const SKIPPED_DIR: &str = "node_modules";
+
+/// Opens the compiler's per-circuit progress row, `circuit "<name>" (k=<n>, rows=<n>)`.
+const ROW_MARKER: &str = "circuit ";
 
 /// Compiler-output lines kept in a failure report.
 const TAIL_LINES: usize = 20;
@@ -68,8 +75,21 @@ pub enum MeasureError {
         #[source]
         source: serde_json::Error,
     },
-    #[error("{path} has no cached measurement for {name}; drop --no-compile to compile it")]
-    CacheMiss { path: PathBuf, name: String },
+    #[error(
+        "no measurement for {file} at {path}; compile it, or run fill-constraints without --no-compile"
+    )]
+    CacheMiss { file: PathBuf, path: PathBuf },
+    #[error("several artifact directories are named {stem}: {}", list(paths))]
+    AmbiguousArtifact { stem: String, paths: Vec<PathBuf> },
+}
+
+/// Paths as one comma-separated line, for an error message.
+fn list(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// One circuit's measured constraints.
@@ -87,7 +107,7 @@ impl Constraints {
     }
 }
 
-/// One entry of the `.circuit-info.json` cache.
+/// One circuit of the `circuit-info.json` list.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Measurement {
     pub name: String,
@@ -105,12 +125,16 @@ impl Measurement {
     }
 }
 
-/// The `.circuit-info.json` cache: each source file name's measurements.
+/// The `circuit-info.json` shape, shared with the TypeScript builder.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct CircuitInfo {
     #[serde(rename = "generatedAt")]
     generated_at: String,
-    files: BTreeMap<String, Vec<Measurement>>,
+    /// The compiled file, as its writer spelled it; the directory, not this, locates a source.
+    #[serde(default)]
+    source: String,
+    #[serde(default)]
+    circuits: Vec<Measurement>,
 }
 
 /// The compiler's circuit list; only `proof` circuits carry constraints.
@@ -149,11 +173,7 @@ impl Compiler {
     /// Returns an error when the binary cannot run, the compile fails, or the
     /// artifacts cannot be read.
     pub fn measure(&self, source: &Path) -> Result<Vec<Measurement>, MeasureError> {
-        let stem = source
-            .file_stem()
-            .unwrap_or_else(|| OsStr::new("contract"))
-            .to_owned();
-        let output = self.artifacts.join(&stem);
+        let output = self.artifacts.join(stem(source));
         std::fs::create_dir_all(&output).map_err(|cause| MeasureError::Write {
             path: output.clone(),
             source: cause,
@@ -270,33 +290,89 @@ fn proved_circuits(output: &Path) -> Result<Option<Vec<String>>, MeasureError> {
     ))
 }
 
-/// Reads a source's entry from the cache beside it.
-/// # Errors
-/// Returns an error when the cache is unreadable or malformed.
-pub fn read_cache(source: &Path) -> Result<Option<Vec<Measurement>>, MeasureError> {
-    let path = cache_path(source);
-    if !path.is_file() {
-        return Ok(None);
-    }
-
-    let info = load_cache(&path)?;
-    Ok(info.files.get(&file_key(source)).cloned())
+/// A source's artifact file, in the directory the compiler writes for it.
+#[must_use]
+pub fn artifact_path(artifacts: &Path, source: &Path) -> PathBuf {
+    artifacts.join(stem(source)).join(ARTIFACT_FILE_NAME)
 }
 
-/// Writes a source's entry into the cache beside it, keeping every other entry.
+/// Finds a source's artifact file: its own directory first, then a search of the tree.
+///
+/// A hierarchical build nests the contract directory under the subdirectory it was
+/// compiled from.
 /// # Errors
-/// Returns an error when the cache is unreadable, malformed or unwritable.
-pub fn write_cache(source: &Path, measured: &[Measurement]) -> Result<PathBuf, MeasureError> {
-    let path = cache_path(source);
-    let mut info = if path.is_file() {
-        load_cache(&path)?
-    } else {
-        CircuitInfo::default()
+/// Returns an error when no directory under `artifacts` holds the file, or several do.
+pub fn locate(artifacts: &Path, source: &Path) -> Result<PathBuf, MeasureError> {
+    let flat = artifact_path(artifacts, source);
+    if flat.is_file() {
+        return Ok(flat);
+    }
+
+    let mut nested = search(artifacts, &stem(source));
+    if nested.len() > 1 {
+        return Err(MeasureError::AmbiguousArtifact {
+            stem: stem(source),
+            paths: nested,
+        });
+    }
+    nested.pop().ok_or_else(|| MeasureError::CacheMiss {
+        file: source.to_owned(),
+        path: flat,
+    })
+}
+
+/// Every artifact file under `artifacts` whose contract directory is named `stem`.
+fn search(artifacts: &Path, stem: &str) -> Vec<PathBuf> {
+    WalkDir::new(artifacts)
+        .follow_links(false)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| entry.depth() == 0 || entry.file_name() != SKIPPED_DIR)
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_dir() && entry.file_name() == OsStr::new(stem))
+        .map(|entry| entry.path().join(ARTIFACT_FILE_NAME))
+        .filter(|path| path.is_file())
+        .collect()
+}
+
+/// Reads one contract's measurements from its artifact file.
+/// # Errors
+/// Returns an error when the file is unreadable or malformed.
+pub fn read_artifact(path: &Path) -> Result<Vec<Measurement>, MeasureError> {
+    let text = std::fs::read_to_string(path).map_err(|source| MeasureError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let info: CircuitInfo = serde_json::from_str(&text).map_err(|source| MeasureError::Parse {
+        path: path.to_owned(),
+        source,
+    })?;
+    Ok(info.circuits)
+}
+
+/// Writes one contract's measurements, replacing whatever the file held.
+///
+/// `recorded` is the compiled file's path as the artifact spells it.
+/// # Errors
+/// Returns an error when the directory or the file cannot be written.
+pub fn write_artifact(
+    artifacts: &Path,
+    source: &Path,
+    recorded: &str,
+    measured: &[Measurement],
+) -> Result<PathBuf, MeasureError> {
+    let path = artifact_path(artifacts, source);
+    let directory = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(directory).map_err(|source| MeasureError::Write {
+        path: directory.to_owned(),
+        source,
+    })?;
+
+    let info = CircuitInfo {
+        generated_at: timestamp(SystemTime::now()),
+        source: recorded.to_owned(),
+        circuits: measured.to_vec(),
     };
-
-    info.generated_at = timestamp(SystemTime::now());
-    info.files.insert(file_key(source), measured.to_vec());
-
     let mut text = serde_json::to_string_pretty(&info).map_err(|source| MeasureError::Parse {
         path: path.clone(),
         source,
@@ -309,31 +385,11 @@ pub fn write_cache(source: &Path, measured: &[Measurement]) -> Result<PathBuf, M
     Ok(path)
 }
 
-fn load_cache(path: &Path) -> Result<CircuitInfo, MeasureError> {
-    let text = std::fs::read_to_string(path).map_err(|source| MeasureError::Read {
-        path: path.to_owned(),
-        source,
-    })?;
-    serde_json::from_str(&text).map_err(|source| MeasureError::Parse {
-        path: path.to_owned(),
-        source,
-    })
-}
-
-/// The cache sits in the source's own directory.
-#[must_use]
-pub fn cache_path(source: &Path) -> PathBuf {
+/// The contract directory's name: the source's file stem.
+fn stem(source: &Path) -> String {
     source
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(CACHE_FILE_NAME)
-}
-
-/// Entries are keyed by the source's file name, not its path.
-fn file_key(source: &Path) -> String {
-    source
-        .file_name()
-        .unwrap_or_default()
+        .file_stem()
+        .unwrap_or_else(|| OsStr::new("contract"))
         .to_string_lossy()
         .into_owned()
 }
@@ -419,22 +475,28 @@ fn strip_escapes(raw: &str) -> String {
     out
 }
 
-/// Every measured circuit in a cleaned transcript; the last line for a name wins.
+/// Every measured circuit in a cleaned transcript; the last row for a name wins.
 #[must_use]
 pub fn parse(cleaned: &str) -> Vec<Measurement> {
     let mut found: BTreeMap<String, Measurement> = BTreeMap::new();
     for line in cleaned.lines() {
-        if let Some(measurement) = parse_line(line) {
+        for measurement in parse_line(line) {
             found.insert(measurement.name.clone(), measurement);
         }
     }
     found.into_values().collect()
 }
 
-/// Matches `circuit "<name>" (k=<n>, rows=<n>)`, the compiler's per-circuit progress line.
-fn parse_line(line: &str) -> Option<Measurement> {
-    let after = line.split_once("circuit ")?.1.trim_start();
-    let (name, rest) = after.strip_prefix('"')?.split_once('"')?;
+/// Every progress row on a line. A compiler that pads a row to the terminal width in
+/// place of ending it puts all its rows on one line.
+fn parse_line(line: &str) -> impl Iterator<Item = Measurement> + '_ {
+    line.match_indices(ROW_MARKER)
+        .filter_map(|(start, marker)| parse_row(&line[start + marker.len()..]))
+}
+
+/// Matches `"<name>" (k=<n>, rows=<n>)`, the rest of a row after [`ROW_MARKER`].
+fn parse_row(after: &str) -> Option<Measurement> {
+    let (name, rest) = after.trim_start().strip_prefix('"')?.split_once('"')?;
     let fields = rest.trim_start().strip_prefix('(')?.split_once(')')?.0;
     let (k, rows) = fields.split_once(',')?;
 
@@ -510,8 +572,8 @@ fn civil_date(days: i64) -> (i64, i64, i64) {
 #[cfg(test)]
 mod tests {
     use super::{
-        CACHE_FILE_NAME, Measurement, civil_date, clean, parse, read_cache, tail, timestamp,
-        write_cache,
+        ARTIFACT_FILE_NAME, MeasureError, Measurement, civil_date, clean, locate, parse,
+        read_artifact, tail, timestamp, write_artifact,
     };
     use std::path::Path;
     use std::time::{Duration, UNIX_EPOCH};
@@ -551,6 +613,32 @@ mod tests {
     }
 
     #[test]
+    fn rows_sharing_one_line_each_yield_a_measurement() {
+        let wrapped = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/fill-transcript/pty-0.36.0.txt"),
+        )
+        .expect("the captured transcript is readable");
+        let cleaned = clean(&wrapped);
+
+        assert_eq!(cleaned.lines().count(), 2, "{cleaned}");
+        assert_eq!(
+            parse(&cleaned),
+            [measurement("bump", 6, 31), measurement("read", 6, 34)]
+        );
+    }
+
+    #[test]
+    fn a_row_still_missing_a_field_does_not_hide_the_rows_after_it() {
+        let line = "circuit \"bump\" (k=6) circuit \"read\" (k=6, rows=34) circuit \"bump\" (k=6, rows=31)";
+
+        assert_eq!(
+            parse(line),
+            [measurement("bump", 6, 31), measurement("read", 6, 34)]
+        );
+    }
+
+    #[test]
     fn the_last_line_for_a_name_wins_over_the_partial_frames_above_it() {
         let frames = "  circuit \"owner\" (k=7)\n  circuit \"owner\" (k=7, rows=9999)\n  circuit \"owner\" (k=7, rows=74)\n";
 
@@ -579,36 +667,90 @@ mod tests {
         assert_eq!(tail(cleaned, 20), "one\ntwo\nthree\nfour");
     }
 
-    #[test]
-    fn a_cache_write_keeps_the_entries_of_other_sources() {
-        let directory = tempfile::tempdir().expect("a temporary directory is available");
-        let source = directory.path().join("MockOwnable.compact");
+    /// Seeds `<artifacts>/<directory>/circuit-info.json` with one measured circuit.
+    fn seed(artifacts: &Path, directory: &str) {
+        let target = artifacts.join(directory);
+        std::fs::create_dir_all(&target).expect("the tree is writable");
         std::fs::write(
-            directory.path().join(CACHE_FILE_NAME),
-            "{\n  \"generatedAt\": \"2026-01-01T00:00:00.000Z\",\n  \"files\": {\n    \"Other.compact\": [{ \"name\": \"run\", \"k\": 3, \"rows\": 4 }]\n  }\n}\n",
+            target.join(ARTIFACT_FILE_NAME),
+            "{\n  \"generatedAt\": \"2026-01-01T00:00:00.000Z\",\n  \"source\": \"src/MockOwnable.compact\",\n  \"circuits\": [{ \"name\": \"owner\", \"k\": 7, \"rows\": 74 }]\n}\n",
         )
-        .expect("the cache is writable");
+        .expect("the artifact is writable");
+    }
 
+    #[test]
+    fn a_written_artifact_reads_back_with_the_source_it_records() {
+        let directory = tempfile::tempdir().expect("a temporary directory is available");
+        let source = Path::new("src/access/test/mocks/MockOwnable.compact");
         let written = [measurement("owner", 7, 74)];
-        write_cache(&source, &written).expect("the cache is writable");
 
-        assert_eq!(
-            read_cache(&source).expect("the cache is readable"),
-            Some(written.to_vec())
+        let path = write_artifact(
+            directory.path(),
+            source,
+            "src/access/test/mocks/MockOwnable.compact",
+            &written,
+        )
+        .expect("the artifact is writable");
+        let text = std::fs::read_to_string(&path).expect("the artifact is readable");
+
+        assert_eq!(path, directory.path().join("MockOwnable/circuit-info.json"));
+        assert!(
+            text.contains("\"source\": \"src/access/test/mocks/MockOwnable.compact\""),
+            "{text}"
         );
         assert_eq!(
-            read_cache(&directory.path().join("Other.compact")).expect("the cache is readable"),
-            Some(vec![measurement("run", 3, 4)])
+            read_artifact(&path).expect("the artifact parses"),
+            written.to_vec()
         );
     }
 
     #[test]
-    fn a_source_with_no_cache_entry_reads_as_absent() {
+    fn a_nested_contract_directory_is_found_by_its_stem() {
         let directory = tempfile::tempdir().expect("a temporary directory is available");
+        seed(directory.path(), "access/MockOwnable");
+
+        let found = locate(
+            directory.path(),
+            Path::new("src/access/test/mocks/MockOwnable.compact"),
+        )
+        .expect("the nested artifact is found");
 
         assert_eq!(
-            read_cache(&directory.path().join("Gone.compact")).expect("the cache is readable"),
-            None
+            found,
+            directory
+                .path()
+                .join("access/MockOwnable/circuit-info.json")
+        );
+    }
+
+    #[test]
+    fn two_contract_directories_of_one_stem_are_ambiguous() {
+        let directory = tempfile::tempdir().expect("a temporary directory is available");
+        seed(directory.path(), "access/MockOwnable");
+        seed(directory.path(), "token/MockOwnable");
+
+        let error = locate(directory.path(), Path::new("MockOwnable.compact"))
+            .expect_err("the stem names two directories");
+
+        assert!(
+            matches!(error, MeasureError::AmbiguousArtifact { ref stem, ref paths }
+                if stem == "MockOwnable" && paths.len() == 2),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_source_with_no_artifact_names_the_path_it_tried() {
+        let directory = tempfile::tempdir().expect("a temporary directory is available");
+
+        let error = locate(directory.path(), Path::new("src/Gone.compact"))
+            .expect_err("nothing was compiled");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Gone/circuit-info.json; compile it"),
+            "{error}"
         );
     }
 

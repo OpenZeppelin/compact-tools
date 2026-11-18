@@ -177,6 +177,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 name = "compact-lint"
 version = "0.1.0"
 dependencies = [
+ "anstyle",
  "anyhow",
  "assert_cmd",
  "clap",
@@ -185,6 +186,7 @@ dependencies = [
  "portable-pty",
  "serde",
  "serde_json",
+ "similar",
  "tempfile",
  "thiserror 2.0.20",
  "toml",
@@ -572,6 +574,12 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
+name = "similar"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "streaming-iterator"

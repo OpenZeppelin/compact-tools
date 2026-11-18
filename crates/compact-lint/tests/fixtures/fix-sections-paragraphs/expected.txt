@@ -1,0 +1,9 @@
+Paragraphs.compact:12:1 lint/missing-tag  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Module `Paragraphs` doc comment has no `@notice Privacy` section.
+
+  i Applied fix: Insert @notice Privacy
+
+      8 │ + ·*·@notice·Privacy:
+      9 │ + ·*·TODO
+

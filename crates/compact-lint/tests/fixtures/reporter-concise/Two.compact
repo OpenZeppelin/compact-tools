@@ -1,0 +1,16 @@
+/**
+ * @module Two
+ * @description A module with one finding of each level.
+ */
+export module Two {
+  /**
+   * @description Not measured yet.
+   * @constraints k=?, rows=?
+   */
+  export circuit run(): [] { }
+
+  /**
+   * @description Unannotated.
+   */
+  export circuit bump(): [] { }
+}
