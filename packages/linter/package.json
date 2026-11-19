@@ -39,6 +39,7 @@
     "@tsconfig/node24": "^24.0.3",
     "@types/node": "26.1.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   }
 }
