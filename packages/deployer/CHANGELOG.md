@@ -8,6 +8,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.5.1 (2026-11-19)
+
 ### Changed
 
 - `pino` moves to `^10.3.1` and `smol-toml` to `^1.7.1` (#231)
