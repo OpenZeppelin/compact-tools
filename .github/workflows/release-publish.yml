@@ -184,7 +184,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -226,7 +226,7 @@ jobs:
           cp target/${{ matrix.target }}/release/compact-lint dist/compact-lint-${{ matrix.target }}
 
       - name: Upload the release asset
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: compact-lint-${{ matrix.target }}
           path: dist/compact-lint-${{ matrix.target }}
@@ -250,7 +250,7 @@ jobs:
 
     steps:
       - name: Get github app token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: gh-app-token
         with:
           app-id: ${{ vars.GH_APP_ID }}
@@ -275,7 +275,7 @@ jobs:
           fi
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: ".nvmrc"
           package-manager-cache: false # Prevent cache poisoning issues
@@ -302,7 +302,7 @@ jobs:
 
       - name: Download the release binaries
         if: needs.detect.outputs.name == 'compact-linter'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
           pattern: compact-lint-*
