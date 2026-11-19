@@ -9,6 +9,10 @@ Releases before this file see the `compact-cli/v*` tags.
 
 ## Unreleased
 
+### Changed
+
+- `pino` moves to `^10.3.1` (#231)
+
 ## 0.2.0 (2026-11-05)
 
 ### Changed

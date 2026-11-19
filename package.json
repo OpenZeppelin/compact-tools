@@ -28,12 +28,13 @@
     "@openzeppelin/compact-deployer": "workspace:^",
     "@tsconfig/node24": "24.0.3",
     "@types/node": "26.1.2",
-    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/coverage-v8": "5.1.1",
     "pino": "^9.7.0",
     "ts-node": "^10.9.2",
     "turbo": "^2.10.8",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   },
   "resolutions": {
     "@midnightntwrk/ledger-v9": "1.0.0",
