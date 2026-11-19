@@ -40,11 +40,11 @@ The deployer pins one Midnight stack, and artifacts have to be compiled against 
 | Component | Version |
 |---|---|
 | `@midnight-ntwrk/compact-runtime` | 0.21.0 |
-| `@midnightntwrk/ledger-v9` | 1.0.0 |
-| `@midnight-ntwrk/compact-js` | 3.0.0 |
-| `@midnight-ntwrk/midnight-js-*` | 5.0.0 |
-| `@midnight-ntwrk/testkit-js` | 5.0.0 |
-| `@midnightntwrk/wallet-sdk-facade` | 5.0.0 |
+| `@midnightntwrk/ledger-v9` | 1.0.2 |
+| `@midnight-ntwrk/compact-js` | 3.0.2 |
+| `@midnight-ntwrk/midnight-js-*` | 5.0.1 |
+| `@midnight-ntwrk/testkit-js` | 5.0.1 |
+| `@midnightntwrk/wallet-sdk-facade` | 5.0.1 |
 | Compact compiler | 0.36.0 |
 | Proof server (`proof_server = "auto"`) | 9.0.1 |
 
@@ -56,8 +56,8 @@ Every package manager needs three pins, because the stack's packages ask for the
 
 ```json
 "overrides": {
-  "@midnightntwrk/ledger-v9": "1.0.0",
-  "@midnightntwrk/onchain-runtime-v4": "4.0.0",
+  "@midnightntwrk/ledger-v9": "1.0.2",
+  "@midnightntwrk/onchain-runtime-v4": "4.0.2",
   "@midnight-ntwrk/platform-js": "3.0.0"
 }
 ```
