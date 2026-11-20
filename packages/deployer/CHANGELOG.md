@@ -8,6 +8,15 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- midnight-js moves to `5.0.1` with:
+  - `@midnight-ntwrk/compact-js` `3.0.2`
+  - `@midnightntwrk/ledger-v9` `1.0.2`
+  - `@midnight-ntwrk/testkit-js` `5.0.1`
+  - `@midnightntwrk/wallet-sdk-facade` `5.0.1`, with the other wallet SDK packages at the versions `@midnightntwrk/wallet-sdk` `2.0.1` pins
+  The one-copy pins move to `@midnightntwrk/ledger-v9` `1.0.2` and `@midnightntwrk/onchain-runtime-v4` `4.0.2`. midnight-js `5.0.0` builds calls the node refuses: `Custom error: 104` ("ran out of gas budget") for a call that stores a shielded coin without growing state, and `Custom error: 231` for a call that takes an unshielded deposit (#236)
+
 ## 0.5.1 (2026-11-19)
 
 ### Changed
