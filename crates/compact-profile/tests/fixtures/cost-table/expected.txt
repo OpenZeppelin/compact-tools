@@ -1,0 +1,15 @@
+mainnet: node 2.1.101, midnight-ledger-v9 1.0.1, captured 2026-11-20, balanced
+unproven: serialized 83,219 bytes, estimated 499,556 bytes, 1,189 declared nodes; times in picoseconds
+limit                         used            allowed    used%  status
+nodes                        1,199              1,024  117.08%  over
+txBytes                    502,839          1,048,576   47.95%  ok
+readTime           148,869,000,000  2,000,000,000,000    7.44%  ok
+computeTime        382,922,932,718  2,000,000,000,000   19.14%  ok
+blockUsage                 502,839          1,000,000   50.28%  ok
+bytesWritten                 7,904             50,000   15.80%  ok
+bytesChurned               679,368         50,000,000    1.35%  ok
+timeToDismiss      383,959,623,494  1,005,678,000,000   38.17%  ok
+extrinsicWeight  1,025,678,000,001  1,299,891,843,000   78.90%  ok
+blockWeight      1,025,786,157,001  1,500,000,000,000   68.38%  ok
+blockLength                502,839            786,432   63.93%  ok
+fits: no, binding nodes (117.08%)

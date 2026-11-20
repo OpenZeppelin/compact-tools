@@ -1,0 +1,39 @@
+[package]
+name = "compact-profile"
+version = "0.1.0"
+description = "Capacity profiler for Midnight Compact contract transactions"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "compact_profile"
+path = "src/lib.rs"
+
+[[bin]]
+name = "compact-profile"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+hex.workspace = true
+midnight-base-crypto.workspace = true
+midnight-ledger-v9.workspace = true
+midnight-serialize.workspace = true
+midnight-storage.workspace = true
+midnight-storage-core.workspace = true
+midnight-transient-crypto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+tempfile.workspace = true

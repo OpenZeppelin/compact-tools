@@ -1,0 +1,8 @@
+{
+  "network": "mainnet",
+  "provisional": false,
+  "nodeRelease": "2.1.101",
+  "ledgerCrate": "midnight-ledger-v9 1.0.1",
+  "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
+  "minClientLedger": "1.0.2"
+}

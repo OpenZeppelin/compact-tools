@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "contract": "NativeShieldedToken",
+  "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
+  "toolchain": {
+    "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
+    "compactc": "0.35.0"
+  },
+  "scenarios": [
+    {
+      "name": "base-mint",
+      "series": null,
+      "n": null,
+      "calls": 1,
+      "ops": 1,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "3978000000",
+          "computeTime": "8402856575",
+          "blockUsage": "10983",
+          "bytesWritten": "160",
+          "bytesChurned": "13960"
+        },
+        "serializedLen": 2380,
+        "declaredNodes": 89,
+        "timeToDismiss": "8424454300"
+      }
+    },
+    {
+      "name": "preset-mint",
+      "series": null,
+      "n": null,
+      "calls": 1,
+      "ops": 1,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "5406000000",
+          "computeTime": "10599463223",
+          "blockUsage": "11341",
+          "bytesWritten": "300",
+          "bytesChurned": "14680"
+        },
+        "serializedLen": 3036,
+        "declaredNodes": 129,
+        "timeToDismiss": "10621060948"
+      }
+    },
+    {
+      "name": "base-merged-n1",
+      "series": "base-merged",
+      "n": 1,
+      "calls": 1,
+      "ops": 1,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "3978000000",
+          "computeTime": "8402856575",
+          "blockUsage": "10983",
+          "bytesWritten": "160",
+          "bytesChurned": "13960"
+        },
+        "serializedLen": 2380,
+        "declaredNodes": 89,
+        "timeToDismiss": "8424454300"
+      }
+    },
+    {
+      "name": "base-merged-n2",
+      "series": "base-merged",
+      "n": 2,
+      "calls": 2,
+      "ops": 2,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "7021000000",
+          "computeTime": "16298310912",
+          "blockUsage": "21401",
+          "bytesWritten": "320",
+          "bytesChurned": "27920"
+        },
+        "serializedLen": 4125,
+        "declaredNodes": 114,
+        "timeToDismiss": "16341506361"
+      }
+    },
+    {
+      "name": "base-merged-n4",
+      "series": "base-merged",
+      "n": 4,
+      "calls": 4,
+      "ops": 4,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "13107000000",
+          "computeTime": "32089219585",
+          "blockUsage": "42206",
+          "bytesWritten": "640",
+          "bytesChurned": "55840"
+        },
+        "serializedLen": 7580,
+        "declaredNodes": 161,
+        "timeToDismiss": "32175610483"
+      }
+    },
+    {
+      "name": "base-merged-n8",
+      "series": "base-merged",
+      "n": 8,
+      "calls": 8,
+      "ops": 8,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "25279000000",
+          "computeTime": "63671036932",
+          "blockUsage": "83773",
+          "bytesWritten": "1280",
+          "bytesChurned": "111680"
+        },
+        "serializedLen": 14447,
+        "declaredNodes": 254,
+        "timeToDismiss": "63843818728"
+      }
+    },
+    {
+      "name": "base-merged-n16",
+      "series": "base-merged",
+      "n": 16,
+      "calls": 16,
+      "ops": 16,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "49623000000",
+          "computeTime": "126834671626",
+          "blockUsage": "166904",
+          "bytesWritten": "2560",
+          "bytesChurned": "223360"
+        },
+        "serializedLen": 28184,
+        "declaredNodes": 440,
+        "timeToDismiss": "127180235218"
+      }
+    },
+    {
+      "name": "base-merged-n32",
+      "series": "base-merged",
+      "n": 32,
+      "calls": 32,
+      "ops": 32,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "98311000000",
+          "computeTime": "253161941014",
+          "blockUsage": "333238",
+          "bytesWritten": "5120",
+          "bytesChurned": "446720"
+        },
+        "serializedLen": 55705,
+        "declaredNodes": 814,
+        "timeToDismiss": "253853068198"
+      }
+    },
+    {
+      "name": "base-merged-n40",
+      "series": "base-merged",
+      "n": 40,
+      "calls": 40,
+      "ops": 40,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "122655000000",
+          "computeTime": "316325575708",
+          "blockUsage": "416410",
+          "bytesWritten": "6400",
+          "bytesChurned": "558400"
+        },
+        "serializedLen": 69484,
+        "declaredNodes": 1002,
+        "timeToDismiss": "317189484688"
+      }
+    },
+    {
+      "name": "base-merged-n48",
+      "series": "base-merged",
+      "n": 48,
+      "calls": 48,
+      "ops": 48,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "146999000000",
+          "computeTime": "379489210402",
+          "blockUsage": "499556",
+          "bytesWritten": "7680",
+          "bytesChurned": "670080"
+        },
+        "serializedLen": 83219,
+        "declaredNodes": 1189,
+        "timeToDismiss": "380525901178"
+      }
+    }
+  ],
+  "networks": [
+    {
+      "name": "mainnet",
+      "scenarios": [
+        {
+          "name": "base-mint",
+          "fits": true,
+          "binding": "timeToDismiss",
+          "txsPerBlock": 30,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 30
+        },
+        {
+          "name": "preset-mint",
+          "fits": true,
+          "binding": "timeToDismiss",
+          "txsPerBlock": 30,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 30
+        },
+        {
+          "name": "base-merged-n1",
+          "fits": true,
+          "binding": "timeToDismiss",
+          "txsPerBlock": 30,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 30
+        },
+        {
+          "name": "base-merged-n2",
+          "fits": true,
+          "binding": "timeToDismiss",
+          "txsPerBlock": 21,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 42
+        },
+        {
+          "name": "base-merged-n4",
+          "fits": true,
+          "binding": "timeToDismiss",
+          "txsPerBlock": 13,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 52
+        },
+        {
+          "name": "base-merged-n8",
+          "fits": true,
+          "binding": "timeToDismiss",
+          "txsPerBlock": 7,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 56
+        },
+        {
+          "name": "base-merged-n16",
+          "fits": true,
+          "binding": "nodes",
+          "txsPerBlock": 4,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 64
+        },
+        {
+          "name": "base-merged-n32",
+          "fits": true,
+          "binding": "nodes",
+          "txsPerBlock": 2,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 64
+        },
+        {
+          "name": "base-merged-n40",
+          "fits": true,
+          "binding": "nodes",
+          "txsPerBlock": 1,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 40
+        },
+        {
+          "name": "base-merged-n48",
+          "fits": true,
+          "binding": "blockWeight",
+          "txsPerBlock": 1,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 48
+        }
+      ],
+      "series": [
+        {
+          "name": "base-merged",
+          "maxN": 48,
+          "basis": "measured",
+          "binding": "nodes"
+        }
+      ]
+    }
+  ]
+}
