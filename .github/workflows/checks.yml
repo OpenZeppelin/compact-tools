@@ -35,5 +35,16 @@ jobs:
       - name: Run type checks
         run: yarn types
 
+      # The profiler's end-to-end tests fail under CI without this binary.
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install 1.96 --profile minimal --component rustfmt --component clippy
+          rustup show active-toolchain
+
+      - name: Build compact-profile
+        run: cargo build -p compact-profile
+
       - name: Run tests
         run: yarn test
+        env:
+          COMPACT_PROFILE_BINARY: ${{ github.workspace }}/target/debug/compact-profile

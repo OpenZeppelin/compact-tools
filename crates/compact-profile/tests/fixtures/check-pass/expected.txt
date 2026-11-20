@@ -1,0 +1,44 @@
+contract NativeShieldedToken
+params identity ba96a2b0beca6f2e
+toolchain @midnight-ntwrk/compact-runtime 0.21.0, @midnightntwrk/ledger-v9 1.0.0-rc.5, compactc 0.36.0
+parity ok (10 transactions)
+
+mainnet: node 2.1.101, midnight-ledger-v9 1.0.1, captured 2026-11-20, balanced, client below minimum
+scenario          n  calls  ops  nodes  est size  binding           used  fits  txs/block  block bound  ops/block
+base-mint         -      1    1     99    14,266  timeToDismiss   41.56%  yes          30  blockWeight         30
+preset-mint       -      1    1    139    14,624  timeToDismiss   48.05%  yes          30  blockWeight         30
+base-merged-n1    1      1    1     99    14,266  timeToDismiss   41.56%  yes          30  blockWeight         30
+base-merged-n2    2      2    2    124    24,684  timeToDismiss   40.05%  yes          21  blockWeight         42
+base-merged-n4    4      4    4    171    45,489  timeToDismiss   39.14%  yes          13  blockWeight         52
+base-merged-n8    8      8    8    264    87,056  timeToDismiss   38.64%  yes           7  blockWeight         56
+base-merged-n16  16     16   16    450   170,187  nodes           43.94%  yes           4  blockWeight         64
+base-merged-n32  32     32   32    824   336,521  nodes           80.46%  yes           2  blockWeight         64
+base-merged-n40  40     40   40  1,012   419,693  nodes           98.82%  yes           1  blockWeight         40
+base-merged-n48  48     48   48  1,199   502,839  nodes          117.08%  no            0  nodes                0
+
+series base-merged: max n 40, measured (40 fits, 48 over nodes)
+  limit            fit max n
+  nodes                   40
+  txBytes                100
+  readTime               656
+  computeTime            252
+  blockUsage              95
+  bytesWritten           311
+  bytesChurned         3,580
+  timeToDismiss    unbounded
+  extrinsicWeight         61
+  blockWeight             70
+  blockLength             75
+
+fit base-merged (n = 1, 2, 4, 8, 16, 32, 40, 48)
+  metric                  fixed             per n  max resid
+  readTime       935,000,000.00  3,043,000,000.00       0.00
+  computeTime    507,402,238.19  7,895,454,336.74       0.32
+  blockUsage             606.25         10,394.84      20.38
+  bytesWritten             0.00            160.00       0.00
+  bytesChurned             0.00         13,960.00       0.00
+  nodes                   66.65             23.38       1.03
+  serializedLen          681.57          1,719.68      21.25
+  timeToDismiss  507,402,238.33  7,917,052,061.24       0.43
+
+snapshot matches

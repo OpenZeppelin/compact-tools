@@ -1,0 +1,105 @@
+{
+  "network": "mainnet",
+  "provisional": false,
+  "nodeRelease": "2.1.101",
+  "ledgerCrate": "midnight-ledger-v9 1.0.1",
+  "scope": "balanced",
+  "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
+  "form": "unproven",
+  "serializedLen": 2380,
+  "estimatedSize": 10983,
+  "declaredNodes": 89,
+  "cost": {
+    "readTime": "3978000000",
+    "computeTime": "8402856575",
+    "blockUsage": "10983",
+    "bytesWritten": "160",
+    "bytesChurned": "13960"
+  },
+  "timeToDismiss": {
+    "used": "11858176616",
+    "allowed": "28532000000"
+  },
+  "weight": "48640157001",
+  "limits": [
+    {
+      "name": "nodes",
+      "used": "99",
+      "allowed": "1024",
+      "ratioPpm": 96680,
+      "status": "ok"
+    },
+    {
+      "name": "txBytes",
+      "used": "14266",
+      "allowed": "1048576",
+      "ratioPpm": 13606,
+      "status": "ok"
+    },
+    {
+      "name": "readTime",
+      "used": "5848000000",
+      "allowed": "2000000000000",
+      "ratioPpm": 2924,
+      "status": "ok"
+    },
+    {
+      "name": "computeTime",
+      "used": "11836578891",
+      "allowed": "2000000000000",
+      "ratioPpm": 5919,
+      "status": "ok"
+    },
+    {
+      "name": "blockUsage",
+      "used": "14266",
+      "allowed": "1000000",
+      "ratioPpm": 14266,
+      "status": "ok"
+    },
+    {
+      "name": "bytesWritten",
+      "used": "384",
+      "allowed": "50000",
+      "ratioPpm": 7680,
+      "status": "ok"
+    },
+    {
+      "name": "bytesChurned",
+      "used": "23248",
+      "allowed": "50000000",
+      "ratioPpm": 465,
+      "status": "ok"
+    },
+    {
+      "name": "timeToDismiss",
+      "used": "11858176616",
+      "allowed": "28532000000",
+      "ratioPpm": 415610,
+      "status": "ok"
+    },
+    {
+      "name": "extrinsicWeight",
+      "used": "48532000001",
+      "allowed": "1299891843000",
+      "ratioPpm": 37336,
+      "status": "ok"
+    },
+    {
+      "name": "blockWeight",
+      "used": "48640157001",
+      "allowed": "1500000000000",
+      "ratioPpm": 32427,
+      "status": "ok"
+    },
+    {
+      "name": "blockLength",
+      "used": "14266",
+      "allowed": "786432",
+      "ratioPpm": 18141,
+      "status": "ok"
+    }
+  ],
+  "fits": true,
+  "binding": "timeToDismiss"
+}
