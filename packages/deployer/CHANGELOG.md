@@ -8,6 +8,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.5.2 (2026-11-20)
+
 ### Changed
 
 - midnight-js moves to `5.0.1` with:
