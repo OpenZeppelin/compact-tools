@@ -1,0 +1,25 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+export ledger count: Counter;
+export ledger owner: ZswapCoinPublicKey;
+
+constructor() {
+  owner = disclose(ownPublicKey());
+}
+
+export circuit increment(): [] {
+  count.increment(1);
+}
+
+/** Fails unless the previous call left the count at `expected`. */
+export circuit incrementFrom(expected: Uint<64>): [] {
+  assert(count.read() == disclose(expected), "Counter: unexpected count");
+  count.increment(1);
+}
+
+export circuit reset(): [] {
+  assert(ownPublicKey() == owner, "Counter: caller is not the owner");
+  count.resetToDefault();
+}

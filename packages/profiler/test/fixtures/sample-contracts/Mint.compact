@@ -1,0 +1,79 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+export { ZswapCoinPublicKey, ShieldedCoinInfo };
+
+circuit domain(): Bytes<32> {
+  return pad(32, "compact-profiler:mint");
+}
+
+export circuit mint(
+  recipient: ZswapCoinPublicKey,
+  amount: Uint<64>,
+  nonce: Bytes<32>
+): ShieldedCoinInfo {
+  return mintShieldedToken(
+    domain(),
+    disclose(amount),
+    disclose(nonce),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient))
+  );
+}
+
+export circuit mintToSelf(amount: Uint<64>, nonce: Bytes<32>): ShieldedCoinInfo {
+  return mintShieldedToken(
+    domain(),
+    disclose(amount),
+    disclose(nonce),
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+}
+
+/** Mints to this contract and spends the coin in the same call, a Zswap transient. */
+export circuit mintAndSend(
+  recipient: ZswapCoinPublicKey,
+  amount: Uint<64>,
+  nonce: Bytes<32>
+): [] {
+  const coin = mintToSelf(amount, nonce);
+  sendImmediateShielded(
+    coin,
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount) as Uint<128>
+  );
+}
+
+export circuit mintUnshielded(recipient: UserAddress, amount: Uint<64>): [] {
+  mintUnshieldedToken(
+    domain(),
+    disclose(amount),
+    right<ContractAddress, UserAddress>(disclose(recipient))
+  );
+}
+
+circuit mintAll<#N>(
+  recipient: ZswapCoinPublicKey,
+  amount: Uint<64>,
+  nonces: Vector<N, Bytes<32>>
+): [] {
+  for (const nonce of nonces) {
+    mint(recipient, amount, nonce);
+  }
+}
+
+export circuit mintBatch2(
+  recipient: ZswapCoinPublicKey,
+  amount: Uint<64>,
+  nonces: Vector<2, Bytes<32>>
+): [] {
+  mintAll<2>(recipient, amount, nonces);
+}
+
+export circuit mintBatch4(
+  recipient: ZswapCoinPublicKey,
+  amount: Uint<64>,
+  nonces: Vector<4, Bytes<32>>
+): [] {
+  mintAll<4>(recipient, amount, nonces);
+}

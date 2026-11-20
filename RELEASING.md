@@ -109,7 +109,7 @@ each dependent finds its deps already on npm:
 6. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
    `main` first so both bump commits are present locally before triggering)
 
-After the first release, the five packages version independently — bump any
+After the first release, the six packages version independently — bump any
 one of them in isolation without re-publishing the others.
 
 A package's first publish authenticates with the `NPM_TOKEN` secret from the
