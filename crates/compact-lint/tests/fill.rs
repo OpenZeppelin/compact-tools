@@ -421,6 +421,88 @@ fn two_artifacts_with_one_stem_are_an_error() {
 }
 
 #[test]
+fn two_sources_with_one_file_name_are_an_error_before_any_compile() {
+    let directory = work("self");
+    let root = directory.path();
+    let other = root.join("src/treasury/presets");
+    std::fs::create_dir_all(&other).expect("the tree is writable");
+    std::fs::copy(
+        root.join("src/multisig/presets/Vault.compact"),
+        other.join("Vault.compact"),
+    )
+    .expect("the source is copyable");
+    let before = tree(root);
+
+    let output = fill(root, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(
+        stderr.contains("src/multisig/presets/Vault.compact"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("src/treasury/presets/Vault.compact"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Vault"), "{stderr}");
+    assert_eq!(tree(root), before, "nothing is compiled or written");
+}
+
+#[test]
+fn an_artifact_recording_another_source_is_an_error() {
+    let directory = work("no-compile");
+    let root = directory.path();
+    let artifact = root.join("artifacts/MockOwnable/circuit-info.json");
+    let seeded = std::fs::read_to_string(&artifact).expect("the seeded artifact is readable");
+    std::fs::write(
+        &artifact,
+        seeded.replace(
+            "src/access/test/mocks/MockOwnable.compact",
+            "src/token/test/mocks/MockOwnable.compact",
+        ),
+    )
+    .expect("the artifact is writable");
+    let before = sources(root);
+
+    let output = fill(root, &["--no-compile"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(EXIT_ERROR));
+    assert!(
+        stderr.contains("src/token/test/mocks/MockOwnable.compact"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("src/access/test/mocks/MockOwnable.compact"),
+        "{stderr}"
+    );
+    assert_eq!(sources(root), before, "no value is applied");
+}
+
+#[test]
+fn an_artifact_recording_its_source_from_a_deeper_root_still_applies() {
+    let directory = work("no-compile");
+    let root = directory.path();
+    let artifact = root.join("artifacts/MockOwnable/circuit-info.json");
+    let seeded = std::fs::read_to_string(&artifact).expect("the seeded artifact is readable");
+    // The TypeScript builder records the file relative to its own source directory.
+    std::fs::write(
+        &artifact,
+        seeded.replace(
+            "\"src/access/test/mocks/MockOwnable.compact\"",
+            "\"access/test/mocks/MockOwnable.compact\"",
+        ),
+    )
+    .expect("the artifact is writable");
+
+    let (code, stdout) = code_and_stdout(&fill(root, &["--no-compile"]));
+
+    assert_eq!(stdout, expected("no-compile", "expected.txt"));
+    assert_eq!(code, 0);
+}
+
+#[test]
 fn the_summary_goes_to_stderr_and_the_changes_to_stdout() {
     let directory = work("basic");
     let output = fill(directory.path(), &[]);
