@@ -81,6 +81,15 @@ pub enum MeasureError {
     CacheMiss { file: PathBuf, path: PathBuf },
     #[error("several artifact directories are named {stem}: {}", list(paths))]
     AmbiguousArtifact { stem: String, paths: Vec<PathBuf> },
+    #[error(
+        "{path} measured {recorded}, not {}; contracts with one file name share an artifact directory",
+        file.display()
+    )]
+    ForeignArtifact {
+        path: PathBuf,
+        recorded: String,
+        file: PathBuf,
+    },
 }
 
 /// Paths as one comma-separated line, for an error message.
@@ -339,15 +348,54 @@ fn search(artifacts: &Path, stem: &str) -> Vec<PathBuf> {
 /// # Errors
 /// Returns an error when the file is unreadable or malformed.
 pub fn read_artifact(path: &Path) -> Result<Vec<Measurement>, MeasureError> {
+    Ok(read_info(path)?.circuits)
+}
+
+/// Reads the measurements `path` holds for `file`, spelled `recorded` as a written artifact
+/// would spell it.
+///
+/// An artifact whose recorded source names another file belongs to a contract of the same
+/// file name. One that records none, or the file relative to a deeper root, as the
+/// TypeScript builder does, is taken as `file`'s.
+/// # Errors
+/// Returns an error when the file is unreadable or malformed, or records another source.
+pub fn read_artifact_for(
+    path: &Path,
+    file: &Path,
+    recorded: &str,
+) -> Result<Vec<Measurement>, MeasureError> {
+    let info = read_info(path)?;
+    if !names(&info.source, recorded) {
+        return Err(MeasureError::ForeignArtifact {
+            path: path.to_owned(),
+            recorded: info.source,
+            file: file.to_owned(),
+        });
+    }
+    Ok(info.circuits)
+}
+
+fn read_info(path: &Path) -> Result<CircuitInfo, MeasureError> {
     let text = std::fs::read_to_string(path).map_err(|source| MeasureError::Read {
         path: path.to_owned(),
         source,
     })?;
-    let info: CircuitInfo = serde_json::from_str(&text).map_err(|source| MeasureError::Parse {
+    serde_json::from_str(&text).map_err(|source| MeasureError::Parse {
         path: path.to_owned(),
         source,
-    })?;
-    Ok(info.circuits)
+    })
+}
+
+/// Whether an artifact's recorded source can be `expected`: empty, or its trailing path.
+fn names(recorded: &str, expected: &str) -> bool {
+    let parts = |path: &str| -> Vec<String> {
+        path.split(['/', '\\'])
+            .filter(|part| !part.is_empty() && *part != ".")
+            .map(str::to_owned)
+            .collect()
+    };
+    let recorded = parts(recorded);
+    recorded.is_empty() || parts(expected).ends_with(&recorded)
 }
 
 /// Writes one contract's measurements, replacing whatever the file held.
@@ -572,7 +620,7 @@ fn civil_date(days: i64) -> (i64, i64, i64) {
 #[cfg(test)]
 mod tests {
     use super::{
-        ARTIFACT_FILE_NAME, MeasureError, Measurement, civil_date, clean, locate, parse,
+        ARTIFACT_FILE_NAME, MeasureError, Measurement, civil_date, clean, locate, names, parse,
         read_artifact, tail, timestamp, write_artifact,
     };
     use std::path::Path;
@@ -752,6 +800,25 @@ mod tests {
                 .contains("Gone/circuit-info.json; compile it"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn a_recorded_source_names_its_file_whole_or_by_its_trailing_path() {
+        let file = "src/access/test/mocks/MockOwnable.compact";
+
+        assert!(names(file, file));
+        assert!(names("access/test/mocks/MockOwnable.compact", file));
+        assert!(names("./access\\test\\mocks\\MockOwnable.compact", file));
+        assert!(
+            names("", file),
+            "an artifact that records no source is not refused"
+        );
+        assert!(!names("src/token/test/mocks/MockOwnable.compact", file));
+        assert!(!names("mocks/OtherOwnable.compact", file));
+        assert!(!names(
+            "lib/src/access/test/mocks/MockOwnable.compact",
+            file
+        ));
     }
 
     #[test]
