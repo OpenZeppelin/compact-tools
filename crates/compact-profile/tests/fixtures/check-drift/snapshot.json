@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "contract": "NativeShieldedToken",
+  "contract": "Mint",
   "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
   "toolchain": {
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
+    "@midnightntwrk/ledger-v9": "1.0.2",
     "compactc": "0.35.0"
   },
   "scenarios": [
     {
-      "name": "base-mint",
+      "name": "mint",
       "series": null,
       "n": null,
       "calls": 1,
@@ -17,19 +17,19 @@
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "3978000000",
-          "computeTime": "8402856575",
-          "blockUsage": "10983",
+          "readTime": "3570000000",
+          "computeTime": "7905457704",
+          "blockUsage": "10833",
           "bytesWritten": "160",
           "bytesChurned": "13960"
         },
-        "serializedLen": 2380,
-        "declaredNodes": 89,
-        "timeToDismiss": "8424454300"
+        "serializedLen": 2044,
+        "declaredNodes": 76,
+        "timeToDismiss": "7927055429"
       }
     },
     {
-      "name": "preset-mint",
+      "name": "mint to self",
       "series": null,
       "n": null,
       "calls": 1,
@@ -37,175 +37,155 @@
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "5406000000",
-          "computeTime": "10599463223",
-          "blockUsage": "11341",
-          "bytesWritten": "300",
-          "bytesChurned": "14680"
+          "readTime": "3570000000",
+          "computeTime": "8074702937",
+          "blockUsage": "10699",
+          "bytesWritten": "161",
+          "bytesChurned": "13960"
         },
-        "serializedLen": 3134,
-        "declaredNodes": 129,
-        "timeToDismiss": "10621060948"
+        "serializedLen": 2203,
+        "declaredNodes": 83,
+        "timeToDismiss": "8107099524"
       }
     },
     {
-      "name": "base-merged-n1",
-      "series": "base-merged",
+      "name": "mint batch of 4",
+      "series": null,
+      "n": null,
+      "calls": 1,
+      "ops": 4,
+      "conflict": "none",
+      "measured": {
+        "cost": {
+          "readTime": "5865000000",
+          "computeTime": "15456250833",
+          "blockUsage": "26882",
+          "bytesWritten": "352",
+          "bytesChurned": "35680"
+        },
+        "serializedLen": 5668,
+        "declaredNodes": 119,
+        "timeToDismiss": "15510245145"
+      }
+    },
+    {
+      "name": "mint multi-call n=1",
+      "series": "mint multi-call",
       "n": 1,
       "calls": 1,
       "ops": 1,
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "3978000000",
-          "computeTime": "8402856575",
-          "blockUsage": "10983",
+          "readTime": "3570000000",
+          "computeTime": "7905457704",
+          "blockUsage": "10833",
           "bytesWritten": "160",
           "bytesChurned": "13960"
         },
-        "serializedLen": 2380,
-        "declaredNodes": 89,
-        "timeToDismiss": "8424454300"
+        "serializedLen": 2044,
+        "declaredNodes": 76,
+        "timeToDismiss": "7927055429"
       }
     },
     {
-      "name": "base-merged-n2",
-      "series": "base-merged",
+      "name": "mint multi-call n=2",
+      "series": "mint multi-call",
       "n": 2,
       "calls": 2,
       "ops": 2,
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "7021000000",
-          "computeTime": "16298310912",
-          "blockUsage": "21401",
+          "readTime": "6205000000",
+          "computeTime": "15303513170",
+          "blockUsage": "21244",
           "bytesWritten": "320",
           "bytesChurned": "27920"
         },
-        "serializedLen": 4125,
-        "declaredNodes": 114,
-        "timeToDismiss": "16341506361"
+        "serializedLen": 3592,
+        "declaredNodes": 101,
+        "timeToDismiss": "15346708619"
       }
     },
     {
-      "name": "base-merged-n4",
-      "series": "base-merged",
+      "name": "mint multi-call n=4",
+      "series": "mint multi-call",
       "n": 4,
       "calls": 4,
       "ops": 4,
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "13107000000",
-          "computeTime": "32089219585",
-          "blockUsage": "42206",
+          "readTime": "11475000000",
+          "computeTime": "30099624101",
+          "blockUsage": "42035",
           "bytesWritten": "640",
           "bytesChurned": "55840"
         },
-        "serializedLen": 7580,
-        "declaredNodes": 161,
-        "timeToDismiss": "32175610483"
+        "serializedLen": 6663,
+        "declaredNodes": 148,
+        "timeToDismiss": "30186014999"
       }
     },
     {
-      "name": "base-merged-n8",
-      "series": "base-merged",
+      "name": "mint multi-call n=8",
+      "series": "mint multi-call",
       "n": 8,
       "calls": 8,
       "ops": 8,
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "25279000000",
-          "computeTime": "63671036932",
-          "blockUsage": "83773",
+          "readTime": "22015000000",
+          "computeTime": "59691845964",
+          "blockUsage": "83573",
           "bytesWritten": "1280",
           "bytesChurned": "111680"
         },
-        "serializedLen": 14447,
-        "declaredNodes": 254,
-        "timeToDismiss": "63843818728"
+        "serializedLen": 12759,
+        "declaredNodes": 241,
+        "timeToDismiss": "59864627760"
       }
     },
     {
-      "name": "base-merged-n16",
-      "series": "base-merged",
-      "n": 16,
-      "calls": 16,
-      "ops": 16,
+      "name": "mint multi-call n=41",
+      "series": "mint multi-call",
+      "n": 41,
+      "calls": 41,
+      "ops": 41,
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "49623000000",
-          "computeTime": "126834671626",
-          "blockUsage": "166904",
-          "bytesWritten": "2560",
-          "bytesChurned": "223360"
+          "readTime": "108970000000",
+          "computeTime": "303827587190",
+          "blockUsage": "426367",
+          "bytesWritten": "6560",
+          "bytesChurned": "572360"
         },
-        "serializedLen": 28184,
-        "declaredNodes": 440,
-        "timeToDismiss": "127180235218"
+        "serializedLen": 63162,
+        "declaredNodes": 1013,
+        "timeToDismiss": "304713093895"
       }
     },
     {
-      "name": "base-merged-n32",
-      "series": "base-merged",
-      "n": 32,
-      "calls": 32,
-      "ops": 32,
+      "name": "mint multi-call n=42",
+      "series": "mint multi-call",
+      "n": 42,
+      "calls": 42,
+      "ops": 42,
       "conflict": "none",
       "measured": {
         "cost": {
-          "readTime": "98311000000",
-          "computeTime": "253161941014",
-          "blockUsage": "333238",
-          "bytesWritten": "5120",
-          "bytesChurned": "446720"
+          "readTime": "111605000000",
+          "computeTime": "311225642656",
+          "blockUsage": "436764",
+          "bytesWritten": "6720",
+          "bytesChurned": "586320"
         },
-        "serializedLen": 55705,
-        "declaredNodes": 814,
-        "timeToDismiss": "253853068198"
-      }
-    },
-    {
-      "name": "base-merged-n40",
-      "series": "base-merged",
-      "n": 40,
-      "calls": 40,
-      "ops": 40,
-      "conflict": "none",
-      "measured": {
-        "cost": {
-          "readTime": "122655000000",
-          "computeTime": "316325575708",
-          "blockUsage": "416410",
-          "bytesWritten": "6400",
-          "bytesChurned": "558400"
-        },
-        "serializedLen": 69484,
-        "declaredNodes": 1002,
-        "timeToDismiss": "317189484688"
-      }
-    },
-    {
-      "name": "base-merged-n48",
-      "series": "base-merged",
-      "n": 48,
-      "calls": 48,
-      "ops": 48,
-      "conflict": "none",
-      "measured": {
-        "cost": {
-          "readTime": "146999000000",
-          "computeTime": "379489210402",
-          "blockUsage": "499556",
-          "bytesWritten": "7680",
-          "bytesChurned": "670080"
-        },
-        "serializedLen": 83219,
-        "declaredNodes": 1189,
-        "timeToDismiss": "380525901178"
+        "serializedLen": 64697,
+        "declaredNodes": 1037,
+        "timeToDismiss": "312132747085"
       }
     }
   ],
@@ -214,31 +194,39 @@
       "name": "mainnet",
       "scenarios": [
         {
-          "name": "base-mint",
+          "name": "mint",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 30,
+          "txsPerBlock": 31,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 30
+          "opsPerBlock": 31
         },
         {
-          "name": "preset-mint",
+          "name": "mint to self",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 30,
+          "txsPerBlock": 31,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 30
+          "opsPerBlock": 31
         },
         {
-          "name": "base-merged-n1",
+          "name": "mint batch of 4",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 30,
+          "txsPerBlock": 18,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 30
+          "opsPerBlock": 72
         },
         {
-          "name": "base-merged-n2",
+          "name": "mint multi-call n=1",
+          "fits": true,
+          "binding": "timeToDismiss",
+          "txsPerBlock": 31,
+          "blockBinding": "blockWeight",
+          "opsPerBlock": 31
+        },
+        {
+          "name": "mint multi-call n=2",
           "fits": true,
           "binding": "timeToDismiss",
           "txsPerBlock": 21,
@@ -246,7 +234,7 @@
           "opsPerBlock": 42
         },
         {
-          "name": "base-merged-n4",
+          "name": "mint multi-call n=4",
           "fits": true,
           "binding": "timeToDismiss",
           "txsPerBlock": 13,
@@ -254,7 +242,7 @@
           "opsPerBlock": 52
         },
         {
-          "name": "base-merged-n8",
+          "name": "mint multi-call n=8",
           "fits": true,
           "binding": "timeToDismiss",
           "txsPerBlock": 7,
@@ -262,42 +250,26 @@
           "opsPerBlock": 56
         },
         {
-          "name": "base-merged-n16",
-          "fits": true,
-          "binding": "nodes",
-          "txsPerBlock": 4,
-          "blockBinding": "blockWeight",
-          "opsPerBlock": 64
-        },
-        {
-          "name": "base-merged-n32",
-          "fits": true,
-          "binding": "nodes",
-          "txsPerBlock": 2,
-          "blockBinding": "blockWeight",
-          "opsPerBlock": 64
-        },
-        {
-          "name": "base-merged-n40",
+          "name": "mint multi-call n=41",
           "fits": true,
           "binding": "nodes",
           "txsPerBlock": 1,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 40
+          "opsPerBlock": 41
         },
         {
-          "name": "base-merged-n48",
+          "name": "mint multi-call n=42",
           "fits": true,
-          "binding": "blockWeight",
+          "binding": "nodes",
           "txsPerBlock": 1,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 48
+          "opsPerBlock": 42
         }
       ],
       "series": [
         {
-          "name": "base-merged",
-          "maxN": 48,
+          "name": "mint multi-call",
+          "maxN": 42,
           "basis": "measured",
           "binding": "nodes"
         }

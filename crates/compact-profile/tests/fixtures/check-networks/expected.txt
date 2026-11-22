@@ -1,27 +1,26 @@
-contract NativeShieldedToken
+contract Mint
 params identity ba96a2b0beca6f2e
-toolchain @midnight-ntwrk/compact-runtime 0.21.0, @midnightntwrk/ledger-v9 1.0.0-rc.5, compactc 0.36.0
-parity ok (10 transactions)
+toolchain @midnight-ntwrk/compact-runtime 0.21.0, @midnightntwrk/ledger-v9 1.0.2, compactc 0.36.0
+parity ok (9 transactions)
 
-mainnet: node 2.1.101, midnight-ledger-v9 1.0.1, captured 2026-11-20, balanced, client below minimum
-scenario          n  calls  ops  nodes  est size  binding           used  fits  txs/block  block bound  ops/block
-base-mint         -      1    1     99    14,266  timeToDismiss   41.56%  yes          30  blockWeight         30
-preset-mint       -      1    1    139    14,624  timeToDismiss   48.05%  yes          30  blockWeight         30
-base-merged-n1    1      1    1     99    14,266  timeToDismiss   41.56%  yes          30  blockWeight         30
-base-merged-n2    2      2    2    124    24,684  timeToDismiss   40.05%  yes          21  blockWeight         42
-base-merged-n4    4      4    4    171    45,489  timeToDismiss   39.14%  yes          13  blockWeight         52
-base-merged-n8    8      8    8    264    87,056  timeToDismiss   38.64%  yes           7  blockWeight         56
-base-merged-n16  16     16   16    450   170,187  nodes           43.94%  yes           4  blockWeight         64
-base-merged-n32  32     32   32    824   336,521  nodes           80.46%  yes           2  blockWeight         64
-base-merged-n40  40     40   40  1,012   419,693  nodes           98.82%  yes           1  blockWeight         40
-base-merged-n48  48     48   48  1,199   502,839  nodes          117.08%  no            0  nodes                0
+mainnet: node 2.1.101, midnight-ledger-v9 1.0.1, captured 2026-11-20, balanced
+scenario               n  calls  ops  nodes  est size  binding           used  fits  txs/block  block bound  ops/block
+mint                   -      1    1     86    14,116  timeToDismiss   40.24%  yes          31  blockWeight         31
+mint to self           -      1    1     93    13,982  timeToDismiss   41.27%  yes          31  blockWeight         31
+mint batch of 4        -      1    4    129    30,165  timeToDismiss   31.40%  yes          18  blockWeight         72
+mint multi-call n=1    1      1    1     86    14,116  timeToDismiss   40.24%  yes          31  blockWeight         31
+mint multi-call n=2    2      2    2    111    24,527  timeToDismiss   38.28%  yes          21  blockWeight         42
+mint multi-call n=4    4      4    4    158    45,318  timeToDismiss   37.09%  yes          13  blockWeight         52
+mint multi-call n=8    8      8    8    251    86,856  timeToDismiss   36.43%  yes           7  blockWeight         56
+mint multi-call n=41  41     41   41  1,023   429,650  nodes           99.90%  yes           1  blockWeight         41
+mint multi-call n=42  42     42   42  1,047   440,047  nodes          102.24%  no            0  nodes                0
 
-series base-merged: max n 40, measured (40 fits, 48 over nodes)
+series mint multi-call: max n 41, measured (41 fits, 42 over nodes)
   limit            fit max n
-  nodes                   40
+  nodes                   41
   txBytes                100
-  readTime               656
-  computeTime            252
+  readTime               757
+  computeTime            269
   blockUsage              95
   bytesWritten           311
   bytesChurned         3,580
@@ -31,24 +30,23 @@ series base-merged: max n 40, measured (40 fits, 48 over nodes)
   blockLength             75
 
 undeployed: node unknown, midnight-ledger-v9 1.0.1, captured 2026-11-20, contract-only, provisional
-scenario          n  calls  ops  nodes  est size  binding          used  fits  txs/block  block bound  ops/block
-base-mint         -      1    1     89    10,983  timeToDismiss  38.35%  yes          91  blockUsage          91
-preset-mint       -      1    1    129    11,341  timeToDismiss  46.82%  yes          88  blockUsage          88
-base-merged-n1    1      1    1     89    10,983  timeToDismiss  38.35%  yes          91  blockUsage          91
-base-merged-n2    2      2    2    114    21,401  timeToDismiss  38.17%  yes          46  blockUsage          92
-base-merged-n4    4      4    4    161    42,206  timeToDismiss  38.11%  yes          23  blockUsage          92
-base-merged-n8    8      8    8    254    83,773  timeToDismiss  38.10%  yes          11  blockUsage          88
-base-merged-n16  16     16   16    440   166,904  timeToDismiss  38.09%  yes           5  blockUsage          80
-base-merged-n32  32     32   32    814   333,238  timeToDismiss  38.08%  yes           3  blockUsage          96
-base-merged-n40  40     40   40  1,002   416,410  blockUsage     41.64%  yes           2  blockUsage          80
-base-merged-n48  48     48   48  1,189   499,556  blockUsage     49.95%  yes           2  blockUsage          96
+scenario               n  calls  ops  nodes  est size  binding          used  fits  txs/block  block bound  ops/block
+mint                   -      1    1     76    10,833  timeToDismiss  36.58%  yes          92  blockUsage          92
+mint to self           -      1    1     83    10,699  timeToDismiss  37.88%  yes          93  blockUsage          93
+mint batch of 4        -      1    4    119    26,882  timeToDismiss  28.84%  yes          37  blockUsage         148
+mint multi-call n=1    1      1    1     76    10,833  timeToDismiss  36.58%  yes          92  blockUsage          92
+mint multi-call n=2    2      2    2    101    21,244  timeToDismiss  36.12%  yes          47  blockUsage          94
+mint multi-call n=4    4      4    4    148    42,035  timeToDismiss  35.90%  yes          23  blockUsage          92
+mint multi-call n=8    8      8    8    241    83,573  timeToDismiss  35.81%  yes          11  blockUsage          88
+mint multi-call n=41  41     41   41  1,013   426,367  blockUsage     42.63%  yes           2  blockUsage          82
+mint multi-call n=42  42     42   42  1,037   436,764  blockUsage     43.67%  yes           2  blockUsage          84
 
-series base-merged: max n 96, fit only (binds on blockUsage)
+series mint multi-call: max n 96, fit only (binds on blockUsage)
   limit            fit max n
   nodes                  n/a
   txBytes                100
-  readTime               656
-  computeTime            253
+  readTime               758
+  computeTime            270
   blockUsage              96
   bytesWritten           312
   bytesChurned         3,581
@@ -57,15 +55,15 @@ series base-merged: max n 96, fit only (binds on blockUsage)
   blockWeight            n/a
   blockLength            n/a
 
-fit base-merged (n = 1, 2, 4, 8, 16, 32, 40, 48)
+fit mint multi-call (n = 1, 2, 4, 8, 41, 42)
   metric                  fixed             per n  max resid
-  readTime       935,000,000.00  3,043,000,000.00       0.00
-  computeTime    507,402,238.19  7,895,454,336.74       0.32
-  blockUsage             606.25         10,394.84      20.38
+  readTime       935,000,000.00  2,635,000,000.00       0.00
+  computeTime    507,410,508.80  7,398,053,140.12  10,334.20
+  blockUsage             465.86         10,387.97      20.83
   bytesWritten             0.00            160.00       0.00
   bytesChurned             0.00         13,960.00       0.00
-  nodes                   66.65             23.38       1.03
-  serializedLen          681.57          1,719.68      21.25
-  timeToDismiss  507,402,238.33  7,917,052,061.24       0.43
+  nodes                   53.71             23.41       1.12
+  serializedLen          535.59          1,527.59      19.17
+  timeToDismiss  507,410,508.93  7,419,650,864.63  10,334.06
 
 snapshot matches

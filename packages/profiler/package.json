@@ -41,6 +41,7 @@
   "scripts": {
     "build": "tsc -p .",
     "compile:fixtures": "node test/setup.ts",
+    "generate:crate-fixtures": "node test/crateFixtures.ts",
     "types": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "yarn vitest run",
     "coverage": "yarn vitest run --coverage",

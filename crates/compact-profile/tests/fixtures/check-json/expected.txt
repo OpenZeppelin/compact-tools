@@ -1,43 +1,41 @@
 {
-  "contract": "NativeShieldedToken",
+  "contract": "Mint",
   "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
   "toolchain": {
     "@midnight-ntwrk/compact-runtime": "0.21.0",
-    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
+    "@midnightntwrk/ledger-v9": "1.0.2",
     "compactc": "0.36.0"
   },
   "parity": [],
   "series": [
     {
-      "name": "base-merged",
+      "name": "mint multi-call",
       "sizes": [
         1,
         2,
         4,
         8,
-        16,
-        32,
-        40,
-        48
+        41,
+        42
       ],
       "lines": [
         {
           "metric": "readTime",
           "fixed": 935000000.0,
-          "perItem": 3043000000.0,
+          "perItem": 2635000000.0,
           "maxResidual": 0.0
         },
         {
           "metric": "computeTime",
-          "fixed": 507402238.194,
-          "perItem": 7895454336.745,
-          "maxResidual": 0.316
+          "fixed": 507410508.799,
+          "perItem": 7398053140.125,
+          "maxResidual": 10334.205
         },
         {
           "metric": "blockUsage",
-          "fixed": 606.252,
-          "perItem": 10394.841,
-          "maxResidual": 20.384
+          "fixed": 465.864,
+          "perItem": 10387.968,
+          "maxResidual": 20.831
         },
         {
           "metric": "bytesWritten",
@@ -53,21 +51,21 @@
         },
         {
           "metric": "nodes",
-          "fixed": 66.651,
-          "perItem": 23.376,
-          "maxResidual": 1.027
+          "fixed": 53.71,
+          "perItem": 23.405,
+          "maxResidual": 1.116
         },
         {
           "metric": "serializedLen",
-          "fixed": 681.575,
-          "perItem": 1719.678,
-          "maxResidual": 21.253
+          "fixed": 535.586,
+          "perItem": 1527.587,
+          "maxResidual": 19.173
         },
         {
           "metric": "timeToDismiss",
-          "fixed": 507402238.327,
-          "perItem": 7917052061.241,
-          "maxResidual": 0.432
+          "fixed": 507410508.926,
+          "perItem": 7419650864.627,
+          "maxResidual": 10334.058
         }
       ]
     }
@@ -81,64 +79,64 @@
       "scope": "balanced",
       "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
       "minClientLedger": "1.0.2",
-      "clientBelowMinimum": true,
+      "clientBelowMinimum": false,
       "scenarios": [
         {
-          "name": "base-mint",
+          "name": "mint",
           "series": null,
           "n": null,
           "calls": 1,
           "ops": 1,
           "conflict": "none",
-          "serializedLen": 2380,
-          "estimatedSize": 10983,
-          "declaredNodes": 89,
+          "serializedLen": 2044,
+          "estimatedSize": 10833,
+          "declaredNodes": 76,
           "cost": {
-            "readTime": "3978000000",
-            "computeTime": "8402856575",
-            "blockUsage": "10983",
+            "readTime": "3570000000",
+            "computeTime": "7905457704",
+            "blockUsage": "10833",
             "bytesWritten": "160",
             "bytesChurned": "13960"
           },
           "timeToDismiss": {
-            "used": "11858176616",
-            "allowed": "28532000000"
+            "used": "11360777745",
+            "allowed": "28232000000"
           },
-          "weight": "48640157001",
+          "weight": "48340157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "99",
+              "used": "86",
               "allowed": "1024",
-              "ratioPpm": 96680,
+              "ratioPpm": 83985,
               "status": "ok"
             },
             {
               "name": "txBytes",
-              "used": "14266",
+              "used": "14116",
               "allowed": "1048576",
-              "ratioPpm": 13606,
+              "ratioPpm": 13463,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "5848000000",
+              "used": "5440000000",
               "allowed": "2000000000000",
-              "ratioPpm": 2924,
+              "ratioPpm": 2720,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "11836578891",
+              "used": "11339180020",
               "allowed": "2000000000000",
-              "ratioPpm": 5919,
+              "ratioPpm": 5670,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "14266",
+              "used": "14116",
               "allowed": "1000000",
-              "ratioPpm": 14266,
+              "ratioPpm": 14116,
               "status": "ok"
             },
             {
@@ -157,30 +155,30 @@
             },
             {
               "name": "timeToDismiss",
-              "used": "11858176616",
-              "allowed": "28532000000",
-              "ratioPpm": 415610,
+              "used": "11360777745",
+              "allowed": "28232000000",
+              "ratioPpm": 402408,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "48532000001",
+              "used": "48232000001",
               "allowed": "1299891843000",
-              "ratioPpm": 37336,
+              "ratioPpm": 37105,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "48640157001",
+              "used": "48340157001",
               "allowed": "1500000000000",
-              "ratioPpm": 32427,
+              "ratioPpm": 32227,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "14266",
+              "used": "14116",
               "allowed": "786432",
-              "ratioPpm": 18141,
+              "ratioPpm": 17950,
               "status": "ok"
             }
           ],
@@ -190,7 +188,7 @@
             "bounds": [
               {
                 "limit": "blockWeight",
-                "txs": 30
+                "txs": 31
               },
               {
                 "limit": "blockLength",
@@ -198,11 +196,11 @@
               },
               {
                 "limit": "readTime",
-                "txs": 341
+                "txs": 367
               },
               {
                 "limit": "computeTime",
-                "txs": 168
+                "txs": 176
               },
               {
                 "limit": "blockUsage",
@@ -217,109 +215,109 @@
                 "txs": 2150
               }
             ],
-            "txsPerBlock": 30,
+            "txsPerBlock": 31,
             "binding": "blockWeight",
-            "opsPerBlock": 30
+            "opsPerBlock": 31
           }
         },
         {
-          "name": "preset-mint",
+          "name": "mint to self",
           "series": null,
           "n": null,
           "calls": 1,
           "ops": 1,
           "conflict": "none",
-          "serializedLen": 3034,
-          "estimatedSize": 11341,
-          "declaredNodes": 129,
+          "serializedLen": 2103,
+          "estimatedSize": 10699,
+          "declaredNodes": 83,
           "cost": {
-            "readTime": "5406000000",
-            "computeTime": "10599463223",
-            "blockUsage": "11341",
-            "bytesWritten": "307",
-            "bytesChurned": "14680"
+            "readTime": "3570000000",
+            "computeTime": "8074702937",
+            "blockUsage": "10699",
+            "bytesWritten": "160",
+            "bytesChurned": "13960"
           },
           "timeToDismiss": {
-            "used": "14054783264",
-            "allowed": "29248000000"
+            "used": "11540821840",
+            "allowed": "27964000000"
           },
-          "weight": "49356157001",
+          "weight": "48072157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "139",
+              "used": "93",
               "allowed": "1024",
-              "ratioPpm": 135743,
+              "ratioPpm": 90821,
               "status": "ok"
             },
             {
               "name": "txBytes",
-              "used": "14624",
+              "used": "13982",
               "allowed": "1048576",
-              "ratioPpm": 13947,
+              "ratioPpm": 13335,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "7276000000",
+              "used": "5440000000",
               "allowed": "2000000000000",
-              "ratioPpm": 3638,
+              "ratioPpm": 2720,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "14033185539",
+              "used": "11508425253",
               "allowed": "2000000000000",
-              "ratioPpm": 7017,
+              "ratioPpm": 5755,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "14624",
+              "used": "13982",
               "allowed": "1000000",
-              "ratioPpm": 14624,
+              "ratioPpm": 13982,
               "status": "ok"
             },
             {
               "name": "bytesWritten",
-              "used": "531",
+              "used": "384",
               "allowed": "50000",
-              "ratioPpm": 10620,
+              "ratioPpm": 7680,
               "status": "ok"
             },
             {
               "name": "bytesChurned",
-              "used": "23968",
+              "used": "23248",
               "allowed": "50000000",
-              "ratioPpm": 480,
+              "ratioPpm": 465,
               "status": "ok"
             },
             {
               "name": "timeToDismiss",
-              "used": "14054783264",
-              "allowed": "29248000000",
-              "ratioPpm": 480539,
+              "used": "11540821840",
+              "allowed": "27964000000",
+              "ratioPpm": 412703,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "49248000001",
+              "used": "47964000001",
               "allowed": "1299891843000",
-              "ratioPpm": 37887,
+              "ratioPpm": 36899,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "49356157001",
+              "used": "48072157001",
               "allowed": "1500000000000",
-              "ratioPpm": 32905,
+              "ratioPpm": 32049,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "14624",
+              "used": "13982",
               "allowed": "786432",
-              "ratioPpm": 18596,
+              "ratioPpm": 17780,
               "status": "ok"
             }
           ],
@@ -329,94 +327,233 @@
             "bounds": [
               {
                 "limit": "blockWeight",
-                "txs": 30
+                "txs": 31
               },
               {
                 "limit": "blockLength",
-                "txs": 53
+                "txs": 56
               },
               {
                 "limit": "readTime",
-                "txs": 274
+                "txs": 367
               },
               {
                 "limit": "computeTime",
-                "txs": 142
+                "txs": 173
               },
               {
                 "limit": "blockUsage",
-                "txs": 68
+                "txs": 71
               },
               {
                 "limit": "bytesWritten",
-                "txs": 94
+                "txs": 130
               },
               {
                 "limit": "bytesChurned",
-                "txs": 2086
+                "txs": 2150
               }
             ],
-            "txsPerBlock": 30,
+            "txsPerBlock": 31,
             "binding": "blockWeight",
-            "opsPerBlock": 30
+            "opsPerBlock": 31
           }
         },
         {
-          "name": "base-merged-n1",
-          "series": "base-merged",
+          "name": "mint batch of 4",
+          "series": null,
+          "n": null,
+          "calls": 1,
+          "ops": 4,
+          "conflict": "none",
+          "serializedLen": 5668,
+          "estimatedSize": 26882,
+          "declaredNodes": 119,
+          "cost": {
+            "readTime": "5865000000",
+            "computeTime": "15456250833",
+            "blockUsage": "26882",
+            "bytesWritten": "352",
+            "bytesChurned": "35680"
+          },
+          "timeToDismiss": {
+            "used": "18943967461",
+            "allowed": "60330000000"
+          },
+          "weight": "80438157001",
+          "limits": [
+            {
+              "name": "nodes",
+              "used": "129",
+              "allowed": "1024",
+              "ratioPpm": 125977,
+              "status": "ok"
+            },
+            {
+              "name": "txBytes",
+              "used": "30165",
+              "allowed": "1048576",
+              "ratioPpm": 28768,
+              "status": "ok"
+            },
+            {
+              "name": "readTime",
+              "used": "7735000000",
+              "allowed": "2000000000000",
+              "ratioPpm": 3868,
+              "status": "ok"
+            },
+            {
+              "name": "computeTime",
+              "used": "18889973149",
+              "allowed": "2000000000000",
+              "ratioPpm": 9445,
+              "status": "ok"
+            },
+            {
+              "name": "blockUsage",
+              "used": "30165",
+              "allowed": "1000000",
+              "ratioPpm": 30165,
+              "status": "ok"
+            },
+            {
+              "name": "bytesWritten",
+              "used": "576",
+              "allowed": "50000",
+              "ratioPpm": 11520,
+              "status": "ok"
+            },
+            {
+              "name": "bytesChurned",
+              "used": "44968",
+              "allowed": "50000000",
+              "ratioPpm": 900,
+              "status": "ok"
+            },
+            {
+              "name": "timeToDismiss",
+              "used": "18943967461",
+              "allowed": "60330000000",
+              "ratioPpm": 314006,
+              "status": "ok"
+            },
+            {
+              "name": "extrinsicWeight",
+              "used": "80330000001",
+              "allowed": "1299891843000",
+              "ratioPpm": 61798,
+              "status": "ok"
+            },
+            {
+              "name": "blockWeight",
+              "used": "80438157001",
+              "allowed": "1500000000000",
+              "ratioPpm": 53626,
+              "status": "ok"
+            },
+            {
+              "name": "blockLength",
+              "used": "30165",
+              "allowed": "786432",
+              "ratioPpm": 38357,
+              "status": "ok"
+            }
+          ],
+          "fits": true,
+          "binding": "timeToDismiss",
+          "block": {
+            "bounds": [
+              {
+                "limit": "blockWeight",
+                "txs": 18
+              },
+              {
+                "limit": "blockLength",
+                "txs": 26
+              },
+              {
+                "limit": "readTime",
+                "txs": 258
+              },
+              {
+                "limit": "computeTime",
+                "txs": 105
+              },
+              {
+                "limit": "blockUsage",
+                "txs": 33
+              },
+              {
+                "limit": "bytesWritten",
+                "txs": 86
+              },
+              {
+                "limit": "bytesChurned",
+                "txs": 1111
+              }
+            ],
+            "txsPerBlock": 18,
+            "binding": "blockWeight",
+            "opsPerBlock": 72
+          }
+        },
+        {
+          "name": "mint multi-call n=1",
+          "series": "mint multi-call",
           "n": 1,
           "calls": 1,
           "ops": 1,
           "conflict": "none",
-          "serializedLen": 2380,
-          "estimatedSize": 10983,
-          "declaredNodes": 89,
+          "serializedLen": 2044,
+          "estimatedSize": 10833,
+          "declaredNodes": 76,
           "cost": {
-            "readTime": "3978000000",
-            "computeTime": "8402856575",
-            "blockUsage": "10983",
+            "readTime": "3570000000",
+            "computeTime": "7905457704",
+            "blockUsage": "10833",
             "bytesWritten": "160",
             "bytesChurned": "13960"
           },
           "timeToDismiss": {
-            "used": "11858176616",
-            "allowed": "28532000000"
+            "used": "11360777745",
+            "allowed": "28232000000"
           },
-          "weight": "48640157001",
+          "weight": "48340157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "99",
+              "used": "86",
               "allowed": "1024",
-              "ratioPpm": 96680,
+              "ratioPpm": 83985,
               "status": "ok"
             },
             {
               "name": "txBytes",
-              "used": "14266",
+              "used": "14116",
               "allowed": "1048576",
-              "ratioPpm": 13606,
+              "ratioPpm": 13463,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "5848000000",
+              "used": "5440000000",
               "allowed": "2000000000000",
-              "ratioPpm": 2924,
+              "ratioPpm": 2720,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "11836578891",
+              "used": "11339180020",
               "allowed": "2000000000000",
-              "ratioPpm": 5919,
+              "ratioPpm": 5670,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "14266",
+              "used": "14116",
               "allowed": "1000000",
-              "ratioPpm": 14266,
+              "ratioPpm": 14116,
               "status": "ok"
             },
             {
@@ -435,30 +572,30 @@
             },
             {
               "name": "timeToDismiss",
-              "used": "11858176616",
-              "allowed": "28532000000",
-              "ratioPpm": 415610,
+              "used": "11360777745",
+              "allowed": "28232000000",
+              "ratioPpm": 402408,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "48532000001",
+              "used": "48232000001",
               "allowed": "1299891843000",
-              "ratioPpm": 37336,
+              "ratioPpm": 37105,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "48640157001",
+              "used": "48340157001",
               "allowed": "1500000000000",
-              "ratioPpm": 32427,
+              "ratioPpm": 32227,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "14266",
+              "used": "14116",
               "allowed": "786432",
-              "ratioPpm": 18141,
+              "ratioPpm": 17950,
               "status": "ok"
             }
           ],
@@ -468,7 +605,7 @@
             "bounds": [
               {
                 "limit": "blockWeight",
-                "txs": 30
+                "txs": 31
               },
               {
                 "limit": "blockLength",
@@ -476,11 +613,11 @@
               },
               {
                 "limit": "readTime",
-                "txs": 341
+                "txs": 367
               },
               {
                 "limit": "computeTime",
-                "txs": 168
+                "txs": 176
               },
               {
                 "limit": "blockUsage",
@@ -495,67 +632,67 @@
                 "txs": 2150
               }
             ],
-            "txsPerBlock": 30,
+            "txsPerBlock": 31,
             "binding": "blockWeight",
-            "opsPerBlock": 30
+            "opsPerBlock": 31
           }
         },
         {
-          "name": "base-merged-n2",
-          "series": "base-merged",
+          "name": "mint multi-call n=2",
+          "series": "mint multi-call",
           "n": 2,
           "calls": 2,
           "ops": 2,
           "conflict": "none",
-          "serializedLen": 4125,
-          "estimatedSize": 21401,
-          "declaredNodes": 114,
+          "serializedLen": 3592,
+          "estimatedSize": 21244,
+          "declaredNodes": 101,
           "cost": {
-            "readTime": "7021000000",
-            "computeTime": "16298310912",
-            "blockUsage": "21401",
+            "readTime": "6205000000",
+            "computeTime": "15303513170",
+            "blockUsage": "21244",
             "bytesWritten": "320",
             "bytesChurned": "27920"
           },
           "timeToDismiss": {
-            "used": "19775228677",
-            "allowed": "49368000000"
+            "used": "18780430935",
+            "allowed": "49054000000"
           },
-          "weight": "69476157001",
+          "weight": "69162157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "124",
+              "used": "111",
               "allowed": "1024",
-              "ratioPpm": 121094,
+              "ratioPpm": 108399,
               "status": "ok"
             },
             {
               "name": "txBytes",
-              "used": "24684",
+              "used": "24527",
               "allowed": "1048576",
-              "ratioPpm": 23541,
+              "ratioPpm": 23391,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "8891000000",
+              "used": "8075000000",
               "allowed": "2000000000000",
-              "ratioPpm": 4446,
+              "ratioPpm": 4038,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "19732033228",
+              "used": "18737235486",
               "allowed": "2000000000000",
-              "ratioPpm": 9867,
+              "ratioPpm": 9369,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "24684",
+              "used": "24527",
               "allowed": "1000000",
-              "ratioPpm": 24684,
+              "ratioPpm": 24527,
               "status": "ok"
             },
             {
@@ -574,30 +711,30 @@
             },
             {
               "name": "timeToDismiss",
-              "used": "19775228677",
-              "allowed": "49368000000",
-              "ratioPpm": 400568,
+              "used": "18780430935",
+              "allowed": "49054000000",
+              "ratioPpm": 382853,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "69368000001",
+              "used": "69054000001",
               "allowed": "1299891843000",
-              "ratioPpm": 53365,
+              "ratioPpm": 53123,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "69476157001",
+              "used": "69162157001",
               "allowed": "1500000000000",
-              "ratioPpm": 46318,
+              "ratioPpm": 46109,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "24684",
+              "used": "24527",
               "allowed": "786432",
-              "ratioPpm": 31388,
+              "ratioPpm": 31188,
               "status": "ok"
             }
           ],
@@ -611,15 +748,15 @@
               },
               {
                 "limit": "blockLength",
-                "txs": 31
+                "txs": 32
               },
               {
                 "limit": "readTime",
-                "txs": 224
+                "txs": 247
               },
               {
                 "limit": "computeTime",
-                "txs": 101
+                "txs": 106
               },
               {
                 "limit": "blockUsage",
@@ -640,61 +777,61 @@
           }
         },
         {
-          "name": "base-merged-n4",
-          "series": "base-merged",
+          "name": "mint multi-call n=4",
+          "series": "mint multi-call",
           "n": 4,
           "calls": 4,
           "ops": 4,
           "conflict": "none",
-          "serializedLen": 7580,
-          "estimatedSize": 42206,
-          "declaredNodes": 161,
+          "serializedLen": 6663,
+          "estimatedSize": 42035,
+          "declaredNodes": 148,
           "cost": {
-            "readTime": "13107000000",
-            "computeTime": "32089219585",
-            "blockUsage": "42206",
+            "readTime": "11475000000",
+            "computeTime": "30099624101",
+            "blockUsage": "42035",
             "bytesWritten": "640",
             "bytesChurned": "55840"
           },
           "timeToDismiss": {
-            "used": "35609332799",
-            "allowed": "90978000000"
+            "used": "33619737315",
+            "allowed": "90636000000"
           },
-          "weight": "111086157001",
+          "weight": "110744157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "171",
+              "used": "158",
               "allowed": "1024",
-              "ratioPpm": 166993,
+              "ratioPpm": 154297,
               "status": "ok"
             },
             {
               "name": "txBytes",
-              "used": "45489",
+              "used": "45318",
               "allowed": "1048576",
-              "ratioPpm": 43382,
+              "ratioPpm": 43219,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "14977000000",
+              "used": "13345000000",
               "allowed": "2000000000000",
-              "ratioPpm": 7489,
+              "ratioPpm": 6673,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "35522941901",
+              "used": "33533346417",
               "allowed": "2000000000000",
-              "ratioPpm": 17762,
+              "ratioPpm": 16767,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "45489",
+              "used": "45318",
               "allowed": "1000000",
-              "ratioPpm": 45489,
+              "ratioPpm": 45318,
               "status": "ok"
             },
             {
@@ -713,30 +850,30 @@
             },
             {
               "name": "timeToDismiss",
-              "used": "35609332799",
-              "allowed": "90978000000",
-              "ratioPpm": 391406,
+              "used": "33619737315",
+              "allowed": "90636000000",
+              "ratioPpm": 370932,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "110978000001",
+              "used": "110636000001",
               "allowed": "1299891843000",
-              "ratioPpm": 85375,
+              "ratioPpm": 85112,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "111086157001",
+              "used": "110744157001",
               "allowed": "1500000000000",
-              "ratioPpm": 74058,
+              "ratioPpm": 73830,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "45489",
+              "used": "45318",
               "allowed": "786432",
-              "ratioPpm": 57843,
+              "ratioPpm": 57625,
               "status": "ok"
             }
           ],
@@ -754,15 +891,15 @@
               },
               {
                 "limit": "readTime",
-                "txs": 133
+                "txs": 149
               },
               {
                 "limit": "computeTime",
-                "txs": 56
+                "txs": 59
               },
               {
                 "limit": "blockUsage",
-                "txs": 21
+                "txs": 22
               },
               {
                 "limit": "bytesWritten",
@@ -779,61 +916,61 @@
           }
         },
         {
-          "name": "base-merged-n8",
-          "series": "base-merged",
+          "name": "mint multi-call n=8",
+          "series": "mint multi-call",
           "n": 8,
           "calls": 8,
           "ops": 8,
           "conflict": "none",
-          "serializedLen": 14447,
-          "estimatedSize": 83773,
-          "declaredNodes": 254,
+          "serializedLen": 12759,
+          "estimatedSize": 83573,
+          "declaredNodes": 241,
           "cost": {
-            "readTime": "25279000000",
-            "computeTime": "63671036932",
-            "blockUsage": "83773",
+            "readTime": "22015000000",
+            "computeTime": "59691845964",
+            "blockUsage": "83573",
             "bytesWritten": "1280",
             "bytesChurned": "111680"
           },
           "timeToDismiss": {
-            "used": "67277541044",
-            "allowed": "174112000000"
+            "used": "63298350076",
+            "allowed": "173712000000"
           },
-          "weight": "194220157001",
+          "weight": "193820157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "264",
+              "used": "251",
               "allowed": "1024",
-              "ratioPpm": 257813,
+              "ratioPpm": 245118,
               "status": "ok"
             },
             {
               "name": "txBytes",
-              "used": "87056",
+              "used": "86856",
               "allowed": "1048576",
-              "ratioPpm": 83024,
+              "ratioPpm": 82833,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "27149000000",
+              "used": "23885000000",
               "allowed": "2000000000000",
-              "ratioPpm": 13575,
+              "ratioPpm": 11943,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "67104759248",
+              "used": "63125568280",
               "allowed": "2000000000000",
-              "ratioPpm": 33553,
+              "ratioPpm": 31563,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "87056",
+              "used": "86856",
               "allowed": "1000000",
-              "ratioPpm": 87056,
+              "ratioPpm": 86856,
               "status": "ok"
             },
             {
@@ -852,30 +989,30 @@
             },
             {
               "name": "timeToDismiss",
-              "used": "67277541044",
-              "allowed": "174112000000",
-              "ratioPpm": 386404,
+              "used": "63298350076",
+              "allowed": "173712000000",
+              "ratioPpm": 364387,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "194112000001",
+              "used": "193712000001",
               "allowed": "1299891843000",
-              "ratioPpm": 149330,
+              "ratioPpm": 149022,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "194220157001",
+              "used": "193820157001",
               "allowed": "1500000000000",
-              "ratioPpm": 129481,
+              "ratioPpm": 129214,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "87056",
+              "used": "86856",
               "allowed": "786432",
-              "ratioPpm": 110698,
+              "ratioPpm": 110444,
               "status": "ok"
             }
           ],
@@ -893,11 +1030,11 @@
               },
               {
                 "limit": "readTime",
-                "txs": 73
+                "txs": 83
               },
               {
                 "limit": "computeTime",
-                "txs": 29
+                "txs": 31
               },
               {
                 "limit": "blockUsage",
@@ -918,381 +1055,103 @@
           }
         },
         {
-          "name": "base-merged-n16",
-          "series": "base-merged",
-          "n": 16,
-          "calls": 16,
-          "ops": 16,
+          "name": "mint multi-call n=41",
+          "series": "mint multi-call",
+          "n": 41,
+          "calls": 41,
+          "ops": 41,
           "conflict": "none",
-          "serializedLen": 28184,
-          "estimatedSize": 166904,
-          "declaredNodes": 440,
+          "serializedLen": 63162,
+          "estimatedSize": 426367,
+          "declaredNodes": 1013,
           "cost": {
-            "readTime": "49623000000",
-            "computeTime": "126834671626",
-            "blockUsage": "166904",
-            "bytesWritten": "2560",
-            "bytesChurned": "223360"
+            "readTime": "108970000000",
+            "computeTime": "303827587190",
+            "blockUsage": "426367",
+            "bytesWritten": "6560",
+            "bytesChurned": "572360"
           },
           "timeToDismiss": {
-            "used": "130613957534",
-            "allowed": "340374000000"
+            "used": "308146816211",
+            "allowed": "859300000000"
           },
-          "weight": "360482157001",
+          "weight": "879408157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "450",
+              "used": "1023",
               "allowed": "1024",
-              "ratioPpm": 439454,
+              "ratioPpm": 999024,
               "status": "ok"
             },
             {
               "name": "txBytes",
-              "used": "170187",
+              "used": "429650",
               "allowed": "1048576",
-              "ratioPpm": 162303,
+              "ratioPpm": 409747,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "51493000000",
+              "used": "110840000000",
               "allowed": "2000000000000",
-              "ratioPpm": 25747,
+              "ratioPpm": 55420,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "130268393942",
+              "used": "307261309506",
               "allowed": "2000000000000",
-              "ratioPpm": 65135,
+              "ratioPpm": 153631,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "170187",
+              "used": "429650",
               "allowed": "1000000",
-              "ratioPpm": 170187,
+              "ratioPpm": 429650,
               "status": "ok"
             },
             {
               "name": "bytesWritten",
-              "used": "2784",
+              "used": "6784",
               "allowed": "50000",
-              "ratioPpm": 55680,
+              "ratioPpm": 135680,
               "status": "ok"
             },
             {
               "name": "bytesChurned",
-              "used": "232648",
+              "used": "581648",
               "allowed": "50000000",
-              "ratioPpm": 4653,
+              "ratioPpm": 11633,
               "status": "ok"
             },
             {
               "name": "timeToDismiss",
-              "used": "130613957534",
-              "allowed": "340374000000",
-              "ratioPpm": 383737,
+              "used": "308146816211",
+              "allowed": "859300000000",
+              "ratioPpm": 358603,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "360374000001",
+              "used": "879300000001",
               "allowed": "1299891843000",
-              "ratioPpm": 277234,
+              "ratioPpm": 676441,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "360482157001",
+              "used": "879408157001",
               "allowed": "1500000000000",
-              "ratioPpm": 240322,
+              "ratioPpm": 586273,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "170187",
+              "used": "429650",
               "allowed": "786432",
-              "ratioPpm": 216404,
-              "status": "ok"
-            }
-          ],
-          "fits": true,
-          "binding": "nodes",
-          "block": {
-            "bounds": [
-              {
-                "limit": "blockWeight",
-                "txs": 4
-              },
-              {
-                "limit": "blockLength",
-                "txs": 4
-              },
-              {
-                "limit": "readTime",
-                "txs": 38
-              },
-              {
-                "limit": "computeTime",
-                "txs": 15
-              },
-              {
-                "limit": "blockUsage",
-                "txs": 5
-              },
-              {
-                "limit": "bytesWritten",
-                "txs": 17
-              },
-              {
-                "limit": "bytesChurned",
-                "txs": 214
-              }
-            ],
-            "txsPerBlock": 4,
-            "binding": "blockWeight",
-            "opsPerBlock": 64
-          }
-        },
-        {
-          "name": "base-merged-n32",
-          "series": "base-merged",
-          "n": 32,
-          "calls": 32,
-          "ops": 32,
-          "conflict": "none",
-          "serializedLen": 55705,
-          "estimatedSize": 333238,
-          "declaredNodes": 814,
-          "cost": {
-            "readTime": "98311000000",
-            "computeTime": "253161941014",
-            "blockUsage": "333238",
-            "bytesWritten": "5120",
-            "bytesChurned": "446720"
-          },
-          "timeToDismiss": {
-            "used": "257286790514",
-            "allowed": "673042000000"
-          },
-          "weight": "693150157001",
-          "limits": [
-            {
-              "name": "nodes",
-              "used": "824",
-              "allowed": "1024",
-              "ratioPpm": 804688,
-              "status": "ok"
-            },
-            {
-              "name": "txBytes",
-              "used": "336521",
-              "allowed": "1048576",
-              "ratioPpm": 320932,
-              "status": "ok"
-            },
-            {
-              "name": "readTime",
-              "used": "100181000000",
-              "allowed": "2000000000000",
-              "ratioPpm": 50091,
-              "status": "ok"
-            },
-            {
-              "name": "computeTime",
-              "used": "256595663330",
-              "allowed": "2000000000000",
-              "ratioPpm": 128298,
-              "status": "ok"
-            },
-            {
-              "name": "blockUsage",
-              "used": "336521",
-              "allowed": "1000000",
-              "ratioPpm": 336521,
-              "status": "ok"
-            },
-            {
-              "name": "bytesWritten",
-              "used": "5344",
-              "allowed": "50000",
-              "ratioPpm": 106880,
-              "status": "ok"
-            },
-            {
-              "name": "bytesChurned",
-              "used": "456008",
-              "allowed": "50000000",
-              "ratioPpm": 9121,
-              "status": "ok"
-            },
-            {
-              "name": "timeToDismiss",
-              "used": "257286790514",
-              "allowed": "673042000000",
-              "ratioPpm": 382275,
-              "status": "ok"
-            },
-            {
-              "name": "extrinsicWeight",
-              "used": "693042000001",
-              "allowed": "1299891843000",
-              "ratioPpm": 533154,
-              "status": "ok"
-            },
-            {
-              "name": "blockWeight",
-              "used": "693150157001",
-              "allowed": "1500000000000",
-              "ratioPpm": 462101,
-              "status": "ok"
-            },
-            {
-              "name": "blockLength",
-              "used": "336521",
-              "allowed": "786432",
-              "ratioPpm": 427909,
-              "status": "ok"
-            }
-          ],
-          "fits": true,
-          "binding": "nodes",
-          "block": {
-            "bounds": [
-              {
-                "limit": "blockWeight",
-                "txs": 2
-              },
-              {
-                "limit": "blockLength",
-                "txs": 2
-              },
-              {
-                "limit": "readTime",
-                "txs": 19
-              },
-              {
-                "limit": "computeTime",
-                "txs": 7
-              },
-              {
-                "limit": "blockUsage",
-                "txs": 2
-              },
-              {
-                "limit": "bytesWritten",
-                "txs": 9
-              },
-              {
-                "limit": "bytesChurned",
-                "txs": 109
-              }
-            ],
-            "txsPerBlock": 2,
-            "binding": "blockWeight",
-            "opsPerBlock": 64
-          }
-        },
-        {
-          "name": "base-merged-n40",
-          "series": "base-merged",
-          "n": 40,
-          "calls": 40,
-          "ops": 40,
-          "conflict": "none",
-          "serializedLen": 69484,
-          "estimatedSize": 416410,
-          "declaredNodes": 1002,
-          "cost": {
-            "readTime": "122655000000",
-            "computeTime": "316325575708",
-            "blockUsage": "416410",
-            "bytesWritten": "6400",
-            "bytesChurned": "558400"
-          },
-          "timeToDismiss": {
-            "used": "320623207004",
-            "allowed": "839386000000"
-          },
-          "weight": "859494157001",
-          "limits": [
-            {
-              "name": "nodes",
-              "used": "1012",
-              "allowed": "1024",
-              "ratioPpm": 988282,
-              "status": "ok"
-            },
-            {
-              "name": "txBytes",
-              "used": "419693",
-              "allowed": "1048576",
-              "ratioPpm": 400251,
-              "status": "ok"
-            },
-            {
-              "name": "readTime",
-              "used": "124525000000",
-              "allowed": "2000000000000",
-              "ratioPpm": 62263,
-              "status": "ok"
-            },
-            {
-              "name": "computeTime",
-              "used": "319759298024",
-              "allowed": "2000000000000",
-              "ratioPpm": 159880,
-              "status": "ok"
-            },
-            {
-              "name": "blockUsage",
-              "used": "419693",
-              "allowed": "1000000",
-              "ratioPpm": 419693,
-              "status": "ok"
-            },
-            {
-              "name": "bytesWritten",
-              "used": "6624",
-              "allowed": "50000",
-              "ratioPpm": 132480,
-              "status": "ok"
-            },
-            {
-              "name": "bytesChurned",
-              "used": "567688",
-              "allowed": "50000000",
-              "ratioPpm": 11354,
-              "status": "ok"
-            },
-            {
-              "name": "timeToDismiss",
-              "used": "320623207004",
-              "allowed": "839386000000",
-              "ratioPpm": 381974,
-              "status": "ok"
-            },
-            {
-              "name": "extrinsicWeight",
-              "used": "859386000001",
-              "allowed": "1299891843000",
-              "ratioPpm": 661122,
-              "status": "ok"
-            },
-            {
-              "name": "blockWeight",
-              "used": "859494157001",
-              "allowed": "1500000000000",
-              "ratioPpm": 572997,
-              "status": "ok"
-            },
-            {
-              "name": "blockLength",
-              "used": "419693",
-              "allowed": "786432",
-              "ratioPpm": 533668,
+              "ratioPpm": 546329,
               "status": "ok"
             }
           ],
@@ -1310,7 +1169,7 @@
               },
               {
                 "limit": "readTime",
-                "txs": 16
+                "txs": 18
               },
               {
                 "limit": "computeTime",
@@ -1326,112 +1185,112 @@
               },
               {
                 "limit": "bytesChurned",
-                "txs": 88
+                "txs": 85
               }
             ],
             "txsPerBlock": 1,
             "binding": "blockWeight",
-            "opsPerBlock": 40
+            "opsPerBlock": 41
           }
         },
         {
-          "name": "base-merged-n48",
-          "series": "base-merged",
-          "n": 48,
-          "calls": 48,
-          "ops": 48,
+          "name": "mint multi-call n=42",
+          "series": "mint multi-call",
+          "n": 42,
+          "calls": 42,
+          "ops": 42,
           "conflict": "none",
-          "serializedLen": 83219,
-          "estimatedSize": 499556,
-          "declaredNodes": 1189,
+          "serializedLen": 64697,
+          "estimatedSize": 436764,
+          "declaredNodes": 1037,
           "cost": {
-            "readTime": "146999000000",
-            "computeTime": "379489210402",
-            "blockUsage": "499556",
-            "bytesWritten": "7680",
-            "bytesChurned": "670080"
+            "readTime": "111605000000",
+            "computeTime": "311225642656",
+            "blockUsage": "436764",
+            "bytesWritten": "6720",
+            "bytesChurned": "586320"
           },
           "timeToDismiss": {
-            "used": "383959623494",
-            "allowed": "1005678000000"
+            "used": "315566469401",
+            "allowed": "880094000000"
           },
-          "weight": "1025786157001",
+          "weight": "900202157001",
           "limits": [
             {
               "name": "nodes",
-              "used": "1199",
+              "used": "1047",
               "allowed": "1024",
-              "ratioPpm": 1170899,
+              "ratioPpm": 1022461,
               "status": "over"
             },
             {
               "name": "txBytes",
-              "used": "502839",
+              "used": "440047",
               "allowed": "1048576",
-              "ratioPpm": 479545,
+              "ratioPpm": 419662,
               "status": "ok"
             },
             {
               "name": "readTime",
-              "used": "148869000000",
+              "used": "113475000000",
               "allowed": "2000000000000",
-              "ratioPpm": 74435,
+              "ratioPpm": 56738,
               "status": "ok"
             },
             {
               "name": "computeTime",
-              "used": "382922932718",
+              "used": "314659364972",
               "allowed": "2000000000000",
-              "ratioPpm": 191462,
+              "ratioPpm": 157330,
               "status": "ok"
             },
             {
               "name": "blockUsage",
-              "used": "502839",
+              "used": "440047",
               "allowed": "1000000",
-              "ratioPpm": 502839,
+              "ratioPpm": 440047,
               "status": "ok"
             },
             {
               "name": "bytesWritten",
-              "used": "7904",
+              "used": "6944",
               "allowed": "50000",
-              "ratioPpm": 158080,
+              "ratioPpm": 138880,
               "status": "ok"
             },
             {
               "name": "bytesChurned",
-              "used": "679368",
+              "used": "595608",
               "allowed": "50000000",
-              "ratioPpm": 13588,
+              "ratioPpm": 11913,
               "status": "ok"
             },
             {
               "name": "timeToDismiss",
-              "used": "383959623494",
-              "allowed": "1005678000000",
-              "ratioPpm": 381792,
+              "used": "315566469401",
+              "allowed": "880094000000",
+              "ratioPpm": 358560,
               "status": "ok"
             },
             {
               "name": "extrinsicWeight",
-              "used": "1025678000001",
+              "used": "900094000001",
               "allowed": "1299891843000",
-              "ratioPpm": 789049,
+              "ratioPpm": 692438,
               "status": "ok"
             },
             {
               "name": "blockWeight",
-              "used": "1025786157001",
+              "used": "900202157001",
               "allowed": "1500000000000",
-              "ratioPpm": 683858,
+              "ratioPpm": 600135,
               "status": "ok"
             },
             {
               "name": "blockLength",
-              "used": "502839",
+              "used": "440047",
               "allowed": "786432",
-              "ratioPpm": 639393,
+              "ratioPpm": 559549,
               "status": "ok"
             }
           ],
@@ -1449,23 +1308,23 @@
               },
               {
                 "limit": "readTime",
-                "txs": 13
+                "txs": 17
               },
               {
                 "limit": "computeTime",
-                "txs": 5
-              },
-              {
-                "limit": "blockUsage",
-                "txs": 1
-              },
-              {
-                "limit": "bytesWritten",
                 "txs": 6
               },
               {
+                "limit": "blockUsage",
+                "txs": 2
+              },
+              {
+                "limit": "bytesWritten",
+                "txs": 7
+              },
+              {
                 "limit": "bytesChurned",
-                "txs": 73
+                "txs": 83
               }
             ],
             "txsPerBlock": 0,
@@ -1476,19 +1335,19 @@
       ],
       "series": [
         {
-          "name": "base-merged",
-          "maxN": 40,
+          "name": "mint multi-call",
+          "maxN": 41,
           "basis": "measured",
           "binding": "nodes",
           "boundary": {
-            "largestFit": 40,
-            "smallestOver": 48,
+            "largestFit": 41,
+            "smallestOver": 42,
             "binding": "nodes"
           },
           "predictions": [
             {
               "limit": "nodes",
-              "maxN": 40
+              "maxN": 41
             },
             {
               "limit": "txBytes",
@@ -1496,11 +1355,11 @@
             },
             {
               "limit": "readTime",
-              "maxN": 656
+              "maxN": 757
             },
             {
               "limit": "computeTime",
-              "maxN": 252
+              "maxN": 269
             },
             {
               "limit": "blockUsage",

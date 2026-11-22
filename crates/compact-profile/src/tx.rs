@@ -214,6 +214,7 @@ fn plain(cost: &SyntheticCost) -> Cost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manifest::JsMeasurement;
 
     fn payload(body: &[u8]) -> Vec<u8> {
         let mut bytes = Form::Unproven.tag().as_bytes().to_vec();
@@ -293,18 +294,34 @@ mod tests {
         assert!(matches!(decode(&bytes), Err(TxError::WrongTag { .. })));
     }
 
-    fn fixture(name: &str) -> Vec<u8> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/token/txs")
-            .join(name);
-        std::fs::read(path).expect("the fixture exists")
+    fn fixtures() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+    }
+
+    fn base_manifest() -> crate::manifest::Manifest {
+        crate::manifest::Manifest::load(&fixtures().join("mint/manifest.json"))
+            .expect("the base manifest loads")
+    }
+
+    /// A base scenario's transaction and what the runner measured for it.
+    fn scenario(pick: impl Fn(&crate::manifest::Scenario) -> bool) -> (Vec<u8>, JsMeasurement) {
+        let manifest = base_manifest();
+        let entry = manifest
+            .scenarios
+            .iter()
+            .find(|entry| pick(entry))
+            .expect("the base manifest has the scenario");
+        let bytes =
+            std::fs::read(fixtures().join("mint").join(&entry.tx)).expect("the transaction exists");
+        (bytes, entry.js)
+    }
+
+    fn named(name: &str) -> (Vec<u8>, JsMeasurement) {
+        scenario(|entry| entry.name == name)
     }
 
     fn live(name: &str) -> Vec<u8> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/live")
-            .join(name);
-        std::fs::read(path).expect("the fixture exists")
+        std::fs::read(fixtures().join("live").join(name)).expect("the fixture exists")
     }
 
     #[test]
@@ -350,35 +367,32 @@ mod tests {
     }
 
     #[test]
-    fn the_base_mint_measures_as_the_js_ledger_did() {
-        let (form, measurement) =
-            measure(&fixture("base-mint.bin"), &mainnet()).expect("it measures");
+    fn a_single_mint_measures_as_the_js_ledger_did() {
+        let (bytes, js) = named("mint");
+        let (form, measurement) = measure(&bytes, &mainnet()).expect("it measures");
         assert_eq!(form, Form::Unproven);
-        assert_eq!(
-            measurement.cost,
-            Cost {
-                read_time: 3_978_000_000,
-                compute_time: 8_402_856_575,
-                block_usage: 10_983,
-                bytes_written: 160,
-                bytes_churned: 13_960,
-            }
-        );
-        assert_eq!(measurement.serialized_len, 2_380);
-        assert_eq!(measurement.declared_nodes, 89);
+        assert_eq!(measurement.cost, js.cost);
+        assert_eq!(measurement.serialized_len, js.serialized_len);
+        assert_eq!(measurement.declared_nodes, js.declared_nodes);
     }
 
     #[test]
     fn the_largest_fixture_deserializes_within_the_debug_recursion_limit() {
-        let (_, measurement) =
-            measure(&fixture("base-merged-n48.bin"), &mainnet()).expect("it measures");
-        assert_eq!(measurement.declared_nodes, 1_189);
+        let most_nodes = base_manifest()
+            .scenarios
+            .iter()
+            .map(|entry| entry.js.declared_nodes)
+            .max()
+            .expect("the base manifest has scenarios");
+        let (bytes, js) = scenario(|entry| entry.js.declared_nodes == most_nodes);
+        let (_, measurement) = measure(&bytes, &mainnet()).expect("it measures");
+        assert_eq!(measurement.declared_nodes, js.declared_nodes);
     }
 
     #[test]
     fn the_estimated_size_is_block_usage() {
         // With no allowance at all, the dismissal error carries the size the ledger used.
-        let tx = decode(&fixture("base-merged-n8.bin")).expect("it decodes");
+        let tx = decode(&named("mint multi-call n=8").0).expect("it decodes");
         let mut params = mainnet();
         let block_usage = tx.cost(&params, false).expect("it costs").block_usage;
         params.limits.time_to_dismiss_per_byte = CostDuration::ZERO;
@@ -393,7 +407,7 @@ mod tests {
 
     #[test]
     fn the_ledger_enforces_dismissal_exactly_where_the_limit_check_does() {
-        let tx = decode(&fixture("base-mint.bin")).expect("it decodes");
+        let tx = decode(&named("mint").0).expect("it decodes");
         let mut params = mainnet();
         let used = tx.time_to_dismiss(&params).expect("it costs");
         params.limits.min_time_to_dismiss = used;

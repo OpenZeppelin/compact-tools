@@ -1,7 +1,8 @@
 //! `compact-profile` end to end, one fixture case per behaviour.
 //!
 //! Every case runs inside `tests/fixtures/<case>/` and shares the transactions, manifest
-//! and snapshot in `tests/fixtures/token/`.
+//! and snapshot in `tests/fixtures/mint/`. `tests/fixtures/README.md` says how to regenerate
+//! them.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -14,13 +15,16 @@ const EXIT_FINDINGS: i32 = 1;
 /// Exit code for a usage, input, IO or ledger error.
 const EXIT_ERROR: i32 = 2;
 
-const MANIFEST: &str = "../token/manifest.json";
+/// Set to `1`, each case writes its actual output to `expected.txt` instead of comparing.
+const BLESS: &str = "COMPACT_PROFILE_BLESS";
 
-/// The fixture manifest's client ledger, 1.0.0-rc.5, is below mainnet's 1.0.2.
+const MANIFEST: &str = "../mint/manifest.json";
+const SNAPSHOT: &str = "../mint/snapshot.json";
+
+/// The `check-client` manifest's client ledger, 1.0.0-rc.5, is below mainnet's 1.0.2.
 const CLIENT_WARNING: &str = "compact-profile: warning: the transactions were built with \
     @midnightntwrk/ledger-v9 1.0.0-rc.5, below mainnet's minimum client ledger 1.0.2; the \
     network may refuse what that client builds.\n";
-const SNAPSHOT: &str = "../token/snapshot.json";
 
 fn case(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -28,8 +32,15 @@ fn case(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn expected(name: &str, file: &str) -> String {
-    std::fs::read_to_string(case(name).join(file)).expect("the case has an expectation")
+/// Compares `actual` with the case's `expected.txt`, or writes it there under [`BLESS`].
+fn assert_expected(name: &str, actual: &str) {
+    let path = case(name).join("expected.txt");
+    if std::env::var_os(BLESS).is_some_and(|value| value == "1") {
+        std::fs::write(&path, actual).expect("the expectation is writable");
+    } else {
+        let expected = std::fs::read_to_string(&path).expect("the case has an expectation");
+        assert_eq!(actual, expected, "{name}");
+    }
 }
 
 /// Runs the binary inside a case directory and returns its exit code, stdout and stderr.
@@ -64,23 +75,32 @@ fn check(name: &str, manifest: &str, snapshot: &str, extra: &[&str]) -> (i32, St
 #[test]
 fn check_passes_when_parity_holds_and_the_snapshot_matches() {
     let (code, stdout, stderr) = check("check-pass", MANIFEST, SNAPSHOT, &[]);
-    assert_eq!(stdout, expected("check-pass", "expected.txt"));
+    assert_expected("check-pass", &stdout);
     assert_eq!(code, 0);
     assert_eq!(
         stderr,
-        format!("{CLIENT_WARNING}Checked 10 scenarios on 1 network. Snapshot matches.\n")
+        "Checked 9 scenarios on 1 network. Snapshot matches.\n"
     );
 }
 
 #[test]
 fn an_old_client_ledger_labels_the_network_without_failing() {
-    let (code, stdout, _) = check("check-pass", MANIFEST, SNAPSHOT, &[]);
+    let (code, stdout, stderr) = check("check-client", "manifest.json", "snapshot.json", &[]);
     assert_eq!(code, 0);
     assert!(
         stdout.contains("captured 2026-11-20, balanced, client below minimum\n"),
         "{stdout}"
     );
-    let (_, json, _) = check("check-pass", MANIFEST, SNAPSHOT, &["--reporter", "json"]);
+    assert_eq!(
+        stderr,
+        format!("{CLIENT_WARNING}Checked 9 scenarios on 1 network. Snapshot matches.\n")
+    );
+    let (_, json, _) = check(
+        "check-client",
+        "manifest.json",
+        "snapshot.json",
+        &["--reporter", "json"],
+    );
     let report: serde_json::Value = serde_json::from_str(&json).expect("check prints JSON");
     assert_eq!(report["networks"][0]["clientBelowMinimum"], true);
     assert_eq!(report["networks"][0]["minClientLedger"], "1.0.2");
@@ -111,29 +131,46 @@ fn update_json(name: &str, manifest: &str) -> (serde_json::Value, String) {
     )
 }
 
+/// The first network's entry for scenario `name`.
+fn scenario<'a>(report: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
+    report["networks"][0]["scenarios"]
+        .as_array()
+        .expect("the network lists its scenarios")
+        .iter()
+        .find(|entry| entry["name"] == name)
+        .expect("the report has the scenario")
+}
+
+/// More than one copy fits a block, and each copy adds `ops` operations.
+fn assert_ops_per_block(entry: &serde_json::Value, ops: u64) {
+    let txs = entry["block"]["txsPerBlock"]
+        .as_u64()
+        .expect("mainnet knows every block bound");
+    assert!(txs > 1, "{entry}");
+    assert_eq!(entry["block"]["opsPerBlock"], txs * ops, "{entry}");
+}
+
 #[test]
 fn ops_default_to_calls_in_the_report() {
     let (report, _) = update_json("check-pass", MANIFEST);
-    let merged = &report["networks"][0]["scenarios"][7];
-    assert_eq!(merged["name"], "base-merged-n32");
-    assert_eq!(merged["ops"], 32);
-    assert_eq!(merged["block"]["txsPerBlock"], 2);
-    assert_eq!(merged["block"]["opsPerBlock"], 64);
+    let merged = scenario(&report, "mint multi-call n=8");
+    assert_eq!(merged["calls"], 8);
+    assert_eq!(merged["ops"], 8);
+    assert_ops_per_block(merged, 8);
 }
 
 #[test]
 fn a_batch_circuit_counts_its_ops_per_block() {
-    let (report, _) = update_json("check-ops", "manifest.json");
-    let batch = &report["networks"][0]["scenarios"][0];
+    let (report, _) = update_json("check-pass", MANIFEST);
+    let batch = scenario(&report, "mint batch of 4");
     assert_eq!(batch["calls"], 1);
-    assert_eq!(batch["ops"], 8);
-    assert_eq!(batch["block"]["txsPerBlock"], 30);
-    assert_eq!(batch["block"]["opsPerBlock"], 240);
+    assert_eq!(batch["ops"], 4);
+    assert_ops_per_block(batch, 4);
 }
 
 #[test]
 fn a_manifest_without_a_client_ledger_says_so_once_and_is_not_labelled() {
-    let (report, stderr) = update_json("check-ops", "manifest-no-client.json");
+    let (report, stderr) = update_json("check-client", "manifest-no-client.json");
     assert_eq!(report["networks"][0]["clientBelowMinimum"], false);
     assert_eq!(
         stderr
@@ -150,14 +187,14 @@ fn params_prints_json_for_the_runner() {
         "params-json",
         &["params", "--network", "mainnet", "--reporter", "json"],
     );
-    assert_eq!(stdout, expected("params-json", "expected.txt"));
+    assert_expected("params-json", &stdout);
     assert_eq!(code, 0);
 }
 
 #[test]
 fn check_prints_json_for_the_runner() {
     let (code, stdout, _) = check("check-json", MANIFEST, SNAPSHOT, &["--reporter", "json"]);
-    assert_eq!(stdout, expected("check-json", "expected.txt"));
+    assert_expected("check-json", &stdout);
     assert_eq!(code, 0);
 }
 
@@ -177,21 +214,18 @@ fn check_evaluates_each_network_and_marks_unknown_caps_not_applicable() {
             "snapshot.json",
         ],
     );
-    assert_eq!(stdout, expected("check-networks", "expected.txt"));
+    assert_expected("check-networks", &stdout);
     assert_eq!(code, 0);
 }
 
 #[test]
 fn check_fails_on_a_drifted_snapshot_and_names_each_value() {
     let (code, stdout, stderr) = check("check-drift", MANIFEST, "snapshot.json", &[]);
-    assert_eq!(stdout, expected("check-drift", "expected.txt"));
+    assert_expected("check-drift", &stdout);
     assert_eq!(code, EXIT_FINDINGS);
     assert_eq!(
         stderr,
-        format!(
-            "{CLIENT_WARNING}Checked 10 scenarios on 1 network. Found 9 drifted values. \
-             1 scenario no longer fits.\n"
-        )
+        "Checked 9 scenarios on 1 network. Found 8 drifted values. 1 scenario no longer fits.\n"
     );
 }
 
@@ -209,25 +243,24 @@ fn check_refuses_a_manifest_built_with_other_parameters() {
 #[test]
 fn check_fails_when_the_runner_reported_other_numbers() {
     let (code, stdout, stderr) = check("check-parity", "manifest.json", SNAPSHOT, &[]);
-    assert_eq!(stdout, expected("check-parity", "expected.txt"));
+    assert_expected("check-parity", &stdout);
     assert_eq!(code, EXIT_FINDINGS);
     assert!(stderr.contains("Found 2 parity mismatches."), "{stderr}");
 }
 
 #[test]
 fn check_absorbs_byte_jitter_unless_the_size_tolerance_is_zero() {
-    let rerun = "../token/manifest-rerun.json";
-    let (code, stdout, _) = check("check-tolerance", rerun, SNAPSHOT, &[]);
+    let (code, stdout, _) = check("check-tolerance", "manifest.json", SNAPSHOT, &[]);
     assert!(stdout.ends_with("\nsnapshot matches\n"), "{stdout}");
     assert_eq!(code, 0);
 
     let (code, stdout, _) = check(
         "check-tolerance",
-        rerun,
+        "manifest.json",
         SNAPSHOT,
         &["--size-tolerance", "0"],
     );
-    assert_eq!(stdout, expected("check-tolerance", "expected.txt"));
+    assert_expected("check-tolerance", &stdout);
     assert_eq!(code, EXIT_FINDINGS);
 }
 
@@ -261,7 +294,9 @@ fn update_writes_the_committed_snapshot_and_check_accepts_it() {
     );
     assert_eq!(code, 0, "{stderr}");
     let text = std::fs::read_to_string(&written).expect("update wrote the snapshot");
-    assert_eq!(text, expected("token", "snapshot.json"));
+    let committed =
+        std::fs::read_to_string(case("mint").join("snapshot.json")).expect("the base snapshot");
+    assert_eq!(text, committed);
 
     let (code, _, _) = check("check-pass", MANIFEST, written_arg, &[]);
     assert_eq!(code, 0);
@@ -294,29 +329,30 @@ fn cost_prints_one_transaction_as_json() {
         "cost-json",
         &[
             "cost",
-            "../token/txs/base-mint.bin",
+            "../mint/txs/mint.tx",
             "--network",
             "mainnet",
             "--reporter",
             "json",
         ],
     );
-    assert_eq!(stdout, expected("cost-json", "expected.txt"));
+    assert_expected("cost-json", &stdout);
     assert_eq!(code, 0);
 }
 
 #[test]
 fn cost_reports_a_transaction_over_the_node_cap_without_failing() {
+    // The first multi-call size over mainnet's node cap.
     let (code, stdout, _) = run(
         "cost-table",
         &[
             "cost",
-            "../token/txs/base-merged-n48.bin",
+            "../mint/txs/mint-multi-call-n-42.tx",
             "--network",
             "mainnet",
         ],
     );
-    assert_eq!(stdout, expected("cost-table", "expected.txt"));
+    assert_expected("cost-table", &stdout);
     assert_eq!(code, 0);
 }
 
@@ -333,7 +369,7 @@ fn cost_evaluates_a_balanced_transaction_as_submitted() {
             "json",
         ],
     );
-    assert_eq!(stdout, expected("cost-balanced", "expected.txt"));
+    assert_expected("cost-balanced", &stdout);
     assert_eq!(code, 0);
 }
 
@@ -406,7 +442,7 @@ fn params_writes_the_captured_bytes_and_prints_the_identity() {
             out.to_str().expect("the path is UTF-8"),
         ],
     );
-    assert_eq!(stdout, expected("params", "expected.txt"));
+    assert_expected("params", &stdout);
     assert_eq!(code, 0);
     let written = std::fs::read(&out).expect("params wrote the bytes");
     let captured = std::fs::read(case("params").join("live-mainnet.bin")).expect("the capture");
@@ -415,9 +451,10 @@ fn params_writes_the_captured_bytes_and_prints_the_identity() {
 
 #[test]
 fn params_identity_is_shared_by_every_shipped_network() {
+    let (_, mainnet, _) = run("params", &["params", "--network", "mainnet"]);
     for network in ["preprod", "undeployed"] {
         let (code, stdout, _) = run("params", &["params", "--network", network]);
-        assert_eq!(stdout, expected("params", "expected.txt"), "{network}");
+        assert_eq!(stdout, mainnet, "{network}");
         assert_eq!(code, 0);
     }
 }
