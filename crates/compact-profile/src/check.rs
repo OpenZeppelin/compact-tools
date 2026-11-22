@@ -340,6 +340,12 @@ mod tests {
         ClientCheck::of(&ClientVersion::of(&manifest(client)), &profile)
     }
 
+    fn check_without_a_minimum(client: Option<&str>) -> ClientCheck {
+        let mut profile = Profile::embedded("mainnet").expect("the profile parses");
+        profile.min_client_ledger.version = None;
+        ClientCheck::of(&ClientVersion::of(&manifest(client)), &profile)
+    }
+
     #[test]
     fn a_release_candidate_is_below_the_release_minimum() {
         assert!(matches!(
@@ -354,7 +360,7 @@ mod tests {
         assert_eq!(check(None, "mainnet"), ClientCheck::Unchecked);
         assert_eq!(check(Some("^1.0.2"), "mainnet"), ClientCheck::Unchecked);
         assert_eq!(
-            check(Some("1.0.0-rc.5"), "undeployed"),
+            check_without_a_minimum(Some("1.0.0-rc.5")),
             ClientCheck::Unchecked
         );
         assert_eq!(

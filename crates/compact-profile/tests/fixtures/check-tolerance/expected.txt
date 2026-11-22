@@ -7,13 +7,13 @@ mainnet: node 2.1.101, midnight-ledger-v9 1.0.1, captured 2026-11-20, balanced
 scenario               n  calls  ops  nodes  est size  binding           used  fits  txs/block  block bound  ops/block
 mint                   -      1    1     86    14,116  timeToDismiss   40.24%  yes          31  blockWeight         31
 mint to self           -      1    1     93    13,982  timeToDismiss   41.27%  yes          31  blockWeight         31
-mint batch of 4        -      1    4    129    30,165  timeToDismiss   31.40%  yes          18  blockWeight         72
+mint batch of 4        -      1    4    129    30,164  timeToDismiss   31.40%  yes          18  blockWeight         72
 mint multi-call n=1    1      1    1     86    14,116  timeToDismiss   40.24%  yes          31  blockWeight         31
 mint multi-call n=2    2      2    2    111    24,527  timeToDismiss   38.28%  yes          21  blockWeight         42
-mint multi-call n=4    4      4    4    158    45,317  timeToDismiss   37.09%  yes          13  blockWeight         52
-mint multi-call n=8    8      8    8    251    86,856  timeToDismiss   36.43%  yes           7  blockWeight         56
-mint multi-call n=41  41     41   41  1,023   429,650  nodes           99.90%  yes           1  blockWeight         41
-mint multi-call n=42  42     42   42  1,047   440,047  nodes          102.24%  no            0  nodes                0
+mint multi-call n=4    4      4    4    158    45,318  timeToDismiss   37.09%  yes          13  blockWeight         52
+mint multi-call n=8    8      8    8    251    86,855  timeToDismiss   36.43%  yes           7  blockWeight         56
+mint multi-call n=41  41     41   41  1,023   429,651  nodes           99.90%  yes           1  blockWeight         41
+mint multi-call n=42  42     42   42  1,047   440,046  nodes          102.24%  no            0  nodes                0
 
 series mint multi-call: max n 41, measured (41 fits, 42 over nodes)
   limit            fit max n
@@ -33,13 +33,12 @@ fit mint multi-call (n = 1, 2, 4, 8, 41, 42)
   metric                  fixed             per n  max resid
   readTime       935,000,000.00  2,635,000,000.00       0.00
   computeTime    507,410,508.80  7,398,053,140.12  10,334.20
-  blockUsage             465.59         10,387.97      20.57
+  blockUsage             465.64         10,387.97      20.61
   bytesWritten             0.00            160.00       0.00
   bytesChurned             0.00         13,960.00       0.00
   nodes                   53.71             23.41       1.12
-  serializedLen          535.32          1,527.59      18.91
+  serializedLen          535.00          1,527.69      18.70
   timeToDismiss  507,410,508.93  7,419,650,864.63  10,334.06
 
-snapshot drift (2)
-  scenarios[mint multi-call n=4].measured.cost.blockUsage: 42035 -> 42034
-  scenarios[mint multi-call n=4].measured.serializedLen: 6663 -> 6662
+snapshot drift (1)
+  scenarios[mint multi-call n=4].measured.serializedLen: 6663 -> 6660

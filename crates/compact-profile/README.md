@@ -65,7 +65,8 @@ Node caps: `max_transaction_nodes`, `weight_scale`, `fixed_extra_weight`,
 The `mainnet` and `preprod` caps and balancing term were observed on 2026-11-20
 on a local dev chain running node 2.1.101, spec_version 2001100, the runtime both
 networks reported that day. `fixed_extra_weight` is a storage value, read on that
-chain only. `undeployed` is provisional: its node release is not measured.
+chain only. `undeployed` is that dev chain, so it carries the same caps. A local
+stack on another node release needs its own profile file.
 
 ## Manifest
 

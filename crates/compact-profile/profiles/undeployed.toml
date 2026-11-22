@@ -1,9 +1,9 @@
-# Local dev stack (network id "undeployed"). Provisional: only the ledger parameters are known.
+# Local dev chain (network id "undeployed") on node 2.1.101.
 name = "undeployed"
-provisional = true
+node_release = "2.1.101"
 ledger_crate = "midnight-ledger-v9 1.0.1"
 captured = "2026-11-20"
-source = "midnight-node origin/main res/dev/ledger-parameters-config.json, serialized with midnight-ledger-v9 1.0.1"
+source = "state_call MidnightRuntimeApi_get_ledger_parameters on a local dev chain on node 2.1.101, spec_version 2001100"
 # Tagged LedgerParameters, hex. Whitespace is ignored.
 parameters = """
 6d69646e696768743a6c65646765722d706172616d65746572735b76385d3ac6
@@ -26,36 +26,47 @@ ea503eb0bae1912312eea6549608753602127a0002fd4314000284d717000000
 0000000000000001000000000000000200400002127a000700d6117e030b0020
 4aa9d1010b00204aa9d10102093d00420d030002c2eb0b000000000000008000
 00000000000000020080020700f2052a012d81302a0000000000000000000000
-00000000000000000000000a0000000000000000000000000000000100000000
-0000000000000000000000010000000000000000000000000000000100000000
-0000000000000000000000010000000000000000751200000000000000000000
+00000000000000000000000a0000000000000025d4d53c1379effc0000000000
+000000ccc0fdbed66917ff000000000000000019d3a8865c58ac010100000000
+000000f597837db9c44c02010000000000000000751200000000000000000000
 0000000000000000000040000000000000000000000000000000006400000000
 000000d107a10f00000000000000000a00000000000000
 """
 
 [node.max_transaction_nodes]
-source = "unknown: the compact-contracts local stack runs node 2.1.0-rc.4, which has not been measured"
+value = 1024
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (midnight.maxTransactionNodes). Source: midnight-node release/node-2.1.101 runtime/src/lib.rs:676 (MaxTransactionNodes = ConstU32<1024>); pallets/midnight/src/lib.rs:537-543 rejects nodes > max"
 
 [node.weight_scale]
-source = "unknown: the compact-contracts local stack runs node 2.1.0-rc.4, which has not been measured"
+value = 2_000_000_000_000
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.maxBlock.refTime). Source: runtime/src/lib.rs:314-318 (BlockWeights max_block); pallets/midnight/src/lib.rs:626, :670 pass max_block.ref_time() as max_weight; ledger/src/ledger_9/mod.rs:1064-1069, :1649-1661 scale the largest normalized dimension by it, rounding up and capping at max_weight"
 
 [node.fixed_extra_weight]
-source = "unknown: the compact-contracts local stack runs node 2.1.0-rc.4, which has not been measured"
+value = 20_000_000_000
+source = "Observed 2026-11-20 in the storage of a local dev chain on node 2.1.101, spec_version 2001100 (midnight configurableTransactionSizeWeight). Source: pallets/midnight/src/lib.rs:686-691 adds it to the scaled cost; its default is EXTRA_WEIGHT_TX_SIZE (:110, :191-204)"
 
 [node.base_extrinsic_weight]
-source = "unknown: the compact-contracts local stack runs node 2.1.0-rc.4, which has not been measured"
+value = 108_157_000
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.baseExtrinsic.refTime). frame_system CheckWeight adds it per extrinsic to the class total (pallets/midnight/src/lib.rs:595-596 mirrors that), not to the dispatch weight max_extrinsic is compared with"
 
 [node.extrinsic_weight_ceiling]
-source = "unknown: the compact-contracts local stack runs node 2.1.0-rc.4, which has not been measured"
+value = 1_299_891_843_000
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.maxExtrinsic.refTime), compared with the dispatch weight without the base"
 
 [node.normal_block_weight]
-source = "unknown: the compact-contracts local stack runs node 2.1.0-rc.4, which has not been measured"
+value = 1_500_000_000_000
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.maxTotal.refTime). Source: runtime/src/lib.rs:307 (NORMAL_DISPATCH_RATIO 75%), :314-318 (BlockWeights::with_sensible_defaults)"
 
 [node.normal_block_length]
-source = "unknown: the compact-contracts local stack runs node 2.1.0-rc.4, which has not been measured"
+value = 786_432
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockLength.max.normal). Source: runtime/src/lib.rs:319-320 (BlockLength::max_with_normal_ratio(1024 * 1024, 75%))"
 
 [balancing]
-source = "unknown: not measured on the local stack's node release"
+source = "Measured 2026-11-20 on a local dev chain on node 2.1.101 as balanced minus proven for a single base mint and a single preset mint; the wallet adds one intent holding one dust spend. Ranges across runs: nodes +8 to +10, bytes +3,264 to +3,283, blockUsage +3,264 to +3,278; readTime, computeTime, bytesWritten, bytesChurned and time to dismiss were constant. The values are the conservative end"
+nodes = 10
+bytes = 3_283
+cost = { readTime = "1870000000", computeTime = "3433722316", blockUsage = "3283", bytesWritten = "224", bytesChurned = "9288" }
 
 [min_client_ledger]
-source = "unknown: not measured on the local stack's node release"
+value = "1.0.2"
+source = "Measured 2026-11-20 on a local dev chain on node 2.1.101: a preset mint built with npm @midnightntwrk/ledger-v9 1.0.0-rc.5 was rejected (ran out of gas budget, 2 of 2), the same call built with 1.0.2 landed; a base mint landed with both"

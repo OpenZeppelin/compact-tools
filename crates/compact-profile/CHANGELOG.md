@@ -11,9 +11,9 @@ and this crate adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 - `compact-profile`, a capacity profiler for Compact contract transactions: `params`, `cost`, `check` and `update`
 - `cost` reads unproven, proven and wallet-balanced transactions; a balanced one is evaluated as submitted
-- Shipped profiles for `mainnet` and `preprod` (node 2.1.101, `midnight-ledger-v9` 1.0.1) with node caps and a balancing term measured on a 2.1.101 dev chain, and a provisional `undeployed`
+- Shipped profiles for `mainnet`, `preprod` and `undeployed` (node 2.1.101, `midnight-ledger-v9` 1.0.1) with node caps and a balancing term measured on a 2.1.101 dev chain
 - The weight model counts frame_system's base extrinsic weight in the block total, not against the per-extrinsic ceiling
 - Optional manifest field `ops` for logical operations per transaction; the report and snapshot count `opsPerBlock`
-- Optional profile field `min_client_ledger` (`1.0.2` on `mainnet` and `preprod`); `check` and `update` warn and label a network when the manifest's `@midnightntwrk/ledger-v9` is older
+- Optional profile field `min_client_ledger` (`1.0.2` on every shipped profile); `check` and `update` warn and label a network when the manifest's `@midnightntwrk/ledger-v9` is older
 - `params --reporter json`
 - `check` allows 32 bytes of drift on `serializedLen` and `blockUsage`, which vary between builds of one scenario; `--size-tolerance` changes it

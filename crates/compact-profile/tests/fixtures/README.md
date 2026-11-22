@@ -23,6 +23,11 @@ The second writes each case's `expected.txt` from the binary's output. A rebuild
 `tests/cli.rs` names the first multi-call size over mainnet's node cap
 (`mint-multi-call-n-42.tx`) and the scenario count. Update both when the cap moves.
 
+## Hand-written
+
+`check-networks/unmeasured.toml` is a profile with no node facts. It replaces the shipped
+`undeployed` in that case, so the report shows a network whose caps are unknown.
+
 ## Captured, not regenerated
 
 ### `params/live-mainnet.bin`

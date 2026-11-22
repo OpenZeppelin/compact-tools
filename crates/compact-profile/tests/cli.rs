@@ -210,6 +210,8 @@ fn check_evaluates_each_network_and_marks_unknown_caps_not_applicable() {
             "mainnet",
             "--network",
             "undeployed",
+            "--profile-file",
+            "unmeasured.toml",
             "--snapshot",
             "snapshot.json",
         ],

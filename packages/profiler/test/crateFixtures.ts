@@ -145,8 +145,20 @@ async function main(): Promise<void> {
       binary,
       toolchain: { compactc },
     });
-  const update = (manifest: string, snapshot: string, networks: string[]) =>
-    runCheck({ binary, manifest, networks, snapshot, update: true });
+  const update = (
+    manifest: string,
+    snapshot: string,
+    networks: string[],
+    profileFile?: string,
+  ) =>
+    runCheck({
+      binary,
+      manifest,
+      networks,
+      snapshot,
+      update: true,
+      profileFile,
+    });
 
   // Base set.
   const profiler = await mintProfiler(BASE);
@@ -269,10 +281,12 @@ async function main(): Promise<void> {
   await update(oldClientPath, join(FIXTURES, 'check-client', 'snapshot.json'), [
     'mainnet',
   ]);
+  // `unmeasured.toml` is hand-written and replaces the shipped `undeployed`.
   await update(
     baseManifestPath,
     join(FIXTURES, 'check-networks', 'snapshot.json'),
     ['mainnet', 'undeployed'],
+    join(FIXTURES, 'check-networks', 'unmeasured.toml'),
   );
 
   const drift = readJson<Snapshot>(baseSnapshotPath);

@@ -351,6 +351,21 @@ mod tests {
     }
 
     #[test]
+    fn every_shipped_profile_is_measured_on_node_2_1_101() {
+        for (name, _) in EMBEDDED {
+            let profile = Profile::embedded(name).expect("the shipped profile parses");
+            assert!(!profile.provisional, "{name}");
+            assert_eq!(profile.node_release.as_deref(), Some("2.1.101"), "{name}");
+            assert_eq!(
+                profile.node.max_transaction_nodes.value,
+                Some(1_024),
+                "{name}"
+            );
+            assert!(profile.balancing.is_some(), "{name}");
+        }
+    }
+
+    #[test]
     fn mainnet_and_preprod_share_a_params_identity() {
         let mainnet = Profile::embedded("mainnet").expect("mainnet parses");
         let preprod = Profile::embedded("preprod").expect("preprod parses");
@@ -388,22 +403,19 @@ mod tests {
     }
 
     #[test]
-    fn the_live_networks_need_client_ledger_1_0_2() {
-        for name in ["mainnet", "preprod"] {
+    fn every_shipped_network_needs_client_ledger_1_0_2() {
+        for (name, _) in EMBEDDED {
             let profile = Profile::embedded(name).expect("the profile parses");
             let minimum = profile.min_client_ledger.version.map(|v| v.to_string());
             assert_eq!(minimum.as_deref(), Some("1.0.2"), "{name}");
         }
-        let local = Profile::embedded("undeployed").expect("undeployed parses");
-        assert!(local.min_client_ledger.version.is_none());
     }
 
     #[test]
     fn a_minimum_that_is_not_semver_is_refused() {
-        let text = EMBEDDED[2].1.replace(
-            "[min_client_ledger]\n",
-            "[min_client_ledger]\nvalue = \"^1.0.2\"\n",
-        );
+        let text = EMBEDDED[0]
+            .1
+            .replace("value = \"1.0.2\"", "value = \"^1.0.2\"");
         assert!(matches!(
             Profile::parse(&text, "test"),
             Err(ProfileError::ClientVersion { .. })
@@ -412,9 +424,7 @@ mod tests {
 
     #[test]
     fn a_partial_balancing_term_is_refused() {
-        let text = EMBEDDED[2]
-            .1
-            .replace("[balancing]\n", "[balancing]\nnodes = 9\n");
+        let text = EMBEDDED[0].1.replace("bytes = 3_283\n", "");
         assert!(matches!(
             Profile::parse(&text, "test"),
             Err(ProfileError::PartialBalancing { .. })
