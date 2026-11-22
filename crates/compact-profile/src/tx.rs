@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn the_live_multi_call_transactions_declare_the_counts_the_node_saw_unproven() {
+    fn the_live_multi_call_transactions_declare_their_unproven_counts() {
         let counts = [
             ("base-merged-n40-unproven.bin", 1_002),
             ("base-merged-n41-unproven.bin", 1_025),

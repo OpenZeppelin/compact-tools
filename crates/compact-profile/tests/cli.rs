@@ -401,7 +401,8 @@ fn a_proven_transaction_gets_the_balancing_term() {
 
 #[test]
 fn the_node_cap_splits_the_live_multi_call_transactions_as_the_node_did() {
-    // Landed at 1,010 and 995 nodes; rejected at 1,034 and 1,025.
+    // On the node, the same calls landed at 1,010 and 995 nodes and were rejected at 1,034
+    // and 1,025.
     let cases = [
         ("../live/base-merged-n40-unproven.bin", "1012", true),
         ("../live/base-merged-n41-unproven.bin", "1035", false),
