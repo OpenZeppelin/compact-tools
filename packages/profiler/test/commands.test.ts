@@ -168,7 +168,22 @@ describe('slugify', () => {
     expect(slugify('_mint multi-call n=4')).toBe('_mint-multi-call-n-4');
   });
 
+  it('drops separators at both ends', () => {
+    expect(slugify('  -mint to self- ')).toBe('mint-to-self');
+  });
+
   it('rejects a name with no file-name characters', () => {
     expect(() => slugify('!!')).toThrow('has no file name');
+    expect(() => slugify('- -')).toThrow('has no file name');
+    expect(() => slugify('-')).toThrow('has no file name');
+  });
+
+  it('slugifies long dash runs in linear time', () => {
+    const run = '-'.repeat(100_000);
+    const started = performance.now();
+
+    expect(slugify(`${run}mint${run}batch${run}`)).toBe('mint-batch');
+    expect(() => slugify(run)).toThrow('has no file name');
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });

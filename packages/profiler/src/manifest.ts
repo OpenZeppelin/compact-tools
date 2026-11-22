@@ -29,10 +29,10 @@ export interface Manifest {
 
 /** File-name form of a scenario name: lower case, runs of other characters as one `-`. */
 export function slugify(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  let slug = name.toLowerCase().replace(/[^a-z0-9_]+/g, '-');
+  // The replace leaves at most one dash at each end.
+  if (slug.startsWith('-')) slug = slug.slice(1);
+  if (slug.endsWith('-')) slug = slug.slice(0, -1);
   if (slug === '') {
     throw new Error(`scenario name ${JSON.stringify(name)} has no file name`);
   }
