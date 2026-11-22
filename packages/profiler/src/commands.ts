@@ -112,7 +112,7 @@ export interface CheckOptions extends ProfileSource {
   snapshot: string;
   /** Run `update`, which writes the snapshot, instead of `check`. */
   update?: boolean;
-  /** Bytes `serializedLen` and `blockUsage` may drift before `check` fails. */
+  /** Bytes `serializedLen` and `blockUsage` may drift before `check` fails. Omitted, the binary's default applies. */
   sizeTolerance?: number;
   reporter?: 'table' | 'json';
 }

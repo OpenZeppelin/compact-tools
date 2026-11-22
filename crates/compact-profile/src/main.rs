@@ -102,9 +102,13 @@ struct RunArgs {
     reporter: Reporter,
 
     /// Bytes a scenario's serializedLen and blockUsage may drift before `check` fails.
-    #[arg(long, default_value_t = 0, value_name = "BYTES")]
+    /// 0 compares them exactly.
+    #[arg(long, default_value_t = DEFAULT_SIZE_TOLERANCE, value_name = "BYTES")]
     size_tolerance: u64,
 }
+
+/// Slack for the two size fields, which vary by a few bytes between builds of one scenario.
+const DEFAULT_SIZE_TOLERANCE: u64 = 32;
 
 fn main() -> ExitCode {
     match run() {

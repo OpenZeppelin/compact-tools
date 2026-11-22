@@ -140,9 +140,10 @@ JSON, written by `update`. Numbers only:
   `opsPerBlock`.
 - `networks[].series[]`: `maxN`, `basis` (`measured`, `fit` or `none`), `binding`.
 
-Comparison is exact. `--size-tolerance` allows an absolute difference on
-`measured.serializedLen` and `measured.cost.blockUsage` only, which jitter by a
-few bytes between builds.
+Comparison is exact, except for `measured.serializedLen` and
+`measured.cost.blockUsage`, which jitter by a few bytes between builds. Those
+two may differ by up to `--size-tolerance` bytes (default 32).
+`--size-tolerance 0` compares them exactly.
 
 ## Capacity model
 

@@ -215,20 +215,20 @@ fn check_fails_when_the_runner_reported_other_numbers() {
 }
 
 #[test]
-fn size_tolerance_absorbs_byte_jitter_between_runs() {
+fn check_absorbs_byte_jitter_unless_the_size_tolerance_is_zero() {
     let rerun = "../token/manifest-rerun.json";
     let (code, stdout, _) = check("check-tolerance", rerun, SNAPSHOT, &[]);
-    assert_eq!(stdout, expected("check-tolerance", "expected.txt"));
-    assert_eq!(code, EXIT_FINDINGS);
+    assert!(stdout.ends_with("\nsnapshot matches\n"), "{stdout}");
+    assert_eq!(code, 0);
 
     let (code, stdout, _) = check(
         "check-tolerance",
         rerun,
         SNAPSHOT,
-        &["--size-tolerance", "2"],
+        &["--size-tolerance", "0"],
     );
-    assert!(stdout.ends_with("\nsnapshot matches\n"), "{stdout}");
-    assert_eq!(code, 0);
+    assert_eq!(stdout, expected("check-tolerance", "expected.txt"));
+    assert_eq!(code, EXIT_FINDINGS);
 }
 
 #[test]

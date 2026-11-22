@@ -16,3 +16,4 @@ and this crate adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Optional manifest field `ops` for logical operations per transaction; the report and snapshot count `opsPerBlock`
 - Optional profile field `min_client_ledger` (`1.0.2` on `mainnet` and `preprod`); `check` and `update` warn and label a network when the manifest's `@midnightntwrk/ledger-v9` is older
 - `params --reporter json`
+- `check` allows 32 bytes of drift on `serializedLen` and `blockUsage`, which vary between builds of one scenario; `--size-tolerance` changes it

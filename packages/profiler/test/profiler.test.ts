@@ -107,7 +107,6 @@ async function check(
   manifest: string,
   snapshot: string,
   update: boolean,
-  sizeTolerance?: number,
 ): Promise<CheckReport> {
   const run = await runCheck({
     binary,
@@ -116,7 +115,6 @@ async function check(
     snapshot,
     update,
     reporter: 'json',
-    sizeTolerance,
   });
   return JSON.parse(run.stdout) as CheckReport;
 }
@@ -254,7 +252,7 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
       expect(withoutSizes(readManifest(second))).toStrictEqual(
         withoutSizes(readManifest(first)),
       );
-      await expect(check(second, snapshot, false, 16)).resolves.toMatchObject({
+      await expect(check(second, snapshot, false)).resolves.toMatchObject({
         parity: [],
       });
     });

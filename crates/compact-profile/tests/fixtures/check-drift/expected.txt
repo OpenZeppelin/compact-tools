@@ -49,5 +49,5 @@ snapshot drift (9)
   networks[mainnet].scenarios[base-merged-n48].txsPerBlock: 1 -> 0
   networks[mainnet].series[base-merged].maxN: 48 -> 40
   scenarios[preset-mint].measured.cost.bytesWritten: 300 -> 307
-  scenarios[preset-mint].measured.serializedLen: 3036 -> 3034
+  scenarios[preset-mint].measured.serializedLen: 3134 -> 3034
   toolchain.compactc: 0.35.0 -> 0.36.0

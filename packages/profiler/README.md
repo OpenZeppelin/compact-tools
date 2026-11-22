@@ -119,7 +119,8 @@ lands.
 - `serializedLen` and `blockUsage` vary by a few bytes between runs: the ledger draws
   randomness when it builds intents and Zswap outputs, and field elements serialize with
   leading zero bytes dropped. The spread grows with calls (observed: 2 bytes for one mint, 5
-  for four, 12 for forty). Every other number is stable; `runCheck` takes `sizeTolerance`.
+  for four, 12 for forty). Every other number is stable. `check` allows 32 bytes on those
+  two by default, and `runCheck`'s `sizeTolerance` changes that.
 - The ledger client version fixes the gas a transaction declares, so the numbers change with
   `@midnightntwrk/ledger-v9`'s version. The snapshot records which version built them.
 
