@@ -57,5 +57,8 @@ source = "unknown: not measured"
 [balancing]
 source = "unknown: not measured"
 
+[proof]
+source = "unknown: not measured"
+
 [min_client_ledger]
 source = "unknown: not measured"

@@ -16,6 +16,12 @@
     "bytesWritten": "384",
     "bytesChurned": "23248"
   },
+  "proofTerm": {
+    "status": "proven",
+    "callProofs": 1,
+    "builtinProofs": 2,
+    "bytes": null
+  },
   "timeToDismiss": {
     "used": "11858176616",
     "allowed": "29626000000"

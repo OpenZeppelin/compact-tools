@@ -59,11 +59,11 @@
         "cost": {
           "readTime": "5865000000",
           "computeTime": "15456250833",
-          "blockUsage": "26881",
+          "blockUsage": "26882",
           "bytesWritten": "352",
           "bytesChurned": "35680"
         },
-        "serializedLen": 5666,
+        "serializedLen": 5667,
         "declaredNodes": 119,
         "timeToDismiss": "15510245145"
       }
@@ -99,11 +99,11 @@
         "cost": {
           "readTime": "6205000000",
           "computeTime": "15303513170",
-          "blockUsage": "21244",
+          "blockUsage": "21243",
           "bytesWritten": "320",
           "bytesChurned": "27920"
         },
-        "serializedLen": 3594,
+        "serializedLen": 3593,
         "declaredNodes": 101,
         "timeToDismiss": "15346708619"
       }
@@ -123,7 +123,7 @@
           "bytesWritten": "640",
           "bytesChurned": "55840"
         },
-        "serializedLen": 6663,
+        "serializedLen": 6662,
         "declaredNodes": 148,
         "timeToDismiss": "30186014999"
       }
@@ -139,11 +139,11 @@
         "cost": {
           "readTime": "22015000000",
           "computeTime": "59691845964",
-          "blockUsage": "83572",
+          "blockUsage": "83574",
           "bytesWritten": "1280",
           "bytesChurned": "111680"
         },
-        "serializedLen": 12759,
+        "serializedLen": 12761,
         "declaredNodes": 241,
         "timeToDismiss": "59864627760"
       }
@@ -159,11 +159,11 @@
         "cost": {
           "readTime": "108970000000",
           "computeTime": "303827587190",
-          "blockUsage": "426368",
+          "blockUsage": "426367",
           "bytesWritten": "6560",
           "bytesChurned": "572360"
         },
-        "serializedLen": 63169,
+        "serializedLen": 63165,
         "declaredNodes": 1013,
         "timeToDismiss": "304713093895"
       }
@@ -179,11 +179,11 @@
         "cost": {
           "readTime": "111605000000",
           "computeTime": "311225642656",
-          "blockUsage": "436763",
+          "blockUsage": "436764",
           "bytesWritten": "6720",
           "bytesChurned": "586320"
         },
-        "serializedLen": 64698,
+        "serializedLen": 64696,
         "declaredNodes": 1037,
         "timeToDismiss": "312132747085"
       }
@@ -197,17 +197,17 @@
           "name": "mint",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 31,
+          "txsPerBlock": 30,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 31
+          "opsPerBlock": 30
         },
         {
           "name": "mint to self",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 31,
+          "txsPerBlock": 30,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 31
+          "opsPerBlock": 30
         },
         {
           "name": "mint batch of 4",
@@ -221,9 +221,9 @@
           "name": "mint multi-call n=1",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 31,
+          "txsPerBlock": 30,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 31
+          "opsPerBlock": 30
         },
         {
           "name": "mint multi-call n=2",

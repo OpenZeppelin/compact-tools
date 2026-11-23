@@ -537,6 +537,75 @@ fn a_proven_transaction_gets_the_balancing_term() {
     assert_eq!(nodes_used(&report), "99");
 }
 
+fn tx_bytes_used(report: &serde_json::Value) -> &str {
+    report["limits"][1]["used"]
+        .as_str()
+        .expect("txBytes is the second limit")
+}
+
+#[test]
+fn the_proof_term_is_added_to_an_unproven_transaction_only() {
+    // Each build of one mint: the term on the unproven, the balancing term on both
+    // unbalanced builds, neither on the submitted one.
+    let cases = [
+        (
+            "../live/base-mint-unproven.bin",
+            "added",
+            Some("566"),
+            "14832",
+        ),
+        ("../live/base-mint-proven.bin", "proven", None, "14832"),
+        ("../live/base-mint-balanced.bin", "proven", None, "14813"),
+    ];
+    for (file, status, bytes, size) in cases {
+        let report = cost_json(file);
+        let term = &report["proofTerm"];
+        assert_eq!(term["status"], status, "{file}");
+        assert!(term.get("bytes").is_some(), "{file}");
+        assert_eq!(term["bytes"].as_str(), bytes, "{file}");
+        assert_eq!(term["callProofs"], 1, "{file}");
+        assert_eq!(tx_bytes_used(&report), size, "{file}");
+    }
+}
+
+#[test]
+fn a_profile_without_the_proof_term_reports_it_unknown_and_reads_the_estimate() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let shipped = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("profiles/mainnet.toml"),
+    )
+    .expect("the shipped profile is readable");
+    let start = shipped
+        .find("[proof]")
+        .expect("mainnet has a proof section");
+    let end = shipped
+        .find("[min_client_ledger]")
+        .expect("and a later section");
+    let path = dir.path().join("mainnet.toml");
+    std::fs::write(&path, format!("{}{}", &shipped[..start], &shipped[end..]))
+        .expect("the profile is writable");
+
+    let (code, stdout, stderr) = run(
+        "cost-balanced",
+        &[
+            "cost",
+            "../live/base-mint-unproven.bin",
+            "--network",
+            "mainnet",
+            "--profile-file",
+            utf8(&path),
+            "--reporter",
+            "json",
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("cost prints JSON");
+    assert_eq!(report["proofTerm"]["status"], "unknown");
+    assert_eq!(report["proofTerm"]["bytes"], serde_json::Value::Null);
+    // The ledger's estimate of 10,983 bytes plus the balancing term's 3,283.
+    assert_eq!(tx_bytes_used(&report), "14266");
+}
+
 #[test]
 fn the_node_cap_splits_the_live_multi_call_transactions_as_the_node_did() {
     // On the node, the same calls landed at 1,010 and 995 nodes and were rejected at 1,034

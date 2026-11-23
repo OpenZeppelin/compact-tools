@@ -153,21 +153,34 @@ mod tests {
     fn balanced_base_mints_fill_a_block_at_30_as_node_2_1_101_did() {
         let caps = mainnet_caps();
         let capacity = capacity(&evaluate(&base_mint(), &caps), &caps, Conflict::None, 1);
-        // 1.5e12 / 48,640,157,001 = 30.8; 786,432 / 14,266 = 55.1; 1e6 / 14,266 = 70.1.
+        // 1.5e12 / 49,772,157,001 = 30.1; 786,432 / 14,832 = 53.0; 1e6 / 14,832 = 67.4.
         assert_eq!(count(&capacity, Limit::BlockWeight), Count::Txs(30));
-        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(55));
-        assert_eq!(count(&capacity, Limit::BlockUsage), Count::Txs(70));
+        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(53));
+        assert_eq!(count(&capacity, Limit::BlockUsage), Count::Txs(67));
         assert_eq!(capacity.txs, Some(30));
         assert_eq!(capacity.binding, Some(Binding::Limit(Limit::BlockWeight)));
         assert_eq!(capacity.ops, Some(30));
     }
 
     #[test]
+    fn without_the_proof_term_the_bounds_read_the_ledger_estimate() {
+        let caps = Caps {
+            proof: None,
+            ..mainnet_caps()
+        };
+        let capacity = capacity(&evaluate(&base_mint(), &caps), &caps, Conflict::None, 1);
+        // 1.5e12 / 48,640,157,001 = 30.8; 786,432 / 14,266 = 55.1; 1e6 / 14,266 = 70.1.
+        assert_eq!(count(&capacity, Limit::BlockWeight), Count::Txs(30));
+        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(55));
+        assert_eq!(count(&capacity, Limit::BlockUsage), Count::Txs(70));
+    }
+
+    #[test]
     fn the_contract_only_base_mint_counts_the_base_per_transaction() {
         let caps = contract_caps();
         let capacity = capacity(&evaluate(&base_mint(), &caps), &caps, Conflict::None, 1);
-        // 1.5e12 / (41,966,000,001 + 108,157,000) = 35.65.
-        assert_eq!(count(&capacity, Limit::BlockWeight), Count::Txs(35));
+        // 1.5e12 / (43,098,000,001 + 108,157,000) = 34.7.
+        assert_eq!(count(&capacity, Limit::BlockWeight), Count::Txs(34));
     }
 
     #[test]
@@ -196,7 +209,7 @@ mod tests {
         let capacity = capacity(&evaluate(&base_mint(), &caps), &caps, Conflict::None, 1);
         assert_eq!(count(&capacity, Limit::BlockWeight), Count::NotApplicable);
         assert_eq!(count(&capacity, Limit::BlockLength), Count::NotApplicable);
-        assert_eq!(capacity.txs, Some(70));
+        assert_eq!(capacity.txs, Some(67));
         assert_eq!(capacity.binding, Some(Binding::Limit(Limit::BlockUsage)));
     }
 

@@ -56,15 +56,19 @@ TOML, embedded from `profiles/`.
 | `parameters` | Tagged `LedgerParameters`, hex; whitespace ignored |
 | `[node.<cap>]` | `value` (optional) and `source` (required) |
 | `[balancing]` | `source`, and `nodes`, `bytes`, `cost` together or not at all |
+| `[proof]` | Optional; `source`, and `call_bytes`, `builtin_bytes` together or not at all: bytes proving adds per contract call proof and per built-in proof beyond the ledger's estimate |
 | `[min_client_ledger]` | Optional; `value` (semver, optional) and `source`: the oldest npm `@midnightntwrk/ledger-v9` known to build transactions the network accepts |
 
 Node caps: `max_transaction_nodes`, `weight_scale`, `fixed_extra_weight`,
 `base_extrinsic_weight`, `extrinsic_weight_ceiling`, `normal_block_weight`,
 `normal_block_length`.
 
-The `mainnet` and `preprod` caps and balancing term were observed on 2026-11-20
-on a local dev chain running node 2.1.101, spec_version 2001100, the runtime both
-networks reported that day. On 2026-11-23 each network's own runtime metadata
+A built-in proof is a Zswap input or output proof or a Dust spend proof; a Zswap
+transient holds two.
+
+The `mainnet` and `preprod` caps, balancing term and proof term were observed on
+2026-11-20 on a local dev chain running node 2.1.101, spec_version 2001100, the
+runtime both networks reported that day. On 2026-11-23 each network's own runtime metadata
 showed the same caps, and its storage left `fixed_extra_weight` unset, so the
 runtime default applies. `undeployed` is the dev chain, so it carries the same
 caps. A local stack on another node release needs its own profile file.
@@ -101,6 +105,7 @@ One object. Numbers that can pass `2^53` are decimal strings.
 | `form` | `unproven`, `proven` or `balanced` |
 | `serializedLen`, `estimatedSize`, `declaredNodes` | The transaction as read, as numbers |
 | `cost` | Five decimal strings, as in the manifest |
+| `proofTerm` | `status`, `callProofs`, `builtinProofs` and `bytes` |
 | `timeToDismiss` | `used` and `allowed`, decimal strings |
 | `weight` | What the transaction adds to the block total, base included; decimal string, or `null` while a part is unknown |
 | `limits[]` | `name`, `used`, `allowed`, `ratioPpm`, `status` |
@@ -109,7 +114,12 @@ One object. Numbers that can pass `2^53` are decimal strings.
 
 - `serializedLen`, `estimatedSize`, `declaredNodes` and `cost` are the transaction
   as read. `timeToDismiss`, `weight` and `limits` include the balancing term when
-  `scope` is `balanced`.
+  `scope` is `balanced`, and the proof term when `proofTerm.status` is `added`.
+- `proofTerm.status` is `added` for an unproven transaction under a profile that
+  knows the term, `proven` for a proven or balanced one, which holds its proofs,
+  and `unknown` otherwise. `callProofs` and `builtinProofs` count the
+  transaction's proofs. `bytes` is the decimal string added, or `null` unless
+  `added`.
 - `limits[].name`, in order: `nodes`, `txBytes`, `readTime`, `computeTime`,
   `blockUsage`, `bytesWritten`, `bytesChurned`, `timeToDismiss`,
   `extrinsicWeight`, `blockWeight`, `blockLength`.
@@ -131,8 +141,11 @@ network's `series` and, for `check`, `drift`.
 
 Per network: a header line (name, node release, ledger crate, capture date, scope,
 then `provisional` and `client below minimum` when they apply), then one row per
-scenario: `scenario`, `n`, `calls`, `ops`, `nodes`, `est size` (both as the limits
-read them), `binding`, `used`, `fits`, `txs/block`, `block bound`, `ops/block`.
+scenario: `scenario`, `n`, `calls`, `ops`, `nodes`, `proof` (bytes the proof term
+added, `-` when unknown), `est size` (`nodes` and `est size` as the limits read
+them), `binding`, `used`, `fits`, `txs/block`, `block bound`, `ops/block`.
+
+`cost` prints the transaction as read, a `proof term:` line, then one row per limit.
 
 ## Snapshot
 
@@ -175,6 +188,12 @@ that.
 - Series: a least-squares line per metric predicts the largest `n` per limit. A
   measured boundary (a fitting and a failing size) wins over the prediction.
 - Sizes are the ledger's estimate of the proven transaction, not the unproven bytes.
+  For an unproven transaction the ledger assumes 4,832 bytes per contract call proof
+  and per Zswap proof and 2,912 per Dust spend proof, and counts no proof encoding.
+  The proof term adds `call_bytes` per call and `builtin_bytes` per built-in proof,
+  counted in the transaction, to the estimated size and to `blockUsage`, and so to
+  everything that reads them: the time-to-dismiss allowance, weight, block length
+  and the block counts. A series adds it as a line over its members.
 
 ## Scope and `n/a`
 
@@ -184,14 +203,25 @@ that.
   covers the contract's transaction alone.
 - `as-submitted`: the transaction is already balanced; its numbers are read as
   they are.
+- The proof term applies to an unproven transaction in every scope. A proven or
+  balanced transaction holds its proofs and gets none. A profile without the term
+  leaves the ledger's estimate as it is and reports the term `unknown`.
 - `n/a`: the limit or bound reads a profile field that is unknown. It neither
   fails nor binds.
 
 ## Known limitations
 
-- The ledger's size estimate for an unproven transaction ran about 5% below the
-  proven size on the measured mint calls: 566 bytes per call for the base mint,
-  576 for the preset mint. This is not modelled, so a balanced weight predicted
-  from an unproven transaction runs about 2% low.
+- The proof term is measured on V3 contract call proofs of two circuits, which
+  both serialized to 5,395 bytes. A circuit whose proof has another size is
+  under- or overcounted by the difference per call. Zswap input and transient
+  proofs were not captured.
+- Proving can pad a call's transcript. One circuit's single call gained a 10-byte
+  noop, two DAG nodes and 16,001,011 ps of compute time when proved; the term does
+  not model this.
 - The balancing term is the conservative end of two measured mints; its node count
-  varied from +8 to +10 and its size by about 20 bytes between runs.
+  varied from +8 to +10 and its size by about 20 bytes between runs. It was measured
+  on single-intent transactions. Balancing grows every intent's binding commitment
+  from 33 to 96 or 97 bytes, so a 40-intent merge grew by 5,772 bytes, not 3,283.
+  The runner builds one intent per call, so a multi-call scenario's size and weight
+  run low by about 64 bytes per call after the first, and its block count near a
+  boundary can come out one too high.

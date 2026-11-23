@@ -5,8 +5,8 @@ use std::fmt;
 use midnight_base_crypto::cost_model::{CostDuration, SyntheticCost};
 use midnight_ledger_v9::error::FeeCalculationError;
 use midnight_ledger_v9::structure::{
-    LedgerParameters, PedersenDowngradeable, ProofKind, ProofMarker, ProofPreimageMarker,
-    Signature, Transaction,
+    ContractAction, LedgerParameters, PedersenDowngradeable, ProofKind, ProofMarker,
+    ProofPreimageMarker, Signature, Transaction,
 };
 use midnight_serialize::{Deserializable, Serializable, Tagged, tagged_deserialize};
 use midnight_storage::db::InMemoryDB;
@@ -15,7 +15,7 @@ use midnight_transient_crypto::commitment::{PedersenRandomness, PureGeneratorPed
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::cost::{Cost, Measurement};
+use crate::cost::{Cost, Measurement, Proofs};
 
 /// A transaction built from circuit calls, before proving.
 pub type UnprovenTransaction =
@@ -171,7 +171,7 @@ pub fn decode(payload: &[u8]) -> Result<UnprovenTransaction, TxError> {
 pub fn measure(payload: &[u8], params: &LedgerParameters) -> Result<(Form, Measurement), TxError> {
     let form = Form::of(payload)?;
     let declared_nodes = declared_node_count(payload)?;
-    let (cost, time_to_dismiss) = match form {
+    let (cost, time_to_dismiss, proofs) = match form {
         Form::Unproven => costs::<ProofPreimageMarker, PedersenRandomness>(payload, params)?,
         Form::Proven => costs::<ProofMarker, PedersenRandomness>(payload, params)?,
         Form::Balanced => costs::<ProofMarker, PureGeneratorPedersen>(payload, params)?,
@@ -181,6 +181,7 @@ pub fn measure(payload: &[u8], params: &LedgerParameters) -> Result<(Form, Measu
         serialized_len: payload.len() as u64,
         declared_nodes,
         time_to_dismiss: time_to_dismiss.into_picoseconds(),
+        proofs,
     };
     Ok((form, measurement))
 }
@@ -188,7 +189,7 @@ pub fn measure(payload: &[u8], params: &LedgerParameters) -> Result<(Form, Measu
 fn costs<P, B>(
     payload: &[u8],
     params: &LedgerParameters,
-) -> Result<(SyntheticCost, CostDuration), TxError>
+) -> Result<(SyntheticCost, CostDuration, Proofs), TxError>
 where
     P: ProofKind<InMemoryDB>,
     B: Storable<InMemoryDB> + PedersenDowngradeable<InMemoryDB> + Serializable,
@@ -198,7 +199,56 @@ where
         tagged_deserialize(payload).map_err(TxError::Deserialize)?;
     let cost = tx.cost(params, false).map_err(TxError::Cost)?;
     let time_to_dismiss = tx.time_to_dismiss(params).map_err(TxError::Cost)?;
-    Ok((cost, time_to_dismiss))
+    Ok((cost, time_to_dismiss, proofs(&tx)))
+}
+
+/// The proofs `estimated_tx_size` sizes: one per contract call, Zswap input and output
+/// (two per transient) and Dust spend.
+fn proofs<P, B>(tx: &Transaction<Signature, P, B, InMemoryDB>) -> Proofs
+where
+    P: ProofKind<InMemoryDB>,
+    B: Storable<InMemoryDB>,
+{
+    let Transaction::Standard(stx) = tx else {
+        return Proofs::default();
+    };
+    let count = |len: usize| u64::try_from(len).unwrap_or(u64::MAX);
+    let mut proofs = Proofs::default();
+    for entry in stx.intents.iter() {
+        let intent = &entry.1;
+        let calls = intent
+            .actions
+            .iter_deref()
+            .filter(|action| matches!(action, ContractAction::Call(_)))
+            .count();
+        proofs.calls = proofs.calls.saturating_add(count(calls));
+        if let Some(dust) = &intent.dust_actions {
+            proofs.builtin = proofs.builtin.saturating_add(count(dust.spends.len()));
+        }
+    }
+    let guaranteed = stx.guaranteed_coins.iter().map(|offer| {
+        (
+            offer.inputs.len(),
+            offer.outputs.len(),
+            offer.transient.len(),
+        )
+    });
+    let fallible = stx.fallible_coins.iter().map(|entry| {
+        let offer = &entry.1;
+        (
+            offer.inputs.len(),
+            offer.outputs.len(),
+            offer.transient.len(),
+        )
+    });
+    for (inputs, outputs, transients) in guaranteed.chain(fallible) {
+        proofs.builtin = proofs
+            .builtin
+            .saturating_add(count(inputs))
+            .saturating_add(count(outputs))
+            .saturating_add(count(transients).saturating_mul(2));
+    }
+    proofs
 }
 
 fn plain(cost: &SyntheticCost) -> Cost {
@@ -349,6 +399,22 @@ mod tests {
         ];
         for (name, nodes) in counts {
             assert_eq!(declared_node_count(&live(name)).ok(), Some(nodes), "{name}");
+        }
+    }
+
+    #[test]
+    fn proofs_are_counted_from_the_transaction_by_kind() {
+        let cases = [
+            (named("mint").0, 1, 1),
+            (named("mint batch of 4").0, 1, 4),
+            (live("base-merged-n40-unproven.bin"), 40, 40),
+            (live("base-mint-proven.bin"), 1, 1),
+            // The wallet's fee payment adds one Dust spend.
+            (live("base-mint-balanced.bin"), 1, 2),
+        ];
+        for (bytes, calls, builtin) in cases {
+            let (form, measurement) = measure(&bytes, &mainnet()).expect("it measures");
+            assert_eq!(measurement.proofs, Proofs { calls, builtin }, "{form}");
         }
     }
 

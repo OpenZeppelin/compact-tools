@@ -83,6 +83,15 @@ impl Cost {
     }
 }
 
+/// The proofs a transaction holds, counted as the ledger's size estimate counts them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Proofs {
+    /// Contract calls, one proof each.
+    pub calls: u64,
+    /// Zswap inputs, outputs and Dust spends; a Zswap transient counts as two.
+    pub builtin: u64,
+}
+
 /// What the ledger reports for one unproven transaction under one parameter set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Measurement {
@@ -91,6 +100,7 @@ pub struct Measurement {
     pub declared_nodes: u32,
     /// The dismissal cost's longest time, which `cost(params, true)` checks.
     pub time_to_dismiss: u64,
+    pub proofs: Proofs,
 }
 
 impl Measurement {

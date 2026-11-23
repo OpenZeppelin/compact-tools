@@ -9,7 +9,7 @@ use midnight_ledger_v9::structure::LedgerParameters;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::cost::Cost;
+use crate::cost::{Cost, Proofs};
 use crate::params::{self, ParamsError, ParamsIdentity};
 use crate::version::Version;
 
@@ -52,6 +52,10 @@ pub enum ProfileError {
         "profile {origin}: [balancing] gives some of nodes, bytes and cost; give all three or none"
     )]
     PartialBalancing { origin: String },
+    #[error(
+        "profile {origin}: [proof] gives one of call_bytes and builtin_bytes; give both or neither"
+    )]
+    PartialProof { origin: String },
     #[error("profile {origin}: min_client_ledger value {value:?} is not a semantic version")]
     ClientVersion { origin: String, value: String },
     #[error("profile {origin}: a profile name is non-empty")]
@@ -63,6 +67,9 @@ pub enum ProfileError {
     #[error("this command takes one network, but {count} are selected")]
     NotSingle { count: usize },
 }
+
+/// The source of an optional section the profile leaves out.
+const UNSTATED: &str = "unknown: the profile does not say";
 
 fn shipped_names() -> String {
     EMBEDDED
@@ -118,6 +125,35 @@ struct BalancingFile {
     cost: Option<Cost>,
 }
 
+/// What proving adds to an unproven transaction's size, beyond the proof sizes the
+/// ledger's estimate assumes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProofTerm {
+    /// Per contract call proof.
+    pub call_bytes: u64,
+    /// Per built-in proof: a Zswap input or output, or a Dust spend.
+    pub builtin_bytes: u64,
+}
+
+impl ProofTerm {
+    /// The bytes `proofs` add once proven.
+    #[must_use]
+    pub fn bytes(&self, proofs: Proofs) -> u64 {
+        proofs
+            .calls
+            .saturating_mul(self.call_bytes)
+            .saturating_add(proofs.builtin.saturating_mul(self.builtin_bytes))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProofFile {
+    source: String,
+    call_bytes: Option<u64>,
+    builtin_bytes: Option<u64>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProfileFile {
@@ -131,6 +167,7 @@ struct ProfileFile {
     parameters: String,
     node: NodeCaps,
     balancing: BalancingFile,
+    proof: Option<ProofFile>,
     min_client_ledger: Option<ClientFile>,
 }
 
@@ -168,6 +205,9 @@ pub struct Profile {
     pub balancing_source: String,
     /// `None` while unknown; results then cover the contract's transaction only.
     pub balancing: Option<BalancingTerm>,
+    pub proof_source: String,
+    /// `None` while unknown; an unproven transaction's sizes are then the ledger's estimate.
+    pub proof: Option<ProofTerm>,
     pub min_client_ledger: ClientMinimum,
 }
 
@@ -177,7 +217,7 @@ impl Profile {
     /// # Errors
     ///
     /// The TOML is malformed, the parameters are not valid tagged `LedgerParameters`,
-    /// or the balancing term is partial.
+    /// or the balancing or proof term is partial.
     pub fn parse(text: &str, origin: &str) -> Result<Self, ProfileError> {
         let file: ProfileFile = toml::from_str(text).map_err(|source| ProfileError::Parse {
             origin: origin.to_owned(),
@@ -219,10 +259,32 @@ impl Profile {
                 });
             }
         };
+        let (proof_source, proof) = match file.proof {
+            None => (UNSTATED.to_owned(), None),
+            Some(ProofFile {
+                source,
+                call_bytes,
+                builtin_bytes,
+            }) => match (call_bytes, builtin_bytes) {
+                (Some(call_bytes), Some(builtin_bytes)) => (
+                    source,
+                    Some(ProofTerm {
+                        call_bytes,
+                        builtin_bytes,
+                    }),
+                ),
+                (None, None) => (source, None),
+                _ => {
+                    return Err(ProfileError::PartialProof {
+                        origin: origin.to_owned(),
+                    });
+                }
+            },
+        };
         let min_client_ledger = match file.min_client_ledger {
             None => ClientMinimum {
                 version: None,
-                source: "unknown: the profile does not say".to_owned(),
+                source: UNSTATED.to_owned(),
             },
             Some(ClientFile { value, source }) => ClientMinimum {
                 version: value
@@ -249,6 +311,8 @@ impl Profile {
             node: file.node,
             balancing_source: file.balancing.source,
             balancing,
+            proof_source,
+            proof,
             min_client_ledger,
         })
     }
@@ -368,7 +432,50 @@ mod tests {
                 "{name}"
             );
             assert!(profile.balancing.is_some(), "{name}");
+            assert_eq!(
+                profile.proof,
+                Some(ProofTerm {
+                    call_bytes: 564,
+                    builtin_bytes: 2,
+                }),
+                "{name}"
+            );
         }
+    }
+
+    #[test]
+    fn a_partial_proof_term_is_refused() {
+        let text = EMBEDDED[0].1.replace("builtin_bytes = 2\n", "");
+        assert!(matches!(
+            Profile::parse(&text, "test"),
+            Err(ProfileError::PartialProof { .. })
+        ));
+    }
+
+    #[test]
+    fn a_proof_section_with_only_a_source_leaves_the_term_unknown() {
+        let text = EMBEDDED[0]
+            .1
+            .replace("call_bytes = 564\n", "")
+            .replace("builtin_bytes = 2\n", "");
+        let profile = Profile::parse(&text, "test").expect("a source alone parses");
+        assert_eq!(profile.proof, None);
+        assert!(profile.proof_source.starts_with("Measured"));
+    }
+
+    #[test]
+    fn a_profile_without_a_proof_section_leaves_the_term_unknown() {
+        let shipped = EMBEDDED[0].1;
+        let start = shipped
+            .find("[proof]")
+            .expect("mainnet has a proof section");
+        let end = shipped
+            .find("[min_client_ledger]")
+            .expect("and a later section");
+        let text = format!("{}{}", &shipped[..start], &shipped[end..]);
+        let profile = Profile::parse(&text, "test").expect("the section is optional");
+        assert_eq!(profile.proof, None);
+        assert_eq!(profile.proof_source, UNSTATED);
     }
 
     #[test]

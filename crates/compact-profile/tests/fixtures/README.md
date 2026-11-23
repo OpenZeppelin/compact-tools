@@ -44,10 +44,13 @@ holding one dust spend.
 
 | File | Calls | Form | Client ledger-v9 | Outcome |
 |---|---|---|---|---|
+| `base-mint-unproven.bin` | 1 | unproven, 89 nodes | not recorded | proven into the next file |
 | `base-mint-proven.bin` | 1 | proven, 89 nodes | not recorded | balanced into the next file |
 | `base-mint-balanced.bin` | 1 | balanced, 98 nodes | not recorded | landed; the indexer returned the same bytes |
 | `preset-mint-balanced.bin` | 1 | balanced, 140 nodes | 1.0.2 | landed; the indexer returned the same bytes |
 | `base-merged-n40-unproven.bin` | 40 | unproven, 1,002 nodes | 1.0.2 | proven and balanced to 1,010 nodes, landed |
 | `base-merged-n41-unproven.bin` | 41 | unproven, 1,025 nodes | 1.0.2 | proven and balanced to 1,034 nodes, rejected on submission (custom error 111) |
+| `preset-merged-n2-unproven.bin` | 2 | unproven, 167 nodes | 1.0.2 | proven into the next file |
+| `preset-merged-n2-proven.bin` | 2 | proven, 167 nodes | 1.0.2 | balanced to 176 nodes, landed |
 | `preset-merged-n29-unproven.bin` | 29 | unproven, 986 nodes | 1.0.2 | not recorded for this build; an earlier build of the same calls, also 986 nodes, landed at 995 balanced |
 | `preset-merged-n30-unproven.bin` | 30 | unproven, 1,017 nodes | 1.0.2 | proven and balanced to 1,025 nodes, rejected on submission (custom error 111) |

@@ -53,6 +53,16 @@ impl Line {
             ..self
         }
     }
+
+    /// The sum of two lines over the same sizes; the residual bound adds.
+    #[must_use]
+    pub fn plus(self, other: Line) -> Line {
+        Line {
+            fixed: self.fixed + other.fixed,
+            per_item: self.per_item + other.per_item,
+            max_residual: self.max_residual + other.max_residual,
+        }
+    }
 }
 
 /// The largest size a limit allows.

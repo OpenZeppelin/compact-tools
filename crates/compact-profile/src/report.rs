@@ -10,7 +10,7 @@ use crate::block::{Binding, Capacity, Conflict, Count};
 use crate::check::{Analysis, ClientCheck, NetworkResult, ParityMismatch};
 use crate::cost::{Cost, Measurement};
 use crate::fit::Largest;
-use crate::limits::{Check, Evaluation, Limit, Ratio, Scope, Status};
+use crate::limits::{Check, Evaluation, Limit, ProofBytes, Ratio, Scope, Status};
 use crate::profile::Profile;
 use crate::series::{Basis, SeriesCapacity};
 use crate::snapshot::{Change, Drift};
@@ -188,7 +188,25 @@ fn largest_cell(largest: Option<Largest>) -> String {
     }
 }
 
-/// The `cost` table: the transaction's sizes, then every limit.
+fn counted(count: u64, noun: &str) -> String {
+    let suffix = if count == 1 { "" } else { "s" };
+    format!("{} {noun}{suffix}", group(count))
+}
+
+fn proof_term_line(measurement: &Measurement, evaluation: &Evaluation) -> String {
+    match evaluation.proof {
+        ProofBytes::Added(bytes) => format!(
+            "+{} bytes for {} and {}",
+            group(bytes),
+            counted(measurement.proofs.calls, "call proof"),
+            counted(measurement.proofs.builtin, "built-in proof"),
+        ),
+        ProofBytes::Proven => "none, the transaction holds its proofs".to_owned(),
+        ProofBytes::Unknown => "unknown to the profile, sizes are the ledger's estimate".to_owned(),
+    }
+}
+
+/// The `cost` table: the transaction's sizes, the proof term, then every limit.
 ///
 /// # Errors
 ///
@@ -207,6 +225,11 @@ pub fn cost_table(
         group(measurement.serialized_len),
         group(measurement.estimated_size()),
         group(u64::from(measurement.declared_nodes)),
+    )?;
+    writeln!(
+        out,
+        "proof term: {}",
+        proof_term_line(measurement, evaluation)
     )?;
     let rows: Vec<Vec<String>> = evaluation
         .checks
@@ -370,7 +393,7 @@ fn network_section(
         line.push_str(CLIENT_BELOW_MINIMUM);
     }
     writeln!(out, "{line}")?;
-    // Nodes and size as the limits read them, the balancing term included.
+    // Nodes and size as the limits read them, both terms included.
     let rows: Vec<Vec<String>> = analysis
         .manifest
         .scenarios
@@ -384,6 +407,7 @@ fn network_section(
                 group(u64::from(scenario.calls)),
                 group(u64::from(scenario.ops())),
                 group(evaluation.effective.nodes),
+                or_dash(evaluation.proof.added()),
                 group(evaluation.effective.estimated_size),
                 binding,
                 ratio,
@@ -405,6 +429,7 @@ fn network_section(
             ("calls", Align::Right),
             ("ops", Align::Right),
             ("nodes", Align::Right),
+            ("proof", Align::Right),
             ("est size", Align::Right),
             ("binding", Align::Left),
             ("used", Align::Right),
@@ -492,6 +517,17 @@ struct TimeToDismissJson {
     allowed: Decimal,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProofTermJson {
+    /// `added`, `proven` or `unknown`.
+    status: &'static str,
+    call_proofs: u64,
+    builtin_proofs: u64,
+    /// The bytes added; `null` unless `status` is `added`.
+    bytes: Option<Decimal>,
+}
+
 /// One transaction under one profile; the shape `cost` prints and `check` nests.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -500,6 +536,7 @@ struct EvaluationJson {
     estimated_size: u64,
     declared_nodes: u32,
     cost: Cost,
+    proof_term: ProofTermJson,
     time_to_dismiss: TimeToDismissJson,
     /// What the transaction adds to the block total, the base extrinsic weight included.
     weight: Option<Decimal>,
@@ -515,6 +552,12 @@ impl EvaluationJson {
             estimated_size: measurement.estimated_size(),
             declared_nodes: measurement.declared_nodes,
             cost: measurement.cost,
+            proof_term: ProofTermJson {
+                status: evaluation.proof.name(),
+                call_proofs: measurement.proofs.calls,
+                builtin_proofs: measurement.proofs.builtin,
+                bytes: evaluation.proof.added().map(Decimal),
+            },
             time_to_dismiss: TimeToDismissJson {
                 used: Decimal(evaluation.effective.time_to_dismiss),
                 allowed: Decimal(evaluation.time_to_dismiss_allowed),

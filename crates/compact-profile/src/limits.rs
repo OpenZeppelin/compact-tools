@@ -7,7 +7,7 @@ use midnight_base_crypto::cost_model::FixedPoint;
 use serde::{Deserialize, Serialize};
 
 use crate::cost::{Cost, Dimension, Measurement};
-use crate::profile::{BalancingTerm, Profile};
+use crate::profile::{BalancingTerm, Profile, ProofTerm};
 use crate::tx::Form;
 
 /// The numbers the limit checks read from a profile. `None` is an unknown node cap.
@@ -25,6 +25,7 @@ pub struct Caps {
     pub normal_block_weight: Option<u64>,
     pub normal_block_length: Option<u64>,
     pub balancing: Option<BalancingTerm>,
+    pub proof: Option<ProofTerm>,
 }
 
 impl Caps {
@@ -51,6 +52,7 @@ impl Caps {
             normal_block_weight: profile.node.normal_block_weight.value,
             normal_block_length: profile.node.normal_block_length.value,
             balancing: profile.balancing,
+            proof: profile.proof,
         }
     }
 
@@ -253,8 +255,8 @@ impl Check {
     }
 }
 
-/// The transaction as the network sees it: the contract's part, plus the balancing term
-/// when the profile knows it.
+/// The transaction as the network sees it: the contract's part, plus each term the
+/// profile knows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Effective {
     pub cost: Cost,
@@ -264,13 +266,22 @@ pub struct Effective {
 }
 
 impl Effective {
-    /// `bytes` grows the estimated size the size limits read; `cost` adds dimension-wise.
+    /// The proof term grows the estimated size and `blockUsage`. The balancing term's
+    /// `bytes` grows the estimated size and its `cost` adds dimension-wise.
     #[must_use]
-    pub fn of(measurement: &Measurement, balancing: Option<&BalancingTerm>) -> Effective {
+    pub fn of(
+        measurement: &Measurement,
+        balancing: Option<&BalancingTerm>,
+        proof: Option<&ProofTerm>,
+    ) -> Effective {
+        let proof_bytes = proof.map_or(0, |term| term.bytes(measurement.proofs));
         let contract = Effective {
-            cost: measurement.cost,
+            cost: Cost {
+                block_usage: measurement.cost.block_usage.saturating_add(proof_bytes),
+                ..measurement.cost
+            },
             nodes: u64::from(measurement.declared_nodes),
-            estimated_size: measurement.estimated_size(),
+            estimated_size: measurement.estimated_size().saturating_add(proof_bytes),
             time_to_dismiss: measurement.time_to_dismiss,
         };
         match balancing {
@@ -283,6 +294,37 @@ impl Effective {
                     .time_to_dismiss
                     .saturating_add(term.cost.max_time()),
             },
+        }
+    }
+}
+
+/// What the proof term did to one evaluation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProofBytes {
+    /// Added this many bytes to the ledger's estimate of an unproven transaction.
+    Added(u64),
+    /// Nothing: the transaction holds its proofs, so its sizes are real.
+    Proven,
+    /// Nothing: the profile does not know the term, so the sizes are the ledger's estimate.
+    Unknown,
+}
+
+impl ProofBytes {
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            ProofBytes::Added(_) => "added",
+            ProofBytes::Proven => "proven",
+            ProofBytes::Unknown => "unknown",
+        }
+    }
+
+    /// The bytes added, when any were.
+    #[must_use]
+    pub fn added(self) -> Option<u64> {
+        match self {
+            ProofBytes::Added(bytes) => Some(bytes),
+            ProofBytes::Proven | ProofBytes::Unknown => None,
         }
     }
 }
@@ -338,6 +380,7 @@ impl Scope {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Evaluation {
     pub scope: Scope,
+    pub proof: ProofBytes,
     pub effective: Effective,
     pub time_to_dismiss_allowed: u64,
     /// Scaled cost plus fixed extra weight, which the extrinsic ceiling reads.
@@ -379,27 +422,42 @@ impl Evaluation {
     }
 }
 
-/// Evaluates every per-transaction limit of a transaction of `form`. A balanced
-/// transaction already carries the fee payment, so the balancing term is not added again.
+/// Evaluates every per-transaction limit of a transaction of `form`. A proven transaction
+/// holds its proofs, so the proof term is not added; a balanced one also holds the fee
+/// payment, so neither is the balancing term.
 #[must_use]
 pub fn evaluate_form(measurement: &Measurement, caps: &Caps, form: Form) -> Evaluation {
-    if form != Form::Balanced {
-        return evaluate(measurement, caps);
-    }
-    let submitted = Caps {
-        balancing: None,
-        ..*caps
-    };
-    Evaluation {
-        scope: Scope::AsSubmitted,
-        ..evaluate(measurement, &submitted)
+    match form {
+        Form::Unproven => evaluate(measurement, caps),
+        Form::Proven => Evaluation {
+            proof: ProofBytes::Proven,
+            ..evaluate(
+                measurement,
+                &Caps {
+                    proof: None,
+                    ..*caps
+                },
+            )
+        },
+        Form::Balanced => Evaluation {
+            scope: Scope::AsSubmitted,
+            proof: ProofBytes::Proven,
+            ..evaluate(
+                measurement,
+                &Caps {
+                    balancing: None,
+                    proof: None,
+                    ..*caps
+                },
+            )
+        },
     }
 }
 
-/// Evaluates every per-transaction limit of an unbalanced transaction.
+/// Evaluates every per-transaction limit of an unproven, unbalanced transaction.
 #[must_use]
 pub fn evaluate(measurement: &Measurement, caps: &Caps) -> Evaluation {
-    let effective = Effective::of(measurement, caps.balancing.as_ref());
+    let effective = Effective::of(measurement, caps.balancing.as_ref(), caps.proof.as_ref());
     let time_to_dismiss_allowed = caps.time_to_dismiss_allowed(effective.estimated_size);
     let dispatch_weight = caps.dispatch_weight(&effective.cost);
     let weight = caps.block_weight(&effective.cost);
@@ -440,6 +498,9 @@ pub fn evaluate(measurement: &Measurement, caps: &Caps) -> Evaluation {
         .collect();
     Evaluation {
         scope: Scope::of(caps),
+        proof: caps.proof.map_or(ProofBytes::Unknown, |term| {
+            ProofBytes::Added(term.bytes(measurement.proofs))
+        }),
         effective,
         time_to_dismiss_allowed,
         dispatch_weight,
@@ -451,6 +512,7 @@ pub fn evaluate(measurement: &Measurement, caps: &Caps) -> Evaluation {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::cost::Proofs;
 
     /// The wallet's fee payment, as measured on node 2.1.101 (conservative end).
     pub(crate) fn balancing() -> BalancingTerm {
@@ -464,6 +526,14 @@ pub(crate) mod tests {
                 bytes_written: 224,
                 bytes_churned: 9_288,
             },
+        }
+    }
+
+    /// What proving adds, as measured on node 2.1.101 (conservative end).
+    pub(crate) fn proof_term() -> ProofTerm {
+        ProofTerm {
+            call_bytes: 564,
+            builtin_bytes: 2,
         }
     }
 
@@ -488,6 +558,7 @@ pub(crate) mod tests {
             normal_block_weight: Some(1_500_000_000_000),
             normal_block_length: Some(786_432),
             balancing: Some(balancing()),
+            proof: Some(proof_term()),
         }
     }
 
@@ -495,6 +566,15 @@ pub(crate) mod tests {
     pub(crate) fn contract_caps() -> Caps {
         Caps {
             balancing: None,
+            ..mainnet_caps()
+        }
+    }
+
+    /// The mainnet caps without either term: the ledger's estimate as it stands.
+    pub(crate) fn estimate_caps() -> Caps {
+        Caps {
+            balancing: None,
+            proof: None,
             ..mainnet_caps()
         }
     }
@@ -512,6 +592,10 @@ pub(crate) mod tests {
             serialized_len: 2_380,
             declared_nodes: 89,
             time_to_dismiss: 8_424_454_300,
+            proofs: Proofs {
+                calls: 1,
+                builtin: 1,
+            },
         }
     }
 
@@ -528,6 +612,10 @@ pub(crate) mod tests {
             serialized_len: 14_881,
             declared_nodes: 98,
             time_to_dismiss: 11_858_176_616,
+            proofs: Proofs {
+                calls: 1,
+                builtin: 2,
+            },
         }
     }
 
@@ -541,6 +629,18 @@ pub(crate) mod tests {
     fn the_contract_only_base_mint_binds_on_time_to_dismiss() {
         let evaluation = evaluate(&base_mint(), &contract_caps());
         assert!(evaluation.fits());
+        assert_eq!(evaluation.proof, ProofBytes::Added(566));
+        let binding = evaluation.binding().expect("some limit is evaluable");
+        assert_eq!(binding.limit, Limit::TimeToDismiss);
+        assert_eq!(binding.allowed, Some(23_098_000_000));
+        assert_eq!(binding.ratio().map(Ratio::ppm), Some(364_727));
+    }
+
+    #[test]
+    fn without_the_proof_term_the_limits_read_the_ledger_estimate() {
+        let evaluation = evaluate(&base_mint(), &estimate_caps());
+        assert_eq!(evaluation.proof, ProofBytes::Unknown);
+        assert_eq!(evaluation.effective.estimated_size, 10_983);
         let binding = evaluation.binding().expect("some limit is evaluable");
         assert_eq!(binding.limit, Limit::TimeToDismiss);
         assert_eq!(binding.allowed, Some(21_966_000_000));
@@ -577,7 +677,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_ceiling_reads_the_dispatch_weight_and_the_block_adds_the_base() {
-        let evaluation = evaluate(&balanced_base_mint(), &contract_caps());
+        let evaluation = evaluate_form(&balanced_base_mint(), &mainnet_caps(), Form::Balanced);
         assert_eq!(evaluation.dispatch_weight, Some(49_626_000_001));
         assert_eq!(evaluation.weight, Some(49_734_157_001));
         let used = |limit| evaluation.check(limit).and_then(|check| check.used);
@@ -586,11 +686,11 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_balancing_term_reaches_the_submitted_weight_within_the_size_estimate() {
-        // Unproven plus the term sizes the mint at 14,266 bytes; the proven one was 14,813.
+    fn the_proof_and_balancing_terms_cover_the_submitted_mint() {
+        // The submitted mint measured 14,813 bytes and weighed 49,734,157,001.
         let evaluation = evaluate(&base_mint(), &mainnet_caps());
-        assert_eq!(evaluation.effective.estimated_size, 14_266);
-        assert_eq!(evaluation.weight, Some(48_640_157_001));
+        assert_eq!(evaluation.effective.estimated_size, 14_832);
+        assert_eq!(evaluation.weight, Some(49_772_157_001));
         assert_eq!(
             evaluation.effective.time_to_dismiss,
             balanced_base_mint().time_to_dismiss
@@ -601,11 +701,85 @@ pub(crate) mod tests {
     fn a_balanced_transaction_is_evaluated_as_submitted() {
         let evaluation = evaluate_form(&balanced_base_mint(), &mainnet_caps(), Form::Balanced);
         assert_eq!(evaluation.scope, Scope::AsSubmitted);
+        assert_eq!(evaluation.proof, ProofBytes::Proven);
         assert_eq!(evaluation.effective.nodes, 98);
+        assert_eq!(evaluation.effective.estimated_size, 14_813);
         assert_eq!(evaluation.weight, Some(49_734_157_001));
+    }
+
+    #[test]
+    fn a_proven_transaction_gets_the_balancing_term_but_not_the_proof_term() {
         let proven = evaluate_form(&base_mint(), &mainnet_caps(), Form::Proven);
         assert_eq!(proven.scope, Scope::Balanced);
+        assert_eq!(proven.proof, ProofBytes::Proven);
         assert_eq!(proven.effective.nodes, 99);
+        assert_eq!(proven.effective.estimated_size, 10_983 + 3_283);
+    }
+
+    #[test]
+    fn the_proof_term_adds_to_the_size_and_block_usage_only() {
+        let effective = Effective::of(&base_mint(), None, Some(&proof_term()));
+        assert_eq!(effective.estimated_size, 11_549);
+        assert_eq!(
+            effective.cost,
+            Cost {
+                block_usage: 11_549,
+                ..base_mint().cost
+            }
+        );
+        assert_eq!(effective.nodes, 89);
+        assert_eq!(effective.time_to_dismiss, base_mint().time_to_dismiss);
+    }
+
+    #[test]
+    fn the_proof_term_counts_each_proof_by_kind() {
+        let term = proof_term();
+        let bytes = |calls, builtin| term.bytes(Proofs { calls, builtin });
+        assert_eq!(bytes(1, 0), 564);
+        assert_eq!(bytes(1, 4), 572);
+        assert_eq!(bytes(40, 40), 22_640);
+    }
+
+    fn live(name: &str) -> Measurement {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/live")
+            .join(name);
+        let bytes = std::fs::read(path).expect("the fixture exists");
+        let params = Profile::embedded("mainnet")
+            .expect("mainnet parses")
+            .parameters;
+        crate::tx::measure(&bytes, &params).expect("it measures").1
+    }
+
+    #[test]
+    fn the_shipped_proof_term_reaches_each_captured_proven_size_within_3_bytes() {
+        let term = Profile::embedded("mainnet")
+            .expect("mainnet parses")
+            .proof
+            .expect("mainnet knows the proof term");
+        // The last three proven builds measured these sizes; their files are not kept.
+        let cases = [
+            (
+                "base-mint-unproven.bin",
+                live("base-mint-proven.bin").estimated_size(),
+            ),
+            (
+                "preset-merged-n2-unproven.bin",
+                live("preset-merged-n2-proven.bin").estimated_size(),
+            ),
+            ("base-merged-n40-unproven.bin", 439_050),
+            ("base-merged-n41-unproven.bin", 449_999),
+            ("preset-merged-n30-unproven.bin", 332_782),
+        ];
+        for (name, proven) in cases {
+            let unproven = live(name);
+            assert!(unproven.estimated_size() < proven, "{name}");
+            let estimated = Effective::of(&unproven, None, Some(&term)).estimated_size;
+            assert!(
+                (proven..=proven + 3).contains(&estimated),
+                "{name}: {estimated} against {proven}"
+            );
+        }
     }
 
     #[test]
@@ -667,7 +841,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_balancing_term_adds_to_every_side_it_touches() {
-        let effective = Effective::of(&base_mint(), Some(&balancing()));
+        let effective = Effective::of(&base_mint(), Some(&balancing()), None);
         assert_eq!(effective.nodes, 99);
         assert_eq!(effective.estimated_size, 14_266);
         assert_eq!(effective.cost.block_usage, 14_266);
