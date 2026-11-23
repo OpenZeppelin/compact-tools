@@ -83,7 +83,8 @@ breaking change. After that, only `prerelease` moves the counter. Running
 
 ## First-release order
 
-`compact-cli` depends on `compact-builder` and `compact-deployer`. The other
+`compact-cli` depends on `compact-builder` and `compact-deployer`.
+`compact-linter` and `compact-profiler` depend on `compact-launcher`. The other
 published packages have no internal dependencies:
 
 ```text
@@ -92,8 +93,11 @@ compact-cli (bin wrapper)
   └─ depends on compact-deployer
 compact-builder (library)
 compact-deployer (library)
+compact-launcher (library that downloads, verifies and caches the Rust binaries)
 compact-linter (bin wrapper around the compact-lint crate)
+  └─ depends on compact-launcher
 compact-profiler (bin wrapper around the compact-profile crate, and a library)
+  └─ depends on compact-launcher
 compact-simulator (library)
 ```
 
@@ -104,12 +108,13 @@ each dependent finds its deps already on npm:
 1. `compact-builder` (no internal deps)
 2. `compact-simulator` (no internal deps)
 3. `compact-deployer` (no internal deps)
-4. `compact-linter` (no internal deps)
-5. `compact-profiler` (no internal deps)
-6. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
+4. `compact-launcher` (no internal deps)
+5. `compact-linter` (depends on `compact-launcher`)
+6. `compact-profiler` (depends on `compact-launcher`)
+7. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
    `main` first so both bump commits are present locally before triggering)
 
-After the first release, the six packages version independently — bump any
+After the first release, the seven packages version independently — bump any
 one of them in isolation without re-publishing the others.
 
 A package's first publish authenticates with the `NPM_TOKEN` secret from the
@@ -121,7 +126,9 @@ version on its own.
 ## Rust-binary packages
 
 `compact-linter` and `compact-profiler` are bin wrappers around a Rust crate, so
-each release carries native binaries as well as an npm package.
+each release carries native binaries as well as an npm package. Both resolve the
+binary through `compact-launcher`, which has no crate and releases like the other
+TypeScript packages.
 
 | Package | Directory | Crate | Binary and asset prefix |
 | --- | --- | --- | --- |

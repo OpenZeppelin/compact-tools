@@ -1043,10 +1043,23 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@openzeppelin/compact-launcher@workspace:^, @openzeppelin/compact-launcher@workspace:packages/launcher":
+  version: 0.0.0-use.local
+  resolution: "@openzeppelin/compact-launcher@workspace:packages/launcher"
+  dependencies:
+    "@tsconfig/node24": "npm:^24.0.3"
+    "@types/node": "npm:26.1.2"
+    typescript: "npm:^6.0.3"
+    vite: "npm:^8.3.8"
+    vitest: "npm:^5.1.1"
+  languageName: unknown
+  linkType: soft
+
 "@openzeppelin/compact-linter@workspace:packages/linter":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-linter@workspace:packages/linter"
   dependencies:
+    "@openzeppelin/compact-launcher": "workspace:^"
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:26.1.2"
     typescript: "npm:^6.0.3"
@@ -1063,6 +1076,7 @@ __metadata:
   dependencies:
     "@midnight-ntwrk/compact-runtime": "npm:0.21.0"
     "@midnightntwrk/ledger-v9": "npm:1.0.2"
+    "@openzeppelin/compact-launcher": "workspace:^"
     "@tsconfig/node24": "npm:^24.0.3"
     "@types/node": "npm:26.1.2"
     typescript: "npm:^6.0.3"

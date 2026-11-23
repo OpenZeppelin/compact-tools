@@ -1,8 +1,9 @@
 # @openzeppelin/compact-linter
 
 Bin wrapper around the [`compact-lint`](../../crates/compact-lint) Rust crate, the
-doc-comment linter for Compact sources. The package itself is a thin launcher: it
-resolves the native binary for the host and runs it with your arguments.
+doc-comment linter for Compact sources. The package itself is a thin bin: it resolves
+the native binary for the host with [`@openzeppelin/compact-launcher`](../launcher) and
+runs it with your arguments.
 
 ## Install
 

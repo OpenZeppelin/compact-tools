@@ -3,7 +3,19 @@ import { readFileSync } from 'node:fs';
 import { constants, homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBinary, userCacheDir } from './binary.ts';
+import {
+  isMusl,
+  type ReleasedBinary,
+  resolveBinary,
+  userCacheDir,
+} from '@openzeppelin/compact-launcher';
+
+export const COMPACT_PROFILE: ReleasedBinary = {
+  name: 'compact-profile',
+  packageName: 'compact-profiler',
+  overrideEnv: 'COMPACT_PROFILE_BINARY',
+  downloadBaseEnv: 'COMPACT_PROFILE_DOWNLOAD_BASE',
+};
 
 // One level up from src/ and from dist/ alike, so both entry points find the manifest.
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -11,17 +23,6 @@ const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 function packageVersion(): string {
   const manifest = readFileSync(join(packageDir, 'package.json'), 'utf8');
   return (JSON.parse(manifest) as { version: string }).version;
-}
-
-/** Node reports a glibc version only when it runs on glibc. */
-function isMusl(): boolean {
-  if (process.platform !== 'linux') {
-    return false;
-  }
-  const report = process.report.getReport() as {
-    header?: { glibcVersionRuntime?: string };
-  };
-  return report.header?.glibcVersionRuntime === undefined;
 }
 
 export interface BinaryOptions {
@@ -41,8 +42,14 @@ export function resolveProfileBinary(
     return Promise.resolve(options.binary);
   }
   return resolveBinary({
+    binary: COMPACT_PROFILE,
     packageDir,
-    cacheDir: userCacheDir(process.platform, process.env, homedir()),
+    cacheDir: userCacheDir(
+      COMPACT_PROFILE.packageName,
+      process.platform,
+      process.env,
+      homedir(),
+    ),
     version: packageVersion(),
     platform: process.platform,
     arch: process.arch,

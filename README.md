@@ -20,6 +20,7 @@ Tools for compiling, building, testing, and deploying Compact smart contracts. T
 - [`packages/builder`](./packages/builder) — programmatic library that drives the Compact compiler + builder
 - [`packages/cli`](./packages/cli) — thin bin wrapper around the builder and deployer libraries (`compact-compiler`, `compact-builder`, `compact-deploy`)
 - [`packages/deployer`](./packages/deployer) — deployer library that submits a compiled contract to a Midnight network. Pins one Midnight stack: see [Supported stack](./packages/deployer/README.md#supported-stack)
+- [`packages/launcher`](./packages/launcher) — shared launcher the linter and the profiler use to download, verify and cache their prebuilt Rust binaries
 - [`packages/linter`](./packages/linter) — bin wrapper around the [`compact-lint`](./crates/compact-lint) crate, the doc-comment linter for Compact sources
 - [`packages/profiler`](./packages/profiler) — runner library and bin wrapper around the [`compact-profile`](./crates/compact-profile) crate, the capacity profiler for contract transactions
 - [`packages/simulator`](./packages/simulator) — TypeScript simulator to run and test Compact contracts locally
@@ -67,7 +68,7 @@ import { createSimulator } from '@openzeppelin/compact-simulator';
 
 ## Requirements
 
-- Node.js >= 22 for `packages/builder` and `packages/simulator`, >= 24 for `packages/cli`, `packages/deployer`, `packages/linter` and `packages/profiler`
+- Node.js >= 22 for `packages/builder` and `packages/simulator`, >= 24 for `packages/cli`, `packages/deployer`, `packages/launcher`, `packages/linter` and `packages/profiler`
 - Yarn 4 (Berry)
 - Turbo
 - Optional: Midnight Compact toolchain installed and available in `PATH`

@@ -1,0 +1,51 @@
+{
+  "name": "@openzeppelin/compact-launcher",
+  "description": "Downloads, verifies and caches the prebuilt Rust binaries of the Compact tools",
+  "version": "0.1.0",
+  "keywords": [
+    "compact",
+    "midnight",
+    "launcher",
+    "binary",
+    "checksum"
+  ],
+  "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenZeppelin/compact-tools.git",
+    "directory": "packages/launcher"
+  },
+  "type": "module",
+  "main": "./dist/launcher.js",
+  "types": "./dist/launcher.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/launcher.d.ts",
+      "import": "./dist/launcher.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "types": "tsc -p tsconfig.json --noEmit",
+    "test": "yarn vitest run",
+    "coverage": "yarn vitest run --coverage",
+    "clean": "git clean -fXd"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.3",
+    "@types/node": "26.1.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}

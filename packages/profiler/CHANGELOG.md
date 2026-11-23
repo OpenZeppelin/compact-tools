@@ -11,6 +11,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `compact-profile` bin, a launcher that downloads the [`compact-profile`](https://github.com/OpenZeppelin/compact-tools/tree/main/crates/compact-profile) release binary for the host, verifies its SHA-256, and runs it
+- `@openzeppelin/compact-launcher` dependency, which downloads, verifies and caches the binary for the bin and `resolveProfileBinary`
 - The `compact-profile` binary, a capacity profiler for Compact contract transactions: `params`, `cost`, `check` and `update`
 - `cost` reads unproven, proven and wallet-balanced transactions; a balanced one is evaluated as submitted
 - Shipped profiles for `mainnet`, `preprod` and `undeployed` (node 2.1.101, `midnight-ledger-v9` 1.0.1) with node caps and a balancing term measured on a 2.1.101 dev chain

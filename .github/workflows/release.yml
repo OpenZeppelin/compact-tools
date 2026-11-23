@@ -11,6 +11,7 @@ on:
           - compact-builder
           - compact-cli
           - compact-deployer
+          - compact-launcher
           - compact-linter
           - compact-profiler
           - compact-simulator
@@ -90,6 +91,7 @@ jobs:
           compact-builder    builder
           compact-cli        cli
           compact-deployer   deployer
+          compact-launcher   launcher
           compact-linter     linter     crates/compact-lint     compact-lint     compact-lint
           compact-profiler   profiler   crates/compact-profile  compact-profile  compact-profile
           compact-simulator  simulator

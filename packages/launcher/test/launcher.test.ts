@@ -1,30 +1,33 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  chmodSync,
-  mkdtempSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  isMusl,
+  type ReleasedBinary,
+  type ResolveOptions,
+  resolveBinary,
+  userCacheDir,
+} from '../src/launcher.ts';
 import {
   expectedChecksum,
   parseChecksums,
-  resolveBinary,
   resolveTarget,
   sha256,
-  userCacheDir,
-} from '../src/binary.ts';
+} from '../src/release.ts';
 
-const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
-const FAKE_BINARY = '#!/bin/sh\necho fake-lint "$@"\n';
-const ASSET = 'compact-lint-x86_64-unknown-linux-gnu';
+const FAKE_TOOL: ReleasedBinary = {
+  name: 'fake-tool',
+  packageName: 'fake-tools',
+  overrideEnv: 'FAKE_TOOL_BINARY',
+  downloadBaseEnv: 'FAKE_TOOL_DOWNLOAD_BASE',
+};
+const FAKE_BINARY = '#!/bin/sh\necho fake-tool "$@"\n';
+const ASSET = 'fake-tool-x86_64-unknown-linux-gnu';
 
 interface Origin {
   base: string;
@@ -60,9 +63,9 @@ async function startOrigin(files: Record<string, string>): Promise<Origin> {
 function checksumsFor(asset: string, body: string): string {
   const digest = createHash('sha256').update(body).digest('hex');
   return [
-    `${'0'.repeat(64)}  compact-lint-aarch64-apple-darwin`,
+    `${'0'.repeat(64)}  fake-tool-aarch64-apple-darwin`,
     `${digest}  ${asset}`,
-    `${'1'.repeat(64)}  compact-lint-aarch64-unknown-linux-gnu`,
+    `${'1'.repeat(64)}  fake-tool-aarch64-unknown-linux-gnu`,
   ].join('\n');
 }
 
@@ -74,10 +77,9 @@ function packageChecksums(body: string): void {
   writeFileSync(join(install, 'checksums.txt'), checksumsFor(ASSET, body));
 }
 
-function options(
-  overrides: Partial<Parameters<typeof resolveBinary>[0]> = {},
-): Parameters<typeof resolveBinary>[0] {
+function options(overrides: Partial<ResolveOptions> = {}): ResolveOptions {
   return {
+    binary: FAKE_TOOL,
     packageDir: install,
     cacheDir: join(install, 'cache'),
     version: '0.1.0',
@@ -90,12 +92,26 @@ function options(
   };
 }
 
+/** Runs `check` with `process.platform` reading `platform`. */
+function onPlatform(platform: string, check: () => void): void {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: platform });
+  try {
+    check();
+  } finally {
+    if (original) {
+      Object.defineProperty(process, 'platform', original);
+    }
+  }
+}
+
 beforeEach(() => {
-  install = mkdtempSync(join(tmpdir(), 'compact-lint-pkg-'));
+  install = mkdtempSync(join(tmpdir(), 'compact-launcher-pkg-'));
   notices = [];
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   rmSync(install, { recursive: true, force: true });
 });
 
@@ -115,24 +131,59 @@ describe('resolveTarget', () => {
 
 describe('userCacheDir', () => {
   it('uses XDG_CACHE_HOME on linux when it is absolute', () => {
-    expect(userCacheDir('linux', { XDG_CACHE_HOME: '/xdg' }, '/home/dev')).toBe(
-      '/xdg/compact-linter',
-    );
+    expect(
+      userCacheDir(
+        'fake-tools',
+        'linux',
+        { XDG_CACHE_HOME: '/xdg' },
+        '/home/dev',
+      ),
+    ).toBe('/xdg/fake-tools');
   });
 
   it('falls back to ~/.cache on linux', () => {
-    expect(userCacheDir('linux', {}, '/home/dev')).toBe(
-      '/home/dev/.cache/compact-linter',
+    expect(userCacheDir('fake-tools', 'linux', {}, '/home/dev')).toBe(
+      '/home/dev/.cache/fake-tools',
     );
     expect(
-      userCacheDir('linux', { XDG_CACHE_HOME: 'relative' }, '/home/dev'),
-    ).toBe('/home/dev/.cache/compact-linter');
+      userCacheDir(
+        'fake-tools',
+        'linux',
+        { XDG_CACHE_HOME: 'relative' },
+        '/home/dev',
+      ),
+    ).toBe('/home/dev/.cache/fake-tools');
   });
 
   it('uses ~/Library/Caches on macos', () => {
     expect(
-      userCacheDir('darwin', { XDG_CACHE_HOME: '/xdg' }, '/Users/dev'),
-    ).toBe('/Users/dev/Library/Caches/compact-linter');
+      userCacheDir(
+        'fake-tools',
+        'darwin',
+        { XDG_CACHE_HOME: '/xdg' },
+        '/Users/dev',
+      ),
+    ).toBe('/Users/dev/Library/Caches/fake-tools');
+  });
+});
+
+describe('isMusl', () => {
+  it('is true on linux when the report names no glibc version', () => {
+    vi.spyOn(process.report, 'getReport').mockReturnValue({ header: {} });
+    onPlatform('linux', () => expect(isMusl()).toBe(true));
+  });
+
+  it('is false on linux when the report names a glibc version', () => {
+    vi.spyOn(process.report, 'getReport').mockReturnValue({
+      header: { glibcVersionRuntime: '2.39' },
+    });
+    onPlatform('linux', () => expect(isMusl()).toBe(false));
+  });
+
+  it('is false off linux without reading the report', () => {
+    const getReport = vi.spyOn(process.report, 'getReport');
+    onPlatform('darwin', () => expect(isMusl()).toBe(false));
+    expect(getReport).not.toHaveBeenCalled();
   });
 });
 
@@ -172,38 +223,38 @@ describe('resolveBinary', () => {
     await expect(
       resolveBinary(options({ platform: 'win32', arch: 'x64' })),
     ).rejects.toThrow(
-      'no prebuilt binary for win32-x64; build from source with cargo (crates/compact-lint) and set COMPACT_LINT_BINARY',
+      'no prebuilt binary for win32-x64; build from source with cargo (crates/fake-tool) and set FAKE_TOOL_BINARY',
     );
   });
 
   it('reports a musl linux host', async () => {
     await expect(resolveBinary(options({ musl: true }))).rejects.toThrow(
-      'no prebuilt binary for musl Linux, the release binaries need glibc; build from source with cargo (crates/compact-lint) and set COMPACT_LINT_BINARY',
+      'no prebuilt binary for musl Linux, the release binaries need glibc; build from source with cargo (crates/fake-tool) and set FAKE_TOOL_BINARY',
     );
   });
 
-  it('runs COMPACT_LINT_BINARY on a musl host', async () => {
+  it('runs the override on a musl host', async () => {
     const binary = await resolveBinary(
       options({
         musl: true,
-        env: { COMPACT_LINT_BINARY: '/opt/compact-lint' },
+        env: { FAKE_TOOL_BINARY: '/opt/fake-tool' },
       }),
     );
-    expect(binary).toBe('/opt/compact-lint');
+    expect(binary).toBe('/opt/fake-tool');
   });
 
-  it('returns COMPACT_LINT_BINARY without contacting the origin', async () => {
+  it('returns the override without contacting the origin', async () => {
     const origin = await startOrigin({});
     try {
       const binary = await resolveBinary(
         options({
           env: {
-            COMPACT_LINT_BINARY: '/opt/compact-lint',
-            COMPACT_LINT_DOWNLOAD_BASE: origin.base,
+            FAKE_TOOL_BINARY: '/opt/fake-tool',
+            FAKE_TOOL_DOWNLOAD_BASE: origin.base,
           },
         }),
       );
-      expect(binary).toBe('/opt/compact-lint');
+      expect(binary).toBe('/opt/fake-tool');
       expect(origin.requests).toStrictEqual([]);
       expect(notices).toStrictEqual([]);
     } finally {
@@ -216,22 +267,30 @@ describe('resolveBinary', () => {
     const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const binary = await resolveBinary(
-        options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+        options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
       );
       expect(binary).toBe(
-        join(install, 'cache', 'compact-lint-0.1.0-x86_64-unknown-linux-gnu'),
+        join(install, 'cache', 'fake-tool-0.1.0-x86_64-unknown-linux-gnu'),
       );
       expect(statSync(binary).mode & 0o777).toBe(0o755);
       expect(spawnSync(binary, ['check'], { encoding: 'utf8' }).stdout).toBe(
-        'fake-lint check\n',
+        'fake-tool check\n',
       );
       expect(origin.requests).toStrictEqual([ASSET]);
       expect(notices).toStrictEqual([
-        'downloading compact-lint-x86_64-unknown-linux-gnu (v0.1.0)',
+        'downloading fake-tool-x86_64-unknown-linux-gnu (v0.1.0)',
       ]);
     } finally {
       await origin.close();
     }
+  });
+
+  it('fetches from the package release on GitHub by default', async () => {
+    packageChecksums(FAKE_BINARY);
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    await expect(resolveBinary(options())).rejects.toThrow(
+      `download failed for https://github.com/OpenZeppelin/compact-tools/releases/download/fake-tools/v0.1.0/${ASSET}: offline`,
+    );
   });
 
   it('serves a second run from the cache', async () => {
@@ -239,10 +298,10 @@ describe('resolveBinary', () => {
     const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
     try {
       const first = await resolveBinary(
-        options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+        options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
       );
       const second = await resolveBinary(
-        options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+        options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
       );
       expect(second).toBe(first);
       expect(origin.requests).toHaveLength(1);
@@ -260,7 +319,7 @@ describe('resolveBinary', () => {
       const actual = sha256(Buffer.from(FAKE_BINARY));
       await expect(
         resolveBinary(
-          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+          options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(
         `checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}`,
@@ -280,7 +339,7 @@ describe('resolveBinary', () => {
     try {
       await expect(
         resolveBinary(
-          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+          options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(`checksum mismatch for ${ASSET}`);
       expect(origin.requests).toStrictEqual([ASSET]);
@@ -294,10 +353,10 @@ describe('resolveBinary', () => {
     try {
       await expect(
         resolveBinary(
-          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+          options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(
-        `${join(install, 'checksums.txt')} is missing, so a download cannot be verified; set COMPACT_LINT_BINARY`,
+        `${join(install, 'checksums.txt')} is missing, so a download cannot be verified; set FAKE_TOOL_BINARY`,
       );
       expect(origin.requests).toStrictEqual([]);
     } finally {
@@ -311,7 +370,7 @@ describe('resolveBinary', () => {
     try {
       await expect(
         resolveBinary(
-          options({ env: { COMPACT_LINT_DOWNLOAD_BASE: origin.base } }),
+          options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(
         `download failed for ${origin.base}/${ASSET}: HTTP 404`,
@@ -326,43 +385,9 @@ describe('resolveBinary', () => {
     await expect(
       resolveBinary(
         options({
-          env: { COMPACT_LINT_DOWNLOAD_BASE: 'http://127.0.0.1:1/download' },
+          env: { FAKE_TOOL_DOWNLOAD_BASE: 'http://127.0.0.1:1/download' },
         }),
       ),
     ).rejects.toThrow('download failed for http://127.0.0.1:1/download/');
-  });
-});
-
-describe('the compact-linter bin', () => {
-  it('passes its arguments to the binary and forwards the exit code', () => {
-    const stub = join(install, 'stub-lint');
-    writeFileSync(stub, '#!/bin/sh\necho "args: $*"\nexit 7\n');
-    chmodSync(stub, 0o755);
-
-    const run = spawnSync(
-      process.execPath,
-      [join(packageDir, 'src', 'compactLinter.ts'), 'check', '--strict', 'src'],
-      { encoding: 'utf8', env: { ...process.env, COMPACT_LINT_BINARY: stub } },
-    );
-
-    expect(run.stdout).toBe('args: check --strict src\n');
-    expect(run.status).toBe(7);
-  });
-
-  it('exits 2 when no binary can be resolved', () => {
-    const run = spawnSync(
-      process.execPath,
-      [join(packageDir, 'src', 'compactLinter.ts'), 'check'],
-      {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          COMPACT_LINT_BINARY: join(install, 'not-installed'),
-        },
-      },
-    );
-
-    expect(run.status).toBe(2);
-    expect(run.stderr).toContain('compact-linter: cannot run');
   });
 });

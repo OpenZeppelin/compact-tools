@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
@@ -8,14 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-
-/** npm `platform-arch` pair to the Rust target triple the release assets are named after. */
-const TARGETS: Record<string, string> = {
-  'linux-x64': 'x86_64-unknown-linux-gnu',
-  'linux-arm64': 'aarch64-unknown-linux-gnu',
-  'darwin-x64': 'x86_64-apple-darwin',
-  'darwin-arm64': 'aarch64-apple-darwin',
-};
+import { expectedChecksum, resolveTarget, sha256 } from './release.ts';
 
 const RELEASE_BASE =
   'https://github.com/OpenZeppelin/compact-tools/releases/download';
@@ -23,8 +16,21 @@ const RELEASE_BASE =
 /** A stalled release download fails instead of hanging the run. */
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
+/** The names a prebuilt binary is released, cached and overridden under. */
+export interface ReleasedBinary {
+  /** The executable, its release asset prefix and its crate under `crates/`, as `compact-lint`. */
+  name: string;
+  /** Unscoped npm package name: the release tag prefix and the cache directory, as `compact-linter`. */
+  packageName: string;
+  /** Names an executable to run instead of downloading, as `COMPACT_LINT_BINARY`. */
+  overrideEnv: string;
+  /** Names a base URL to fetch the asset from instead of the GitHub release. */
+  downloadBaseEnv: string;
+}
+
 /** Where the binary is fetched from and cached, and who is told about a download. */
 export interface ResolveOptions {
+  binary: ReleasedBinary;
   /** Root of the installed package, which carries the release's `checksums.txt`. */
   packageDir: string;
   /** Per-user directory the binary is cached in, never inside the installed package. */
@@ -40,102 +46,81 @@ export interface ResolveOptions {
 }
 
 /**
- * `compact-profiler` under the user's cache: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME`
- * or `~/.cache` elsewhere. The installed package can be read-only (Yarn Plug'n'Play, a
+ * `name` under the user's cache: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or
+ * `~/.cache` elsewhere. The installed package can be read-only (Yarn Plug'n'Play, a
  * global install).
  */
 export function userCacheDir(
+  name: string,
   platform: string,
   env: Record<string, string | undefined>,
   home: string,
 ): string {
   if (platform === 'darwin') {
-    return join(home, 'Library', 'Caches', 'compact-profiler');
+    return join(home, 'Library', 'Caches', name);
   }
   const xdg = env.XDG_CACHE_HOME;
-  return join(
-    xdg && isAbsolute(xdg) ? xdg : join(home, '.cache'),
-    'compact-profiler',
-  );
+  return join(xdg && isAbsolute(xdg) ? xdg : join(home, '.cache'), name);
 }
 
-export function resolveTarget(platform: string, arch: string): string | null {
-  return TARGETS[`${platform}-${arch}`] ?? null;
-}
-
-export function assetName(target: string): string {
-  return `compact-profile-${target}`;
-}
-
-export function sha256(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
-}
-
-/** `<sha256>  <asset>` lines to an asset-keyed map; CRLF and the `*` binary marker are tolerated. */
-export function parseChecksums(text: string): Map<string, string> {
-  const digests = new Map<string, string>();
-  for (const line of text.split('\n')) {
-    const entry = /^([0-9a-f]{64})\s+\*?(\S+)$/.exec(line.trim());
-    if (entry) {
-      digests.set(entry[2], entry[1]);
-    }
+/** Node reports a glibc version only when it runs on glibc. */
+export function isMusl(): boolean {
+  if (process.platform !== 'linux') {
+    return false;
   }
-  return digests;
-}
-
-export function expectedChecksum(text: string, asset: string): string {
-  const digest = parseChecksums(text).get(asset);
-  if (digest === undefined) {
-    throw new Error(`checksums.txt has no entry for ${asset}`);
-  }
-  return digest;
+  const report = process.report.getReport() as {
+    header?: { glibcVersionRuntime?: string };
+  };
+  return report.header?.glibcVersionRuntime === undefined;
 }
 
 /**
- * Path to the `compact-profile` executable, downloading it into the user cache when missing.
+ * Path to the binary's executable, downloading it into the user cache when missing.
  *
- * Messages carry no `compact-profile:` prefix; the bin adds it.
+ * Messages carry no prefix; the caller adds it.
  */
 export async function resolveBinary(options: ResolveOptions): Promise<string> {
-  const override = options.env.COMPACT_PROFILE_BINARY;
+  const { binary } = options;
+  const override = options.env[binary.overrideEnv];
   if (override) {
     return override;
   }
 
+  const fromSource = `build from source with cargo (crates/${binary.name}) and set ${binary.overrideEnv}`;
   if (options.platform === 'linux' && options.musl) {
     throw new Error(
-      'no prebuilt binary for musl Linux, the release binaries need glibc; build from source with cargo (crates/compact-profile) and set COMPACT_PROFILE_BINARY',
+      `no prebuilt binary for musl Linux, the release binaries need glibc; ${fromSource}`,
     );
   }
 
   const target = resolveTarget(options.platform, options.arch);
   if (target === null) {
     throw new Error(
-      `no prebuilt binary for ${options.platform}-${options.arch}; build from source with cargo (crates/compact-profile) and set COMPACT_PROFILE_BINARY`,
+      `no prebuilt binary for ${options.platform}-${options.arch}; ${fromSource}`,
     );
   }
 
   const cached = join(
     options.cacheDir,
-    `compact-profile-${options.version}-${target}`,
+    `${binary.name}-${options.version}-${target}`,
   );
   if (existsSync(cached)) {
     return cached;
   }
 
   // Digests come from the package, never the release, so a replaced asset fails here.
-  const asset = assetName(target);
+  const asset = `${binary.name}-${target}`;
   const expected = expectedChecksum(
-    packagedChecksums(options.packageDir),
+    packagedChecksums(options.packageDir, binary.overrideEnv),
     asset,
   );
   const base =
-    options.env.COMPACT_PROFILE_DOWNLOAD_BASE ??
-    `${RELEASE_BASE}/compact-profiler/v${options.version}`;
+    options.env[binary.downloadBaseEnv] ??
+    `${RELEASE_BASE}/${binary.packageName}/v${options.version}`;
   options.notify(`downloading ${asset} (v${options.version})`);
 
-  const binary = await fetchBytes(`${base}/${asset}`);
-  const actual = sha256(binary);
+  const bytes = await fetchBytes(`${base}/${asset}`);
+  const actual = sha256(bytes);
   if (actual !== expected) {
     throw new Error(
       `checksum mismatch for ${asset}: expected ${expected}, got ${actual}`,
@@ -145,17 +130,17 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
   // Staged under a unique name so concurrent runs never read a half-written file.
   mkdirSync(options.cacheDir, { recursive: true });
   const staged = `${cached}.${randomUUID()}.tmp`;
-  writeFileSync(staged, binary);
+  writeFileSync(staged, bytes);
   chmodSync(staged, 0o755);
   renameSync(staged, cached);
   return cached;
 }
 
-function packagedChecksums(packageDir: string): string {
+function packagedChecksums(packageDir: string, overrideEnv: string): string {
   const path = join(packageDir, 'checksums.txt');
   if (!existsSync(path)) {
     throw new Error(
-      `${path} is missing, so a download cannot be verified; set COMPACT_PROFILE_BINARY`,
+      `${path} is missing, so a download cannot be verified; set ${overrideEnv}`,
     );
   }
   return readFileSync(path, 'utf8');

@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- The bin resolves `compact-lint` through the new `@openzeppelin/compact-launcher` dependency. Environment variables, cache paths and download URLs are unchanged
+
 ## 0.1.0 (2026-11-19)
 
 ### Added
