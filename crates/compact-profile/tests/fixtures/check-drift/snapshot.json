@@ -63,7 +63,7 @@
           "bytesWritten": "352",
           "bytesChurned": "35680"
         },
-        "serializedLen": 5667,
+        "serializedLen": 5668,
         "declaredNodes": 119,
         "timeToDismiss": "15510245145"
       }
@@ -99,11 +99,11 @@
         "cost": {
           "readTime": "6205000000",
           "computeTime": "15303513170",
-          "blockUsage": "21243",
+          "blockUsage": "21244",
           "bytesWritten": "320",
           "bytesChurned": "27920"
         },
-        "serializedLen": 3593,
+        "serializedLen": 3594,
         "declaredNodes": 101,
         "timeToDismiss": "15346708619"
       }
@@ -119,11 +119,11 @@
         "cost": {
           "readTime": "11475000000",
           "computeTime": "30099624101",
-          "blockUsage": "42035",
+          "blockUsage": "42034",
           "bytesWritten": "640",
           "bytesChurned": "55840"
         },
-        "serializedLen": 6662,
+        "serializedLen": 6661,
         "declaredNodes": 148,
         "timeToDismiss": "30186014999"
       }
@@ -159,11 +159,11 @@
         "cost": {
           "readTime": "108970000000",
           "computeTime": "303827587190",
-          "blockUsage": "426367",
+          "blockUsage": "426363",
           "bytesWritten": "6560",
           "bytesChurned": "572360"
         },
-        "serializedLen": 63165,
+        "serializedLen": 63162,
         "declaredNodes": 1013,
         "timeToDismiss": "304713093895"
       }
@@ -179,11 +179,11 @@
         "cost": {
           "readTime": "111605000000",
           "computeTime": "311225642656",
-          "blockUsage": "436764",
+          "blockUsage": "436766",
           "bytesWritten": "6720",
           "bytesChurned": "586320"
         },
-        "serializedLen": 64696,
+        "serializedLen": 64698,
         "declaredNodes": 1037,
         "timeToDismiss": "312132747085"
       }
@@ -229,17 +229,17 @@
           "name": "mint multi-call n=2",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 21,
+          "txsPerBlock": 20,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 42
+          "opsPerBlock": 40
         },
         {
           "name": "mint multi-call n=4",
           "fits": true,
           "binding": "timeToDismiss",
-          "txsPerBlock": 13,
+          "txsPerBlock": 12,
           "blockBinding": "blockWeight",
-          "opsPerBlock": 52
+          "opsPerBlock": 48
         },
         {
           "name": "mint multi-call n=8",

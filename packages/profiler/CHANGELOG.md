@@ -17,6 +17,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The weight model counts frame_system's base extrinsic weight in the block total, not against the per-extrinsic ceiling
 - Optional profile section `[proof]`: bytes proving adds per contract call proof (`call_bytes`) and per Zswap or Dust proof (`builtin_bytes`) beyond the ledger's size estimate; every shipped profile carries 564 and 2, measured on a 2.1.101 dev chain
 - An unproven transaction's estimated size and `blockUsage` include the proof term, counted from its proofs; a proven or balanced one gets none. `cost` and `check` report it as `proofTerm` in JSON, and the tables show it
+- `[balancing]` field `further_intent_bytes`, required with the others: bytes each intent after the first adds when balanced, counted from the transaction's intents; every shipped profile carries 65. `cost` and `check` report the intents and the bytes added as `balancingTerm` in JSON, and the tables show them
 - Optional manifest field `ops` for logical operations per transaction; the report and snapshot count `opsPerBlock`
 - Optional profile field `min_client_ledger` (`1.0.2` on every shipped profile); `check` and `update` warn and label a network when the manifest's `@midnightntwrk/ledger-v9` is older
 - `params --reporter json`

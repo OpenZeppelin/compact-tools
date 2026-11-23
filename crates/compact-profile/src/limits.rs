@@ -267,7 +267,8 @@ pub struct Effective {
 
 impl Effective {
     /// The proof term grows the estimated size and `blockUsage`. The balancing term's
-    /// `bytes` grows the estimated size and its `cost` adds dimension-wise.
+    /// bytes grow the estimated size and its cost adds dimension-wise, both counted for
+    /// the transaction's intents.
     #[must_use]
     pub fn of(
         measurement: &Measurement,
@@ -287,9 +288,13 @@ impl Effective {
         match balancing {
             None => contract,
             Some(term) => Effective {
-                cost: contract.cost.saturating_add(&term.cost),
+                cost: contract
+                    .cost
+                    .saturating_add(&term.added_cost(measurement.intents)),
                 nodes: contract.nodes.saturating_add(u64::from(term.nodes)),
-                estimated_size: contract.estimated_size.saturating_add(term.bytes),
+                estimated_size: contract
+                    .estimated_size
+                    .saturating_add(term.added_bytes(measurement.intents)),
                 time_to_dismiss: contract
                     .time_to_dismiss
                     .saturating_add(term.cost.max_time()),
@@ -381,6 +386,8 @@ impl Scope {
 pub struct Evaluation {
     pub scope: Scope,
     pub proof: ProofBytes,
+    /// Bytes the balancing term added; `None` unless `scope` is `balanced`.
+    pub balancing: Option<u64>,
     pub effective: Effective,
     pub time_to_dismiss_allowed: u64,
     /// Scaled cost plus fixed extra weight, which the extrinsic ceiling reads.
@@ -501,6 +508,9 @@ pub fn evaluate(measurement: &Measurement, caps: &Caps) -> Evaluation {
         proof: caps.proof.map_or(ProofBytes::Unknown, |term| {
             ProofBytes::Added(term.bytes(measurement.proofs))
         }),
+        balancing: caps
+            .balancing
+            .map(|term| term.added_bytes(measurement.intents)),
         effective,
         time_to_dismiss_allowed,
         dispatch_weight,
@@ -519,6 +529,7 @@ pub(crate) mod tests {
         BalancingTerm {
             nodes: 10,
             bytes: 3_283,
+            further_intent_bytes: 65,
             cost: Cost {
                 read_time: 1_870_000_000,
                 compute_time: 3_433_722_316,
@@ -596,6 +607,7 @@ pub(crate) mod tests {
                 calls: 1,
                 builtin: 1,
             },
+            intents: 1,
         }
     }
 
@@ -616,6 +628,7 @@ pub(crate) mod tests {
                 calls: 1,
                 builtin: 2,
             },
+            intents: 2,
         }
     }
 
@@ -702,6 +715,7 @@ pub(crate) mod tests {
         let evaluation = evaluate_form(&balanced_base_mint(), &mainnet_caps(), Form::Balanced);
         assert_eq!(evaluation.scope, Scope::AsSubmitted);
         assert_eq!(evaluation.proof, ProofBytes::Proven);
+        assert_eq!(evaluation.balancing, None);
         assert_eq!(evaluation.effective.nodes, 98);
         assert_eq!(evaluation.effective.estimated_size, 14_813);
         assert_eq!(evaluation.weight, Some(49_734_157_001));
@@ -712,6 +726,7 @@ pub(crate) mod tests {
         let proven = evaluate_form(&base_mint(), &mainnet_caps(), Form::Proven);
         assert_eq!(proven.scope, Scope::Balanced);
         assert_eq!(proven.proof, ProofBytes::Proven);
+        assert_eq!(proven.balancing, Some(3_283));
         assert_eq!(proven.effective.nodes, 99);
         assert_eq!(proven.effective.estimated_size, 10_983 + 3_283);
     }
@@ -780,6 +795,52 @@ pub(crate) mod tests {
                 "{name}: {estimated} against {proven}"
             );
         }
+    }
+
+    /// The balanced sizes are the `blockUsage` of the wallet-balanced builds from the
+    /// 2026-11-20 run on node 2.1.101; only the single mint's file is kept.
+    #[test]
+    fn the_shipped_terms_reach_each_captured_balanced_size_without_undercounting() {
+        let caps = Caps::of(&Profile::embedded("mainnet").expect("mainnet parses"));
+        let cases = [
+            (
+                "base-mint-unproven.bin",
+                live("base-mint-balanced.bin").estimated_size(),
+            ),
+            ("preset-merged-n2-unproven.bin", 26_379),
+            ("base-merged-n40-unproven.bin", 444_822),
+            ("base-merged-n41-unproven.bin", 455_859),
+            ("preset-merged-n30-unproven.bin", 337_910),
+        ];
+        for (name, balanced) in cases {
+            let estimated = evaluate(&live(name), &caps).effective.estimated_size;
+            assert!(
+                (balanced..=balanced + 50).contains(&estimated),
+                "{name}: {estimated} against {balanced}"
+            );
+        }
+    }
+
+    #[test]
+    fn each_further_intent_adds_to_the_size_and_block_usage_only() {
+        let merged = Measurement {
+            intents: 40,
+            ..base_mint()
+        };
+        let one = Effective::of(&base_mint(), Some(&balancing()), None);
+        let forty = Effective::of(&merged, Some(&balancing()), None);
+        assert_eq!(forty.estimated_size, one.estimated_size + 39 * 65);
+        assert_eq!(
+            forty.cost,
+            Cost {
+                block_usage: one.cost.block_usage + 39 * 65,
+                ..one.cost
+            }
+        );
+        assert_eq!(forty.nodes, one.nodes);
+        assert_eq!(forty.time_to_dismiss, one.time_to_dismiss);
+        let evaluation = evaluate(&merged, &mainnet_caps());
+        assert_eq!(evaluation.balancing, Some(3_283 + 39 * 65));
     }
 
     #[test]

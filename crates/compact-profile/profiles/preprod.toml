@@ -62,9 +62,10 @@ value = 786_432
 source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockLength.max.normal). Preprod's own runtime metadata showed the same value on 2026-11-23. Source: runtime/src/lib.rs:319-320 (BlockLength::max_with_normal_ratio(1024 * 1024, 75%))"
 
 [balancing]
-source = "Measured 2026-11-20 on a local dev chain on node 2.1.101 as balanced minus proven for a single base mint and a single preset mint; the wallet adds one intent holding one dust spend. Ranges across runs: nodes +8 to +10, bytes +3,264 to +3,283, blockUsage +3,264 to +3,278; readTime, computeTime, bytesWritten, bytesChurned and time to dismiss were constant. The values are the conservative end"
+source = "Measured 2026-11-20 on a local dev chain on node 2.1.101 as balanced minus proven for a single base mint and a single preset mint; the wallet adds one intent holding one dust spend. Ranges across runs: nodes +8 to +10, bytes +3,264 to +3,283, blockUsage +3,264 to +3,278; readTime, computeTime, bytesWritten, bytesChurned and time to dismiss were constant. The values are the conservative end. Balancing also grows every intent's binding commitment from 32 or 33 bytes to 96 or 97, so further_intent_bytes counts each intent after the first: on merges of 2, 29, 30, 39, 40 and 41 one-call intents, blockUsage grew by 3,340 to 5,860, which is 57 to 64.7 bytes per further intent above the one-intent 3,283. Nodes, the other cost dimensions and time to dismiss did not change with the intent count. 65 is the conservative end"
 nodes = 10
 bytes = 3_283
+further_intent_bytes = 65
 cost = { readTime = "1870000000", computeTime = "3433722316", blockUsage = "3283", bytesWritten = "224", bytesChurned = "9288" }
 
 [proof]

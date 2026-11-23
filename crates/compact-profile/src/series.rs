@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::cost::{Dimension, Measurement};
 use crate::fit::{Largest, Line, largest};
 use crate::limits::{Caps, Limit};
+use crate::profile::BalancingTerm;
 
 /// A measured quantity a series fits a line to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -143,10 +144,10 @@ impl SeriesCapacity {
 /// Bounds one series on one network. `points` must be sorted by size.
 #[must_use]
 pub fn capacity(fit: &SeriesFit, points: &[Point<'_>], caps: &Caps) -> SeriesCapacity {
-    let proof = proof_line(points, caps);
+    let added = added(points, caps);
     let predictions: Vec<(Limit, Option<Largest>)> = Limit::ALL
         .into_iter()
-        .map(|limit| (limit, predict(fit, proof, caps, limit)))
+        .map(|limit| (limit, predict(fit, added, caps, limit)))
         .collect();
     let boundary = boundary(points);
     let mut capacity = SeriesCapacity {
@@ -182,36 +183,61 @@ fn boundary(points: &[Point<'_>]) -> Option<Boundary> {
     })
 }
 
-/// What the proof term adds to each member, as a line over the series; `None` while the
-/// profile does not know the term or the series has one size.
-fn proof_line(points: &[Point<'_>], caps: &Caps) -> Option<Line> {
-    let term = caps.proof?;
-    let bytes: Vec<(u64, u64)> = points
-        .iter()
-        .map(|point| (point.n, term.bytes(point.measurement.proofs)))
-        .collect();
-    Line::fit(&bytes)
+/// What the proof and balancing terms add to each member, as lines over the series.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Added {
+    /// Added to the estimated size.
+    size: Line,
+    /// Added to `blockUsage`.
+    block_usage: Line,
 }
 
-/// The fit's largest size within `limit`, with the proof line added to the size and
-/// `blockUsage` lines and the balancing term added as a constant.
+/// The terms' lines under `caps`; `None` with fewer than two sizes.
+fn added(points: &[Point<'_>], caps: &Caps) -> Option<Added> {
+    let line = |bytes: &dyn Fn(&Measurement) -> u64| {
+        let values: Vec<(u64, u64)> = points
+            .iter()
+            .map(|point| (point.n, bytes(point.measurement)))
+            .collect();
+        Line::fit(&values)
+    };
+    let proof =
+        |measurement: &Measurement| caps.proof.map_or(0, |term| term.bytes(measurement.proofs));
+    let balancing = |measurement: &Measurement, bytes: fn(&BalancingTerm, u64) -> u64| {
+        caps.balancing
+            .map_or(0, |term| bytes(&term, measurement.intents))
+    };
+    Some(Added {
+        size: line(&|measurement| {
+            proof(measurement).saturating_add(balancing(measurement, BalancingTerm::added_bytes))
+        })?,
+        block_usage: line(&|measurement| {
+            proof(measurement).saturating_add(balancing(measurement, |term, intents| {
+                term.added_cost(intents).block_usage
+            }))
+        })?,
+    })
+}
+
+/// The fit's largest size within `limit`, with the terms' lines added to the size and
+/// `blockUsage` lines and the balancing term's other dimensions added as constants.
 #[allow(
     clippy::cast_precision_loss,
     reason = "caps and balancing terms stay far below 2^52"
 )]
-fn predict(fit: &SeriesFit, proof: Option<Line>, caps: &Caps, limit: Limit) -> Option<Largest> {
+fn predict(fit: &SeriesFit, added: Option<Added>, caps: &Caps, limit: Limit) -> Option<Largest> {
+    let added = added?;
     let balancing = caps.balancing.as_ref();
-    let with_proofs = |line: Line| proof.map_or(line, |proof| line.plus(proof));
-    let extra_bytes = balancing.map_or(0.0, |term| term.bytes as f64);
-    let size = with_proofs(fit.line(Metric::Cost(Dimension::BlockUsage))?).shifted(extra_bytes);
+    let size = fit
+        .line(Metric::Cost(Dimension::BlockUsage))?
+        .plus(added.size);
     let dimension_line = |dimension: Dimension| {
         let line = fit.line(Metric::Cost(dimension))?;
-        let line = if dimension == Dimension::BlockUsage {
-            with_proofs(line)
+        Some(if dimension == Dimension::BlockUsage {
+            line.plus(added.block_usage)
         } else {
-            line
-        };
-        Some(line.shifted(balancing.map_or(0.0, |term| term.cost.get(dimension) as f64)))
+            line.shifted(balancing.map_or(0.0, |term| term.cost.get(dimension) as f64))
+        })
     };
     // Weight stays within `cap` while every dimension stays within its share of what the
     // cap leaves after the per-transaction constants.
@@ -294,6 +320,7 @@ mod tests {
                 calls: n,
                 builtin: n,
             },
+            intents: n,
         }
     }
 
@@ -394,19 +421,19 @@ mod tests {
     fn predicted(caps: &Caps, limit: Limit) -> Option<Largest> {
         let series = series();
         let fit = SeriesFit::of(&series.iter().map(|(n, m)| (*n, m)).collect::<Vec<_>>());
-        predict(&fit, proof_line(&points(&series, caps), caps), caps, limit)
+        predict(&fit, added(&points(&series, caps), caps), caps, limit)
     }
 
     #[test]
     fn block_weight_prediction_divides_the_cap_among_the_dimensions() {
         let caps = mainnet_caps();
         // (1.5e12 - 20e9 - 108,157,000) / 2e12 of a block is 739,945.9 block-usage bytes,
-        // at 10,398 + 566 per call plus 584 + 3,283 fixed.
-        assert_eq!(predicted(&caps, Limit::BlockWeight), Some(Largest::Max(67)));
+        // at 10,398 + 566 + 65 per call plus 584 + 3,283 - 65 fixed.
+        assert_eq!(predicted(&caps, Limit::BlockWeight), Some(Largest::Max(66)));
         // The ceiling leaves (1,299,891,843,000 - 20e9) / 2e12 of a block: 639,945.9 bytes.
         assert_eq!(
             predicted(&caps, Limit::ExtrinsicWeight),
-            Some(Largest::Max(58))
+            Some(Largest::Max(57))
         );
     }
 
@@ -416,20 +443,29 @@ mod tests {
             proof: None,
             ..mainnet_caps()
         };
-        // At 10,398 per call plus 584 + 3,283 fixed.
+        // At 10,398 + 65 per call plus 584 + 3,283 - 65 fixed.
         assert_eq!(predicted(&caps, Limit::BlockWeight), Some(Largest::Max(70)));
         assert_eq!(
             predicted(&caps, Limit::ExtrinsicWeight),
-            Some(Largest::Max(61))
+            Some(Largest::Max(60))
         );
     }
 
     #[test]
-    fn the_proof_line_follows_the_proofs_each_member_holds() {
+    fn the_added_lines_follow_each_members_proofs_and_intents() {
         let caps = mainnet_caps();
         let series = series();
-        let line = proof_line(&points(&series, &caps), &caps).expect("eight sizes");
-        assert!(line.fixed.abs() < 1e-6);
-        assert!((line.per_item - 566.0).abs() < 1e-6);
+        let both = added(&points(&series, &caps), &caps).expect("eight sizes");
+        for line in [both.size, both.block_usage] {
+            assert!((line.fixed - 3_218.0).abs() < 1e-6);
+            assert!((line.per_item - 631.0).abs() < 1e-6);
+        }
+        let proof_only = Caps {
+            balancing: None,
+            ..caps
+        };
+        let proofs = added(&points(&series, &proof_only), &proof_only).expect("eight sizes");
+        assert!(proofs.size.fixed.abs() < 1e-6);
+        assert!((proofs.size.per_item - 566.0).abs() < 1e-6);
     }
 }

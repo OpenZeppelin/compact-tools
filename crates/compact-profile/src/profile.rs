@@ -49,7 +49,8 @@ pub enum ProfileError {
         source: ParamsError,
     },
     #[error(
-        "profile {origin}: [balancing] gives some of nodes, bytes and cost; give all three or none"
+        "profile {origin}: [balancing] gives some of nodes, bytes, further_intent_bytes and cost; \
+         give all four or none"
     )]
     PartialBalancing { origin: String },
     #[error(
@@ -108,12 +109,38 @@ pub struct NodeCaps {
 }
 
 /// What a wallet's fee payment adds to a contract transaction.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BalancingTerm {
     pub nodes: u32,
+    /// Bytes added to a one-intent transaction.
     pub bytes: u64,
+    /// Bytes each intent after the first adds, as its binding commitment grows.
+    pub further_intent_bytes: u64,
+    /// Cost added to a one-intent transaction.
     pub cost: Cost,
+}
+
+impl BalancingTerm {
+    fn growth(&self, intents: u64) -> u64 {
+        intents
+            .saturating_sub(1)
+            .saturating_mul(self.further_intent_bytes)
+    }
+
+    /// Bytes added to a transaction of `intents` intents.
+    #[must_use]
+    pub fn added_bytes(&self, intents: u64) -> u64 {
+        self.bytes.saturating_add(self.growth(intents))
+    }
+
+    /// Cost added to a transaction of `intents` intents; only `blockUsage` grows with them.
+    #[must_use]
+    pub fn added_cost(&self, intents: u64) -> Cost {
+        Cost {
+            block_usage: self.cost.block_usage.saturating_add(self.growth(intents)),
+            ..self.cost
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,7 +149,28 @@ struct BalancingFile {
     source: String,
     nodes: Option<u32>,
     bytes: Option<u64>,
+    further_intent_bytes: Option<u64>,
     cost: Option<Cost>,
+}
+
+impl BalancingFile {
+    /// The term, `None` when every value is absent.
+    fn term(&self, origin: &str) -> Result<Option<BalancingTerm>, ProfileError> {
+        match (self.nodes, self.bytes, self.further_intent_bytes, self.cost) {
+            (Some(nodes), Some(bytes), Some(further_intent_bytes), Some(cost)) => {
+                Ok(Some(BalancingTerm {
+                    nodes,
+                    bytes,
+                    further_intent_bytes,
+                    cost,
+                }))
+            }
+            (None, None, None, None) => Ok(None),
+            _ => Err(ProfileError::PartialBalancing {
+                origin: origin.to_owned(),
+            }),
+        }
+    }
 }
 
 /// What proving adds to an unproven transaction's size, beyond the proof sizes the
@@ -152,6 +200,22 @@ struct ProofFile {
     source: String,
     call_bytes: Option<u64>,
     builtin_bytes: Option<u64>,
+}
+
+impl ProofFile {
+    /// The term, `None` when both values are absent.
+    fn term(&self, origin: &str) -> Result<Option<ProofTerm>, ProfileError> {
+        match (self.call_bytes, self.builtin_bytes) {
+            (Some(call_bytes), Some(builtin_bytes)) => Ok(Some(ProofTerm {
+                call_bytes,
+                builtin_bytes,
+            })),
+            (None, None) => Ok(None),
+            _ => Err(ProfileError::PartialProof {
+                origin: origin.to_owned(),
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,40 +310,13 @@ impl Profile {
             origin: origin.to_owned(),
             source,
         })?;
-        let balancing = match (
-            file.balancing.nodes,
-            file.balancing.bytes,
-            file.balancing.cost,
-        ) {
-            (Some(nodes), Some(bytes), Some(cost)) => Some(BalancingTerm { nodes, bytes, cost }),
-            (None, None, None) => None,
-            _ => {
-                return Err(ProfileError::PartialBalancing {
-                    origin: origin.to_owned(),
-                });
-            }
-        };
+        let balancing = file.balancing.term(origin)?;
         let (proof_source, proof) = match file.proof {
             None => (UNSTATED.to_owned(), None),
-            Some(ProofFile {
-                source,
-                call_bytes,
-                builtin_bytes,
-            }) => match (call_bytes, builtin_bytes) {
-                (Some(call_bytes), Some(builtin_bytes)) => (
-                    source,
-                    Some(ProofTerm {
-                        call_bytes,
-                        builtin_bytes,
-                    }),
-                ),
-                (None, None) => (source, None),
-                _ => {
-                    return Err(ProfileError::PartialProof {
-                        origin: origin.to_owned(),
-                    });
-                }
-            },
+            Some(section) => {
+                let term = section.term(origin)?;
+                (section.source, term)
+            }
         };
         let min_client_ledger = match file.min_client_ledger {
             None => ClientMinimum {
@@ -431,7 +468,9 @@ mod tests {
                 Some(1_024),
                 "{name}"
             );
-            assert!(profile.balancing.is_some(), "{name}");
+            let balancing = profile.balancing.expect("the balancing term is known");
+            assert_eq!(balancing.bytes, 3_283, "{name}");
+            assert_eq!(balancing.further_intent_bytes, 65, "{name}");
             assert_eq!(
                 profile.proof,
                 Some(ProofTerm {
@@ -542,6 +581,34 @@ mod tests {
             Profile::parse(&text, "test"),
             Err(ProfileError::PartialBalancing { .. })
         ));
+    }
+
+    #[test]
+    fn a_balancing_term_without_its_per_intent_part_is_refused() {
+        let text = EMBEDDED[0].1.replace("further_intent_bytes = 65\n", "");
+        assert!(matches!(
+            Profile::parse(&text, "test"),
+            Err(ProfileError::PartialBalancing { .. })
+        ));
+    }
+
+    #[test]
+    fn the_balancing_term_grows_with_each_intent_after_the_first() {
+        let term = Profile::embedded("mainnet")
+            .expect("mainnet parses")
+            .balancing
+            .expect("mainnet knows the balancing term");
+        assert_eq!(term.added_bytes(0), 3_283);
+        assert_eq!(term.added_bytes(1), 3_283);
+        assert_eq!(term.added_bytes(40), 3_283 + 39 * 65);
+        assert_eq!(term.added_cost(1), term.cost);
+        assert_eq!(
+            term.added_cost(40),
+            Cost {
+                block_usage: 3_283 + 39 * 65,
+                ..term.cost
+            }
+        );
     }
 
     #[test]

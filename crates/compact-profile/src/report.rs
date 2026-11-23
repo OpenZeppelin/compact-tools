@@ -206,7 +206,21 @@ fn proof_term_line(measurement: &Measurement, evaluation: &Evaluation) -> String
     }
 }
 
-/// The `cost` table: the transaction's sizes, the proof term, then every limit.
+fn balancing_term_line(measurement: &Measurement, evaluation: &Evaluation) -> String {
+    match (evaluation.balancing, evaluation.scope) {
+        (Some(bytes), _) => format!(
+            "+{} bytes for {}",
+            group(bytes),
+            counted(measurement.intents, "intent")
+        ),
+        (None, Scope::AsSubmitted) => "none, the transaction is balanced".to_owned(),
+        (None, _) => {
+            "unknown to the profile, results cover the contract's transaction alone".to_owned()
+        }
+    }
+}
+
+/// The `cost` table: the transaction's sizes, both terms, then every limit.
 ///
 /// # Errors
 ///
@@ -230,6 +244,11 @@ pub fn cost_table(
         out,
         "proof term: {}",
         proof_term_line(measurement, evaluation)
+    )?;
+    writeln!(
+        out,
+        "balancing term: {}",
+        balancing_term_line(measurement, evaluation)
     )?;
     let rows: Vec<Vec<String>> = evaluation
         .checks
@@ -398,16 +417,19 @@ fn network_section(
         .manifest
         .scenarios
         .iter()
+        .zip(&analysis.measurements)
         .zip(network.evaluations.iter().zip(&network.capacities))
-        .map(|(scenario, (evaluation, capacity))| {
+        .map(|((scenario, measurement), (evaluation, capacity))| {
             let (binding, ratio) = binding_cell(evaluation.binding());
             vec![
                 scenario.name.clone(),
                 or_dash(scenario.n),
                 group(u64::from(scenario.calls)),
                 group(u64::from(scenario.ops())),
+                group(measurement.intents),
                 group(evaluation.effective.nodes),
                 or_dash(evaluation.proof.added()),
+                or_dash(evaluation.balancing),
                 group(evaluation.effective.estimated_size),
                 binding,
                 ratio,
@@ -428,8 +450,10 @@ fn network_section(
             ("n", Align::Right),
             ("calls", Align::Right),
             ("ops", Align::Right),
+            ("intents", Align::Right),
             ("nodes", Align::Right),
             ("proof", Align::Right),
+            ("balancing", Align::Right),
             ("est size", Align::Right),
             ("binding", Align::Left),
             ("used", Align::Right),
@@ -528,6 +552,14 @@ struct ProofTermJson {
     bytes: Option<Decimal>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BalancingTermJson {
+    intents: u64,
+    /// The bytes added; `null` unless `scope` is `balanced`.
+    bytes: Option<Decimal>,
+}
+
 /// One transaction under one profile; the shape `cost` prints and `check` nests.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -537,6 +569,7 @@ struct EvaluationJson {
     declared_nodes: u32,
     cost: Cost,
     proof_term: ProofTermJson,
+    balancing_term: BalancingTermJson,
     time_to_dismiss: TimeToDismissJson,
     /// What the transaction adds to the block total, the base extrinsic weight included.
     weight: Option<Decimal>,
@@ -557,6 +590,10 @@ impl EvaluationJson {
                 call_proofs: measurement.proofs.calls,
                 builtin_proofs: measurement.proofs.builtin,
                 bytes: evaluation.proof.added().map(Decimal),
+            },
+            balancing_term: BalancingTermJson {
+                intents: measurement.intents,
+                bytes: evaluation.balancing.map(Decimal),
             },
             time_to_dismiss: TimeToDismissJson {
                 used: Decimal(evaluation.effective.time_to_dismiss),

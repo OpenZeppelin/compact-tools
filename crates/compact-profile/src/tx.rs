@@ -171,25 +171,31 @@ pub fn decode(payload: &[u8]) -> Result<UnprovenTransaction, TxError> {
 pub fn measure(payload: &[u8], params: &LedgerParameters) -> Result<(Form, Measurement), TxError> {
     let form = Form::of(payload)?;
     let declared_nodes = declared_node_count(payload)?;
-    let (cost, time_to_dismiss, proofs) = match form {
+    let read = match form {
         Form::Unproven => costs::<ProofPreimageMarker, PedersenRandomness>(payload, params)?,
         Form::Proven => costs::<ProofMarker, PedersenRandomness>(payload, params)?,
         Form::Balanced => costs::<ProofMarker, PureGeneratorPedersen>(payload, params)?,
     };
     let measurement = Measurement {
-        cost: plain(&cost),
+        cost: plain(&read.cost),
         serialized_len: payload.len() as u64,
         declared_nodes,
-        time_to_dismiss: time_to_dismiss.into_picoseconds(),
-        proofs,
+        time_to_dismiss: read.time_to_dismiss.into_picoseconds(),
+        proofs: read.proofs,
+        intents: read.intents,
     };
     Ok((form, measurement))
 }
 
-fn costs<P, B>(
-    payload: &[u8],
-    params: &LedgerParameters,
-) -> Result<(SyntheticCost, CostDuration, Proofs), TxError>
+/// What the decoded transaction gives a [`Measurement`].
+struct Read {
+    cost: SyntheticCost,
+    time_to_dismiss: CostDuration,
+    proofs: Proofs,
+    intents: u64,
+}
+
+fn costs<P, B>(payload: &[u8], params: &LedgerParameters) -> Result<Read, TxError>
 where
     P: ProofKind<InMemoryDB>,
     B: Storable<InMemoryDB> + PedersenDowngradeable<InMemoryDB> + Serializable,
@@ -197,9 +203,16 @@ where
 {
     let tx: Transaction<Signature, P, B, InMemoryDB> =
         tagged_deserialize(payload).map_err(TxError::Deserialize)?;
-    let cost = tx.cost(params, false).map_err(TxError::Cost)?;
-    let time_to_dismiss = tx.time_to_dismiss(params).map_err(TxError::Cost)?;
-    Ok((cost, time_to_dismiss, proofs(&tx)))
+    let intents = match &tx {
+        Transaction::Standard(stx) => u64::try_from(stx.intents.size()).unwrap_or(u64::MAX),
+        Transaction::ClaimRewards(_) => 0,
+    };
+    Ok(Read {
+        cost: tx.cost(params, false).map_err(TxError::Cost)?,
+        time_to_dismiss: tx.time_to_dismiss(params).map_err(TxError::Cost)?,
+        proofs: proofs(&tx),
+        intents,
+    })
 }
 
 /// The proofs `estimated_tx_size` sizes: one per contract call, Zswap input and output
@@ -415,6 +428,23 @@ mod tests {
         for (bytes, calls, builtin) in cases {
             let (form, measurement) = measure(&bytes, &mainnet()).expect("it measures");
             assert_eq!(measurement.proofs, Proofs { calls, builtin }, "{form}");
+        }
+    }
+
+    #[test]
+    fn intents_are_counted_from_the_transaction() {
+        let cases = [
+            (named("mint").0, 1),
+            (named("mint batch of 4").0, 1),
+            (named("mint multi-call n=8").0, 8),
+            (live("base-merged-n40-unproven.bin"), 40),
+            (live("base-mint-proven.bin"), 1),
+            // The wallet's fee payment is an intent of its own.
+            (live("base-mint-balanced.bin"), 2),
+        ];
+        for (bytes, intents) in cases {
+            let (form, measurement) = measure(&bytes, &mainnet()).expect("it measures");
+            assert_eq!(measurement.intents, intents, "{form}");
         }
     }
 

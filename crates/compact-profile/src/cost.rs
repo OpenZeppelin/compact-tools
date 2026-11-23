@@ -101,6 +101,8 @@ pub struct Measurement {
     /// The dismissal cost's longest time, which `cost(params, true)` checks.
     pub time_to_dismiss: u64,
     pub proofs: Proofs,
+    /// Intents, each of which balancing gives a larger binding commitment.
+    pub intents: u64,
 }
 
 impl Measurement {

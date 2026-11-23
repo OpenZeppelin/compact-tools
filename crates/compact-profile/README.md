@@ -55,7 +55,7 @@ TOML, embedded from `profiles/`.
 | `node_release`, `ledger_crate`, `captured`, `source` | Provenance |
 | `parameters` | Tagged `LedgerParameters`, hex; whitespace ignored |
 | `[node.<cap>]` | `value` (optional) and `source` (required) |
-| `[balancing]` | `source`, and `nodes`, `bytes`, `cost` together or not at all |
+| `[balancing]` | `source`, and `nodes`, `bytes`, `further_intent_bytes`, `cost` together or not at all: what a wallet's fee payment adds to a one-intent transaction, and the bytes each further intent adds |
 | `[proof]` | Optional; `source`, and `call_bytes`, `builtin_bytes` together or not at all: bytes proving adds per contract call proof and per built-in proof beyond the ledger's estimate |
 | `[min_client_ledger]` | Optional; `value` (semver, optional) and `source`: the oldest npm `@midnightntwrk/ledger-v9` known to build transactions the network accepts |
 
@@ -106,6 +106,7 @@ One object. Numbers that can pass `2^53` are decimal strings.
 | `serializedLen`, `estimatedSize`, `declaredNodes` | The transaction as read, as numbers |
 | `cost` | Five decimal strings, as in the manifest |
 | `proofTerm` | `status`, `callProofs`, `builtinProofs` and `bytes` |
+| `balancingTerm` | `intents` and `bytes` |
 | `timeToDismiss` | `used` and `allowed`, decimal strings |
 | `weight` | What the transaction adds to the block total, base included; decimal string, or `null` while a part is unknown |
 | `limits[]` | `name`, `used`, `allowed`, `ratioPpm`, `status` |
@@ -120,6 +121,9 @@ One object. Numbers that can pass `2^53` are decimal strings.
   and `unknown` otherwise. `callProofs` and `builtinProofs` count the
   transaction's proofs. `bytes` is the decimal string added, or `null` unless
   `added`.
+- `balancingTerm.intents` counts the transaction's intents. `bytes` is the decimal
+  string the balancing term added to the size, or `null` unless `scope` is
+  `balanced`.
 - `limits[].name`, in order: `nodes`, `txBytes`, `readTime`, `computeTime`,
   `blockUsage`, `bytesWritten`, `bytesChurned`, `timeToDismiss`,
   `extrinsicWeight`, `blockWeight`, `blockLength`.
@@ -141,11 +145,13 @@ network's `series` and, for `check`, `drift`.
 
 Per network: a header line (name, node release, ledger crate, capture date, scope,
 then `provisional` and `client below minimum` when they apply), then one row per
-scenario: `scenario`, `n`, `calls`, `ops`, `nodes`, `proof` (bytes the proof term
-added, `-` when unknown), `est size` (`nodes` and `est size` as the limits read
-them), `binding`, `used`, `fits`, `txs/block`, `block bound`, `ops/block`.
+scenario: `scenario`, `n`, `calls`, `ops`, `intents`, `nodes`, `proof` and
+`balancing` (bytes each term added, `-` when not added), `est size` (`nodes` and
+`est size` as the limits read them), `binding`, `used`, `fits`, `txs/block`,
+`block bound`, `ops/block`.
 
-`cost` prints the transaction as read, a `proof term:` line, then one row per limit.
+`cost` prints the transaction as read, a `proof term:` and a `balancing term:`
+line, then one row per limit.
 
 ## Snapshot
 
@@ -194,11 +200,16 @@ that.
   counted in the transaction, to the estimated size and to `blockUsage`, and so to
   everything that reads them: the time-to-dismiss allowance, weight, block length
   and the block counts. A series adds it as a line over its members.
+- The balancing term adds `nodes` and `cost` once and `bytes` to the estimated
+  size. Balancing also grows every intent's binding commitment, so each intent
+  after the first adds `further_intent_bytes` to the size and to `blockUsage`,
+  counted in the transaction. A series adds this as a line over its members too.
 
 ## Scope and `n/a`
 
-- `balanced`: the profile's balancing term (one intent holding one dust spend) is
-  added to the transaction before the limits are read.
+- `balanced`: the profile's balancing term (one intent holding one dust spend,
+  plus each further intent's larger binding commitment) is added to the
+  transaction before the limits are read.
 - `contract-only`: the profile does not know the balancing term, so every result
   covers the contract's transaction alone.
 - `as-submitted`: the transaction is already balanced; its numbers are read as
@@ -218,10 +229,6 @@ that.
 - Proving can pad a call's transcript. One circuit's single call gained a 10-byte
   noop, two DAG nodes and 16,001,011 ps of compute time when proved; the term does
   not model this.
-- The balancing term is the conservative end of two measured mints; its node count
-  varied from +8 to +10 and its size by about 20 bytes between runs. It was measured
-  on single-intent transactions. Balancing grows every intent's binding commitment
-  from 33 to 96 or 97 bytes, so a 40-intent merge grew by 5,772 bytes, not 3,283.
-  The runner builds one intent per call, so a multi-call scenario's size and weight
-  run low by about 64 bytes per call after the first, and its block count near a
-  boundary can come out one too high.
+- The balancing term is the conservative end of the measured mints; its node count
+  varied from +8 to +10 and its one-intent size by about 20 bytes between runs. Its
+  per-intent part was measured on one-call intents, up to 41 per transaction.

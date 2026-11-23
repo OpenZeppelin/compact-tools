@@ -22,6 +22,10 @@
     "builtinProofs": 1,
     "bytes": "566"
   },
+  "balancingTerm": {
+    "intents": 1,
+    "bytes": "3283"
+  },
   "timeToDismiss": {
     "used": "11360777745",
     "allowed": "29364000000"

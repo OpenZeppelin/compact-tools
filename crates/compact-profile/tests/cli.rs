@@ -569,6 +569,30 @@ fn the_proof_term_is_added_to_an_unproven_transaction_only() {
 }
 
 #[test]
+fn the_balancing_term_counts_each_intent_of_an_unbalanced_transaction() {
+    // The 40-call merge balanced to 444,822 bytes on node 2.1.101.
+    let cases = [
+        ("../live/base-mint-unproven.bin", 1, Some("3283"), "14832"),
+        (
+            "../live/base-merged-n40-unproven.bin",
+            40,
+            Some("5818"),
+            "444868",
+        ),
+        ("../live/base-mint-proven.bin", 1, Some("3283"), "14832"),
+        ("../live/base-mint-balanced.bin", 2, None, "14813"),
+    ];
+    for (file, intents, bytes, size) in cases {
+        let report = cost_json(file);
+        let term = &report["balancingTerm"];
+        assert_eq!(term["intents"], intents, "{file}");
+        assert!(term.get("bytes").is_some(), "{file}");
+        assert_eq!(term["bytes"].as_str(), bytes, "{file}");
+        assert_eq!(tx_bytes_used(&report), size, "{file}");
+    }
+}
+
+#[test]
 fn a_profile_without_the_proof_term_reports_it_unknown_and_reads_the_estimate() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let shipped = std::fs::read_to_string(

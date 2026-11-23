@@ -58,7 +58,7 @@
           "bytesWritten": "352",
           "bytesChurned": "35680"
         },
-        "serializedLen": 5667,
+        "serializedLen": 5668,
         "declaredNodes": 119
       }
     },
@@ -94,11 +94,11 @@
         "cost": {
           "readTime": "6205000000",
           "computeTime": "15303513170",
-          "blockUsage": "21243",
+          "blockUsage": "21244",
           "bytesWritten": "320",
           "bytesChurned": "27920"
         },
-        "serializedLen": 3593,
+        "serializedLen": 3594,
         "declaredNodes": 101
       }
     },
@@ -114,11 +114,11 @@
         "cost": {
           "readTime": "11475000000",
           "computeTime": "30099624101",
-          "blockUsage": "42034",
+          "blockUsage": "42035",
           "bytesWritten": "640",
           "bytesChurned": "55840"
         },
-        "serializedLen": 6660,
+        "serializedLen": 6663,
         "declaredNodes": 148
       }
     },
@@ -154,11 +154,11 @@
         "cost": {
           "readTime": "108970000000",
           "computeTime": "303827587190",
-          "blockUsage": "426367",
+          "blockUsage": "426363",
           "bytesWritten": "6560",
           "bytesChurned": "572360"
         },
-        "serializedLen": 63165,
+        "serializedLen": 63162,
         "declaredNodes": 1013
       }
     },
@@ -174,11 +174,11 @@
         "cost": {
           "readTime": "111605000000",
           "computeTime": "311225642656",
-          "blockUsage": "436764",
+          "blockUsage": "436766",
           "bytesWritten": "6720",
           "bytesChurned": "586320"
         },
-        "serializedLen": 64696,
+        "serializedLen": 64698,
         "declaredNodes": 1037
       }
     }

@@ -20,11 +20,11 @@
         "cost": {
           "readTime": "11475000000",
           "computeTime": "30099624101",
-          "blockUsage": "42034",
+          "blockUsage": "42035",
           "bytesWritten": "640",
           "bytesChurned": "55840"
         },
-        "serializedLen": 6660,
+        "serializedLen": 6663,
         "declaredNodes": 148
       }
     }
