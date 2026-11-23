@@ -56,7 +56,8 @@ Deploys the contract in memory and reads `network`'s ledger parameters from
 | `contract` | Required; a compiled contract instance, `new Contract(witnesses)` |
 | `network` | Required; the profile whose parameters partition transcripts |
 | `outDir` | Required |
-| `constructorArgs`, `privateState` | `[]`, `undefined` |
+| `constructorArgs` | `[]` |
+| `privateState` | Required unless the private state type admits `undefined` |
 | `caller` | `defaultCaller().coinPublicKey`, keys from seed sha256(`compact-profiler:caller`) |
 | `encryptionPublicKey` | `(coinPublicKey) => defaultCaller().encryptionPublicKey` |
 | `contractAddress` | `DEFAULTS.contractAddress`, sha256(`compact-profiler:contract-address`) |
@@ -77,7 +78,14 @@ Deploys the contract in memory and reads `network`'s ledger parameters from
   and 8 below the maximum, the maximum and the first size over. Returns
   `{ maxN, capped, binding, scenarios }`.
 - `apply(build)`: runs calls on the base state without recording a transaction.
-- `write()`: writes the manifest and returns its path.
+- `write()`: writes the manifest, deletes every `.tx` file under `<outDir>/txs` the manifest
+  does not list, and returns the manifest's path.
+
+`conflict` defaults to `none`, the optimistic value: copies of the transaction share a block.
+`serial` fits one copy per block. A scenario is `serial` when its circuit reads, in-circuit, a
+ledger value that another copy of the same transaction writes: a `Counter.read`, a
+`Map.lookup`, a cell read. The sample's `incrementFrom` in
+[`Counter.compact`](test/fixtures/sample-contracts/Counter.compact) is one.
 
 Every scenario starts from the base state: the deployed state plus every `apply`. A build
 receives a `TxBuilder`:
@@ -90,7 +98,8 @@ receives a `TxBuilder`:
 
 Runs `compact-profile check`, or `update` with `update: true`. Resolves to
 `{ exitCode, stdout, stderr }`. A non-zero exit rejects with `ProfileCommandError`, which
-carries the same fields and puts both streams in its message.
+carries the same fields and puts both streams in its message. `sizeTolerance` applies to
+`check` only and rejects with `update: true`.
 
 `runProfileBinary(args)`, `networkParams(network)` and `costTransaction(tx, network)` run
 the binary directly.
@@ -119,8 +128,11 @@ lands.
 - `serializedLen` and `blockUsage` vary by a few bytes between runs: the ledger draws
   randomness when it builds intents and Zswap outputs, and field elements serialize with
   leading zero bytes dropped. The spread grows with calls (observed: 2 bytes for one mint, 5
-  for four, 12 for forty). Every other number is stable. `check` allows 32 bytes on those
-  two by default, and `runCheck`'s `sizeTolerance` changes that.
+  for four, 12 for forty). Every other measured number is stable. `check` allows 32 bytes on
+  those two by default, and `runCheck`'s `sizeTolerance` changes that.
+- `txsPerBlock`, `opsPerBlock` and a fit-based `maxN` follow `blockUsage` and are compared
+  exactly, so a scenario on a block-count boundary can flip between builds. `sizeTolerance`
+  does not absorb that.
 - The ledger client version fixes the gas a transaction declares, so the numbers change with
   `@midnightntwrk/ledger-v9`'s version. The snapshot records which version built them.
 

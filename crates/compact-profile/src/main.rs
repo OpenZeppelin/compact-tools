@@ -40,7 +40,7 @@ enum Command {
     /// Cost one serialized transaction (unproven, proven or balanced) against one network.
     Cost(CostArgs),
     /// Check a manifest's scenarios against the runner's numbers and a snapshot.
-    Check(RunArgs),
+    Check(CheckArgs),
     /// Write the snapshot `check` compares against.
     Update(RunArgs),
 }
@@ -100,6 +100,12 @@ struct RunArgs {
     /// Output format.
     #[arg(long, value_enum, default_value_t = Reporter::Table, value_name = "NAME")]
     reporter: Reporter,
+}
+
+#[derive(Debug, clap::Args)]
+struct CheckArgs {
+    #[command(flatten)]
+    run: RunArgs,
 
     /// Bytes a scenario's serializedLen and blockUsage may drift before `check` fails.
     /// 0 compares them exactly.
@@ -213,11 +219,11 @@ fn render(args: &RunArgs, analysis: &Analysis, drift: Option<&[Drift]>) -> Resul
     .context("writing the report")
 }
 
-fn run_check(args: &RunArgs) -> Result<ExitCode> {
-    let committed = Snapshot::load(&args.snapshot)?;
-    let analysis = analyze(args)?;
+fn run_check(args: &CheckArgs) -> Result<ExitCode> {
+    let committed = Snapshot::load(&args.run.snapshot)?;
+    let analysis = analyze(&args.run)?;
     let drift = snapshot::compare(&committed, &Snapshot::of(&analysis), args.size_tolerance)?;
-    render(args, &analysis, Some(&drift))?;
+    render(&args.run, &analysis, Some(&drift))?;
     eprintln!(
         "{} {}",
         scope_line(&analysis),

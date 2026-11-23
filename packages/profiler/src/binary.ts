@@ -94,7 +94,7 @@ export function expectedChecksum(text: string, asset: string): string {
 /**
  * Path to the `compact-profile` executable, downloading it into the user cache when missing.
  *
- * Messages carry no `compact-lint:` prefix; the bin adds it.
+ * Messages carry no `compact-profile:` prefix; the bin adds it.
  */
 export async function resolveBinary(options: ResolveOptions): Promise<string> {
   const override = options.env.COMPACT_PROFILE_BINARY;

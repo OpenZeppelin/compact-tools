@@ -99,12 +99,18 @@ export interface CompiledContract<PS> {
   >;
 }
 
-export interface ProfilerOptions<PS> extends ProfileSource {
+/** `privateState` may be omitted only when `undefined` is a valid private state. */
+type PrivateStateOption<PS> = undefined extends PS
+  ? { privateState?: PS }
+  : { privateState: PS };
+
+export type ProfilerOptions<PS> = BaseOptions<PS> & PrivateStateOption<PS>;
+
+interface BaseOptions<PS> extends ProfileSource {
   /** The manifest's `contract`. */
   name: string;
   contract: CompiledContract<PS>;
   constructorArgs?: readonly unknown[];
-  privateState?: PS;
   /** Coin public key, hex, that deploys and calls; default {@link defaultCaller}. */
   caller?: string;
   /** Encryption key for a coin sent to `coinPublicKey`; default the default caller's. */
@@ -663,6 +669,7 @@ export async function createProfiler<PS>(
   const keys = defaultCaller();
   const caller = options.caller ?? keys.coinPublicKey;
   const deployed = await options.contract.initialState(
+    // ProfilerOptions lets `privateState` be omitted only when `undefined` is a `PS`.
     createConstructorContext(options.privateState as PS, caller),
     ...(options.constructorArgs ?? []),
   );

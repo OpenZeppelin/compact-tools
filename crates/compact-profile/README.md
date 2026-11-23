@@ -25,7 +25,7 @@ compact-profile update --manifest <file> --network <name>... --snapshot <file> [
 - `--network <name>`: a shipped profile, `mainnet`, `preprod` or `undeployed`.
   `check` and `update` take it more than once.
 - `--profile-file <file>`: a profile on disk. It replaces the shipped profile of
-  the same name, or adds a network.
+  the same name, or adds a network. Two files with one profile name are an error.
 - `params` prints the params identity; `--reporter json` prints `network`,
   `provisional`, `nodeRelease`, `ledgerCrate`, `paramsIdentity` and
   `minClientLedger` (string or `null`). With `--out` it also writes the tagged
@@ -64,9 +64,10 @@ Node caps: `max_transaction_nodes`, `weight_scale`, `fixed_extra_weight`,
 
 The `mainnet` and `preprod` caps and balancing term were observed on 2026-11-20
 on a local dev chain running node 2.1.101, spec_version 2001100, the runtime both
-networks reported that day. `fixed_extra_weight` is a storage value, read on that
-chain only. `undeployed` is that dev chain, so it carries the same caps. A local
-stack on another node release needs its own profile file.
+networks reported that day. On 2026-11-23 each network's own runtime metadata
+showed the same caps, and its storage left `fixed_extra_weight` unset, so the
+runtime default applies. `undeployed` is the dev chain, so it carries the same
+caps. A local stack on another node release needs its own profile file.
 
 ## Manifest
 
@@ -106,6 +107,9 @@ One object. Numbers that can pass `2^53` are decimal strings.
 | `fits` | `true` when no limit is `over` |
 | `binding` | The limit with the highest ratio, or `null` |
 
+- `serializedLen`, `estimatedSize`, `declaredNodes` and `cost` are the transaction
+  as read. `timeToDismiss`, `weight` and `limits` include the balancing term when
+  `scope` is `balanced`.
 - `limits[].name`, in order: `nodes`, `txBytes`, `readTime`, `computeTime`,
   `blockUsage`, `bytesWritten`, `bytesChurned`, `timeToDismiss`,
   `extrinsicWeight`, `blockWeight`, `blockLength`.
@@ -144,7 +148,10 @@ JSON, written by `update`. Numbers only:
 Comparison is exact, except for `measured.serializedLen` and
 `measured.cost.blockUsage`, which jitter by a few bytes between builds. Those
 two may differ by up to `--size-tolerance` bytes (default 32).
-`--size-tolerance 0` compares them exactly.
+`--size-tolerance 0` compares them exactly. `txsPerBlock`, `opsPerBlock` and a
+fit-based `maxN` follow `blockUsage` and are compared exactly, so a scenario on a
+block-count boundary can flip between builds. `--size-tolerance` does not absorb
+that.
 
 ## Capacity model
 

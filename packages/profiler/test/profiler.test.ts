@@ -1,8 +1,24 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Transaction } from '@midnightntwrk/ledger-v9';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+  vi,
+} from 'vitest';
 import { runCheck } from '../src/commands.ts';
 import type { Manifest } from '../src/manifest.ts';
 import {
@@ -17,8 +33,20 @@ import {
   ledger as counterLedger,
 } from './fixtures/artifacts/Counter/contract/index.js';
 import { Contract as Mint } from './fixtures/artifacts/Mint/contract/index.js';
+import { Contract as PrivateCounter } from './fixtures/artifacts/PrivateCounter/contract/index.js';
 
 const { binary, skip } = binaryUnderTest(process.env, existsSync);
+
+const SHIPPED_MAINNET = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'crates',
+  'compact-profile',
+  'profiles',
+  'mainnet.toml',
+);
 const skipReason = skip === undefined ? '' : ` (skipped: ${skip})`;
 
 const caller = defaultCaller().coinPublicKey;
@@ -48,6 +76,27 @@ function counter(
     outDir: join(root, outDir),
     binary,
     ...extra,
+  });
+}
+
+interface CountState {
+  count: bigint;
+}
+
+/** The PrivateCounter sample, its witness handing out the private count from 5. */
+function privateCounter(outDir: string): Promise<Profiler<CountState>> {
+  return createProfiler({
+    name: 'PrivateCounter',
+    contract: new PrivateCounter<CountState>({
+      nextCount: ({ privateState }) => [
+        { count: privateState.count + 1n },
+        privateState.count,
+      ],
+    }),
+    privateState: { count: 5n },
+    network: 'mainnet',
+    outDir: join(root, outDir),
+    binary,
   });
 }
 
@@ -133,6 +182,20 @@ function withoutSizes(manifest: Manifest): unknown {
     },
   }));
 }
+
+describe('ProfilerOptions', () => {
+  it('requires privateState unless undefined is a valid private state', () => {
+    expectTypeOf<
+      Pick<ProfilerOptions<CountState>, 'privateState'>
+    >().toEqualTypeOf<{ privateState: CountState }>();
+    expectTypeOf<
+      Pick<ProfilerOptions<CountState | undefined>, 'privateState'>
+    >().toEqualTypeOf<{ privateState?: CountState | undefined }>();
+    expectTypeOf<
+      Pick<ProfilerOptions<unknown>, 'privateState'>
+    >().toEqualTypeOf<{ privateState?: unknown }>();
+  });
+});
 
 describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
   describe('manifest', () => {
@@ -258,6 +321,43 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
     });
   });
 
+  describe('transaction', () => {
+    it('gives each call its own intent at segments 1 to N, in call order', async () => {
+      const profiler = await mint('segments');
+      const entry = await profiler.scenario('three circuits', (tx) => {
+        tx.call('mint', recipient, 1000n, nonce(0));
+        tx.call('mintToSelf', 1000n, nonce(1));
+        tx.call('mintUnshielded', { bytes: nonce(99) }, 1000n);
+      });
+
+      const tx = Transaction.deserialize(
+        'signature',
+        'pre-proof',
+        'pre-binding',
+        new Uint8Array(readFileSync(join(root, 'segments', entry.tx))),
+      );
+      const entryPoints = (segment: number) =>
+        tx.intents
+          ?.get(segment)
+          ?.actions.map((action) =>
+            'entryPoint' in action
+              ? typeof action.entryPoint === 'string'
+                ? action.entryPoint
+                : new TextDecoder().decode(action.entryPoint)
+              : null,
+          );
+
+      expect(
+        [...(tx.intents?.keys() ?? [])].sort((a, b) => a - b),
+      ).toStrictEqual([1, 2, 3]);
+      expect([1, 2, 3].map(entryPoints)).toStrictEqual([
+        ['mint'],
+        ['mintToSelf'],
+        ['mintUnshielded'],
+      ]);
+    });
+  });
+
   describe('state', () => {
     it('chains the calls of one scenario', async () => {
       const profiler = await counter('chain');
@@ -311,6 +411,46 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
         await tx.call('increment');
         expect(counterLedger(tx.contractState).count).toBe(2n);
       });
+    });
+
+    it('threads the private state through the calls of one scenario', async () => {
+      const profiler = await privateCounter('private-chain');
+      const seen: unknown[] = [];
+
+      await profiler.scenario('record twice', async (tx) => {
+        seen.push(await tx.call('record'), tx.privateState);
+        seen.push(await tx.call('record'), tx.privateState);
+      });
+
+      expect(seen).toStrictEqual([5n, { count: 6n }, 6n, { count: 7n }]);
+    });
+
+    it('starts every scenario from the base private state', async () => {
+      const profiler = await privateCounter('private-base');
+      const seen: unknown[] = [];
+
+      await profiler.scenario('first', async (tx) => {
+        seen.push(await tx.call('record'));
+      });
+      await profiler.scenario('second', async (tx) => {
+        seen.push(await tx.call('record'));
+      });
+
+      expect(seen).toStrictEqual([5n, 5n]);
+      expect(profiler.privateState).toStrictEqual({ count: 5n });
+    });
+
+    it('advances the base private state with apply', async () => {
+      const profiler = await privateCounter('private-apply');
+      const seen: unknown[] = [];
+
+      await profiler.apply((tx) => tx.call('record'));
+      await profiler.scenario('after apply', async (tx) => {
+        seen.push(await tx.call('record'));
+      });
+
+      expect(seen).toStrictEqual([6n]);
+      expect(profiler.privateState).toStrictEqual({ count: 6n });
     });
 
     it('returns a circuit result to an awaiting builder', async () => {
@@ -450,6 +590,36 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
 
       expect(result).toMatchObject({ maxN: 4, capped: true, binding: null });
       expect(result.scenarios.map((entry) => entry.n)).toStrictEqual([1, 2, 4]);
+    });
+  });
+
+  describe('client ledger', () => {
+    it('warns once when the client ledger is below a network minimum', async () => {
+      const profileFile = join(root, 'minimum-9.9.9.toml');
+      writeFileSync(
+        profileFile,
+        readFileSync(SHIPPED_MAINNET, 'utf8').replace(
+          'value = "1.0.2"',
+          'value = "9.9.9"',
+        ),
+      );
+      const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+      let written: string[] = [];
+      try {
+        const profiler = await counter('below-minimum', { profileFile });
+        await profiler.searchMax('increment', { cap: 1 }, (tx) =>
+          tx.call('increment'),
+        );
+      } finally {
+        written = stderr.mock.calls.map(([chunk]) => String(chunk));
+        stderr.mockRestore();
+      }
+
+      expect(
+        written.filter((line) =>
+          line.includes("below mainnet's minimum client ledger 9.9.9"),
+        ),
+      ).toHaveLength(1);
     });
   });
 });

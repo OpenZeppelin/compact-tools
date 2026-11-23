@@ -2,7 +2,12 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ProfileCommandError, runCheck } from '../src/commands.ts';
+import {
+  costTransaction,
+  networkParams,
+  ProfileCommandError,
+  runCheck,
+} from '../src/commands.ts';
 import { resolveProfileBinary, runProfileBinary } from '../src/launcher.ts';
 import { compareVersions, slugify } from '../src/manifest.ts';
 import { declaredNodes } from '../src/transaction.ts';
@@ -13,6 +18,14 @@ let dir: string;
 function stub(status: number): string {
   const path = join(dir, `stub-${status}`);
   writeFileSync(path, `#!/bin/sh\necho "$*"\necho err >&2\nexit ${status}\n`);
+  chmodSync(path, 0o755);
+  return path;
+}
+
+/** A stand-in binary that prints `report` and exits 0. */
+function printing(report: string): string {
+  const path = join(dir, 'printing');
+  writeFileSync(path, `#!/bin/sh\necho '${report}'\n`);
   chmodSync(path, 0o755);
   return path;
 }
@@ -105,6 +118,59 @@ describe('runCheck', () => {
     await expect(
       runCheck({ manifest: 'm.json', networks: [], snapshot: 's.json' }),
     ).rejects.toThrow('runCheck needs at least one network');
+  });
+
+  it('rejects a size tolerance on update', async () => {
+    await expect(
+      runCheck({
+        binary: stub(0),
+        manifest: 'm.json',
+        networks: ['mainnet'],
+        snapshot: 's.json',
+        update: true,
+        sizeTolerance: 3,
+      }),
+    ).rejects.toThrow('sizeTolerance applies to check only');
+  });
+});
+
+describe('reports', () => {
+  it('rejects a cost report without the fields the runner reads, naming the binary', async () => {
+    const binary = printing('{}');
+
+    await expect(
+      costTransaction('a.tx', 'mainnet', { binary }),
+    ).rejects.toThrow(
+      `${binary} cost printed an unexpected report: network is not a string`,
+    );
+  });
+
+  it('rejects a params report without the fields the runner reads, naming the binary', async () => {
+    const binary = printing('{}');
+
+    await expect(networkParams('mainnet', { binary })).rejects.toThrow(
+      `${binary} params printed an unexpected report: network is not a string`,
+    );
+  });
+
+  it('names the limit whose field has the wrong type', async () => {
+    const binary = printing(
+      '{"network":"mainnet","fits":true,"binding":null,"serializedLen":1,"declaredNodes":1,"limits":[{"name":"nodes","used":"1","allowed":"2","ratioPpm":1,"status":"fine"}]}',
+    );
+
+    await expect(
+      costTransaction('a.tx', 'mainnet', { binary }),
+    ).rejects.toThrow(
+      `${binary} cost printed an unexpected report: limits[0].status is not one of ok, over, n/a`,
+    );
+  });
+
+  it('rejects output that is not a JSON object', async () => {
+    const binary = stub(0);
+
+    await expect(
+      costTransaction('a.tx', 'mainnet', { binary }),
+    ).rejects.toThrow(`${binary} cost printed no JSON object`);
   });
 });
 

@@ -132,6 +132,8 @@ each release carries native binaries as well as an npm package.
   `Cargo.toml`. The release workflow bumps the package, mirrors the value into the
   crate, refreshes `Cargo.lock`, and commits all three. A unit test in each
   package fails when the two drift.
+- The release workflow builds the crate's release binary before it runs the
+  package's tests.
 - The publish workflow builds four binaries before publishing, one per target, each
   on its own runner:
 

@@ -2,9 +2,9 @@
 //!
 //! Every case runs inside `tests/fixtures/<case>/` and shares the transactions, manifest
 //! and snapshot in `tests/fixtures/mint/`. `tests/fixtures/README.md` says how to regenerate
-//! them.
+//! them. A case that needs an edited input derives it from `mint/` in a temporary directory.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use assert_cmd::prelude::*;
@@ -58,6 +58,15 @@ fn run(name: &str, args: &[&str]) -> (i32, String, String) {
     )
 }
 
+fn read_json(path: &Path) -> serde_json::Value {
+    let text = std::fs::read_to_string(path).expect("the file is readable");
+    serde_json::from_str(&text).expect("the file is JSON")
+}
+
+fn utf8(path: &Path) -> &str {
+    path.to_str().expect("the path is UTF-8")
+}
+
 fn check(name: &str, manifest: &str, snapshot: &str, extra: &[&str]) -> (i32, String, String) {
     let mut args = vec![
         "check",
@@ -107,23 +116,22 @@ fn an_old_client_ledger_labels_the_network_without_failing() {
 }
 
 /// `update --reporter json` into a temporary snapshot, parsed, with stderr.
-fn update_json(name: &str, manifest: &str) -> (serde_json::Value, String) {
+fn update_json(name: &str, manifest: &str, extra: &[&str]) -> (serde_json::Value, String) {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let snapshot = dir.path().join("snapshot.json");
-    let (code, stdout, stderr) = run(
-        name,
-        &[
-            "update",
-            "--manifest",
-            manifest,
-            "--network",
-            "mainnet",
-            "--snapshot",
-            snapshot.to_str().expect("the path is UTF-8"),
-            "--reporter",
-            "json",
-        ],
-    );
+    let mut args = vec![
+        "update",
+        "--manifest",
+        manifest,
+        "--network",
+        "mainnet",
+        "--snapshot",
+        snapshot.to_str().expect("the path is UTF-8"),
+        "--reporter",
+        "json",
+    ];
+    args.extend_from_slice(extra);
+    let (code, stdout, stderr) = run(name, &args);
     assert_eq!(code, 0, "{stderr}");
     (
         serde_json::from_str(&stdout).expect("update prints JSON"),
@@ -152,7 +160,7 @@ fn assert_ops_per_block(entry: &serde_json::Value, ops: u64) {
 
 #[test]
 fn ops_default_to_calls_in_the_report() {
-    let (report, _) = update_json("check-pass", MANIFEST);
+    let (report, _) = update_json("check-pass", MANIFEST, &[]);
     let merged = scenario(&report, "mint multi-call n=8");
     assert_eq!(merged["calls"], 8);
     assert_eq!(merged["ops"], 8);
@@ -161,7 +169,7 @@ fn ops_default_to_calls_in_the_report() {
 
 #[test]
 fn a_batch_circuit_counts_its_ops_per_block() {
-    let (report, _) = update_json("check-pass", MANIFEST);
+    let (report, _) = update_json("check-pass", MANIFEST, &[]);
     let batch = scenario(&report, "mint batch of 4");
     assert_eq!(batch["calls"], 1);
     assert_eq!(batch["ops"], 4);
@@ -170,7 +178,7 @@ fn a_batch_circuit_counts_its_ops_per_block() {
 
 #[test]
 fn a_manifest_without_a_client_ledger_says_so_once_and_is_not_labelled() {
-    let (report, stderr) = update_json("check-client", "manifest-no-client.json");
+    let (report, stderr) = update_json("check-client", "manifest-no-client.json", &[]);
     assert_eq!(report["networks"][0]["clientBelowMinimum"], false);
     assert_eq!(
         stderr
@@ -179,6 +187,59 @@ fn a_manifest_without_a_client_ledger_says_so_once_and_is_not_labelled() {
         1,
         "{stderr}"
     );
+}
+
+#[test]
+fn an_unparsable_client_ledger_says_so_once_and_is_not_labelled() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let mut manifest = read_json(&case("mint").join("manifest.json"));
+    manifest["toolchain"]["@midnightntwrk/ledger-v9"] = "latest".into();
+    std::fs::create_dir(dir.path().join("txs")).expect("the txs directory is creatable");
+    for scenario in manifest["scenarios"]
+        .as_array()
+        .expect("the manifest lists scenarios")
+    {
+        let tx = scenario["tx"].as_str().expect("each scenario names its tx");
+        std::fs::copy(case("mint").join(tx), dir.path().join(tx)).expect("the tx copies");
+    }
+    let path = dir.path().join("manifest.json");
+    std::fs::write(&path, manifest.to_string()).expect("the manifest is writable");
+
+    let (report, stderr) = update_json("check-client", utf8(&path), &[]);
+    assert_eq!(report["networks"][0]["clientBelowMinimum"], false);
+    assert_eq!(
+        stderr
+            .matches(
+                "compact-profile: warning: the manifest's @midnightntwrk/ledger-v9 version \
+                 \"latest\" is not a semantic version, so it is not checked against the minimum \
+                 client ledger.\n"
+            )
+            .count(),
+        1,
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_profile_file_with_an_unshipped_name_adds_a_network() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let shipped = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("profiles/mainnet.toml"),
+    )
+    .expect("the shipped profile is readable");
+    let custom = shipped.replacen("name = \"mainnet\"", "name = \"custom\"", 1);
+    assert_ne!(custom, shipped);
+    let path = dir.path().join("custom.toml");
+    std::fs::write(&path, custom).expect("the profile is writable");
+
+    let (report, _) = update_json("check-pass", MANIFEST, &["--profile-file", utf8(&path)]);
+    let networks: Vec<&str> = report["networks"]
+        .as_array()
+        .expect("the report lists networks")
+        .iter()
+        .map(|network| network["network"].as_str().expect("each network is named"))
+        .collect();
+    assert_eq!(networks, ["mainnet", "custom"]);
 }
 
 #[test]
@@ -267,6 +328,56 @@ fn check_absorbs_byte_jitter_unless_the_size_tolerance_is_zero() {
 }
 
 #[test]
+fn the_default_size_tolerance_absorbs_32_bytes_and_not_33() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let committed = read_json(&case("mint").join("snapshot.json"));
+    let first = &committed["scenarios"][0];
+    let name = first["name"].as_str().expect("the scenario is named");
+    let len = first["measured"]["serializedLen"]
+        .as_u64()
+        .expect("serializedLen is a number");
+    let usage: u64 = first["measured"]["cost"]["blockUsage"]
+        .as_str()
+        .and_then(|text| text.parse().ok())
+        .expect("blockUsage is a decimal string");
+    let shifted = |bytes: u64| {
+        let mut snapshot = committed.clone();
+        let measured = &mut snapshot["scenarios"][0]["measured"];
+        measured["serializedLen"] = (len + bytes).into();
+        measured["cost"]["blockUsage"] = (usage + bytes).to_string().into();
+        let path = dir.path().join(format!("shifted-{bytes}.json"));
+        std::fs::write(&path, snapshot.to_string()).expect("the snapshot is writable");
+        path
+    };
+
+    let (code, _, stderr) = check("check-pass", MANIFEST, utf8(&shifted(32)), &[]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        stderr,
+        "Checked 9 scenarios on 1 network. Snapshot matches.\n"
+    );
+
+    let (code, stdout, stderr) = check("check-pass", MANIFEST, utf8(&shifted(33)), &[]);
+    assert_eq!(code, EXIT_FINDINGS);
+    assert_eq!(
+        stderr,
+        "Checked 9 scenarios on 1 network. Found 2 drifted values.\n"
+    );
+    for line in [
+        format!(
+            "scenarios[{name}].measured.cost.blockUsage: {} -> {usage}",
+            usage + 33
+        ),
+        format!(
+            "scenarios[{name}].measured.serializedLen: {} -> {len}",
+            len + 33
+        ),
+    ] {
+        assert!(stdout.contains(&line), "{stdout}");
+    }
+}
+
+#[test]
 fn a_missing_snapshot_is_an_error() {
     let (code, stdout, stderr) = check("check-pass", MANIFEST, "absent.json", &[]);
     assert_eq!(stdout, "");
@@ -322,6 +433,33 @@ fn update_refuses_to_write_when_parity_fails() {
     );
     assert_eq!(code, EXIT_FINDINGS);
     assert!(stderr.ends_with("Snapshot not written.\n"), "{stderr}");
+    assert!(!written.exists());
+}
+
+#[test]
+fn update_refuses_a_size_tolerance() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let written = dir.path().join("snapshot.json");
+    let (code, stdout, stderr) = run(
+        "check-pass",
+        &[
+            "update",
+            "--manifest",
+            MANIFEST,
+            "--network",
+            "mainnet",
+            "--snapshot",
+            utf8(&written),
+            "--size-tolerance",
+            "5",
+        ],
+    );
+    assert_eq!(stdout, "");
+    assert_eq!(code, EXIT_ERROR);
+    assert!(
+        stderr.contains("unexpected argument '--size-tolerance'"),
+        "{stderr}"
+    );
     assert!(!written.exists());
 }
 

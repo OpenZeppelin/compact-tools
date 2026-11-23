@@ -35,31 +35,31 @@ ea503eb0bae1912312eea6549608753602127a0002fd4314000284d717000000
 
 [node.max_transaction_nodes]
 value = 1024
-source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (midnight.maxTransactionNodes). Source: midnight-node release/node-2.1.101 runtime/src/lib.rs:676 (MaxTransactionNodes = ConstU32<1024>); pallets/midnight/src/lib.rs:537-543 rejects nodes > max"
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (midnight.maxTransactionNodes). Mainnet's own runtime metadata showed the same value on 2026-11-23. Source: midnight-node release/node-2.1.101 runtime/src/lib.rs:676 (MaxTransactionNodes = ConstU32<1024>); pallets/midnight/src/lib.rs:537-543 rejects nodes > max"
 
 [node.weight_scale]
 value = 2_000_000_000_000
-source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.maxBlock.refTime). Source: runtime/src/lib.rs:314-318 (BlockWeights max_block); pallets/midnight/src/lib.rs:626, :670 pass max_block.ref_time() as max_weight; ledger/src/ledger_9/mod.rs:1064-1069, :1649-1661 scale the largest normalized dimension by it, rounding up and capping at max_weight"
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.maxBlock.refTime). Mainnet's own runtime metadata showed the same value on 2026-11-23. Source: runtime/src/lib.rs:314-318 (BlockWeights max_block); pallets/midnight/src/lib.rs:626, :670 pass max_block.ref_time() as max_weight; ledger/src/ledger_9/mod.rs:1064-1069, :1649-1661 scale the largest normalized dimension by it, rounding up and capping at max_weight"
 
 [node.fixed_extra_weight]
 value = 20_000_000_000
-source = "Observed 2026-11-20 in the storage of a local dev chain on node 2.1.101, spec_version 2001100 (midnight configurableTransactionSizeWeight); a storage value, read on the local dev chain, not on mainnet or preprod. Source: pallets/midnight/src/lib.rs:686-691 adds it to the scaled cost; its default is EXTRA_WEIGHT_TX_SIZE (:110, :191-204)"
+source = "Read 2026-11-23 on https://rpc.mainnet.midnight.network at block 3,581,163 (system_version 2.1.101-913ec011, spec_version 2001100): midnight.configurableTransactionSizeWeight is 20,000,000,000 refTime. The storage item is unset, so the runtime default applies. Source: pallets/midnight/src/lib.rs:686-691 adds it to the scaled cost; its default is EXTRA_WEIGHT_TX_SIZE (:110, :191-204)"
 
 [node.base_extrinsic_weight]
 value = 108_157_000
-source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.baseExtrinsic.refTime). frame_system CheckWeight adds it per extrinsic to the class total (pallets/midnight/src/lib.rs:595-596 mirrors that), not to the dispatch weight max_extrinsic is compared with"
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.baseExtrinsic.refTime). Mainnet's own runtime metadata showed the same value on 2026-11-23. frame_system CheckWeight adds it per extrinsic to the class total (pallets/midnight/src/lib.rs:595-596 mirrors that), not to the dispatch weight max_extrinsic is compared with"
 
 [node.extrinsic_weight_ceiling]
 value = 1_299_891_843_000
-source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.maxExtrinsic.refTime), compared with the dispatch weight without the base"
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.maxExtrinsic.refTime), compared with the dispatch weight without the base. Mainnet's own runtime metadata showed the same value on 2026-11-23"
 
 [node.normal_block_weight]
 value = 1_500_000_000_000
-source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.maxTotal.refTime). Source: runtime/src/lib.rs:307 (NORMAL_DISPATCH_RATIO 75%), :314-318 (BlockWeights::with_sensible_defaults)"
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockWeights.perClass.normal.maxTotal.refTime). Mainnet's own runtime metadata showed the same value on 2026-11-23. Source: runtime/src/lib.rs:307 (NORMAL_DISPATCH_RATIO 75%), :314-318 (BlockWeights::with_sensible_defaults)"
 
 [node.normal_block_length]
 value = 786_432
-source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockLength.max.normal). Source: runtime/src/lib.rs:319-320 (BlockLength::max_with_normal_ratio(1024 * 1024, 75%))"
+source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on node 2.1.101, spec_version 2001100 (system.blockLength.max.normal). Mainnet's own runtime metadata showed the same value on 2026-11-23. Source: runtime/src/lib.rs:319-320 (BlockLength::max_with_normal_ratio(1024 * 1024, 75%))"
 
 [balancing]
 source = "Measured 2026-11-20 on a local dev chain on node 2.1.101 as balanced minus proven for a single base mint and a single preset mint; the wallet adds one intent holding one dust spend. Ranges across runs: nodes +8 to +10, bytes +3,264 to +3,283, blockUsage +3,264 to +3,278; readTime, computeTime, bytesWritten, bytesChurned and time to dismiss were constant. The values are the conservative end"

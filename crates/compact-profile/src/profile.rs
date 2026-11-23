@@ -295,6 +295,16 @@ pub fn select(networks: &[String], files: &[PathBuf]) -> Result<Vec<Profile>, Pr
         .iter()
         .map(|path| Profile::load(path))
         .collect::<Result<Vec<_>, _>>()?;
+    for (index, profile) in loaded.iter().enumerate() {
+        if loaded[..index]
+            .iter()
+            .any(|earlier| earlier.name == profile.name)
+        {
+            return Err(ProfileError::Duplicate {
+                name: profile.name.clone(),
+            });
+        }
+    }
     let mut selected = Vec::new();
     for name in networks {
         if selected
@@ -308,15 +318,11 @@ pub fn select(networks: &[String], files: &[PathBuf]) -> Result<Vec<Profile>, Pr
             None => selected.push(Profile::embedded(name)?),
         }
     }
-    for profile in loaded {
-        if networks.contains(&profile.name) {
-            continue;
-        }
-        if selected.iter().any(|chosen| chosen.name == profile.name) {
-            return Err(ProfileError::Duplicate { name: profile.name });
-        }
-        selected.push(profile);
-    }
+    selected.extend(
+        loaded
+            .into_iter()
+            .filter(|profile| !networks.contains(&profile.name)),
+    );
     if selected.is_empty() {
         return Err(ProfileError::NoneSelected);
     }
@@ -446,6 +452,24 @@ mod tests {
         assert!(matches!(
             select(&names, &[]),
             Err(ProfileError::Duplicate { .. })
+        ));
+    }
+
+    #[test]
+    fn two_files_with_one_profile_name_are_refused() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let files: Vec<PathBuf> = ["first.toml", "second.toml"]
+            .iter()
+            .map(|file| {
+                let path = dir.path().join(file);
+                std::fs::write(&path, EMBEDDED[0].1).expect("the profile is writable");
+                path
+            })
+            .collect();
+        let names = vec!["mainnet".to_owned()];
+        assert!(matches!(
+            select(&names, &files),
+            Err(ProfileError::Duplicate { name }) if name == "mainnet"
         ));
     }
 }

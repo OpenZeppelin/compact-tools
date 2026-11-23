@@ -25,7 +25,11 @@ const SAMPLE_CONTRACTS_DIR = join(
 );
 const ARTIFACTS_DIR = join(dirname(__filename), 'fixtures', 'artifacts');
 
-const CONTRACT_FILES: readonly string[] = ['Counter.compact', 'Mint.compact'];
+const CONTRACT_FILES: readonly string[] = [
+  'Counter.compact',
+  'Mint.compact',
+  'PrivateCounter.compact',
+];
 
 // Generated artifacts assert the runtime minor at load time, so the compiler must match the
 // installed compact-runtime. COMPACTC_VERSION overrides it.

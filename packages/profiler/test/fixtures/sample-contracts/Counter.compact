@@ -20,6 +20,7 @@ export circuit incrementFrom(expected: Uint<64>): [] {
 }
 
 export circuit reset(): [] {
+  // The prover supplies ownPublicKey(), so this authorizes nobody; it exercises callWith({ caller }).
   assert(ownPublicKey() == owner, "Counter: caller is not the owner");
   count.resetToDefault();
 }

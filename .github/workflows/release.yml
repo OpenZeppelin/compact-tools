@@ -118,6 +118,14 @@ jobs:
           rustup toolchain install "$CHANNEL" --profile minimal
           rustup show active-toolchain
 
+      # The profiler's end-to-end tests run target/release/compact-profile and
+      # fail under CI without it.
+      - name: Build the crate's release binary
+        if: steps.pkg.outputs.crate_dir != ''
+        env:
+          CARGO_PACKAGE: ${{ steps.pkg.outputs.cargo_package }}
+        run: cargo build --release -p "$CARGO_PACKAGE"
+
       - name: Run tests for package
         run: yarn test --filter=@openzeppelin/${{ inputs.package }}
 

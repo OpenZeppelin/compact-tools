@@ -30,6 +30,7 @@ midnight-base-crypto = "=1.1.1"
 midnight-ledger-v9 = "=1.0.1"
 midnight-serialize = "=1.2.1"
 midnight-storage = "=3.0.0"
+# Not imported: enables the storage features midnight-node builds the ledger with.
 midnight-storage-core = { version = "=1.2.3", features = ["layout-v2", "gc-v1"] }
 midnight-transient-crypto = "=3.0.1"
 portable-pty = "0.9"
