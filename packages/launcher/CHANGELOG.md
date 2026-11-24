@@ -8,6 +8,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.1.0 (2026-11-24)
+
 ### Added
 
 - `resolveBinary`, which returns the path to a Compact tool's Rust binary: the executable its override variable names, else the GitHub release asset for the host, checked against the calling package's `checksums.txt` and cached per user (#239)

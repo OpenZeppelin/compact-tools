@@ -8,6 +8,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.1.0 (2026-11-24)
+
 ### Added
 
 - `compact-profile` bin, a launcher that downloads the [`compact-profile`](https://github.com/OpenZeppelin/compact-tools/tree/main/crates/compact-profile) release binary for the host, verifies its SHA-256, and runs it (#239)
