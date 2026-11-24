@@ -204,7 +204,7 @@ where
     let tx: Transaction<Signature, P, B, InMemoryDB> =
         tagged_deserialize(payload).map_err(TxError::Deserialize)?;
     let intents = match &tx {
-        Transaction::Standard(stx) => u64::try_from(stx.intents.size()).unwrap_or(u64::MAX),
+        Transaction::Standard(stx) => count(stx.intents.size()),
         Transaction::ClaimRewards(_) => 0,
     };
     Ok(Read {
@@ -225,7 +225,6 @@ where
     let Transaction::Standard(stx) = tx else {
         return Proofs::default();
     };
-    let count = |len: usize| u64::try_from(len).unwrap_or(u64::MAX);
     let mut proofs = Proofs::default();
     for entry in stx.intents.iter() {
         let intent = &entry.1;
@@ -240,7 +239,7 @@ where
         }
     }
     let guaranteed = stx.guaranteed_coins.iter().map(|offer| {
-        (
+        offer_proofs(
             offer.inputs.len(),
             offer.outputs.len(),
             offer.transient.len(),
@@ -248,20 +247,27 @@ where
     });
     let fallible = stx.fallible_coins.iter().map(|entry| {
         let offer = &entry.1;
-        (
+        offer_proofs(
             offer.inputs.len(),
             offer.outputs.len(),
             offer.transient.len(),
         )
     });
-    for (inputs, outputs, transients) in guaranteed.chain(fallible) {
-        proofs.builtin = proofs
-            .builtin
-            .saturating_add(count(inputs))
-            .saturating_add(count(outputs))
-            .saturating_add(count(transients).saturating_mul(2));
+    for builtin in guaranteed.chain(fallible) {
+        proofs.builtin = proofs.builtin.saturating_add(builtin);
     }
     proofs
+}
+
+/// The built-in proofs of one Zswap offer: one per input and output, two per transient.
+fn offer_proofs(inputs: usize, outputs: usize, transients: usize) -> u64 {
+    count(inputs)
+        .saturating_add(count(outputs))
+        .saturating_add(count(transients).saturating_mul(2))
+}
+
+fn count(len: usize) -> u64 {
+    u64::try_from(len).unwrap_or(u64::MAX)
 }
 
 fn plain(cost: &SyntheticCost) -> Cost {
@@ -278,6 +284,7 @@ fn plain(cost: &SyntheticCost) -> Cost {
 mod tests {
     use super::*;
     use crate::manifest::JsMeasurement;
+    use midnight_ledger_v9::structure::StandardTransaction;
 
     fn payload(body: &[u8]) -> Vec<u8> {
         let mut bytes = Form::Unproven.tag().as_bytes().to_vec();
@@ -429,6 +436,52 @@ mod tests {
             let (form, measurement) = measure(&bytes, &mainnet()).expect("it measures");
             assert_eq!(measurement.proofs, Proofs { calls, builtin }, "{form}");
         }
+    }
+
+    #[test]
+    fn an_offer_counts_one_proof_per_input_and_output_and_two_per_transient() {
+        assert_eq!(offer_proofs(1, 0, 0), 1);
+        assert_eq!(offer_proofs(0, 1, 0), 1);
+        assert_eq!(offer_proofs(0, 0, 1), 2);
+        assert_eq!(offer_proofs(3, 5, 7), 22);
+    }
+
+    #[test]
+    fn fallible_offers_are_counted_with_the_guaranteed_one() {
+        let Transaction::Standard(stx) = decode(&named("mint batch of 4").0).expect("it decodes")
+        else {
+            panic!("the batch is a standard transaction");
+        };
+        assert_eq!(stx.fallible_coins.size(), 0);
+        let offer = stx
+            .guaranteed_coins
+            .as_deref()
+            .expect("the batch has a guaranteed offer")
+            .clone();
+        let fallible = stx.fallible_coins.insert(1, offer);
+        let variant = |guaranteed_coins| {
+            Transaction::Standard(StandardTransaction {
+                guaranteed_coins,
+                fallible_coins: fallible.clone(),
+                ..stx.clone()
+            })
+        };
+        let only_fallible = variant(None);
+        let both = variant(stx.guaranteed_coins.clone());
+        assert_eq!(
+            proofs(&only_fallible),
+            Proofs {
+                calls: 1,
+                builtin: 4
+            }
+        );
+        assert_eq!(
+            proofs(&both),
+            Proofs {
+                calls: 1,
+                builtin: 8
+            }
+        );
     }
 
     #[test]
