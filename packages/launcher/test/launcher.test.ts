@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createServer, type Server } from 'node:http';
@@ -99,6 +102,18 @@ function options(overrides: Partial<ResolveOptions> = {}): ResolveOptions {
     notify: (message) => notices.push(message),
     ...overrides,
   };
+}
+
+/** Where `options()` caches the binary. */
+function cachedPath(): string {
+  return join(install, 'cache', 'fake-tool-0.1.0-x86_64-unknown-linux-gnu');
+}
+
+/** A cache entry left by an earlier run, or planted. */
+function cacheEntry(body: string): string {
+  mkdirSync(join(install, 'cache'), { recursive: true });
+  writeFileSync(cachedPath(), body, { mode: 0o755 });
+  return cachedPath();
 }
 
 /** The `package.json` of the installed package, at version `1.2.3`. */
@@ -308,10 +323,9 @@ describe('resolveBinary', () => {
       const binary = await resolveBinary(
         options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
       );
-      expect(binary).toBe(
-        join(install, 'cache', 'fake-tool-0.1.0-x86_64-unknown-linux-gnu'),
-      );
+      expect(binary).toBe(cachedPath());
       expect(statSync(binary).mode & 0o777).toBe(0o755);
+      expect(statSync(join(install, 'cache')).mode & 0o777).toBe(0o700);
       expect(spawnSync(binary, ['check'], { encoding: 'utf8' }).stdout).toBe(
         'fake-tool check\n',
       );
@@ -348,6 +362,71 @@ describe('resolveBinary', () => {
     } finally {
       await origin.close();
     }
+  });
+
+  it('serves a cached binary that matches the package checksums without a download', async () => {
+    packageChecksums(FAKE_BINARY);
+    const cached = cacheEntry(FAKE_BINARY);
+    const fetch = vi.spyOn(globalThis, 'fetch');
+
+    await expect(resolveBinary(options())).resolves.toBe(cached);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(notices).toStrictEqual([]);
+  });
+
+  it('replaces a cached binary that does not match the package checksums', async () => {
+    packageChecksums(FAKE_BINARY);
+    const cached = cacheEntry('#!/bin/sh\necho planted\n');
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
+    try {
+      const binary = await resolveBinary(
+        options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
+      );
+
+      expect(binary).toBe(cached);
+      expect(readFileSync(binary, 'utf8')).toBe(FAKE_BINARY);
+      expect(origin.requests).toStrictEqual([ASSET]);
+      expect(notices).toStrictEqual([
+        `cached ${cached} does not match checksums.txt; replacing it`,
+        'downloading fake-tool-x86_64-unknown-linux-gnu (v0.1.0)',
+      ]);
+    } finally {
+      await origin.close();
+    }
+  });
+
+  it('replaces a symlinked cache entry even when its target matches', async () => {
+    packageChecksums(FAKE_BINARY);
+    const target = join(install, 'elsewhere');
+    writeFileSync(target, FAKE_BINARY, { mode: 0o755 });
+    mkdirSync(join(install, 'cache'));
+    symlinkSync(target, cachedPath());
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
+    try {
+      const binary = await resolveBinary(
+        options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
+      );
+
+      expect(lstatSync(binary).isFile()).toBe(true);
+      expect(readFileSync(target, 'utf8')).toBe(FAKE_BINARY);
+      expect(origin.requests).toStrictEqual([ASSET]);
+      expect(notices).toStrictEqual([
+        `cached ${binary} is not a regular file; replacing it`,
+        'downloading fake-tool-x86_64-unknown-linux-gnu (v0.1.0)',
+      ]);
+    } finally {
+      await origin.close();
+    }
+  });
+
+  it('refuses a cached binary without the package checksums', async () => {
+    cacheEntry(FAKE_BINARY);
+    const fetch = vi.spyOn(globalThis, 'fetch');
+
+    await expect(resolveBinary(options())).rejects.toThrow(
+      `${join(install, 'checksums.txt')} is missing, so the binary cannot be verified; set FAKE_TOOL_BINARY`,
+    );
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('rejects an asset whose digest does not match the package checksums', async () => {
@@ -395,7 +474,7 @@ describe('resolveBinary', () => {
           options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
         ),
       ).rejects.toThrow(
-        `${join(install, 'checksums.txt')} is missing, so a download cannot be verified; set FAKE_TOOL_BINARY`,
+        `${join(install, 'checksums.txt')} is missing, so the binary cannot be verified; set FAKE_TOOL_BINARY`,
       );
       expect(origin.requests).toStrictEqual([]);
     } finally {
@@ -538,7 +617,7 @@ describe('runBin', () => {
 
     expect(result).toBe(2);
     expect(stderr).toBe(
-      `fake: ${join(install, 'checksums.txt')} is missing, so a download cannot be verified; set FAKE_TOOL_BINARY\n`,
+      `fake: ${join(install, 'checksums.txt')} is missing, so the binary cannot be verified; set FAKE_TOOL_BINARY\n`,
     );
     expect(fetch).not.toHaveBeenCalled();
   });

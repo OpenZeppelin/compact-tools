@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -45,7 +46,7 @@ export interface ResolveOptions {
   /** Whether the host's C library is musl; every Linux asset links glibc. */
   musl: boolean;
   env: Record<string, string | undefined>;
-  /** Called once, before the first download of a run. */
+  /** Called before a download, and before a cached binary that fails verification is replaced. */
   notify: (message: string) => void;
 }
 
@@ -152,7 +153,9 @@ export async function runBin(
 }
 
 /**
- * Path to the binary's executable, downloading it into the user cache when missing.
+ * Path to the binary's executable. A cached binary is returned only when it is a regular file
+ * whose SHA-256 matches `checksums.txt`; otherwise the release asset is downloaded, verified
+ * and cached in its place.
  *
  * Messages carry no prefix; the caller adds it.
  */
@@ -177,20 +180,29 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
     );
   }
 
-  const cached = join(
-    options.cacheDir,
-    `${binary.name}-${options.version}-${target}`,
-  );
-  if (existsSync(cached)) {
-    return cached;
-  }
-
   // Digests come from the package, never the release, so a replaced asset fails here.
   const asset = `${binary.name}-${target}`;
   const expected = expectedChecksum(
     packagedChecksums(options.packageDir, binary.overrideEnv),
     asset,
   );
+
+  const cached = join(
+    options.cacheDir,
+    `${binary.name}-${options.version}-${target}`,
+  );
+  // lstat, so a symlink is never followed to a file that matches.
+  const entry = lstatSync(cached, { throwIfNoEntry: false });
+  if (entry?.isFile() && sha256(readFileSync(cached)) === expected) {
+    return cached;
+  }
+  if (entry !== undefined) {
+    const problem = entry.isFile()
+      ? 'does not match checksums.txt'
+      : 'is not a regular file';
+    options.notify(`cached ${cached} ${problem}; replacing it`);
+  }
+
   const base =
     options.env[binary.downloadBaseEnv] ??
     `${RELEASE_BASE}/${binary.packageName}/v${options.version}`;
@@ -205,7 +217,7 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
   }
 
   // Staged under a unique name so concurrent runs never read a half-written file.
-  mkdirSync(options.cacheDir, { recursive: true });
+  mkdirSync(options.cacheDir, { recursive: true, mode: 0o700 });
   const staged = `${cached}.${randomUUID()}.tmp`;
   writeFileSync(staged, bytes);
   chmodSync(staged, 0o755);
@@ -217,7 +229,7 @@ function packagedChecksums(packageDir: string, overrideEnv: string): string {
   const path = join(packageDir, 'checksums.txt');
   if (!existsSync(path)) {
     throw new Error(
-      `${path} is missing, so a download cannot be verified; set ${overrideEnv}`,
+      `${path} is missing, so the binary cannot be verified; set ${overrideEnv}`,
     );
   }
   return readFileSync(path, 'utf8');

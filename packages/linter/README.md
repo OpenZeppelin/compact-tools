@@ -29,9 +29,13 @@ one config file, shared with `compact-deploy`.
 - The first run downloads the one matching the host, checks its SHA-256 against the
   `checksums.txt` published inside this package, and caches it as `compact-lint-<version>-<target>` in a
   per-user directory: `$XDG_CACHE_HOME/compact-linter` or `~/.cache/compact-linter` on
-  Linux, `~/Library/Caches/compact-linter` on macOS. Later runs print nothing and start
-  it directly. The installed package is never written to, so read-only installs and
+  Linux, `~/Library/Caches/compact-linter` on macOS. A new cache directory is created
+  with mode `0700`. The installed package is never written to, so read-only installs and
   Yarn Plug'n'Play work.
+- Every run checks the cached binary against `checksums.txt` again before starting it.
+  A cached file that does not match, or is not a regular file, is reported and downloaded
+  again. The check and the start are separate steps, so a process running as you can still
+  swap the file between them.
 - No prebuilt binary for the host is a hard error, and that includes musl Linux such as
   Alpine: build the crate with `cargo install --path crates/compact-lint` and point
   `COMPACT_LINT_BINARY` at it.

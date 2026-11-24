@@ -63,15 +63,34 @@ pass on:
 
 `resolveBinary` returns the first of:
 
-1. The executable that `env[overrideEnv]` names.
-2. `<cacheDir>/<name>-<version>-<target>`, cached by an earlier run. A cached binary is
-   not checked again.
+1. The executable that `env[overrideEnv]` names. It is run as given, unverified.
+2. `<cacheDir>/<name>-<version>-<target>`, cached by an earlier run, when it is a regular
+   file whose SHA-256 matches `<packageDir>/checksums.txt`. Every call hashes it again,
+   which takes a few milliseconds for a release binary. A symlink or a file that does not
+   match is reported through `notify` and replaced by step 3. A directory at that path is
+   reported too, and then the rename onto it fails.
 3. `<name>-<target>`, downloaded from the `<packageName>/v<version>` GitHub release, or
    from `env[downloadBaseEnv]` when set. Its SHA-256 must match `<packageDir>/checksums.txt`;
-   the release's own `checksums.txt` is never read. It is then cached.
+   the release's own `checksums.txt` is never read. It is then staged under a unique name
+   and renamed into the cache path.
 
-`notify` is called once, before a download. Error messages carry no prefix; the caller
-adds its bin's name.
+Without the override, `<packageDir>/checksums.txt` is required for a cache hit as well as
+for a download. Its absence is an error that names `overrideEnv`.
+
+`notify` is called before a download, and before a cached binary that fails verification
+is replaced. Error messages carry no prefix; the caller adds its bin's name.
+
+`resolveBinary` creates the cache directory with mode `0700`. A directory that already
+exists keeps its mode.
+
+### What verification does not cover
+
+`resolveBinary` verifies the file and returns its path, and the caller then starts the
+binary by that path. A process that can write the cache directory can swap the file in
+between. When the directory is `0700`, only a process running as the same user, or root,
+can do that.
+Verification catches a binary planted or damaged before the run. It cannot catch one
+swapped during it.
 
 Prebuilt targets are `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
 `x86_64-apple-darwin` and `aarch64-apple-darwin`. Any other host, musl Linux included,

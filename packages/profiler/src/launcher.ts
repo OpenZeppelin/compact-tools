@@ -26,8 +26,8 @@ export interface BinaryOptions {
 
 /**
  * Path to the `compact-profile` executable, resolved as the `compact-profile` bin does:
- * `COMPACT_PROFILE_BINARY`, else the release asset cached per user, downloaded and verified
- * on first use.
+ * `COMPACT_PROFILE_BINARY`, else the release asset cached per user, verified on every call
+ * and downloaded when missing or rejected.
  */
 export function resolveProfileBinary(
   options: BinaryOptions = {},

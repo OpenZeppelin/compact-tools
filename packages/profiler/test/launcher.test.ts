@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   chmodSync,
   mkdirSync,
@@ -9,7 +10,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveBinary, userCacheDir } from '@openzeppelin/compact-launcher';
+import {
+  hostOptions,
+  resolveBinary,
+  userCacheDir,
+} from '@openzeppelin/compact-launcher';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   COMPACT_PROFILE,
@@ -91,29 +96,59 @@ describe('COMPACT_PROFILE', () => {
 });
 
 describe('resolveProfileBinary', () => {
-  it('runs the binary cached for the installed version under the user cache', async () => {
+  const BODY = '#!/bin/sh\n';
+
+  /** Writes `BODY` as the binary cached for the installed version, for every host. */
+  function plantCache(): string[] {
     const version = (
       JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as {
         version: string;
       }
     ).version;
     const xdg = join(install, 'xdg');
-    const cached = [
+    vi.stubEnv('HOME', install);
+    vi.stubEnv('XDG_CACHE_HOME', xdg);
+    vi.stubEnv('COMPACT_PROFILE_BINARY', undefined);
+    return [
       join(xdg, 'compact-profiler'),
       join(install, 'Library', 'Caches', 'compact-profiler'),
     ].flatMap((dir) => {
       mkdirSync(dir, { recursive: true });
       return TARGETS.map((target) => {
         const path = join(dir, `compact-profile-${version}-${target}`);
-        writeFileSync(path, '');
+        writeFileSync(path, BODY);
         return path;
       });
     });
-    vi.stubEnv('HOME', install);
-    vi.stubEnv('XDG_CACHE_HOME', xdg);
-    vi.stubEnv('COMPACT_PROFILE_BINARY', undefined);
+  }
 
-    expect(cached).toContain(await resolveProfileBinary());
+  it('runs the binary cached for the installed version once it matches the package checksums', async () => {
+    const cached = plantCache();
+    const digest = createHash('sha256').update(BODY).digest('hex');
+    writeFileSync(
+      join(install, 'checksums.txt'),
+      TARGETS.map((target) => `${digest}  compact-profile-${target}`).join(
+        '\n',
+      ),
+    );
+    const fetch = vi.spyOn(globalThis, 'fetch');
+
+    // The installed package ships no checksums.txt, so a stand-in package supplies them.
+    const resolved = await resolveBinary({
+      ...hostOptions(COMPACT_PROFILE, packageDir),
+      packageDir: install,
+    });
+
+    expect(cached).toContain(resolved);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses a cached binary when the package ships no checksums.txt', async () => {
+    plantCache();
+
+    await expect(resolveProfileBinary()).rejects.toThrow(
+      `${join(packageDir, 'checksums.txt')} is missing, so the binary cannot be verified; set COMPACT_PROFILE_BINARY`,
+    );
   });
 });
 

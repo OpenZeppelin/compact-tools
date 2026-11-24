@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -17,6 +19,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COMPACT_LINT, packageDir } from '../src/launcher.ts';
 
 const BIN = join(packageDir, 'src', 'compactLinter.ts');
+const TARGETS = [
+  'x86_64-unknown-linux-gnu',
+  'aarch64-unknown-linux-gnu',
+  'x86_64-apple-darwin',
+  'aarch64-apple-darwin',
+];
 
 let install: string;
 
@@ -109,6 +117,39 @@ describe('the compact-linter bin', () => {
 
     expect(run.stdout).toBe('args: check --strict src\n');
     expect(run.status).toBe(7);
+  });
+
+  it('exits 2 without running a cached binary it cannot verify', () => {
+    const { version } = JSON.parse(
+      readFileSync(join(packageDir, 'package.json'), 'utf8'),
+    ) as { version: string };
+    const ran = join(install, 'ran');
+    const xdg = join(install, 'xdg');
+    for (const dir of [
+      join(xdg, 'compact-linter'),
+      join(install, 'Library', 'Caches', 'compact-linter'),
+    ]) {
+      mkdirSync(dir, { recursive: true });
+      for (const target of TARGETS) {
+        writeFileSync(
+          join(dir, `compact-lint-${version}-${target}`),
+          `#!/bin/sh\ntouch ${ran}\n`,
+          { mode: 0o755 },
+        );
+      }
+    }
+    const { COMPACT_LINT_BINARY: _, ...env } = process.env;
+
+    const run = spawnSync(process.execPath, [BIN, 'check'], {
+      encoding: 'utf8',
+      env: { ...env, HOME: install, XDG_CACHE_HOME: xdg },
+    });
+
+    expect(run.status).toBe(2);
+    expect(run.stderr).toBe(
+      `compact-linter: ${join(packageDir, 'checksums.txt')} is missing, so the binary cannot be verified; set COMPACT_LINT_BINARY\n`,
+    );
+    expect(existsSync(ran)).toBe(false);
   });
 
   it('exits 2 under the compact-linter prefix when the binary cannot be started', () => {
