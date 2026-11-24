@@ -8,6 +8,7 @@ export ledger last: Uint<64>;
 witness nextCount(): Uint<64>;
 
 export circuit record(): Uint<64> {
+  // This makes the count public; the sample exists to exercise private-state threading.
   const count = disclose(nextCount());
   last = count;
   return count;

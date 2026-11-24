@@ -165,6 +165,18 @@ describe('reports', () => {
     );
   });
 
+  it('rejects a cost report without a proof term object', async () => {
+    const binary = printing(
+      '{"network":"mainnet","fits":true,"binding":null,"serializedLen":1,"declaredNodes":1,"limits":[],"proofTerm":null}',
+    );
+
+    await expect(
+      costTransaction('a.tx', 'mainnet', { binary }),
+    ).rejects.toThrow(
+      `${binary} cost printed an unexpected report: proofTerm is not an object`,
+    );
+  });
+
   it('rejects output that is not a JSON object', async () => {
     const binary = stub(0);
 

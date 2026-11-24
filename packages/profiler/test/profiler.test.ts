@@ -19,7 +19,7 @@ import {
   it,
   vi,
 } from 'vitest';
-import { runCheck } from '../src/commands.ts';
+import { costTransaction, runCheck } from '../src/commands.ts';
 import type { Manifest } from '../src/manifest.ts';
 import {
   createProfiler,
@@ -355,6 +355,25 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
         ['mintToSelf'],
         ['mintUnshielded'],
       ]);
+    });
+
+    it('counts a Zswap transient as two built-in proofs', async () => {
+      const profiler = await mint('transient');
+      const entry = await profiler.scenario('mint and send', (tx) =>
+        tx.call('mintAndSend', recipient, 1000n, nonce(0)),
+      );
+
+      const report = await costTransaction(
+        join(root, 'transient', entry.tx),
+        'mainnet',
+        { binary },
+      );
+
+      // One Zswap output and one transient: 1 + 2.
+      expect(report.proofTerm).toMatchObject({
+        callProofs: 1,
+        builtinProofs: 3,
+      });
     });
   });
 

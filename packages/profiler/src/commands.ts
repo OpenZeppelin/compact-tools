@@ -137,6 +137,12 @@ class Report {
     throw this.#error(key, `one of ${values.join(', ')}`);
   }
 
+  object(key: string): Report {
+    const fields = fieldsOf(this.#fields.get(key));
+    if (fields === undefined) throw this.#error(key, 'an object');
+    return new Report(this.#origin, `${this.#prefix}${key}.`, fields);
+  }
+
   list(key: string): Report[] {
     const value = this.#fields.get(key);
     if (!Array.isArray(value)) throw this.#error(key, 'a list');
@@ -188,7 +194,17 @@ export async function networkParams(
   }
 }
 
-/** The parts of `compact-profile cost --reporter json` the runner reads. */
+/** The proofs a transaction holds, and the bytes proving adds to an unproven one. */
+export interface ProofTerm {
+  status: 'added' | 'proven' | 'unknown';
+  callProofs: number;
+  /** Zswap inputs, outputs and Dust spends; a Zswap transient counts as two. */
+  builtinProofs: number;
+  /** A decimal string; `null` unless `status` is `added`. */
+  bytes: string | null;
+}
+
+/** The parts of `compact-profile cost --reporter json` that `costTransaction` reads. */
 export interface CostReport {
   network: string;
   fits: boolean;
@@ -202,6 +218,16 @@ export interface CostReport {
     ratioPpm: number | null;
     status: 'ok' | 'over' | 'n/a';
   }[];
+  proofTerm: ProofTerm;
+}
+
+function proofTermOf(term: Report): ProofTerm {
+  return {
+    status: term.oneOf('status', ['added', 'proven', 'unknown']),
+    callProofs: term.number('callProofs'),
+    builtinProofs: term.number('builtinProofs'),
+    bytes: term.stringOrNull('bytes'),
+  };
 }
 
 export async function costTransaction(
@@ -227,6 +253,7 @@ export async function costTransaction(
       ratioPpm: limit.numberOrNull('ratioPpm'),
       status: limit.oneOf('status', ['ok', 'over', 'n/a']),
     })),
+    proofTerm: proofTermOf(report.object('proofTerm')),
   };
 }
 

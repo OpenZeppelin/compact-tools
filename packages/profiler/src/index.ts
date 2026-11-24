@@ -5,6 +5,7 @@ export type {
   CostReport,
   NetworkParams,
   ProfileSource,
+  ProofTerm,
 } from './commands.ts';
 export {
   costTransaction,
