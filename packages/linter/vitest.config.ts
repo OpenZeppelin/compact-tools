@@ -12,6 +12,12 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       // The bin runs in a subprocess, which v8 coverage does not observe.
       exclude: ['src/compactLinter.ts'],
+      thresholds: {
+        statements: 95,
+        branches: 90,
+        functions: 100,
+        lines: 95,
+      },
     },
   },
 });

@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
@@ -7,6 +8,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
+import { constants, homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { expectedChecksum, resolveTarget, sha256 } from './release.ts';
 
@@ -22,6 +24,8 @@ export interface ReleasedBinary {
   name: string;
   /** Unscoped npm package name: the release tag prefix and the cache directory, as `compact-linter`. */
   packageName: string;
+  /** The npm bin that runs it: its `argv0` and the prefix of its messages, as `compact-linter`. */
+  bin: string;
   /** Names an executable to run instead of downloading, as `COMPACT_LINT_BINARY`. */
   overrideEnv: string;
   /** Names a base URL to fetch the asset from instead of the GitHub release. */
@@ -72,6 +76,79 @@ export function isMusl(): boolean {
     header?: { glibcVersionRuntime?: string };
   };
   return report.header?.glibcVersionRuntime === undefined;
+}
+
+/**
+ * `resolveBinary` options for this process: its host, environment and user cache, and the
+ * version in `<packageDir>/package.json`. Notices go to stderr under the bin's prefix.
+ */
+export function hostOptions(
+  binary: ReleasedBinary,
+  packageDir: string,
+): ResolveOptions {
+  return {
+    binary,
+    packageDir,
+    cacheDir: userCacheDir(
+      binary.packageName,
+      process.platform,
+      process.env,
+      homedir(),
+    ),
+    version: packageVersion(packageDir),
+    platform: process.platform,
+    arch: process.arch,
+    musl: isMusl(),
+    env: process.env,
+    notify: (message) => process.stderr.write(`${binary.bin}: ${message}\n`),
+  };
+}
+
+function packageVersion(packageDir: string): string {
+  const path = join(packageDir, 'package.json');
+  const manifest: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  if (
+    typeof manifest === 'object' &&
+    manifest !== null &&
+    'version' in manifest &&
+    typeof manifest.version === 'string'
+  ) {
+    return manifest.version;
+  }
+  throw new Error(`${path} has no version`);
+}
+
+/**
+ * A bin's body: resolves the binary with `hostOptions` and runs it on `args`, stdio
+ * inherited. Returns the exit code to pass on: the binary's, `128 + n` when signal `n` ends
+ * it, or 2 after a prefixed message when it cannot be resolved or started.
+ */
+export async function runBin(
+  binary: ReleasedBinary,
+  packageDir: string,
+  args: readonly string[],
+): Promise<number> {
+  const fail = (message: string): number => {
+    process.stderr.write(`${binary.bin}: ${message}\n`);
+    return 2;
+  };
+
+  let path: string;
+  try {
+    path = await resolveBinary(hostOptions(binary, packageDir));
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : String(error));
+  }
+
+  // argv0 keeps the cache file name out of the binary's own usage output.
+  const result = spawnSync(path, args, { argv0: binary.bin, stdio: 'inherit' });
+  if (result.error) {
+    return fail(`cannot run ${path}: ${result.error.message}`);
+  }
+  if (result.signal) {
+    return 128 + (constants.signals[result.signal] ?? 0);
+  }
+  return result.status ?? 0;
 }
 
 /**

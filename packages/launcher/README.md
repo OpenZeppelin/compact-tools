@@ -7,29 +7,57 @@ package ships. [`@openzeppelin/compact-linter`](../linter) and
 
 ## Usage
 
-```ts
-import { homedir } from 'node:os';
-import { isMusl, resolveBinary, userCacheDir } from '@openzeppelin/compact-launcher';
+A package describes its binary once and finds its own root:
 
-const COMPACT_LINT = {
+```ts
+// src/launcher.ts
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { ReleasedBinary } from '@openzeppelin/compact-launcher';
+
+export const COMPACT_LINT: ReleasedBinary = {
   name: 'compact-lint',
   packageName: 'compact-linter',
+  bin: 'compact-linter',
   overrideEnv: 'COMPACT_LINT_BINARY',
   downloadBaseEnv: 'COMPACT_LINT_DOWNLOAD_BASE',
 };
 
-const binary = await resolveBinary({
-  binary: COMPACT_LINT,
-  packageDir, // root of the installed package, which ships checksums.txt
-  cacheDir: userCacheDir(COMPACT_LINT.packageName, process.platform, process.env, homedir()),
-  version, // the package's version, which is also the release's
-  platform: process.platform,
-  arch: process.arch,
-  musl: isMusl(),
-  env: process.env,
-  notify: (message) => process.stderr.write(`compact-linter: ${message}\n`),
-});
+// One level up from src/ and from dist/ alike; the root ships checksums.txt.
+export const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 ```
+
+Its bin is then one call:
+
+```ts
+#!/usr/bin/env node
+// src/compactLinter.ts
+import { runBin } from '@openzeppelin/compact-launcher';
+import { COMPACT_LINT, packageDir } from './launcher.ts';
+
+process.exit(await runBin(COMPACT_LINT, packageDir, process.argv.slice(2)));
+```
+
+Library code that needs the path without running the binary resolves it the same way:
+
+```ts
+const path = await resolveBinary(hostOptions(COMPACT_LINT, packageDir));
+```
+
+## Running a bin
+
+`runBin(binary, packageDir, args)` resolves the binary with `hostOptions` and runs it on
+`args` with inherited stdio and `argv0` set to `binary.bin`. It returns the exit code to
+pass on:
+
+- the binary's own exit code;
+- `128 + n` when signal `n` ends it;
+- 2 when the binary cannot be resolved or started, after a message on stderr prefixed
+  `<bin>: `.
+
+`hostOptions(binary, packageDir)` reads the host's platform, architecture and C library,
+`process.env`, the user cache under `packageName`, and the version from
+`<packageDir>/package.json`. Its `notify` writes to stderr under the `<bin>: ` prefix.
 
 ## Resolution
 

@@ -1,16 +1,24 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
+import { constants, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  hostOptions,
   isMusl,
   type ReleasedBinary,
   type ResolveOptions,
   resolveBinary,
+  runBin,
   userCacheDir,
 } from '../src/launcher.ts';
 import {
@@ -23,6 +31,7 @@ import {
 const FAKE_TOOL: ReleasedBinary = {
   name: 'fake-tool',
   packageName: 'fake-tools',
+  bin: 'fake',
   overrideEnv: 'FAKE_TOOL_BINARY',
   downloadBaseEnv: 'FAKE_TOOL_DOWNLOAD_BASE',
 };
@@ -92,6 +101,35 @@ function options(overrides: Partial<ResolveOptions> = {}): ResolveOptions {
   };
 }
 
+/** The `package.json` of the installed package, at version `1.2.3`. */
+function packageManifest(manifest: object = { version: '1.2.3' }): void {
+  writeFileSync(join(install, 'package.json'), JSON.stringify(manifest));
+}
+
+/** Points the override at Node running `script` and isolates the user cache. */
+function overrideWithNode(script: string): string[] {
+  vi.stubEnv('FAKE_TOOL_BINARY', process.execPath);
+  vi.stubEnv('HOME', install);
+  vi.stubEnv('XDG_CACHE_HOME', join(install, 'xdg'));
+  return ['-e', script];
+}
+
+/** Everything written to stderr while `run` is pending. */
+async function stderrOf<T>(
+  run: () => Promise<T>,
+): Promise<{ result: T; stderr: string }> {
+  const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+  try {
+    const result = await run();
+    return {
+      result,
+      stderr: write.mock.calls.map(([chunk]) => String(chunk)).join(''),
+    };
+  } finally {
+    write.mockRestore();
+  }
+}
+
 /** Runs `check` with `process.platform` reading `platform`. */
 function onPlatform(platform: string, check: () => void): void {
   const original = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -112,6 +150,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   rmSync(install, { recursive: true, force: true });
 });
 
@@ -389,5 +428,118 @@ describe('resolveBinary', () => {
         }),
       ),
     ).rejects.toThrow('download failed for http://127.0.0.1:1/download/');
+  });
+});
+
+describe('hostOptions', () => {
+  it('reads the host, the user cache and the installed version', () => {
+    packageManifest();
+    vi.stubEnv('HOME', install);
+    vi.stubEnv('XDG_CACHE_HOME', join(install, 'xdg'));
+
+    const options = hostOptions(FAKE_TOOL, install);
+
+    expect(options).toMatchObject({
+      binary: FAKE_TOOL,
+      packageDir: install,
+      cacheDir:
+        process.platform === 'darwin'
+          ? join(install, 'Library', 'Caches', 'fake-tools')
+          : join(install, 'xdg', 'fake-tools'),
+      version: '1.2.3',
+      platform: process.platform,
+      arch: process.arch,
+      musl: isMusl(),
+    });
+    expect(options.env).toBe(process.env);
+  });
+
+  it('prefixes its notices with the bin', async () => {
+    packageManifest();
+
+    const { stderr } = await stderrOf(async () =>
+      hostOptions(FAKE_TOOL, install).notify('downloading fake-tool'),
+    );
+
+    expect(stderr).toBe('fake: downloading fake-tool\n');
+  });
+
+  it('rejects a package.json without a version', () => {
+    packageManifest({ name: 'fake-tools' });
+
+    expect(() => hostOptions(FAKE_TOOL, install)).toThrow(
+      `${join(install, 'package.json')} has no version`,
+    );
+  });
+});
+
+describe('runBin', () => {
+  it('runs the binary on the arguments as the bin and returns its exit code', async () => {
+    packageManifest();
+    const seen = join(install, 'seen.json');
+    const script = `require('node:fs').writeFileSync(${JSON.stringify(seen)}, JSON.stringify([process.argv0, ...process.argv.slice(1)])); process.exit(7);`;
+
+    const { result, stderr } = await stderrOf(() =>
+      runBin(FAKE_TOOL, install, [
+        ...overrideWithNode(script),
+        'check',
+        '--strict',
+      ]),
+    );
+
+    expect(result).toBe(7);
+    expect(stderr).toBe('');
+    expect(JSON.parse(readFileSync(seen, 'utf8'))).toStrictEqual([
+      'fake',
+      'check',
+      '--strict',
+    ]);
+  });
+
+  it('returns 128 plus the signal number when a signal ends the binary', async () => {
+    packageManifest();
+
+    const { result } = await stderrOf(() =>
+      runBin(
+        FAKE_TOOL,
+        install,
+        overrideWithNode("process.kill(process.pid, 'SIGTERM');"),
+      ),
+    );
+
+    expect(result).toBe(128 + constants.signals.SIGTERM);
+  });
+
+  it('returns 2 after a prefixed message when the binary cannot be started', async () => {
+    packageManifest();
+    const missing = join(install, 'not-installed');
+    vi.stubEnv('FAKE_TOOL_BINARY', missing);
+
+    const { result, stderr } = await stderrOf(() =>
+      runBin(FAKE_TOOL, install, ['check']),
+    );
+
+    expect(result).toBe(2);
+    expect(stderr).toBe(
+      `fake: cannot run ${missing}: spawnSync ${missing} ENOENT\n`,
+    );
+  });
+
+  it('returns 2 after a prefixed message when the binary cannot be resolved', async () => {
+    packageManifest();
+    vi.stubEnv('FAKE_TOOL_BINARY', undefined);
+    vi.stubEnv('HOME', install);
+    vi.stubEnv('XDG_CACHE_HOME', join(install, 'xdg'));
+    const fetch = vi.spyOn(globalThis, 'fetch');
+
+    const { result, stderr } = await stderrOf(() =>
+      runBin(FAKE_TOOL, install, ['check']),
+    );
+
+    expect(result).toBe(2);
+    expect(stderr).toBe(
+      `fake: ${join(install, 'checksums.txt')} is missing, so a download cannot be verified; set FAKE_TOOL_BINARY\n`,
+    );
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
