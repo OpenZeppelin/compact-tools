@@ -166,6 +166,44 @@ jobs:
             exit 1
           fi
 
+      # Yarn publishes a `workspace:` range as the version in this checkout, and
+      # npm accepts a dependency it does not have, so a package released before
+      # its dependency cannot be installed. Checked before the binaries, the tag
+      # and the release, so a failure leaves nothing behind.
+      - name: Check the workspace dependencies are on npm
+        env:
+          DIR: ${{ steps.pkg.outputs.dir }}
+        run: |
+          DEPS=$(jq -r '
+            [.dependencies, .peerDependencies, .optionalDependencies]
+            | map(select(. != null) | to_entries[])
+            | .[] | select(.value | startswith("workspace:")) | .key
+          ' "packages/$DIR/package.json")
+          for DEP in $DEPS; do
+            VERSION=$(jq -r --arg name "$DEP" 'select(.name == $name) | .version' packages/*/package.json)
+            if [[ -z "$VERSION" ]]; then
+              echo "::error::no packages/*/package.json is named $DEP"
+              exit 1
+            fi
+            if ! STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+                --retry 3 --retry-all-errors --max-time 30 \
+                "https://registry.npmjs.org/${DEP/\//%2f}/$VERSION"); then
+              echo "::error::could not reach the npm registry to look up $DEP@$VERSION"
+              exit 1
+            fi
+            case "$STATUS" in
+              200) echo "$DEP@$VERSION is on npm" ;;
+              404)
+                echo "::error::$DEP@$VERSION is not on npm; publish it before packages/$DIR"
+                exit 1
+                ;;
+              *)
+                echo "::error::unexpected HTTP $STATUS from the npm registry for $DEP@$VERSION"
+                exit 1
+                ;;
+            esac
+          done
+
   # A Rust-binary package ships a native binary per target, built on its own
   # runner. The npm package downloads them, so they must reach the GitHub release
   # first.

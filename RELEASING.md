@@ -114,8 +114,16 @@ each dependent finds its deps already on npm:
 7. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
    `main` first so both bump commits are present locally before triggering)
 
-After the first release, the seven packages version independently — bump any
-one of them in isolation without re-publishing the others.
+The publish workflow enforces this order: it stops before building or tagging
+anything when a `workspace:` dependency is not on npm at the version in the
+checkout.
+
+After the first release, each package versions on its own: a release of one
+re-publishes none of the others. `compact-linter` and `compact-profiler` take
+`compact-launcher` at `^<version>`, so a launcher patch reaches their fresh
+installs with no release of theirs. A launcher minor (on 0.x) or major reaches
+a published bin only when that bin is re-released. Each bin ships its own
+`checksums.txt`, so the digests it checks downloads against never float.
 
 A package's first publish authenticates with the `NPM_TOKEN` secret from the
 `compact-npm-prod` environment, since a Trusted Publisher can only be
