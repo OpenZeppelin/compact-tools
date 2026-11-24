@@ -72,11 +72,14 @@ jobs:
           app-id: ${{ vars.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
+      # Cargo build scripts and the package tests run in this job, so the checkout
+      # keeps no credential. The commit action's local pull runs unauthenticated.
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.gh-app-token.outputs.token }}
+          persist-credentials: false
 
       # One row per package. A Rust-binary package also names its crate
       # directory, Cargo package and binary (the release asset prefix). Keep the
