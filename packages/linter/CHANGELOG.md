@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- `fill-constraints` refuses two contracts with one file name, which would share one `<artifacts>/<Contract>/` directory, before it compiles anything, and `--no-compile` refuses a `circuit-info.json` whose recorded `source` is another file (#237)
+
 ## 0.1.0 (2026-11-19)
 
 ### Added

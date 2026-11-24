@@ -41,6 +41,24 @@ pub enum FillError {
     Changed { path: PathBuf },
     #[error("cannot create a temporary directory for the dry-run compile")]
     Scratch(#[source] std::io::Error),
+    #[error(
+        "{} compile into one artifact directory, {}; rename one of them",
+        list(sources),
+        directory.display()
+    )]
+    SharedArtifact {
+        directory: PathBuf,
+        sources: Vec<PathBuf>,
+    },
+}
+
+/// Paths as one comma-separated line, for an error message.
+fn list(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Everything the subcommand needs, already resolved from flags and env.
@@ -213,6 +231,9 @@ fn measure_sources(
         .collect();
     sources.sort();
     sources.dedup();
+    if !options.no_compile {
+        ensure_own_directories(&sources, artifacts, cwd)?;
+    }
 
     let mut compiler = Compiler {
         binary: options.compact_bin.clone(),
@@ -230,7 +251,7 @@ fn measure_sources(
         });
         let (list, detail) = if options.no_compile {
             let path = measure::locate(&artifacts.directory, source)?;
-            let list = measure::read_artifact(&path)?;
+            let list = measure::read_artifact_for(&path, source, &artifacts.recorded(source, cwd))?;
             (list, path.display().to_string())
         } else if options.dry_run {
             // A preview writes nothing to the project, so it compiles into a directory that
@@ -259,6 +280,34 @@ fn measure_sources(
         );
     }
     Ok(measured)
+}
+
+/// Refuses sources that would compile into one artifact directory, which takes only a file's
+/// name, before anything is compiled: the last compile would win and a later `--no-compile`
+/// would apply its measurements to every one of them.
+fn ensure_own_directories(
+    sources: &[&PathBuf],
+    artifacts: &Artifacts,
+    cwd: &Path,
+) -> Result<(), FillError> {
+    let mut by_directory: BTreeMap<PathBuf, BTreeMap<String, PathBuf>> = BTreeMap::new();
+    for source in sources {
+        by_directory
+            .entry(measure::artifact_path(&artifacts.directory, source))
+            .or_default()
+            .insert(artifacts.recorded(source, cwd), (*source).clone());
+    }
+
+    match by_directory
+        .into_iter()
+        .find(|(_, spelled)| spelled.len() > 1)
+    {
+        Some((path, spelled)) => Err(FillError::SharedArtifact {
+            directory: path.parent().map_or_else(|| path.clone(), Path::to_owned),
+            sources: spelled.into_values().collect(),
+        }),
+        None => Ok(()),
+    }
 }
 
 /// Records what changed and what could not be measured, and returns the rewritten text
