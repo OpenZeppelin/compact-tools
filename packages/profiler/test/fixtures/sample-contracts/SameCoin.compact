@@ -1,0 +1,59 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+export { ZswapCoinPublicKey, ShieldedCoinInfo };
+
+circuit domain(): Bytes<32> {
+  return pad(32, "compact-profiler:same-coin");
+}
+
+circuit mintTo(
+  recipient: Either<ZswapCoinPublicKey, ContractAddress>,
+  amount: Uint<64>,
+  nonce: Bytes<32>
+): ShieldedCoinInfo {
+  return mintShieldedToken(domain(), disclose(amount), disclose(nonce), recipient);
+}
+
+/** Mints coins of the same type, nonce and value to two users. */
+export circuit mintPair(
+  first: ZswapCoinPublicKey,
+  second: ZswapCoinPublicKey,
+  amount: Uint<64>,
+  nonce: Bytes<32>
+): ShieldedCoinInfo {
+  mintTo(left<ZswapCoinPublicKey, ContractAddress>(disclose(first)), amount, nonce);
+  return mintTo(
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(second)),
+    amount,
+    nonce
+  );
+}
+
+/**
+ * Mints a coin to a user, then the same coin to this contract, and spends the contract's
+ * copy in the same call.
+ */
+export circuit mintPairAndSend(
+  recipient: ZswapCoinPublicKey,
+  amount: Uint<64>,
+  nonce: Bytes<32>
+): ShieldedCoinInfo {
+  const coin = mintTo(
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    amount,
+    nonce
+  );
+  const own = mintTo(
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    amount,
+    nonce
+  );
+  sendImmediateShielded(
+    own,
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    disclose(amount) as Uint<128>
+  );
+  return coin;
+}

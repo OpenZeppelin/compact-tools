@@ -63,6 +63,15 @@ function preTranscript(proofData: CallProofData): PreTranscript {
   );
 }
 
+/** An output a call created; a spent one becomes a transient. */
+interface Created {
+  key: string;
+  contractOwned: boolean;
+  spent: boolean;
+  segment: number;
+  output: UnprovenOutput;
+}
+
 function mergeOffers(
   offers: (UnprovenOffer | undefined)[],
 ): UnprovenOffer | undefined {
@@ -95,15 +104,14 @@ function zswapOffers(
     return GUARANTEED;
   };
 
-  const outputs = new Map<
-    string,
-    { segment: number; output: UnprovenOutput }
-  >();
-  for (const { coinInfo, recipient } of local.outputs) {
-    let routed: { segment: number; output: UnprovenOutput };
+  const outputs: Created[] = local.outputs.map(({ coinInfo, recipient }) => {
+    const key = coinKey(coinInfo);
     if (recipient.is_left) {
       const target = routeCommitment(coinCommitment(coinInfo, recipient.left));
-      routed = {
+      return {
+        key,
+        contractOwned: false,
+        spent: false,
         segment: target,
         output: ZswapOutput.new(
           coinInfo,
@@ -112,24 +120,25 @@ function zswapOffers(
           settings.encryptionKey(recipient.left),
         ),
       };
-    } else {
-      // The commitment does not depend on the segment, so a segment-0 output finds it.
-      const probe = ZswapOutput.newContractOwned(
-        coinInfo,
-        GUARANTEED,
-        recipient.right,
-      );
-      const target = routeCommitment(probe.commitment);
-      routed = {
-        segment: target,
-        output:
-          target === GUARANTEED
-            ? probe
-            : ZswapOutput.newContractOwned(coinInfo, target, recipient.right),
-      };
     }
-    outputs.set(coinKey(coinInfo), routed);
-  }
+    // The commitment does not depend on the segment, so a segment-0 output finds it.
+    const probe = ZswapOutput.newContractOwned(
+      coinInfo,
+      GUARANTEED,
+      recipient.right,
+    );
+    const target = routeCommitment(probe.commitment);
+    return {
+      key,
+      contractOwned: true,
+      spent: false,
+      segment: target,
+      output:
+        target === GUARANTEED
+          ? probe
+          : ZswapOutput.newContractOwned(coinInfo, target, recipient.right),
+    };
+  });
 
   const bySegment = new Map<number, UnprovenOffer[]>();
   const add = (target: number, offer: UnprovenOffer) =>
@@ -137,13 +146,15 @@ function zswapOffers(
 
   for (const input of local.inputs) {
     const key = coinKey(input);
-    const created = outputs.get(key);
+    const created = outputs.find(
+      (output) => output.contractOwned && !output.spent && output.key === key,
+    );
     if (created === undefined) {
       throw new Error(
         `circuit ${proofData.circuitId} spends a shielded coin it did not create; the profiler can only spend coins created in the same call`,
       );
     }
-    outputs.delete(key);
+    created.spent = true;
     add(
       created.segment,
       ZswapOffer.fromTransient(
@@ -155,8 +166,8 @@ function zswapOffers(
       ),
     );
   }
-  for (const { segment: target, output } of outputs.values()) {
-    add(target, ZswapOffer.fromOutput(output));
+  for (const { spent, segment: target, output } of outputs) {
+    if (!spent) add(target, ZswapOffer.fromOutput(output));
   }
 
   return {

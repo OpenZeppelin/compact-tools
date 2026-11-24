@@ -9,7 +9,11 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Transaction } from '@midnightntwrk/ledger-v9';
+import {
+  coinCommitment,
+  Transaction,
+  ZswapSecretKeys,
+} from '@midnightntwrk/ledger-v9';
 import {
   afterAll,
   beforeAll,
@@ -34,6 +38,7 @@ import {
 } from './fixtures/artifacts/Counter/contract/index.js';
 import { Contract as Mint } from './fixtures/artifacts/Mint/contract/index.js';
 import { Contract as PrivateCounter } from './fixtures/artifacts/PrivateCounter/contract/index.js';
+import { Contract as SameCoin } from './fixtures/artifacts/SameCoin/contract/index.js';
 
 const { binary, skip } = binaryUnderTest(process.env, existsSync);
 
@@ -100,6 +105,27 @@ function privateCounter(outDir: string): Promise<Profiler<CountState>> {
   });
 }
 
+/** The PrivateCounter sample, its witness bumping the count in the private state it receives. */
+function inPlaceCounter<PS extends CountState>(
+  outDir: string,
+  privateState: PS,
+): Promise<Profiler<PS>> {
+  return createProfiler({
+    name: 'PrivateCounter',
+    contract: new PrivateCounter<PS>({
+      nextCount: ({ privateState }) => {
+        const count = privateState.count;
+        privateState.count += 1n;
+        return [privateState, count];
+      },
+    }),
+    privateState,
+    network: 'mainnet',
+    outDir: join(root, outDir),
+    binary,
+  });
+}
+
 function mint(outDir: string): Promise<Profiler<unknown>> {
   return createProfiler({
     name: 'Mint',
@@ -109,6 +135,48 @@ function mint(outDir: string): Promise<Profiler<unknown>> {
     binary,
     toolchain: { compactc: '0.36.0' },
   });
+}
+
+function sameCoin(outDir: string): Promise<Profiler<unknown>> {
+  return createProfiler({
+    name: 'SameCoin',
+    contract: new SameCoin({}),
+    network: 'mainnet',
+    outDir: join(root, outDir),
+    binary,
+  });
+}
+
+function readTransaction(path: string) {
+  return Transaction.deserialize(
+    'signature',
+    'pre-proof',
+    'pre-binding',
+    new Uint8Array(readFileSync(path)),
+  );
+}
+
+/** Every Zswap offer of a transaction, guaranteed first. */
+function zswapOffers(tx: ReturnType<typeof readTransaction>) {
+  return [
+    ...(tx.guaranteedOffer ? [tx.guaranteedOffer] : []),
+    ...(tx.fallibleOffer?.values() ?? []),
+  ];
+}
+
+/** The commitment of `coin`, as a circuit returns it, sent to `coinPublicKey`. */
+function commitment(
+  coin: { nonce: Uint8Array; color: Uint8Array; value: bigint },
+  coinPublicKey: string,
+): string {
+  return coinCommitment(
+    {
+      type: Buffer.from(coin.color).toString('hex'),
+      nonce: Buffer.from(coin.nonce).toString('hex'),
+      value: coin.value,
+    },
+    coinPublicKey,
+  );
 }
 
 /** The mint scenarios both determinism runs record. */
@@ -330,12 +398,7 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
         tx.call('mintUnshielded', { bytes: nonce(99) }, 1000n);
       });
 
-      const tx = Transaction.deserialize(
-        'signature',
-        'pre-proof',
-        'pre-binding',
-        new Uint8Array(readFileSync(join(root, 'segments', entry.tx))),
-      );
+      const tx = readTransaction(join(root, 'segments', entry.tx));
       const entryPoints = (segment: number) =>
         tx.intents
           ?.get(segment)
@@ -374,6 +437,57 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
         callProofs: 1,
         builtinProofs: 3,
       });
+    });
+
+    it('keeps outputs that share type, nonce and value but not recipient', async () => {
+      const profiler = await sameCoin('same-coin');
+      const other = ZswapSecretKeys.fromSeed(
+        new Uint8Array(createHash('sha256').update('other').digest()),
+      ).coinPublicKey;
+      let coin: Parameters<typeof commitment>[0] | undefined;
+
+      const entry = await profiler.scenario('mint pair', async (tx) => {
+        coin = await tx.call(
+          'mintPair',
+          recipient,
+          { bytes: new Uint8Array(Buffer.from(other, 'hex')) },
+          1000n,
+          nonce(0),
+        );
+      });
+      const path = join(root, 'same-coin', entry.tx);
+      const outputs = zswapOffers(readTransaction(path)).flatMap((offer) =>
+        offer.outputs.map((output) => output.commitment),
+      );
+      const report = await costTransaction(path, 'mainnet', { binary });
+
+      expect(outputs.sort()).toStrictEqual(
+        [commitment(coin!, caller), commitment(coin!, other)].sort(),
+      );
+      expect(report.proofTerm.builtinProofs).toBe(2);
+    });
+
+    it('spends a coin through its contract-owned output when a user output shares its coin info', async () => {
+      const profiler = await sameCoin('same-coin-spent');
+      let coin: Parameters<typeof commitment>[0] | undefined;
+
+      const entry = await profiler.scenario(
+        'mint pair and send',
+        async (tx) => {
+          coin = await tx.call('mintPairAndSend', recipient, 1000n, nonce(0));
+        },
+      );
+      const offers = zswapOffers(
+        readTransaction(join(root, 'same-coin-spent', entry.tx)),
+      );
+      const outputs = offers.flatMap((offer) =>
+        offer.outputs.map((output) => output.commitment),
+      );
+
+      // The user's coin and the coin sent on; the contract's copy is the transient.
+      expect(offers.flatMap((offer) => offer.transients)).toHaveLength(1);
+      expect(outputs).toHaveLength(2);
+      expect(outputs).toContain(commitment(coin!, caller));
     });
   });
 
@@ -470,6 +584,60 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
 
       expect(seen).toStrictEqual([6n]);
       expect(profiler.privateState).toStrictEqual({ count: 6n });
+    });
+
+    describe('with a witness that changes its private state in place', () => {
+      it('starts every scenario from the base private state', async () => {
+        const profiler = await inPlaceCounter('in-place-base', { count: 5n });
+        const seen: unknown[] = [];
+
+        await profiler.scenario('first', async (tx) => {
+          seen.push(await tx.call('record'), tx.privateState);
+        });
+        await profiler.scenario('second', async (tx) => {
+          seen.push(await tx.call('record'), tx.privateState);
+        });
+
+        expect(seen).toStrictEqual([5n, { count: 6n }, 5n, { count: 6n }]);
+        expect(profiler.privateState).toStrictEqual({ count: 5n });
+      });
+
+      it('leaves the base private state unchanged when a scenario fails after a call', async () => {
+        const profiler = await inPlaceCounter('in-place-throw', { count: 5n });
+
+        await expect(
+          profiler.scenario('record then fail', async (tx) => {
+            await tx.call('record');
+            throw new Error('build failed');
+          }),
+        ).rejects.toThrow('build failed');
+
+        expect(profiler.privateState).toStrictEqual({ count: 5n });
+      });
+
+      it('advances the base private state with apply', async () => {
+        const profiler = await inPlaceCounter('in-place-apply', { count: 5n });
+        const seen: unknown[] = [];
+
+        await profiler.apply((tx) => tx.call('record'));
+        await profiler.scenario('after apply', async (tx) => {
+          seen.push(await tx.call('record'));
+        });
+
+        expect(seen).toStrictEqual([6n]);
+        expect(profiler.privateState).toStrictEqual({ count: 6n });
+      });
+    });
+
+    it('rejects a private state that cannot be structured-cloned', async () => {
+      const profiler = await inPlaceCounter('uncloneable', {
+        count: 5n,
+        onRecord: () => {},
+      });
+
+      await expect(
+        profiler.scenario('record', (tx) => tx.call('record')),
+      ).rejects.toThrow('the private state must be structured-cloneable');
     });
 
     it('returns a circuit result to an awaiting builder', async () => {
@@ -609,6 +777,17 @@ describe.skipIf(skip !== undefined)(`profiler, end to end${skipReason}`, () => {
 
       expect(result).toMatchObject({ maxN: 4, capped: true, binding: null });
       expect(result.scenarios.map((entry) => entry.n)).toStrictEqual([1, 2, 4]);
+    });
+
+    it('rejects a search over no networks', async () => {
+      const profiler = await counter('no-networks');
+      const build = vi.fn((tx) => tx.call('increment'));
+
+      await expect(
+        profiler.searchMax('increment', { networks: [], cap: 2 }, build),
+      ).rejects.toThrow('searchMax needs at least one network');
+      expect(build).not.toHaveBeenCalled();
+      expect(profiler.scenarios).toStrictEqual([]);
     });
   });
 

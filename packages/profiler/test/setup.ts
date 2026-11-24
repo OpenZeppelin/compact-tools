@@ -29,6 +29,7 @@ const CONTRACT_FILES: readonly string[] = [
   'Counter.compact',
   'Mint.compact',
   'PrivateCounter.compact',
+  'SameCoin.compact',
 ];
 
 // Generated artifacts assert the runtime minor at load time, so the compiler must match the

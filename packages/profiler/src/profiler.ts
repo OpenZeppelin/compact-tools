@@ -166,7 +166,7 @@ export interface SeriesOptions {
 }
 
 export interface SearchOptions {
-  /** Networks the transaction must fit; default the profiler's network. */
+  /** Networks the transaction must fit, at least one; default the profiler's network. */
   networks?: readonly string[];
   /** Largest size tried. */
   cap?: number;
@@ -252,7 +252,7 @@ class Scenario<PS> implements TxBuilder<PS> {
         contractAddress,
         coinPublicKeyOrZswapState: options.caller ?? caller,
         contractState: this.#state.contract,
-        privateState: this.#state.private,
+        privateState: clonePrivateState(this.#state.private),
         time,
       }),
       ...args,
@@ -273,6 +273,19 @@ class Scenario<PS> implements TxBuilder<PS> {
       private: result.context.callContext.currentPrivateState as PS,
     };
     return result.result;
+  }
+}
+
+/** A copy for one call, so a witness that changes its private state in place leaves the caller's intact. */
+function clonePrivateState<PS>(state: PS): PS {
+  try {
+    return structuredClone(state);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `the private state must be structured-cloneable: ${reason}`,
+      { cause: error },
+    );
   }
 }
 
@@ -402,6 +415,11 @@ export class Profiler<PS> {
         throw new Error(`searchMax cap must be a positive integer, got ${cap}`);
       }
       const networks = options.networks ?? [this.#options.network];
+      if (networks.length === 0) {
+        throw new Error(
+          "searchMax needs at least one network; omit networks to search the profiler's",
+        );
+      }
       for (const network of networks) {
         await this.#checkClient(network);
       }

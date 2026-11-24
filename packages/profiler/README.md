@@ -57,7 +57,7 @@ Deploys the contract in memory and reads `network`'s ledger parameters from
 | `network` | Required; the profile whose parameters partition transcripts |
 | `outDir` | Required |
 | `constructorArgs` | `[]` |
-| `privateState` | Required unless the private state type admits `undefined` |
+| `privateState` | Required unless the private state type admits `undefined`. Must be structured-cloneable: each call runs on a `structuredClone`, so a witness receives plain data (class instances lose their prototype) and the base changes only through `apply` |
 | `caller` | `defaultCaller().coinPublicKey`, keys from seed sha256(`compact-profiler:caller`) |
 | `encryptionPublicKey` | `(coinPublicKey) => defaultCaller().encryptionPublicKey` |
 | `contractAddress` | `DEFAULTS.contractAddress`, sha256(`compact-profiler:contract-address`) |
@@ -73,7 +73,8 @@ Deploys the contract in memory and reads `network`'s ledger parameters from
 - `series(name, { sizes, conflict, ops }, build)`: one transaction per size `n`.
   `ops` is a number or `(n) => number`.
 - `searchMax(name, { networks, cap, conflict, ops }, build)`: the largest `n` that fits every
-  per-transaction limit on `networks` (default: the profiler's), per `compact-profile cost`.
+  per-transaction limit on `networks` (default: the profiler's; an empty list is an error),
+  per `compact-profile cost`.
   Sizes double, then a binary search runs up to `cap` (default 256). Records sizes 1, 2, 4
   and 8 below the maximum, the maximum and the first size over. Returns
   `{ maxN, capped, binding, scenarios }`.
@@ -96,7 +97,8 @@ receives a `TxBuilder`:
 
 ### `runCheck({ manifest, networks, snapshot, update, sizeTolerance, reporter })`
 
-Runs `compact-profile check`, or `update` with `update: true`. Resolves to
+Runs `compact-profile check`, or `update` with `update: true`, on every network in
+`networks`, which must name at least one. Resolves to
 `{ exitCode, stdout, stderr }`. A non-zero exit rejects with `ProfileCommandError`, which
 carries the same fields and puts both streams in its message. `sizeTolerance` applies to
 `check` only and rejects with `update: true`.
@@ -153,7 +155,14 @@ labels that network in its report.
 - The first run downloads the one matching the host, checks its SHA-256 against the
   `checksums.txt` published inside this package, and caches it as
   `compact-profile-<version>-<target>` in `$XDG_CACHE_HOME/compact-profiler` or
-  `~/.cache/compact-profiler` on Linux, `~/Library/Caches/compact-profiler` on macOS.
+  `~/.cache/compact-profiler` on Linux, `~/Library/Caches/compact-profiler` on macOS. A
+  new cache directory is created with mode `0700`.
+- The cached binary is checked against `checksums.txt` again every time it is resolved:
+  once per bin run, and once per binary command the library runs, so once per probe and
+  network in `searchMax`. Hashing it takes a few milliseconds. A cached file that does not
+  match, or is not a regular file, is reported and downloaded again. The check and the
+  start are separate steps, so a process running as you can still swap the file between
+  them.
 - No prebuilt binary for the host, musl Linux included, is a hard error: build the crate
   with `cargo install --path crates/compact-profile` and set `COMPACT_PROFILE_BINARY`.
 
