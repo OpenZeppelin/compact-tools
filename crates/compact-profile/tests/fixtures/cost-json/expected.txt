@@ -1,0 +1,115 @@
+{
+  "network": "mainnet",
+  "provisional": false,
+  "nodeRelease": "2.1.101",
+  "ledgerCrate": "midnight-ledger-v9 1.0.1",
+  "scope": "balanced",
+  "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
+  "form": "unproven",
+  "serializedLen": 2044,
+  "estimatedSize": 10833,
+  "declaredNodes": 76,
+  "cost": {
+    "readTime": "3570000000",
+    "computeTime": "7905457704",
+    "blockUsage": "10833",
+    "bytesWritten": "160",
+    "bytesChurned": "13960"
+  },
+  "proofTerm": {
+    "status": "added",
+    "callProofs": 1,
+    "builtinProofs": 1,
+    "bytes": "566"
+  },
+  "balancingTerm": {
+    "intents": 1,
+    "bytes": "3283"
+  },
+  "timeToDismiss": {
+    "used": "11360777745",
+    "allowed": "29364000000"
+  },
+  "weight": "49472157001",
+  "limits": [
+    {
+      "name": "nodes",
+      "used": "86",
+      "allowed": "1024",
+      "ratioPpm": 83985,
+      "status": "ok"
+    },
+    {
+      "name": "txBytes",
+      "used": "14682",
+      "allowed": "1048576",
+      "ratioPpm": 14002,
+      "status": "ok"
+    },
+    {
+      "name": "readTime",
+      "used": "5440000000",
+      "allowed": "2000000000000",
+      "ratioPpm": 2720,
+      "status": "ok"
+    },
+    {
+      "name": "computeTime",
+      "used": "11339180020",
+      "allowed": "2000000000000",
+      "ratioPpm": 5670,
+      "status": "ok"
+    },
+    {
+      "name": "blockUsage",
+      "used": "14682",
+      "allowed": "1000000",
+      "ratioPpm": 14682,
+      "status": "ok"
+    },
+    {
+      "name": "bytesWritten",
+      "used": "384",
+      "allowed": "50000",
+      "ratioPpm": 7680,
+      "status": "ok"
+    },
+    {
+      "name": "bytesChurned",
+      "used": "23248",
+      "allowed": "50000000",
+      "ratioPpm": 465,
+      "status": "ok"
+    },
+    {
+      "name": "timeToDismiss",
+      "used": "11360777745",
+      "allowed": "29364000000",
+      "ratioPpm": 386895,
+      "status": "ok"
+    },
+    {
+      "name": "extrinsicWeight",
+      "used": "49364000001",
+      "allowed": "1299891843000",
+      "ratioPpm": 37976,
+      "status": "ok"
+    },
+    {
+      "name": "blockWeight",
+      "used": "49472157001",
+      "allowed": "1500000000000",
+      "ratioPpm": 32982,
+      "status": "ok"
+    },
+    {
+      "name": "blockLength",
+      "used": "14757",
+      "allowed": "786432",
+      "ratioPpm": 18765,
+      "status": "ok"
+    }
+  ],
+  "fits": true,
+  "binding": "timeToDismiss"
+}

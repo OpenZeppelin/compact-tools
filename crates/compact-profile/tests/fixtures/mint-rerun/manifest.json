@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "contract": "Mint",
+  "toolchain": {
+    "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@midnightntwrk/ledger-v9": "1.0.2",
+    "compactc": "0.36.0"
+  },
+  "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
+  "scenarios": [
+    {
+      "name": "mint multi-call n=4",
+      "series": "mint multi-call",
+      "n": 4,
+      "calls": 4,
+      "ops": 4,
+      "conflict": "none",
+      "tx": "txs/mint-multi-call-n-4.tx",
+      "js": {
+        "cost": {
+          "readTime": "11475000000",
+          "computeTime": "30099624101",
+          "blockUsage": "42035",
+          "bytesWritten": "640",
+          "bytesChurned": "55840"
+        },
+        "serializedLen": 6663,
+        "declaredNodes": 148
+      }
+    }
+  ]
+}

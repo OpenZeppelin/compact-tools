@@ -1,0 +1,46 @@
+contract Mint
+params identity ba96a2b0beca6f2e
+toolchain @midnight-ntwrk/compact-runtime 0.21.0, @midnightntwrk/ledger-v9 1.0.2, compactc 0.36.0
+parity FAILED (2 of 9 transactions)
+  scenario             field                     js           rust
+  mint                 computeTime    7,905,457,705  7,905,457,704
+  mint multi-call n=8  declaredNodes            240            241
+
+mainnet: node 2.1.101, midnight-ledger-v9 1.0.1, captured 2026-11-20, balanced
+scenario               n  calls  ops  intents  nodes   proof  balancing  est size  binding           used  fits  txs/block  block bound  ops/block
+mint                   -      1    1        1     86     566      3,283    14,682  timeToDismiss   38.68%  yes          30  blockWeight         30
+mint to self           -      1    1        1     93     566      3,283    14,548  timeToDismiss   39.66%  yes          30  blockWeight         30
+mint batch of 4        -      1    4        1    129     572      3,283    30,737  timeToDismiss   30.81%  yes          18  blockWeight         72
+mint multi-call n=1    1      1    1        1     86     566      3,283    14,682  timeToDismiss   38.68%  yes          30  blockWeight         30
+mint multi-call n=2    2      2    2        2    111   1,132      3,348    25,724  timeToDismiss   36.50%  yes          20  blockWeight         40
+mint multi-call n=4    4      4    4        4    158   2,264      3,478    47,776  timeToDismiss   35.18%  yes          12  blockWeight         48
+mint multi-call n=8    8      8    8        8    251   4,528      3,738    91,840  timeToDismiss   34.46%  yes           7  blockWeight         56
+mint multi-call n=41  41     41   41       41  1,023  23,206      5,883   455,452  nodes           99.90%  yes           1  blockWeight         41
+mint multi-call n=42  42     42   42       42  1,047  23,772      5,948   466,486  nodes          102.24%  no            0  nodes                0
+
+series mint multi-call: max n 41, measured (41 fits, 42 over nodes)
+  limit            fit max n
+  nodes                   41
+  txBytes                 94
+  readTime               757
+  computeTime            269
+  blockUsage              90
+  bytesWritten           311
+  bytesChurned         3,580
+  timeToDismiss    unbounded
+  extrinsicWeight         57
+  blockWeight             66
+  blockLength             71
+
+fit mint multi-call (n = 1, 2, 4, 8, 41, 42)
+  metric                  fixed             per n  max resid
+  readTime       935,000,000.00  2,635,000,000.00       0.00
+  computeTime    507,410,508.80  7,398,053,140.12  10,334.20
+  blockUsage             465.90         10,387.95      20.84
+  bytesWritten             0.00            160.00       0.00
+  bytesChurned             0.00         13,960.00       0.00
+  nodes                   53.71             23.41       1.12
+  serializedLen          536.04          1,527.59      19.63
+  timeToDismiss  507,410,508.93  7,419,650,864.63  10,334.06
+
+snapshot matches

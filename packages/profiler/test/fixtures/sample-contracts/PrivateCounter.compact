@@ -1,0 +1,15 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+export ledger last: Uint<64>;
+
+/** Returns the private count and bumps it. */
+witness nextCount(): Uint<64>;
+
+export circuit record(): Uint<64> {
+  // This makes the count public; the sample exists to exercise private-state threading.
+  const count = disclose(nextCount());
+  last = count;
+  return count;
+}

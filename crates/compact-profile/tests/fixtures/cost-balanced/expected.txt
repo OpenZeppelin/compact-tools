@@ -1,0 +1,115 @@
+{
+  "network": "mainnet",
+  "provisional": false,
+  "nodeRelease": "2.1.101",
+  "ledgerCrate": "midnight-ledger-v9 1.0.1",
+  "scope": "as-submitted",
+  "paramsIdentity": "ba96a2b0beca6f2e6ba03cdae40bc147686cad506650eb155dc974108a9b1480",
+  "form": "balanced",
+  "serializedLen": 14881,
+  "estimatedSize": 14813,
+  "declaredNodes": 98,
+  "cost": {
+    "readTime": "5848000000",
+    "computeTime": "11836578891",
+    "blockUsage": "14813",
+    "bytesWritten": "384",
+    "bytesChurned": "23248"
+  },
+  "proofTerm": {
+    "status": "proven",
+    "callProofs": 1,
+    "builtinProofs": 2,
+    "bytes": null
+  },
+  "balancingTerm": {
+    "intents": 2,
+    "bytes": null
+  },
+  "timeToDismiss": {
+    "used": "11858176616",
+    "allowed": "29626000000"
+  },
+  "weight": "49734157001",
+  "limits": [
+    {
+      "name": "nodes",
+      "used": "98",
+      "allowed": "1024",
+      "ratioPpm": 95704,
+      "status": "ok"
+    },
+    {
+      "name": "txBytes",
+      "used": "14813",
+      "allowed": "1048576",
+      "ratioPpm": 14127,
+      "status": "ok"
+    },
+    {
+      "name": "readTime",
+      "used": "5848000000",
+      "allowed": "2000000000000",
+      "ratioPpm": 2924,
+      "status": "ok"
+    },
+    {
+      "name": "computeTime",
+      "used": "11836578891",
+      "allowed": "2000000000000",
+      "ratioPpm": 5919,
+      "status": "ok"
+    },
+    {
+      "name": "blockUsage",
+      "used": "14813",
+      "allowed": "1000000",
+      "ratioPpm": 14813,
+      "status": "ok"
+    },
+    {
+      "name": "bytesWritten",
+      "used": "384",
+      "allowed": "50000",
+      "ratioPpm": 7680,
+      "status": "ok"
+    },
+    {
+      "name": "bytesChurned",
+      "used": "23248",
+      "allowed": "50000000",
+      "ratioPpm": 465,
+      "status": "ok"
+    },
+    {
+      "name": "timeToDismiss",
+      "used": "11858176616",
+      "allowed": "29626000000",
+      "ratioPpm": 400263,
+      "status": "ok"
+    },
+    {
+      "name": "extrinsicWeight",
+      "used": "49626000001",
+      "allowed": "1299891843000",
+      "ratioPpm": 38178,
+      "status": "ok"
+    },
+    {
+      "name": "blockWeight",
+      "used": "49734157001",
+      "allowed": "1500000000000",
+      "ratioPpm": 33157,
+      "status": "ok"
+    },
+    {
+      "name": "blockLength",
+      "used": "14888",
+      "allowed": "786432",
+      "ratioPpm": 18932,
+      "status": "ok"
+    }
+  ],
+  "fits": true,
+  "binding": "timeToDismiss"
+}

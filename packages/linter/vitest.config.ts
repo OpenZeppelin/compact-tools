@@ -9,8 +9,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
+      include: ['src/**/*.ts'],
       // The bin runs in a subprocess, which v8 coverage does not observe.
-      include: ['src/binary.ts'],
+      exclude: ['src/compactLinter.ts'],
       thresholds: {
         statements: 95,
         branches: 90,

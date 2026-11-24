@@ -11,7 +11,9 @@ on:
           - compact-builder
           - compact-cli
           - compact-deployer
+          - compact-launcher
           - compact-linter
+          - compact-profiler
           - compact-simulator
       version_bump:
         description: "Version bump type (pre* strategies are beta-only)"
@@ -70,44 +72,64 @@ jobs:
           app-id: ${{ vars.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
+      # Cargo build scripts and the package tests run in this job, so the checkout
+      # keeps no credential. The commit action's local pull runs unauthenticated.
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.gh-app-token.outputs.token }}
+          persist-credentials: false
 
+      # One row per package. A Rust-binary package also names its crate
+      # directory, Cargo package and binary (the release asset prefix). Keep the
+      # table in step with release-publish.yml.
       - name: Set package directory
         id: pkg
+        env:
+          INPUT_PACKAGE: ${{ inputs.package }}
         run: |
-          case "${{ inputs.package }}" in
-            "compact-builder")
-              echo "dir=builder" >> $GITHUB_OUTPUT
-              ;;
-            "compact-cli")
-              echo "dir=cli" >> $GITHUB_OUTPUT
-              ;;
-            "compact-deployer")
-              echo "dir=deployer" >> $GITHUB_OUTPUT
-              ;;
-            "compact-linter")
-              echo "dir=linter" >> $GITHUB_OUTPUT
-              ;;
-            "compact-simulator")
-              echo "dir=simulator" >> $GITHUB_OUTPUT
-              ;;
-          esac
+          # npm name         dir        crate dir               Cargo package    binary
+          PACKAGES='
+          compact-builder    builder
+          compact-cli        cli
+          compact-deployer   deployer
+          compact-launcher   launcher
+          compact-linter     linter     crates/compact-lint     compact-lint     compact-lint
+          compact-profiler   profiler   crates/compact-profile  compact-profile  compact-profile
+          compact-simulator  simulator
+          '
+          ROW=$(awk -v key="$INPUT_PACKAGE" '$1 == key' <<< "$PACKAGES")
+          if [[ -z "$ROW" ]]; then
+            echo "::error::unknown package: $INPUT_PACKAGE"
+            exit 1
+          fi
+          read -r _ DIR CRATE_DIR CARGO_PACKAGE _ <<< "$ROW"
+          {
+            echo "dir=$DIR"
+            echo "crate_dir=$CRATE_DIR"
+            echo "cargo_package=$CARGO_PACKAGE"
+          } >> $GITHUB_OUTPUT
 
       - name: Setup Environment
         uses: ./.github/actions/setup
 
-      # compact-linter's version lives in the crate too, and bumping it there
-      # rewrites Cargo.lock.
+      # A Rust-binary package's version lives in its crate too, and bumping it
+      # there rewrites Cargo.lock.
       - name: Install the pinned toolchain
-        if: inputs.package == 'compact-linter'
+        if: steps.pkg.outputs.crate_dir != ''
         run: |
           CHANNEL=$(grep -m1 '^channel' rust-toolchain.toml | cut -d'"' -f2)
           rustup toolchain install "$CHANNEL" --profile minimal
           rustup show active-toolchain
+
+      # The profiler's end-to-end tests run target/release/compact-profile and
+      # fail under CI without it.
+      - name: Build the crate's release binary
+        if: steps.pkg.outputs.crate_dir != ''
+        env:
+          CARGO_PACKAGE: ${{ steps.pkg.outputs.cargo_package }}
+        run: cargo build --release -p "$CARGO_PACKAGE"
 
       - name: Run tests for package
         run: yarn test --filter=@openzeppelin/${{ inputs.package }}
@@ -147,16 +169,18 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
       - name: Sync the crate version
-        if: inputs.package == 'compact-linter'
+        if: steps.pkg.outputs.crate_dir != ''
         env:
           NEW_VERSION: ${{ steps.version.outputs.new }}
+          CRATE_DIR: ${{ steps.pkg.outputs.crate_dir }}
+          CRATE_PACKAGE: ${{ steps.pkg.outputs.cargo_package }}
         run: |
-          sed -i "0,/^version = .*/s//version = \"$NEW_VERSION\"/" crates/compact-lint/Cargo.toml
+          sed -i "0,/^version = .*/s//version = \"$NEW_VERSION\"/" "$CRATE_DIR/Cargo.toml"
           # Resolving the workspace rewrites the crate's own Cargo.lock entry.
           cargo metadata --format-version 1 > /tmp/cargo-metadata.json
-          ACTUAL=$(node -p "JSON.parse(require('fs').readFileSync('/tmp/cargo-metadata.json','utf8')).packages.find((p) => p.name === 'compact-lint').version")
+          ACTUAL=$(node -p "JSON.parse(require('fs').readFileSync('/tmp/cargo-metadata.json','utf8')).packages.find((p) => p.name === '$CRATE_PACKAGE').version")
           if [[ "$ACTUAL" != "$NEW_VERSION" ]]; then
-            echo "::error::crates/compact-lint/Cargo.toml is at $ACTUAL, expected $NEW_VERSION"
+            echo "::error::$CRATE_DIR/Cargo.toml is at $ACTUAL, expected $NEW_VERSION"
             exit 1
           fi
 
@@ -182,7 +206,7 @@ jobs:
           fi
 
       - name: Commit version bump
-        if: inputs.package != 'compact-linter'
+        if: steps.pkg.outputs.crate_dir == ''
         uses: iarekylew00t/verified-bot-commit@42a042b0407248f3c0acac00c389e729e3476e86 # v2.3.5
         with:
           message: "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}"
@@ -192,15 +216,15 @@ jobs:
             packages/${{ steps.pkg.outputs.dir }}/package.json
 
       - name: Commit version bump with the crate
-        if: inputs.package == 'compact-linter'
+        if: steps.pkg.outputs.crate_dir != ''
         uses: iarekylew00t/verified-bot-commit@42a042b0407248f3c0acac00c389e729e3476e86 # v2.3.5
         with:
           message: "release: ${{ inputs.package }} v${{ steps.version.outputs.new }}"
           token: ${{ steps.gh-app-token.outputs.token }}
           ref: ${{ steps.version.outputs.branch }}
           files: |
-            packages/linter/package.json
-            crates/compact-lint/Cargo.toml
+            packages/${{ steps.pkg.outputs.dir }}/package.json
+            ${{ steps.pkg.outputs.crate_dir }}/Cargo.toml
             Cargo.lock
 
       - name: Ensure release label exists

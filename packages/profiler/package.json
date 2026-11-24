@@ -1,0 +1,66 @@
+{
+  "name": "@openzeppelin/compact-profiler",
+  "description": "Capacity profiler for Midnight Compact contract transactions",
+  "version": "0.1.0",
+  "keywords": [
+    "compact",
+    "midnight",
+    "profiler",
+    "capacity",
+    "transactions"
+  ],
+  "author": "OpenZeppelin Community <maintainers@openzeppelin.org>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenZeppelin/compact-tools.git",
+    "directory": "packages/profiler"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "checksums.txt",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "compact-profile": "dist/compactProfile.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "compile:fixtures": "node test/setup.ts",
+    "generate:crate-fixtures": "node test/crateFixtures.ts",
+    "types": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "yarn vitest run",
+    "coverage": "yarn vitest run --coverage",
+    "clean": "git clean -fXd"
+  },
+  "devDependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@midnightntwrk/ledger-v9": "1.0.2",
+    "@tsconfig/node24": "^24.0.3",
+    "@types/node": "26.1.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  },
+  "dependencies": {
+    "@openzeppelin/compact-launcher": "workspace:^"
+  },
+  "peerDependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.21.0",
+    "@midnightntwrk/ledger-v9": "^1.0.0-rc.5"
+  }
+}
