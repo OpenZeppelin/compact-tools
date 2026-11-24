@@ -13,5 +13,5 @@ bytesChurned             595,608         50,000,000    1.19%  ok
 timeToDismiss    315,566,469,401    932,972,000,000   33.82%  ok
 extrinsicWeight  952,972,000,001  1,299,891,843,000   73.31%  ok
 blockWeight      953,080,157,001  1,500,000,000,000   63.53%  ok
-blockLength              466,486            786,432   59.31%  ok
+blockLength              466,565            786,432   59.32%  ok
 fits: no, binding nodes (102.24%)

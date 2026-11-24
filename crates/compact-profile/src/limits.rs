@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cost::{Cost, Dimension, Measurement};
 use crate::profile::{BalancingTerm, Profile, ProofTerm};
-use crate::tx::Form;
+use crate::tx::{self, Form};
 
 /// The numbers the limit checks read from a profile. `None` is an unknown node cap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,7 +102,8 @@ pub enum Limit {
     ExtrinsicWeight,
     /// Weight against the Normal class's share of a block.
     BlockWeight,
-    /// Estimated size against the Normal class's share of a block's length.
+    /// The encoded extrinsic that carries the balanced transaction against the Normal
+    /// class's share of a block's length.
     BlockLength,
 }
 
@@ -394,6 +395,9 @@ pub struct Evaluation {
     pub dispatch_weight: Option<u64>,
     /// Dispatch weight plus the base extrinsic weight, which the block total reads.
     pub weight: Option<u64>,
+    /// The encoded extrinsic that carries the balanced transaction, which the block length
+    /// reads.
+    pub extrinsic_len: u64,
     /// One entry per [`Limit::ALL`], in that order.
     pub checks: Vec<Check>,
 }
@@ -449,13 +453,14 @@ pub fn evaluate_form(measurement: &Measurement, caps: &Caps, form: Form) -> Eval
         Form::Balanced => Evaluation {
             scope: Scope::AsSubmitted,
             proof: ProofBytes::Proven,
-            ..evaluate(
+            ..evaluate_lands(
                 measurement,
                 &Caps {
                     balancing: None,
                     proof: None,
                     ..*caps
                 },
+                Some(measurement.serialized_len),
             )
         },
     }
@@ -464,7 +469,19 @@ pub fn evaluate_form(measurement: &Measurement, caps: &Caps, form: Form) -> Eval
 /// Evaluates every per-transaction limit of an unproven, unbalanced transaction.
 #[must_use]
 pub fn evaluate(measurement: &Measurement, caps: &Caps) -> Evaluation {
+    evaluate_lands(measurement, caps, None)
+}
+
+/// Evaluates every limit. `balanced_len` is the serialized length of a measured balanced
+/// transaction; without it, the balanced form that lands is projected as the estimated size
+/// plus its tag.
+fn evaluate_lands(measurement: &Measurement, caps: &Caps, balanced_len: Option<u64>) -> Evaluation {
     let effective = Effective::of(measurement, caps.balancing.as_ref(), caps.proof.as_ref());
+    let extrinsic_len = tx::extrinsic_len(balanced_len.unwrap_or_else(|| {
+        effective
+            .estimated_size
+            .saturating_add(Form::Balanced.tag_len())
+    }));
     let time_to_dismiss_allowed = caps.time_to_dismiss_allowed(effective.estimated_size);
     let dispatch_weight = caps.dispatch_weight(&effective.cost);
     let weight = caps.block_weight(&effective.cost);
@@ -494,7 +511,7 @@ pub fn evaluate(measurement: &Measurement, caps: &Caps) -> Evaluation {
                 ),
                 Limit::ExtrinsicWeight => (dispatch_weight, caps.extrinsic_weight_ceiling),
                 Limit::BlockWeight => (weight, caps.normal_block_weight),
-                Limit::BlockLength => (Some(effective.estimated_size), caps.normal_block_length),
+                Limit::BlockLength => (Some(extrinsic_len), caps.normal_block_length),
             };
             Check {
                 limit,
@@ -515,6 +532,7 @@ pub fn evaluate(measurement: &Measurement, caps: &Caps) -> Evaluation {
         time_to_dismiss_allowed,
         dispatch_weight,
         weight,
+        extrinsic_len,
         checks,
     }
 }
@@ -612,7 +630,7 @@ pub(crate) mod tests {
     }
 
     /// The base mint as a wallet submitted it on node 2.1.101.
-    fn balanced_base_mint() -> Measurement {
+    pub(crate) fn balanced_base_mint() -> Measurement {
         Measurement {
             cost: Cost {
                 read_time: 5_848_000_000,
@@ -719,6 +737,29 @@ pub(crate) mod tests {
         assert_eq!(evaluation.effective.nodes, 98);
         assert_eq!(evaluation.effective.estimated_size, 14_813);
         assert_eq!(evaluation.weight, Some(49_734_157_001));
+    }
+
+    #[test]
+    fn an_unbalanced_transaction_counts_its_balanced_extrinsic_against_the_block_length() {
+        let evaluation = evaluate(&base_mint(), &mainnet_caps());
+        let used = |limit| evaluation.check(limit).and_then(|check| check.used);
+        // 14,832 estimated bytes, the 68-byte balanced tag and a 7-byte envelope.
+        assert_eq!(used(Limit::BlockLength), Some(14_907));
+        assert_eq!(used(Limit::TxBytes), Some(14_832));
+    }
+
+    #[test]
+    fn a_balanced_transaction_counts_its_own_serialization_against_the_block_length() {
+        // Longer than its estimate plus tag, so only its own length lands at 16,395.
+        let padded = Measurement {
+            serialized_len: 16_384,
+            ..balanced_base_mint()
+        };
+        let evaluation = evaluate_form(&padded, &mainnet_caps(), Form::Balanced);
+        let used = evaluation
+            .check(Limit::BlockLength)
+            .and_then(|check| check.used);
+        assert_eq!(used, Some(16_395));
     }
 
     #[test]

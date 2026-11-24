@@ -189,21 +189,29 @@ fn a_manifest_without_a_client_ledger_says_so_once_and_is_not_labelled() {
     );
 }
 
-#[test]
-fn an_unparsable_client_ledger_says_so_once_and_is_not_labelled() {
-    let dir = tempfile::tempdir().expect("a temporary directory");
+/// The base manifest after `edit`, written to `dir` beside copies of its transactions.
+fn edited_manifest(dir: &Path, edit: impl FnOnce(&mut serde_json::Value)) -> PathBuf {
     let mut manifest = read_json(&case("mint").join("manifest.json"));
-    manifest["toolchain"]["@midnightntwrk/ledger-v9"] = "latest".into();
-    std::fs::create_dir(dir.path().join("txs")).expect("the txs directory is creatable");
+    edit(&mut manifest);
+    std::fs::create_dir(dir.join("txs")).expect("the txs directory is creatable");
     for scenario in manifest["scenarios"]
         .as_array()
         .expect("the manifest lists scenarios")
     {
         let tx = scenario["tx"].as_str().expect("each scenario names its tx");
-        std::fs::copy(case("mint").join(tx), dir.path().join(tx)).expect("the tx copies");
+        std::fs::copy(case("mint").join(tx), dir.join(tx)).expect("the tx copies");
     }
-    let path = dir.path().join("manifest.json");
+    let path = dir.join("manifest.json");
     std::fs::write(&path, manifest.to_string()).expect("the manifest is writable");
+    path
+}
+
+#[test]
+fn an_unparsable_client_ledger_says_so_once_and_is_not_labelled() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = edited_manifest(dir.path(), |manifest| {
+        manifest["toolchain"]["@midnightntwrk/ledger-v9"] = "latest".into();
+    });
 
     let (report, stderr) = update_json("check-client", utf8(&path), &[]);
     assert_eq!(report["networks"][0]["clientBelowMinimum"], false);
@@ -434,6 +442,51 @@ fn update_refuses_to_write_when_parity_fails() {
     assert_eq!(code, EXIT_FINDINGS);
     assert!(stderr.ends_with("Snapshot not written.\n"), "{stderr}");
     assert!(!written.exists());
+}
+
+#[test]
+fn update_refuses_to_write_when_a_scenario_miscounts_its_calls() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let manifest = edited_manifest(dir.path(), |manifest| {
+        let scenario = manifest["scenarios"]
+            .as_array_mut()
+            .expect("the manifest lists scenarios")
+            .iter_mut()
+            .find(|scenario| scenario["name"] == "mint multi-call n=8")
+            .expect("the manifest has the scenario");
+        scenario["calls"] = 9.into();
+    });
+    let written = dir.path().join("snapshot.json");
+    let (code, stdout, stderr) = run(
+        "check-pass",
+        &[
+            "update",
+            "--manifest",
+            utf8(&manifest),
+            "--network",
+            "mainnet",
+            "--snapshot",
+            utf8(&written),
+            "--reporter",
+            "json",
+        ],
+    );
+    assert_eq!(code, EXIT_FINDINGS);
+    assert!(
+        stderr.ends_with("Found 1 parity mismatch. Snapshot not written.\n"),
+        "{stderr}"
+    );
+    assert!(!written.exists());
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("update prints JSON");
+    assert_eq!(
+        report["parity"],
+        serde_json::json!([{
+            "scenario": "mint multi-call n=8",
+            "field": "calls",
+            "js": "9",
+            "rust": "8",
+        }])
+    );
 }
 
 #[test]

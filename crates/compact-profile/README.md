@@ -34,6 +34,8 @@ compact-profile update --manifest <file> --network <name>... --snapshot <file> [
   balanced by a wallet, told apart by the tag header. It exits 0 whenever it
   computed a result; read `fits`.
 - `check` and `update` read unproven transactions only, and exit 2 on any other form.
+- Parity compares each scenario's `js` numbers and its `calls` with the crate's own
+  measurement of the transaction.
 - `check` exits 1 on a parity mismatch or on any drift from the snapshot.
 - `update` writes the snapshot. It writes nothing and exits 1 on a parity mismatch.
 - Exit 2 is an error: bad input, a params identity that differs from the
@@ -130,6 +132,9 @@ One object. Numbers that can pass `2^53` are decimal strings.
 - `used` and `allowed` are decimal strings, or `null` when unknown.
 - `extrinsicWeight` uses the dispatch weight, without the base;
   `blockWeight` uses `weight`, with it.
+- `blockLength` uses the encoded extrinsic that carries the balanced transaction. The
+  transaction is `serializedLen` long when `form` is `balanced`, and otherwise the
+  size `txBytes` uses plus the 68-byte balanced tag.
 - `ratioPpm` is `used / allowed` in parts per million, rounded up, so it passes
   1,000,000 exactly when `used > allowed`. `null` when either side is unknown.
 - `status` is `ok`, `over` or `n/a`.
@@ -146,8 +151,8 @@ Per network: a header line (name, node release, ledger crate, capture date, scop
 then `provisional` and `client below minimum` when they apply), then one row per
 scenario: `scenario`, `n`, `calls`, `ops`, `intents`, `nodes`, `proof` and
 `balancing` (bytes each term added, `-` when not added), `est size` (`nodes` and
-`est size` as the limits read them), `binding`, `used`, `fits`, `txs/block`,
-`block bound`, `ops/block`.
+`est size` as the `nodes` and `txBytes` limits read them), `binding`, `used`,
+`fits`, `txs/block`, `block bound`, `ops/block`.
 
 `cost` prints the transaction as read, a `proof term:` and a `balancing term:`
 line, then one row per limit.
@@ -162,6 +167,7 @@ JSON, written by `update`. Numbers only:
 - `networks[].scenarios[]`: `fits`, `binding`, `txsPerBlock`, `blockBinding`,
   `opsPerBlock`.
 - `networks[].series[]`: `maxN`, `basis` (`measured`, `fit` or `none`), `binding`.
+  `basis` is `measured` when a size measured to fail sets `maxN`.
 
 Comparison is exact, except for `measured.serializedLen` and
 `measured.cost.blockUsage`, which jitter by a few bytes between builds. Those
@@ -180,8 +186,14 @@ that.
 - Per-transaction limits: declared nodes against the node cap; estimated size
   against `transaction_byte_limit`; each cost dimension against the block limits;
   time to dismiss against `max(per_byte * size, min)`; weight against the
-  per-extrinsic ceiling and the Normal class's block weight; estimated size
+  per-extrinsic ceiling and the Normal class's block weight; the encoded extrinsic
   against the Normal class's block length. Comparisons are inclusive.
+- The node takes the serialized transaction as a bare extrinsic's `Vec<u8>`
+  argument. The block length counts that extrinsic: a SCALE compact length, a
+  preamble byte, the pallet and call index, then the transaction behind its own
+  compact length. A 14,881-byte transaction lands as 14,888 bytes. A balanced
+  transaction counts its serialized length. Any other lands as its balanced form,
+  counted as the estimated size plus the 68-byte balanced tag.
 - Dispatch weight is the largest normalized cost dimension times the weight scale,
   rounded up as the node does, plus the fixed extra weight. The per-extrinsic
   ceiling reads it. The block total adds the base extrinsic weight per
@@ -191,7 +203,11 @@ that.
   bounds; 1 for a `serial` scenario; 0 for one that fails a per-transaction limit.
   Operations per block are transactions per block times `ops`.
 - Series: a least-squares line per metric predicts the largest `n` per limit. A
-  measured boundary (a fitting and a failing size) wins over the prediction.
+  measured boundary (a fitting and a failing size) wins over the prediction. No
+  reported maximum reaches a size measured to fail: when the smallest size fails and
+  the fit predicts it or more, the maximum is the size below it. The block length
+  line adds the balanced tag and the extrinsic encoding of a transaction as long as
+  the cap.
 - Sizes are the ledger's estimate of the proven transaction, not the unproven bytes.
   For an unproven transaction the ledger assumes 4,832 bytes per contract call proof
   and per Zswap proof and 2,912 per Dust spend proof, and counts no proof encoding.
@@ -234,3 +250,5 @@ that.
 - The balancing term is the conservative end of the measured mints; its node count
   varied from +8 to +10 and its one-intent size by about 20 bytes between runs. Its
   per-intent part was measured on one-call intents, up to 41 per transaction.
+- A block's inherent extrinsics share its length budget. Four took 620 bytes on the
+  2026-11-20 dev chain. The block length check and bound do not count them.

@@ -6,6 +6,7 @@ use crate::cost::{Dimension, Measurement};
 use crate::fit::{Largest, Line, largest};
 use crate::limits::{Caps, Limit};
 use crate::profile::BalancingTerm;
+use crate::tx::{Form, extrinsic_len};
 
 /// A measured quantity a series fits a line to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,9 +99,10 @@ impl SeriesFit {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Basis {
-    /// Sizes on both sides of a limit were measured.
+    /// A measured failing size sets it: the largest fitting size measured below that size,
+    /// or the size just below it when no smaller size was measured.
     Measured,
-    /// No measured boundary; the fitted lines predict it.
+    /// No measured boundary; the fitted lines predict it, below any measured failing size.
     Fit,
     /// Neither: a single size and no boundary.
     None,
@@ -121,7 +123,11 @@ pub struct SeriesCapacity {
     /// The fit's largest size per limit, one entry per [`Limit::ALL`]; `None` is `n/a`.
     pub predictions: Vec<(Limit, Option<Largest>)>,
     pub boundary: Option<Boundary>,
-    /// The reported maximum: the measured boundary when there is one, else the fit's.
+    /// The smallest measured size, when it fails and the fit predicted it or more.
+    pub capped_by: Option<u64>,
+    /// The reported maximum, always below the smallest size measured to fail: the measured
+    /// boundary when there is one, else the size below `capped_by` when that is set, else the
+    /// fit's prediction.
     pub max_n: Option<Largest>,
     pub basis: Basis,
     pub binding: Option<Limit>,
@@ -153,6 +159,7 @@ pub fn capacity(fit: &SeriesFit, points: &[Point<'_>], caps: &Caps) -> SeriesCap
     let mut capacity = SeriesCapacity {
         predictions,
         boundary,
+        capped_by: None,
         max_n: None,
         basis: Basis::None,
         binding: None,
@@ -165,6 +172,16 @@ pub fn capacity(fit: &SeriesFit, points: &[Point<'_>], caps: &Caps) -> SeriesCap
         capacity.max_n = Some(largest);
         capacity.basis = Basis::Fit;
         capacity.binding = (largest != Largest::Unbounded).then_some(limit);
+        // With no boundary, no failing size has a fitting one below it, so the smallest size
+        // fails if any does.
+        if let Some(first) = points.first().filter(|point| !point.fits)
+            && largest.min(Largest::Max(first.n)) == Largest::Max(first.n)
+        {
+            capacity.capped_by = Some(first.n);
+            capacity.max_n = Some(Largest::Max(first.n.saturating_sub(1)));
+            capacity.basis = Basis::Measured;
+            capacity.binding = first.binding;
+        }
     }
     capacity
 }
@@ -221,6 +238,9 @@ fn added(points: &[Point<'_>], caps: &Caps) -> Option<Added> {
 
 /// The fit's largest size within `limit`, with the terms' lines added to the size and
 /// `blockUsage` lines and the balancing term's other dimensions added as constants.
+///
+/// Time to dismiss is unbounded when it rises slower than its per-byte allowance, though
+/// sizes in a gap below where the two lines cross can still fail.
 #[allow(
     clippy::cast_precision_loss,
     reason = "caps and balancing terms stay far below 2^52"
@@ -282,7 +302,14 @@ fn predict(fit: &SeriesFit, added: Option<Added>, caps: &Caps, limit: Limit) -> 
                 per_item: used.per_item - per_byte * size.per_item,
                 max_residual: used.max_residual,
             };
-            Some(largest(against_size, 0.0).max(largest(used, caps.min_time_to_dismiss as f64)))
+            // A falling `against_size` crosses zero and stays below it, so the per-byte term
+            // holds for every larger size.
+            let per_byte_largest = if against_size.per_item < 0.0 {
+                Largest::Unbounded
+            } else {
+                largest(against_size, 0.0)
+            };
+            Some(per_byte_largest.max(largest(used, caps.min_time_to_dismiss as f64)))
         }
         Limit::ExtrinsicWeight => {
             weight_within(caps.extrinsic_weight_ceiling?, caps.fixed_extra_weight?)
@@ -292,7 +319,14 @@ fn predict(fit: &SeriesFit, added: Option<Added>, caps: &Caps, limit: Limit) -> 
             caps.fixed_extra_weight?
                 .saturating_add(caps.base_extrinsic_weight?),
         ),
-        Limit::BlockLength => Some(largest(size, caps.normal_block_length? as f64)),
+        Limit::BlockLength => {
+            let cap = caps.normal_block_length?;
+            // The balanced form lands inside its extrinsic. A fitting transaction is shorter
+            // than the cap, so its envelope is at most the cap's.
+            let envelope = extrinsic_len(cap).saturating_sub(cap);
+            let landed = size.shifted(Form::Balanced.tag_len().saturating_add(envelope) as f64);
+            Some(largest(landed, cap as f64))
+        }
     }
 }
 
@@ -301,7 +335,7 @@ mod tests {
     use super::*;
     use crate::cost::{Cost, Proofs};
     use crate::limits::evaluate;
-    use crate::limits::tests::{base_mint, mainnet_caps};
+    use crate::limits::tests::{base_mint, estimate_caps, mainnet_caps};
 
     fn merged(n: u64, nodes: u32) -> Measurement {
         let calls = |per_call: u64, fixed: u64| fixed + per_call * n;
@@ -387,6 +421,27 @@ mod tests {
     }
 
     #[test]
+    fn a_fit_at_or_above_the_smallest_failing_size_is_capped_below_it() {
+        let caps = Caps {
+            max_transaction_nodes: Some(1_000),
+            balancing: None,
+            ..mainnet_caps()
+        };
+        let series: Vec<_> = [(1, 1_001), (2, 1_002), (4, 1_500)]
+            .into_iter()
+            .map(|(n, nodes)| (n, merged(n, nodes)))
+            .collect();
+        let fit = SeriesFit::of(&series.iter().map(|(n, m)| (*n, m)).collect::<Vec<_>>());
+        let capacity = capacity(&fit, &points(&series, &caps), &caps);
+        assert_eq!(capacity.predicted(), Some((Largest::Max(1), Limit::Nodes)));
+        assert_eq!(capacity.max_n, Some(Largest::Max(0)));
+        assert_eq!(capacity.boundary, None);
+        assert_eq!(capacity.capped_by, Some(1));
+        assert_eq!(capacity.basis, Basis::Measured);
+        assert_eq!(capacity.binding, Some(Limit::Nodes));
+    }
+
+    #[test]
     fn an_unknown_cap_leaves_its_prediction_not_applicable() {
         let caps = Caps {
             max_transaction_nodes: None,
@@ -438,6 +493,21 @@ mod tests {
     }
 
     #[test]
+    fn block_length_prediction_adds_the_balanced_tag_and_the_extrinsic_envelope() {
+        let at = |cap| {
+            let caps = Caps {
+                normal_block_length: Some(cap),
+                ..mainnet_caps()
+            };
+            predicted(&caps, Limit::BlockLength)
+        };
+        // The size line is 3,802 + 11,029 n; landing adds 68 + 11 bytes. At n = 40 that is
+        // 445,041 bytes, so a cap 6 bytes short allows 39 and one 3 bytes over allows 40.
+        assert_eq!(at(445_035), Some(Largest::Max(39)));
+        assert_eq!(at(445_044), Some(Largest::Max(40)));
+    }
+
+    #[test]
     fn without_the_proof_term_the_prediction_reads_the_ledger_estimate() {
         let caps = Caps {
             proof: None,
@@ -449,6 +519,43 @@ mod tests {
             predicted(&caps, Limit::ExtrinsicWeight),
             Some(Largest::Max(60))
         );
+    }
+
+    fn line(fixed: f64, per_item: f64) -> Line {
+        Line {
+            fixed,
+            per_item,
+            max_residual: 0.0,
+        }
+    }
+
+    /// The time-to-dismiss prediction for a series whose size line is `2,500 + 1,000 n`.
+    fn time_to_dismiss(used: Line) -> Option<Largest> {
+        let fit = SeriesFit {
+            sizes: vec![1, 2],
+            lines: vec![
+                (Metric::TimeToDismiss, used),
+                (Metric::Cost(Dimension::BlockUsage), line(2_500.0, 1_000.0)),
+            ],
+        };
+        let none = Added {
+            size: line(0.0, 0.0),
+            block_usage: line(0.0, 0.0),
+        };
+        predict(&fit, Some(none), &estimate_caps(), Limit::TimeToDismiss)
+    }
+
+    #[test]
+    fn time_to_dismiss_rising_slower_than_the_per_byte_allowance_is_unbounded() {
+        // 10e9 + 1e9 n against max(2e6 * size, 15e9): within the minimum up to n = 5, within
+        // the per-byte term from n = 5 on.
+        assert_eq!(time_to_dismiss(line(10e9, 1e9)), Some(Largest::Unbounded));
+    }
+
+    #[test]
+    fn time_to_dismiss_rising_faster_than_the_per_byte_allowance_is_bounded_by_the_minimum() {
+        // 10e9 + 3e9 n stays within 15e9 up to n = 1 and is never within the per-byte term.
+        assert_eq!(time_to_dismiss(line(10e9, 3e9)), Some(Largest::Max(1)));
     }
 
     #[test]

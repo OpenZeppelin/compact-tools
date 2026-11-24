@@ -186,9 +186,9 @@
             },
             {
               "name": "blockLength",
-              "used": "14682",
+              "used": "14757",
               "allowed": "786432",
-              "ratioPpm": 18670,
+              "ratioPpm": 18765,
               "status": "ok"
             }
           ],
@@ -335,9 +335,9 @@
             },
             {
               "name": "blockLength",
-              "used": "14548",
+              "used": "14623",
               "allowed": "786432",
-              "ratioPpm": 18499,
+              "ratioPpm": 18595,
               "status": "ok"
             }
           ],
@@ -351,7 +351,7 @@
               },
               {
                 "limit": "blockLength",
-                "txs": 54
+                "txs": 53
               },
               {
                 "limit": "readTime",
@@ -484,9 +484,9 @@
             },
             {
               "name": "blockLength",
-              "used": "30737",
+              "used": "30816",
               "allowed": "786432",
-              "ratioPpm": 39085,
+              "ratioPpm": 39185,
               "status": "ok"
             }
           ],
@@ -633,9 +633,9 @@
             },
             {
               "name": "blockLength",
-              "used": "14682",
+              "used": "14757",
               "allowed": "786432",
-              "ratioPpm": 18670,
+              "ratioPpm": 18765,
               "status": "ok"
             }
           ],
@@ -782,9 +782,9 @@
             },
             {
               "name": "blockLength",
-              "used": "25724",
+              "used": "25803",
               "allowed": "786432",
-              "ratioPpm": 32710,
+              "ratioPpm": 32811,
               "status": "ok"
             }
           ],
@@ -931,9 +931,9 @@
             },
             {
               "name": "blockLength",
-              "used": "47776",
+              "used": "47855",
               "allowed": "786432",
-              "ratioPpm": 60751,
+              "ratioPpm": 60851,
               "status": "ok"
             }
           ],
@@ -1080,9 +1080,9 @@
             },
             {
               "name": "blockLength",
-              "used": "91840",
+              "used": "91919",
               "allowed": "786432",
-              "ratioPpm": 116781,
+              "ratioPpm": 116882,
               "status": "ok"
             }
           ],
@@ -1229,9 +1229,9 @@
             },
             {
               "name": "blockLength",
-              "used": "455452",
+              "used": "455531",
               "allowed": "786432",
-              "ratioPpm": 579138,
+              "ratioPpm": 579238,
               "status": "ok"
             }
           ],
@@ -1378,9 +1378,9 @@
             },
             {
               "name": "blockLength",
-              "used": "466486",
+              "used": "466565",
               "allowed": "786432",
-              "ratioPpm": 593168,
+              "ratioPpm": 593269,
               "status": "ok"
             }
           ],

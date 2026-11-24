@@ -53,7 +53,7 @@ pub enum CheckError {
     },
 }
 
-/// A number the Rust ledger computed differently from the runner's JS ledger.
+/// A number the Rust ledger computed differently from what the runner reported.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParityMismatch {
     pub scenario: String,
@@ -236,7 +236,8 @@ pub fn analyze(manifest_path: &Path, profiles: Vec<Profile>) -> Result<Analysis,
     })
 }
 
-/// Every number of `measurement` that differs from what the runner reported.
+/// Every number of `measurement` that differs from what the runner reported, the scenario's
+/// `calls` included.
 fn parity(scenario: &Scenario, measurement: &Measurement) -> Vec<ParityMismatch> {
     let js = &scenario.js;
     let mut pairs: Vec<(&'static str, u64, u64)> = Dimension::ALL
@@ -259,6 +260,7 @@ fn parity(scenario: &Scenario, measurement: &Measurement) -> Vec<ParityMismatch>
         u64::from(js.declared_nodes),
         u64::from(measurement.declared_nodes),
     ));
+    pairs.push(("calls", u64::from(scenario.calls), measurement.proofs.calls));
     pairs
         .into_iter()
         .filter(|(_, js, rust)| js != rust)

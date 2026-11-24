@@ -79,7 +79,7 @@ pub fn capacity(evaluation: &Evaluation, caps: &Caps, conflict: Conflict, ops: u
         },
         Bound {
             limit: Limit::BlockLength,
-            count: per_block(caps.normal_block_length, Some(effective.estimated_size)),
+            count: per_block(caps.normal_block_length, Some(evaluation.extrinsic_len)),
         },
     ];
     bounds.extend(Dimension::ALL.into_iter().map(|dimension| Bound {
@@ -138,8 +138,9 @@ fn per_block(capacity: Option<u64>, per_tx: Option<u64>) -> Count {
 mod tests {
     use super::*;
     use crate::cost::Measurement;
-    use crate::limits::evaluate;
-    use crate::limits::tests::{base_mint, contract_caps, mainnet_caps};
+    use crate::limits::tests::{balanced_base_mint, base_mint, contract_caps, mainnet_caps};
+    use crate::limits::{evaluate, evaluate_form};
+    use crate::tx::Form;
 
     fn count(capacity: &Capacity, limit: Limit) -> Count {
         capacity
@@ -153,9 +154,10 @@ mod tests {
     fn balanced_base_mints_fill_a_block_at_30_as_node_2_1_101_did() {
         let caps = mainnet_caps();
         let capacity = capacity(&evaluate(&base_mint(), &caps), &caps, Conflict::None, 1);
-        // 1.5e12 / 49,772,157,001 = 30.1; 786,432 / 14,832 = 53.0; 1e6 / 14,832 = 67.4.
+        // 1.5e12 / 49,772,157,001 = 30.1; 1e6 / 14,832 = 67.4. The 14,832 bytes land as an
+        // extrinsic of 14,832 + 68 + 7 bytes, and 786,432 / 14,907 = 52.8.
         assert_eq!(count(&capacity, Limit::BlockWeight), Count::Txs(30));
-        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(53));
+        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(52));
         assert_eq!(count(&capacity, Limit::BlockUsage), Count::Txs(67));
         assert_eq!(capacity.txs, Some(30));
         assert_eq!(capacity.binding, Some(Binding::Limit(Limit::BlockWeight)));
@@ -169,10 +171,21 @@ mod tests {
             ..mainnet_caps()
         };
         let capacity = capacity(&evaluate(&base_mint(), &caps), &caps, Conflict::None, 1);
-        // 1.5e12 / 48,640,157,001 = 30.8; 786,432 / 14,266 = 55.1; 1e6 / 14,266 = 70.1.
+        // 1.5e12 / 48,640,157,001 = 30.8; 786,432 / (14,266 + 68 + 7) = 54.8;
+        // 1e6 / 14,266 = 70.1.
         assert_eq!(count(&capacity, Limit::BlockWeight), Count::Txs(30));
-        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(55));
+        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(54));
         assert_eq!(count(&capacity, Limit::BlockUsage), Count::Txs(70));
+    }
+
+    #[test]
+    fn the_submitted_base_mint_counts_its_own_extrinsic_against_the_block_length() {
+        let caps = mainnet_caps();
+        let evaluation = evaluate_form(&balanced_base_mint(), &caps, Form::Balanced);
+        let capacity = capacity(&evaluation, &caps, Conflict::None, 1);
+        // 14,881 bytes land as a 14,888-byte extrinsic: 786,432 / 14,888 = 52.8.
+        assert_eq!(evaluation.extrinsic_len, 14_888);
+        assert_eq!(count(&capacity, Limit::BlockLength), Count::Txs(52));
     }
 
     #[test]

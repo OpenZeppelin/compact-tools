@@ -53,6 +53,12 @@ impl Form {
         }
     }
 
+    /// The tag header's length in bytes.
+    #[must_use]
+    pub fn tag_len(self) -> u64 {
+        self.tag().len() as u64
+    }
+
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
@@ -141,6 +147,32 @@ fn decode_compact_u32(bytes: &[u8]) -> Option<u32> {
             let value = u32::from_le_bytes(bytes.get(1..5)?.try_into().ok()?);
             (value > 0x3fff_ffff).then_some(value)
         }
+    }
+}
+
+/// The bare extrinsic's preamble byte, then the pallet and call index of
+/// `send_mn_transaction`.
+const CALL_HEADER_LEN: u64 = 3;
+
+/// The encoded extrinsic that carries a serialized transaction of `tx_len` bytes, which the
+/// node's block length counts: the call header and the transaction as a SCALE `Vec<u8>`,
+/// behind the SCALE compact length of both.
+#[must_use]
+pub fn extrinsic_len(tx_len: u64) -> u64 {
+    let body = CALL_HEADER_LEN
+        .saturating_add(compact_len(tx_len))
+        .saturating_add(tx_len);
+    compact_len(body).saturating_add(body)
+}
+
+/// Bytes in the SCALE compact encoding of `value`.
+fn compact_len(value: u64) -> u64 {
+    match value {
+        0..=0x3f => 1,
+        0x40..=0x3fff => 2,
+        0x4000..=0x3fff_ffff => 4,
+        // Big-integer mode: one byte, then the value's significant bytes.
+        _ => 1 + u64::from((u64::BITS - value.leading_zeros()).div_ceil(8)),
     }
 }
 
@@ -406,6 +438,54 @@ mod tests {
             assert_eq!(read, form, "{name}");
             assert_eq!(measurement.declared_nodes, nodes, "{name}");
             assert_eq!(measurement.cost.block_usage, block_usage, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_proven_or_balanced_serialization_is_the_estimated_size_behind_its_tag() {
+        assert_eq!(Form::Proven.tag_len(), 63);
+        assert_eq!(Form::Balanced.tag_len(), 68);
+        for name in [
+            "base-mint-proven.bin",
+            "preset-merged-n2-proven.bin",
+            "base-mint-balanced.bin",
+            "preset-mint-balanced.bin",
+        ] {
+            let (form, measurement) = measure(&live(name), &mainnet()).expect("it measures");
+            assert_eq!(
+                measurement.serialized_len,
+                measurement.estimated_size() + form.tag_len(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn each_compact_length_of_the_extrinsic_grows_at_16_384() {
+        // The body is 16,383 bytes, then 16,384; then the transaction itself reaches 16,384.
+        assert_eq!(extrinsic_len(16_378), 16_385);
+        assert_eq!(extrinsic_len(16_379), 16_388);
+        assert_eq!(extrinsic_len(16_383), 16_392);
+        assert_eq!(extrinsic_len(16_384), 16_395);
+    }
+
+    #[test]
+    fn the_extrinsic_length_matches_the_blocks_node_2_1_101_built() {
+        // Recorded in tests/fixtures/README.md, under `live/`: each balanced transaction's
+        // length, and its block's extrinsic bytes less the 620 of the four inherents.
+        let kept = |name| {
+            let (_, measurement) = measure(&live(name), &mainnet()).expect("it measures");
+            measurement.serialized_len
+        };
+        let blocks = [
+            (kept("base-mint-balanced.bin"), 15_508),
+            (kept("preset-mint-balanced.bin"), 15_889),
+            (26_447, 27_078),
+            (326_840, 327_471),
+            (433_872, 434_503),
+        ];
+        for (tx_len, block_bytes) in blocks {
+            assert_eq!(extrinsic_len(tx_len), block_bytes - 620, "{tx_len}");
         }
     }
 

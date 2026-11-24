@@ -494,15 +494,21 @@ fn network_section(
 }
 
 fn series_verdict(capacity: &SeriesCapacity) -> String {
-    match (capacity.basis, capacity.boundary) {
-        (Basis::Measured, Some(boundary)) => format!(
+    match (capacity.basis, capacity.boundary, capacity.capped_by) {
+        (Basis::Measured, Some(boundary), _) => format!(
             "{}, measured ({} fits, {} over {})",
             group(boundary.largest_fit),
             group(boundary.largest_fit),
             group(boundary.smallest_over),
             boundary.binding.map_or("-", Limit::name),
         ),
-        (Basis::Fit, _) => match capacity.max_n {
+        (Basis::Measured, None, Some(over)) => format!(
+            "{}, measured ({} over {}, no smaller size measured)",
+            largest_cell(capacity.max_n),
+            group(over),
+            capacity.binding.map_or("-", Limit::name),
+        ),
+        (Basis::Fit, _, _) => match capacity.max_n {
             Some(Largest::Max(n)) => format!(
                 "{}, fit only (binds on {})",
                 group(n),
@@ -971,6 +977,22 @@ mod tests {
         assert_eq!(group_decimal(-147.004), "-147.00");
         assert_eq!(group_decimal(-0.001), "0.00");
         assert_eq!(group_decimal(0.0), "0.00");
+    }
+
+    #[test]
+    fn a_maximum_capped_by_the_smallest_failing_size_reads_as_measured() {
+        let capacity = SeriesCapacity {
+            predictions: vec![(Limit::Nodes, Some(Largest::Max(1)))],
+            boundary: None,
+            capped_by: Some(1),
+            max_n: Some(Largest::Max(0)),
+            basis: Basis::Measured,
+            binding: Some(Limit::Nodes),
+        };
+        assert_eq!(
+            series_verdict(&capacity),
+            "0, measured (1 over nodes, no smaller size measured)"
+        );
     }
 
     #[test]

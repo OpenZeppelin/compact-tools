@@ -70,3 +70,15 @@ serialized length. Estimated is the ledger's estimated size, which is also `bloc
 | `base-merged-n39` | 39 | 428,135 | 428,072 | 433,872 | 433,804 |
 | `base-merged-n40` | 40 | 439,113 | 439,050 | 444,890 | 444,822 |
 | `base-merged-n41` | 41 | 450,062 | 449,999 | 455,927 | 455,859 |
+
+The same run read each block's extrinsic bytes. A block with no Midnight transaction held
+its four inherent extrinsics in 620 bytes. These blocks each held one balanced transaction,
+and `src/tx.rs` checks the extrinsic length against them.
+
+| Balanced transaction | Bytes | Block extrinsic bytes |
+|---|---|---|
+| `base-mint-balanced.bin` | 14,881 | 15,508 |
+| `preset-mint-balanced.bin` | 15,262 | 15,889 |
+| `preset-merged-n2` | 26,447 | 27,078 |
+| `preset-merged-n29` | 326,840 | 327,471 |
+| `base-merged-n39` | 433,872 | 434,503 |
