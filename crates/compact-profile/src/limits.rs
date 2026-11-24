@@ -772,7 +772,7 @@ pub(crate) mod tests {
             .expect("mainnet parses")
             .proof
             .expect("mainnet knows the proof term");
-        // The last three proven builds measured these sizes; their files are not kept.
+        // The last three proven sizes are recorded in tests/fixtures/README.md, under `live/`.
         let cases = [
             (
                 "base-mint-unproven.bin",
@@ -797,8 +797,8 @@ pub(crate) mod tests {
         }
     }
 
-    /// The balanced sizes are the `blockUsage` of the wallet-balanced builds from the
-    /// 2026-11-20 run on node 2.1.101; only the single mint's file is kept.
+    /// The balanced sizes are the `blockUsage` of the wallet-balanced builds. Only the single
+    /// mint's file is kept. The others are recorded in `tests/fixtures/README.md`, under `live/`.
     #[test]
     fn the_shipped_terms_reach_each_captured_balanced_size_without_undercounting() {
         let caps = Caps::of(&Profile::embedded("mainnet").expect("mainnet parses"));

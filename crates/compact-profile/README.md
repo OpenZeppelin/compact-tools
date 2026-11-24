@@ -127,8 +127,7 @@ One object. Numbers that can pass `2^53` are decimal strings.
 - `limits[].name`, in order: `nodes`, `txBytes`, `readTime`, `computeTime`,
   `blockUsage`, `bytesWritten`, `bytesChurned`, `timeToDismiss`,
   `extrinsicWeight`, `blockWeight`, `blockLength`.
-- `used` and `allowed` are decimal strings, or `null` when unknown. Limits read the
-  transaction with the balancing term added, except for a balanced one.
+- `used` and `allowed` are decimal strings, or `null` when unknown.
 - `extrinsicWeight` uses the dispatch weight, without the base;
   `blockWeight` uses `weight`, with it.
 - `ratioPpm` is `used / allowed` in parts per million, rounded up, so it passes
@@ -226,6 +225,9 @@ that.
   both serialized to 5,395 bytes. A circuit whose proof has another size is
   under- or overcounted by the difference per call. Zswap input and transient
   proofs were not captured.
+- No test transaction holds a Zswap input or a fallible offer of its own. The
+  input count is tested as arithmetic, and the fallible count on a copy of a
+  guaranteed offer.
 - Proving can pad a call's transcript. One circuit's single call gained a 10-byte
   noop, two DAG nodes and 16,001,011 ps of compute time when proved; the term does
   not model this.

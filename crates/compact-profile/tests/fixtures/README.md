@@ -54,3 +54,19 @@ holding one dust spend.
 | `preset-merged-n2-proven.bin` | 2 | proven, 167 nodes | 1.0.2 | balanced to 176 nodes, landed |
 | `preset-merged-n29-unproven.bin` | 29 | unproven, 986 nodes | 1.0.2 | not recorded for this build; an earlier build of the same calls, also 986 nodes, landed at 995 balanced |
 | `preset-merged-n30-unproven.bin` | 30 | unproven, 1,017 nodes | 1.0.2 | proven and balanced to 1,025 nodes, rejected on submission (custom error 111) |
+
+The proven and balanced builds of the merges are not kept here, except
+`preset-merged-n2-proven.bin`. Their sizes below were recorded from the same 2026-11-20 run,
+and `src/limits.rs` checks the shipped proof and balancing terms against them. Bytes is the
+serialized length. Estimated is the ledger's estimated size, which is also `blockUsage`. The
+`n29` sizes belong to the earlier build of the same calls named in the table above.
+`base-merged-n39` has no unproven file either.
+
+| Merge | Calls | Proven bytes | Proven estimated | Balanced bytes | Balanced estimated |
+|---|---|---|---|---|---|
+| `preset-merged-n2` | 2 | file kept | file kept | 26,447 | 26,379 |
+| `preset-merged-n29` | 29 | 321,740 | 321,677 | 326,840 | 326,772 |
+| `preset-merged-n30` | 30 | 332,845 | 332,782 | 337,978 | 337,910 |
+| `base-merged-n39` | 39 | 428,135 | 428,072 | 433,872 | 433,804 |
+| `base-merged-n40` | 40 | 439,113 | 439,050 | 444,890 | 444,822 |
+| `base-merged-n41` | 41 | 450,062 | 449,999 | 455,927 | 455,859 |

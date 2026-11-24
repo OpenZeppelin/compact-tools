@@ -1,9 +1,9 @@
-# Midnight preprod, captured from a public RPC node.
+# Midnight preprod, captured from a public RPC node since retired (see `source`).
 name = "preprod"
 node_release = "2.1.101"
 ledger_crate = "midnight-ledger-v9 1.0.1"
 captured = "2026-11-20"
-source = "state_call MidnightRuntimeApi_get_ledger_parameters on https://rpc.preprod.midnight.network (system_version 2.1.101-913ec011, spec_version 2001100)"
+source = "state_call MidnightRuntimeApi_get_ledger_parameters on https://rpc.preprod.midnight.network (system_version 2.1.101-913ec011, spec_version 2001100). By 2026-11-24 that endpoint answered every call with ENDPOINT_DECOMMISSIONED. A re-read goes to https://rpc.midnight-preprod.blockfrost.io, which needs a Blockfrost project token"
 # Tagged LedgerParameters, hex. Whitespace is ignored.
 parameters = """
 6d69646e696768743a6c65646765722d706172616d65746572735b76385d3ac6
@@ -43,7 +43,7 @@ source = "Observed 2026-11-20 in the runtime metadata of a local dev chain on no
 
 [node.fixed_extra_weight]
 value = 20_000_000_000
-source = "Read 2026-11-23 on https://rpc.preprod.midnight.network at block 3,545,689 (system_version 2.1.101-913ec011, spec_version 2001100): midnight.configurableTransactionSizeWeight is 20,000,000,000 refTime. The storage item is unset, so the runtime default applies. Source: pallets/midnight/src/lib.rs:686-691 adds it to the scaled cost; its default is EXTRA_WEIGHT_TX_SIZE (:110, :191-204)"
+source = "Read 2026-11-23 on https://rpc.preprod.midnight.network at block 3,545,689 (system_version 2.1.101-913ec011, spec_version 2001100): midnight.configurableTransactionSizeWeight is 20,000,000,000 refTime. The storage item is unset, so the runtime default applies. Source: pallets/midnight/src/lib.rs:686-691 adds it to the scaled cost; its default is EXTRA_WEIGHT_TX_SIZE (:110, :191-204). By 2026-11-24 that endpoint answered every call with ENDPOINT_DECOMMISSIONED. A re-read goes to https://rpc.midnight-preprod.blockfrost.io, which needs a Blockfrost project token"
 
 [node.base_extrinsic_weight]
 value = 108_157_000
