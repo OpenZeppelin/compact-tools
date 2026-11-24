@@ -4,6 +4,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -13,7 +14,7 @@ import {
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { constants, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hostOptions,
@@ -413,6 +414,25 @@ describe('resolveBinary', () => {
       expect(notices).toStrictEqual([
         `cached ${binary} is not a regular file; replacing it`,
         'downloading fake-tool-x86_64-unknown-linux-gnu (v0.1.0)',
+      ]);
+    } finally {
+      await origin.close();
+    }
+  });
+
+  it('discards the download when the cache entry cannot be replaced', async () => {
+    packageChecksums(FAKE_BINARY);
+    mkdirSync(cachedPath(), { recursive: true });
+    const origin = await startOrigin({ [ASSET]: FAKE_BINARY });
+    try {
+      await expect(
+        resolveBinary(
+          options({ env: { FAKE_TOOL_DOWNLOAD_BASE: origin.base } }),
+        ),
+      ).rejects.toThrow();
+
+      expect(readdirSync(join(install, 'cache'))).toStrictEqual([
+        basename(cachedPath()),
       ]);
     } finally {
       await origin.close();

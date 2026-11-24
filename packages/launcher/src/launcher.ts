@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { constants, homedir } from 'node:os';
@@ -221,7 +222,12 @@ export async function resolveBinary(options: ResolveOptions): Promise<string> {
   const staged = `${cached}.${randomUUID()}.tmp`;
   writeFileSync(staged, bytes);
   chmodSync(staged, 0o755);
-  renameSync(staged, cached);
+  try {
+    renameSync(staged, cached);
+  } catch (error) {
+    rmSync(staged, { force: true });
+    throw error;
+  }
   return cached;
 }
 

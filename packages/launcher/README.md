@@ -68,7 +68,7 @@ pass on:
    file whose SHA-256 matches `<packageDir>/checksums.txt`. Every call hashes it again,
    which takes a few milliseconds for a release binary. A symlink or a file that does not
    match is reported through `notify` and replaced by step 3. A directory at that path is
-   reported too, and then the rename onto it fails.
+   reported too; the rename onto it then fails and the download is discarded.
 3. `<name>-<target>`, downloaded from the `<packageName>/v<version>` GitHub release, or
    from `env[downloadBaseEnv]` when set. Its SHA-256 must match `<packageDir>/checksums.txt`;
    the release's own `checksums.txt` is never read. It is then staged under a unique name
