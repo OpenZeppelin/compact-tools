@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `check` reports a tag value, section body or untagged paragraph still equal to `fix.placeholder`, such as the `TODO` that `fix` writes, as `doc-placeholder`: a warning that `--strict` makes an error (#244)
+
 ### Changed
 
 - The bin resolves `compact-lint` through the new `@openzeppelin/compact-launcher` dependency. Environment variables, cache paths and download URLs are unchanged (#239)

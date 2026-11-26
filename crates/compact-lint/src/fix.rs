@@ -234,7 +234,8 @@ fn supplied_elsewhere(issue: &Issue, issues: &[Issue], config: &Config) -> bool 
 /// The repair for one issue, or `None` where the rule has no safe fix.
 ///
 /// `constraints-format` and `constraints-placeholder` need a measurement a rewrite
-/// cannot invent, and `parse` and `format` are not doc-comment issues at all.
+/// cannot invent, `doc-placeholder` needs prose only a human can write, and `parse` and
+/// `format` are not doc-comment issues at all.
 #[must_use]
 #[expect(
     clippy::too_many_lines,
@@ -353,6 +354,7 @@ pub fn edit_for(issue: &Issue, config: &Config, newline: &str) -> Option<Edit> {
 
         Issue::Parse { .. }
         | Issue::UnknownSection { .. }
+        | Issue::DocPlaceholder { .. }
         | Issue::ConstraintsFormat { .. }
         | Issue::ConstraintsPlaceholder { .. } => None,
     }

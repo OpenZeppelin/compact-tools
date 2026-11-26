@@ -12,7 +12,7 @@ use tree_sitter::{Node, Parser};
 use crate::config::{Config, DocsPolicy};
 use crate::diagnostic::{Diagnostic, Level, Span, sentence};
 use crate::doc::{Tag, TagSpec};
-use crate::model::{DeclKind, Declaration, declarations};
+use crate::model::{AttachedDoc, DeclKind, Declaration, declarations};
 use crate::report::{Position, RuleId};
 
 /// The tag whose value must name the module it documents.
@@ -63,6 +63,17 @@ impl ConstraintSite {
             .find(char::is_whitespace)
             .map_or(&self.value, |end| &self.value[..rows + end])
     }
+}
+
+/// What in a doc comment holds a placeholder.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Holder {
+    /// A tag's whole value.
+    Value(Tag),
+    /// The body under a section heading.
+    Section { tag: Tag, heading: String },
+    /// An untagged paragraph, such as the lone line `fix` writes for a kind with no tags.
+    Prose,
 }
 
 /// One rule violation, carrying what `check` prints and what `fix` needs to repair it.
@@ -127,6 +138,11 @@ pub enum Issue {
         line_offset: usize,
         doc: DocRef,
     },
+    DocPlaceholder {
+        position: Position,
+        holder: Holder,
+        placeholder: String,
+    },
     MissingConstraints {
         position: Position,
         end: Position,
@@ -168,6 +184,7 @@ impl Issue {
             | Self::TagOrder { position, .. }
             | Self::ForbiddenTag { position, .. }
             | Self::ModuleName { position, .. }
+            | Self::DocPlaceholder { position, .. }
             | Self::MissingConstraints { position, .. }
             | Self::UndocumentedConstraints { position, .. }
             | Self::ConstraintsFormat { position, .. }
@@ -185,6 +202,7 @@ impl Issue {
             Self::TagOrder { .. } => RuleId::TAG_ORDER,
             Self::ForbiddenTag { .. } => RuleId::FORBIDDEN_TAG,
             Self::ModuleName { .. } => RuleId::MODULE_NAME,
+            Self::DocPlaceholder { .. } => RuleId::DOC_PLACEHOLDER,
             Self::MissingConstraints { .. } | Self::UndocumentedConstraints { .. } => {
                 RuleId::MISSING_CONSTRAINTS
             }
@@ -230,6 +248,21 @@ impl Issue {
             Self::ModuleName {
                 documented, name, ..
             } => format!("{MODULE_TAG} names `{documented}`, but the module is `{name}`"),
+            Self::DocPlaceholder {
+                holder,
+                placeholder,
+                ..
+            } => match holder {
+                Holder::Value(tag) => {
+                    format!("{tag} value still holds the placeholder `{placeholder}`")
+                }
+                Holder::Section { tag, heading } => {
+                    format!("`{tag} {heading}` section still holds the placeholder `{placeholder}`")
+                }
+                Holder::Prose => {
+                    format!("doc comment text still holds the placeholder `{placeholder}`")
+                }
+            },
             Self::ConstraintsFormat { tag, value, .. } => {
                 format!("{tag} value `{value}` is not `k=<n>, rows=<n> [note]`")
             }
@@ -268,6 +301,9 @@ impl Issue {
             Self::ModuleName { name, .. } => {
                 format!("Set the tag to {name}, or run compact-lint fix.")
             }
+            Self::DocPlaceholder { .. } => {
+                "Replace the placeholder with the text it stands for.".to_owned()
+            }
             Self::MissingConstraints { tag, .. } => format!(
                 "Run compact-lint fill-constraints after adding the tag, or add it as {tag} k=?, rows=? to fill later."
             ),
@@ -303,6 +339,18 @@ impl Issue {
                 heading,
                 ..
             } => Span::columns(*position, heading_width(tag, Some(heading))),
+            Self::DocPlaceholder {
+                position,
+                holder,
+                placeholder,
+            } => Span::columns(
+                *position,
+                match holder {
+                    Holder::Value(tag) => tag.as_str().len(),
+                    Holder::Section { tag, heading } => heading_width(tag, Some(heading)),
+                    Holder::Prose => placeholder.len(),
+                },
+            ),
             Self::TagOrder {
                 position, entry, ..
             } => Span::columns(
@@ -509,6 +557,8 @@ fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Ve
         }
     }
 
+    check_placeholders(attached, config, issues);
+
     if declaration.kind == DeclKind::Module {
         check_module_name(declaration, &doc, issues);
     }
@@ -602,6 +652,49 @@ fn check_sections(
             }
             Some((top, _)) if index == top => {}
             _ => highest = Some((index, entry)),
+        }
+    }
+}
+
+/// Tag values, section bodies and untagged paragraphs that still hold `fix.placeholder`,
+/// on any attached comment whatever its docs policy.
+fn check_placeholders(attached: &AttachedDoc, config: &Config, issues: &mut Vec<Issue>) {
+    let placeholder = config.fix.placeholder.trim();
+    let mut found = |position, holder| {
+        issues.push(Issue::DocPlaceholder {
+            position,
+            holder,
+            placeholder: placeholder.to_owned(),
+        });
+    };
+
+    for occurrence in attached.comment.tags() {
+        // `constraints-placeholder` owns the constraints value.
+        if occurrence.tag == config.constraints.tag {
+            continue;
+        }
+        let position = attached.tag_position(occurrence);
+        if occurrence.value.trim() == placeholder {
+            found(position, Holder::Value(occurrence.tag.clone()));
+            continue;
+        }
+        // The heading is ASCII, so the `:` closing it sits at `heading.len()`.
+        if let Some(heading) = occurrence.heading()
+            && occurrence.value[heading.len() + 1..].trim() == placeholder
+        {
+            found(
+                position,
+                Holder::Section {
+                    tag: occurrence.tag.clone(),
+                    heading: heading.to_owned(),
+                },
+            );
+        }
+    }
+
+    for prose in attached.comment.prose() {
+        if prose.text.trim() == placeholder {
+            found(attached.prose_position(prose), Holder::Prose);
         }
     }
 }
@@ -1082,6 +1175,100 @@ mod tests {
     fn a_message_opens_with_a_capital_and_closes_with_one_period() {
         assert_eq!(sentence("forbidden tag @return"), "Forbidden tag @return.");
         assert_eq!(sentence("@module names `A`."), "@module names `A`.");
+    }
+
+    #[test]
+    fn a_section_body_holding_the_placeholder_is_reported() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * TODO\n * @notice Security:\n * - Nonces.\n */\nmodule M {\n}\n";
+
+        assert_eq!(
+            reported(source, &template_config()),
+            ["3:4 doc-placeholder `@notice Privacy` section still holds the placeholder `TODO`."]
+        );
+    }
+
+    #[test]
+    fn a_value_holding_the_placeholder_is_reported_even_where_docs_are_optional() {
+        let source = "/**\n * @description TODO\n */\ncircuit hidden(): [] { }\n";
+
+        assert_eq!(
+            reported(source, &Config::default()),
+            ["2:4 doc-placeholder @description value still holds the placeholder `TODO`."]
+        );
+    }
+
+    #[test]
+    fn a_placeholder_inside_longer_text_is_not_reported() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * TODO once the spec lands.\n * @notice Security:\n * - Nonces. TODO\n */\nmodule M {\n}\n";
+        let one_liner =
+            "/**\n * @description TODO: describe the flow.\n */\ncircuit hidden(): [] { }\n";
+
+        assert!(reported(source, &template_config()).is_empty());
+        assert!(reported(one_liner, &Config::default()).is_empty());
+    }
+
+    #[test]
+    fn an_untagged_placeholder_line_is_reported() {
+        let source = "/**\n * TODO\n */\ncircuit hidden(): [] { }\n";
+        let one_liner = "/** TODO */\ncircuit hidden(): [] { }\n";
+        let longer = "/**\n * TODO: describe it.\n */\ncircuit hidden(): [] { }\n";
+
+        assert_eq!(
+            reported(source, &Config::default()),
+            ["2:4 doc-placeholder Doc comment text still holds the placeholder `TODO`."]
+        );
+        assert_eq!(
+            reported(one_liner, &Config::default()),
+            ["1:5 doc-placeholder Doc comment text still holds the placeholder `TODO`."]
+        );
+        assert!(reported(longer, &Config::default()).is_empty());
+    }
+
+    #[test]
+    fn the_placeholder_follows_the_fix_config() {
+        let source = "/**\n * @description FIXME\n * @dev TODO\n */\ncircuit hidden(): [] { }\n";
+        let mut config = Config::default();
+        config.fix.placeholder = "FIXME".to_owned();
+
+        assert_eq!(
+            reported(source, &config),
+            ["2:4 doc-placeholder @description value still holds the placeholder `FIXME`."]
+        );
+    }
+
+    #[test]
+    fn a_placeholder_holding_a_colon_matches_the_whole_value() {
+        let source = "/**\n * @description TODO: write\n */\ncircuit hidden(): [] { }\n";
+        let mut config = Config::default();
+        config.fix.placeholder = "TODO: write".to_owned();
+
+        assert_eq!(
+            reported(source, &config),
+            ["2:4 doc-placeholder @description value still holds the placeholder `TODO: write`."]
+        );
+    }
+
+    #[test]
+    fn the_constraints_value_is_left_to_its_own_rules() {
+        let source = "/**\n * @description Bumps.\n * @constraints TODO\n */\nexport circuit bump(): [] { }\n";
+
+        assert_eq!(
+            reported(source, &circuit_config()),
+            ["3:4 constraints-format @constraints value `TODO` is not `k=<n>, rows=<n> [note]`."]
+        );
+    }
+
+    #[test]
+    fn a_section_placeholder_span_covers_the_heading() {
+        let source = "/**\n * @module M\n * @notice Privacy:\n * TODO\n * @notice Security:\n * - Nonces.\n */\nmodule M {\n}\n";
+        let issues = Linter::new()
+            .expect("the bundled grammar loads")
+            .issues(Path::new("a.compact"), source, &template_config())
+            .expect("the source produced a tree");
+        let span = issues[0].span();
+
+        assert_eq!(span.start.column, 4);
+        assert_eq!(span.end.column, 4 + "@notice Privacy:".len());
     }
 
     #[test]

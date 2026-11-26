@@ -1,0 +1,15 @@
+/**
+ * @module Unwritten
+ * @description A module whose header still holds what fix wrote.
+ * @notice Privacy:
+ * TODO
+ * @notice Security:
+ * - Nonces are spend-critical.
+ */
+export module Unwritten {
+  /**
+   * @description TODO
+   * @constraints k=6, rows=28
+   */
+  export circuit run(): [] { }
+}

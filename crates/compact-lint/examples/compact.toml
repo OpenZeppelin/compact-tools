@@ -25,7 +25,7 @@ rename = { "@return" = "@returns" }
 
 # Every rule's default level, spelled out. Set one to "off" to stop it running, or to
 # "warn" / "info" to keep it out of the exit code. `check --strict` promotes
-# constraints-placeholder to "error" for that run.
+# doc-placeholder and constraints-placeholder to "error" for that run.
 # [lint.rules]
 # missing-doc = "error"
 # missing-tag = "error"
@@ -33,6 +33,7 @@ rename = { "@return" = "@returns" }
 # tag-order = "error"
 # forbidden-tag = "error"
 # module-name = "error"
+# doc-placeholder = "warn"
 # missing-constraints = "error"
 # constraints-format = "error"
 # constraints-placeholder = "warn"

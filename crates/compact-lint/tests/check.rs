@@ -177,6 +177,20 @@ fn a_placeholder_is_a_warning_until_strict_makes_it_an_error() {
 }
 
 #[test]
+fn a_doc_placeholder_is_a_warning_until_strict_makes_it_an_error() {
+    assert_case("doc-placeholder", &[], 0);
+    assert_expectation(
+        "doc-placeholder",
+        "expected-strict.txt",
+        &["--strict"],
+        EXIT_FINDINGS,
+    );
+
+    let (_, _, stderr) = run("doc-placeholder", &[]);
+    assert!(stderr.ends_with("Found 2 warnings.\n"), "{stderr}");
+}
+
+#[test]
 fn a_broken_file_reports_parse_instead_of_crashing() {
     assert_case("parse", &[], EXIT_FINDINGS);
 }

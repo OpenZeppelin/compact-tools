@@ -13,6 +13,7 @@ impl RuleId {
     pub const TAG_ORDER: Self = Self("tag-order");
     pub const FORBIDDEN_TAG: Self = Self("forbidden-tag");
     pub const MODULE_NAME: Self = Self("module-name");
+    pub const DOC_PLACEHOLDER: Self = Self("doc-placeholder");
     pub const MISSING_CONSTRAINTS: Self = Self("missing-constraints");
     pub const CONSTRAINTS_FORMAT: Self = Self("constraints-format");
     pub const CONSTRAINTS_PLACEHOLDER: Self = Self("constraints-placeholder");
@@ -25,13 +26,14 @@ impl RuleId {
     pub const FILL: Self = Self("fill");
 
     /// Every rule a `[rules]` table can set a level for, in the order the README lists them.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::MISSING_DOC,
         Self::MISSING_TAG,
         Self::UNKNOWN_SECTION,
         Self::TAG_ORDER,
         Self::FORBIDDEN_TAG,
         Self::MODULE_NAME,
+        Self::DOC_PLACEHOLDER,
         Self::MISSING_CONSTRAINTS,
         Self::CONSTRAINTS_FORMAT,
         Self::CONSTRAINTS_PLACEHOLDER,

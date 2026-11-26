@@ -229,6 +229,8 @@ pub struct RulesConfig {
     pub forbidden_tag: Level,
     #[serde(rename = "module-name")]
     pub module_name: Level,
+    #[serde(rename = "doc-placeholder")]
+    pub doc_placeholder: Level,
     #[serde(rename = "missing-constraints")]
     pub missing_constraints: Level,
     #[serde(rename = "constraints-format")]
@@ -253,10 +255,11 @@ impl Default for RulesConfig {
             tag_order: Level::Error,
             forbidden_tag: Level::Error,
             module_name: Level::Error,
+            // Placeholders are text or a measurement still to come, not a defect;
+            // `--strict` promotes both on release branches.
+            doc_placeholder: Level::Warn,
             missing_constraints: Level::Error,
             constraints_format: Level::Error,
-            // A placeholder is a value waiting on a measurement, not a defect; `--strict`
-            // promotes it on release branches.
             constraints_placeholder: Level::Warn,
             constraints_unmeasured: Level::Warn,
             constraints_unmeasurable: Level::Warn,
@@ -276,6 +279,7 @@ impl RulesConfig {
             RuleId::TAG_ORDER => self.tag_order,
             RuleId::FORBIDDEN_TAG => self.forbidden_tag,
             RuleId::MODULE_NAME => self.module_name,
+            RuleId::DOC_PLACEHOLDER => self.doc_placeholder,
             RuleId::MISSING_CONSTRAINTS => self.missing_constraints,
             RuleId::CONSTRAINTS_FORMAT => self.constraints_format,
             RuleId::CONSTRAINTS_PLACEHOLDER => self.constraints_placeholder,

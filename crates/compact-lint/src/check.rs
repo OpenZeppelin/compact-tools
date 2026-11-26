@@ -140,7 +140,11 @@ fn skipped(no_format: bool) -> &'static str {
 /// `--strict` promotes a placeholder to an error; a rule turned off stays off.
 fn level_of(rule: RuleId, config: &Config, strict: bool) -> Level {
     let level = config.rules.get(rule);
-    if strict && rule == RuleId::CONSTRAINTS_PLACEHOLDER && level != Level::Off {
+    let placeholder = matches!(
+        rule,
+        RuleId::CONSTRAINTS_PLACEHOLDER | RuleId::DOC_PLACEHOLDER
+    );
+    if strict && placeholder && level != Level::Off {
         Level::Error
     } else {
         level
@@ -166,17 +170,31 @@ mod tests {
             level_of(RuleId::CONSTRAINTS_PLACEHOLDER, &config, true),
             Level::Error
         );
+        assert_eq!(
+            level_of(RuleId::DOC_PLACEHOLDER, &config, false),
+            Level::Warn
+        );
+        assert_eq!(
+            level_of(RuleId::DOC_PLACEHOLDER, &config, true),
+            Level::Error
+        );
         assert_eq!(level_of(RuleId::MISSING_DOC, &config, true), Level::Error);
+        assert_eq!(
+            level_of(RuleId::UNKNOWN_SECTION, &config, true),
+            Level::Warn
+        );
     }
 
     #[test]
     fn strict_does_not_revive_a_placeholder_rule_turned_off() {
         let mut config = Config::default();
         config.rules.constraints_placeholder = Level::Off;
+        config.rules.doc_placeholder = Level::Off;
 
         assert_eq!(
             level_of(RuleId::CONSTRAINTS_PLACEHOLDER, &config, true),
             Level::Off
         );
+        assert_eq!(level_of(RuleId::DOC_PLACEHOLDER, &config, true), Level::Off);
     }
 }

@@ -26,8 +26,8 @@ compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-com
 - No `PATHS` — the config's `include` globs are used instead.
 - `--config <file>` — use this config instead of searching upward for
   `compact.toml`.
-- `--strict` — report `k=?` / `rows=?` placeholders as errors instead of warnings. Use
-  it on release branches.
+- `--strict` — report placeholders, `k=?` / `rows=?` and the `fix.placeholder` text, as
+  errors instead of warnings. Use it on release branches.
 - `--no-format` — skip the `compact format --check` pass. Required where the `compact`
   binary is unavailable, CI included. Same effect as `format = "off"` in `[lint.rules]`.
 - `--compact-bin <path>` — path to the `compact` binary. Also settable with
@@ -130,11 +130,11 @@ Defaults:
 | `missing-constraints`, `constraints-format` | `error` |
 | `parse`, `format` | `error` |
 | `unknown-section` | `warn` |
-| `constraints-placeholder` | `warn` |
+| `doc-placeholder`, `constraints-placeholder` | `warn` |
 | `constraints-unmeasured`, `constraints-unmeasurable` | `warn` |
 
-- `--strict` promotes `constraints-placeholder` to `error` for that run; a rule set to
-  `off` stays off.
+- `--strict` promotes `doc-placeholder` and `constraints-placeholder` to `error` for
+  that run; a rule set to `off` stays off.
 - An unknown key in `[lint.rules]` is a config error.
 
 ## Exit codes
@@ -189,6 +189,7 @@ Not fixed:
   fold into one, and only a human picks.
 - `constraints-format` — a human wrote a measurement the rule cannot parse; guessing at
   it would lose the value.
+- `doc-placeholder` — the text a placeholder stands for comes from a human.
 - `constraints-placeholder` — filling `k=?` needs a real measurement.
 - `parse` — the file does not parse, so no rewrite is trustworthy.
 - `format` — that is `compact format`'s job.
@@ -206,7 +207,8 @@ into place, keeping the file's line ending and its trailing newline, or lack of 
 ## Fill constraints
 
 `fill-constraints` measures every circuit that already carries the constraints tag and
-writes the value in, so `check --strict` is clean afterwards and a second run is a no-op.
+writes the value in, so `constraints-placeholder` is clean afterwards and a second run is
+a no-op.
 `k` and `rows` reach only the compiler's terminal output, so each contract is compiled
 under a pty and the progress lines are parsed.
 
@@ -323,6 +325,7 @@ written.
 | `tag-order` | Listed entries appear in an order the template order does not have. |
 | `forbidden-tag` | A tag listed in `tags.forbid` is present. |
 | `module-name` | `@module <Name>` does not name the module it documents. |
+| `doc-placeholder` | A tag value, a section body or an untagged paragraph is still `fix.placeholder`. |
 | `missing-constraints` | An exported non-pure circuit has no constraints tag. |
 | `constraints-format` | The constraints value is not `k=<n>, rows=<n>`, optionally followed by whitespace and a note such as `(zkir-v3)`. |
 | `constraints-placeholder` | The constraints value still holds a `?`. |
@@ -347,6 +350,9 @@ Rule detail:
   `module Signer` and `@module Utils.` matches `module Utils`.
 - **`forbidden-tag`.** It fires on any doc comment attached to a checked declaration,
   including declarations whose docs are optional.
+- **`doc-placeholder`.** It fires on any attached doc comment, like `forbidden-tag`. Only
+  a value, section body or paragraph equal to `fix.placeholder` counts, so `TODO` inside
+  a sentence is not reported. The constraints value is left to the constraints rules.
 - **`unknown-section`.** Gated per tag: a kind that lists no headed entry for `@description`
   never gets the rule on `@description`. It is not fixable.
 - **`tag-order`.** The order is `kinds.<kind>.sections` where the kind has one, else
@@ -444,7 +450,8 @@ Defaults when no config file is found:
   must appear in `tags.forbid` and no value may, or the config is rejected. Both
   spellings are validated like every other tag. An unmapped forbidden tag is reported,
   never rewritten.
-- `fix.placeholder` is the text `fix` writes where it has no value of its own.
+- `fix.placeholder` is the text `fix` writes where it has no value of its own, and the
+  text `doc-placeholder` reports.
 - `rules` takes one key per rule id, valued `"off"`, `"info"`, `"warn"` or `"error"`.
 - `constraints.compiler` is passed as `+<version>` to `compact compile`.
 - `constraints.sources` templates are tried in order; the first existing file wins.
