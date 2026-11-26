@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use tree_sitter::Node;
 
-use crate::doc::{DocComment, TagOccurrence};
+use crate::doc::{DocComment, Prose, TagOccurrence};
 use crate::report::Position;
 
 /// The declaration kinds the linter has rules for.
@@ -99,12 +99,22 @@ impl AttachedDoc {
     /// The position of a tag's `@`; a first-line offset is counted after the `/**`.
     #[must_use]
     pub const fn tag_position(&self, occurrence: &TagOccurrence) -> Position {
-        let column = if occurrence.line_offset == 0 {
-            self.start_column + "/**".len() + occurrence.column_offset
+        self.position(occurrence.line_offset, occurrence.column_offset)
+    }
+
+    /// The position of a paragraph's first character.
+    #[must_use]
+    pub const fn prose_position(&self, prose: &Prose) -> Position {
+        self.position(prose.line_offset, prose.column_offset)
+    }
+
+    const fn position(&self, line_offset: usize, column_offset: usize) -> Position {
+        let column = if line_offset == 0 {
+            self.start_column + "/**".len() + column_offset
         } else {
-            occurrence.column_offset
+            column_offset
         };
-        Position::from_zero_based(self.start_row + occurrence.line_offset, column)
+        Position::from_zero_based(self.start_row + line_offset, column)
     }
 }
 

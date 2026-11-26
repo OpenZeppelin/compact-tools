@@ -303,7 +303,7 @@ fn render_doc(doc: &str, indent: usize, newline: &str, ops: &[&DocOp]) -> String
             adopts_prose,
         } = op
         {
-            insert_tag(&mut lines, &gutter, inserted, after, *adopts_prose);
+            insert_tag(&mut lines, &margin, &gutter, inserted, after, *adopts_prose);
         }
     }
 
@@ -371,9 +371,11 @@ fn expand(single: &str, margin: &str, gutter: &str) -> Vec<String> {
 
 /// A tag block lands after the block of the last entry in `after` that is present, every
 /// paragraph of it included, else at the top of the body. With `adopts_prose`, untagged
-/// prose opening the body takes the tag instead of a new line going in.
+/// prose opening the body takes the tag instead of a new line going in; without it, a
+/// blank line keeps that prose out of the block.
 fn insert_tag(
     lines: &mut Vec<String>,
+    margin: &str,
     gutter: &str,
     inserted: &[String],
     after: &[TagSpec],
@@ -393,6 +395,14 @@ fn insert_tag(
     let at = paragraphs_end(lines, closer, after).map_or(1.min(closer), |end| end + 1);
     for (offset, line) in inserted.iter().enumerate() {
         lines.insert(at + offset, format!("{gutter}{line}"));
+    }
+
+    let follows = at + inserted.len();
+    if follows < lines.len() - 1
+        && !is_blank(&lines[follows])
+        && !starts_tag(content(&lines[follows]))
+    {
+        lines.insert(follows, format!("{margin} *"));
     }
 }
 
@@ -695,6 +705,20 @@ mod tests {
                 text: "/**\n * TODO\n */\n".to_owned(),
             }
             .is_safe()
+        );
+    }
+
+    #[test]
+    fn a_tag_at_the_top_stays_apart_from_the_prose_under_it() {
+        let doc = "/**\n * Approved accounts.\n */";
+
+        assert_eq!(
+            rendered(doc, 0, &[tag("@dev TODO", &[])]),
+            "/**\n * @dev TODO\n *\n * Approved accounts.\n */"
+        );
+        assert_eq!(
+            rendered(doc, 0, &[section("@notice Privacy", &[])]),
+            "/**\n * @notice Privacy:\n * TODO\n *\n * Approved accounts.\n */"
         );
     }
 

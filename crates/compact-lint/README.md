@@ -26,8 +26,8 @@ compact-lint fill-constraints [PATHS]... [--config <file>] [--dry-run] [--no-com
 - No `PATHS` — the config's `include` globs are used instead.
 - `--config <file>` — use this config instead of searching upward for
   `compact.toml`.
-- `--strict` — report `k=?` / `rows=?` placeholders as errors instead of warnings. Use
-  it on release branches.
+- `--strict` — report placeholders, `k=?` / `rows=?` and the `fix.placeholder` text, as
+  errors instead of warnings. Use it on release branches.
 - `--no-format` — skip the `compact format --check` pass. Required where the `compact`
   binary is unavailable, CI included. Same effect as `format = "off"` in `[lint.rules]`.
 - `--compact-bin <path>` — path to the `compact` binary. Also settable with
@@ -130,11 +130,11 @@ Defaults:
 | `missing-constraints`, `constraints-format` | `error` |
 | `parse`, `format` | `error` |
 | `unknown-section` | `warn` |
-| `constraints-placeholder` | `warn` |
+| `doc-placeholder`, `constraints-placeholder` | `warn` |
 | `constraints-unmeasured`, `constraints-unmeasurable` | `warn` |
 
-- `--strict` promotes `constraints-placeholder` to `error` for that run; a rule set to
-  `off` stays off.
+- `--strict` promotes `doc-placeholder` and `constraints-placeholder` to `error` for
+  that run; a rule set to `off` stays off.
 - An unknown key in `[lint.rules]` is a config error.
 
 ## Exit codes
@@ -177,7 +177,7 @@ What each rule's fix does:
 | Rule | Fix |
 | --- | --- |
 | `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, a headed entry becomes a `@tag Heading:` line with `fix.placeholder` under it, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
-| `missing-tag` | Inserts each missing entry after the block of the last entry that precedes it in the template order, optional ones included, below every paragraph of that block, else at the top of the body. A headed entry goes in as a two-line section block; the predecessor's block is found by heading, not by bare tag. A missing bare `@description` adopts untagged prose that opens the body instead of writing a placeholder. Text on the `/**` or `*/` line moves onto its own body line first, so a `/** … */` one-liner expands to the multi-line form. |
+| `missing-tag` | Inserts each missing entry after the block of the last entry that precedes it in the template order, optional ones included, below every paragraph of that block, else at the top of the body. A headed entry goes in as a two-line section block; the predecessor's block is found by heading, not by bare tag. A missing bare `@description` adopts untagged prose that opens the body instead of writing a placeholder; any other entry inserted above that prose gets a blank line under it, so the prose stays prose. Text on the `/**` or `*/` line moves onto its own body line first, so a `/** … */` one-liner expands to the multi-line form. |
 | `tag-order` | Splits the comment body into one block per tag, sorts the blocks matching a listed entry into config order, and writes them back into the same slots. Text on the `/**` or `*/` line moves onto its own body line first, so it travels with its block. Prose before the first tag, unlisted blocks and the blank lines separating slots stay put, so a second run reports nothing. |
 | `missing-constraints` | Inserts `<tag> k=?, rows=?` below every paragraph of the `@description` block, but above a paragraph that opens with a label, a line ending in a colon such as `Requirements:`. A blank ` *` line goes before it and, where prose follows, one after. Without a `@description` it opens the body. On a circuit with no doc comment, it inserts a doc comment holding only that line, unless the `missing-doc` skeleton already carries it. Nothing is inserted when a `tags.rename` entry renames another tag in the comment to the constraints tag, and a circuit never gets the constraints tag twice, even when `kinds.circuit.tags` lists it. |
 | `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
@@ -189,6 +189,7 @@ Not fixed:
   fold into one, and only a human picks.
 - `constraints-format` — a human wrote a measurement the rule cannot parse; guessing at
   it would lose the value.
+- `doc-placeholder` — the text a placeholder stands for comes from a human.
 - `constraints-placeholder` — filling `k=?` needs a real measurement.
 - `parse` — the file does not parse, so no rewrite is trustworthy.
 - `format` — that is `compact format`'s job.
@@ -206,7 +207,8 @@ into place, keeping the file's line ending and its trailing newline, or lack of 
 ## Fill constraints
 
 `fill-constraints` measures every circuit that already carries the constraints tag and
-writes the value in, so `check --strict` is clean afterwards and a second run is a no-op.
+writes the value in, so `constraints-placeholder` is clean afterwards and a second run is
+a no-op.
 `k` and `rows` reach only the compiler's terminal output, so each contract is compiled
 under a pty and the progress lines are parsed.
 
@@ -323,6 +325,7 @@ written.
 | `tag-order` | Listed entries appear in an order the template order does not have. |
 | `forbidden-tag` | A tag listed in `tags.forbid` is present. |
 | `module-name` | `@module <Name>` does not name the module it documents. |
+| `doc-placeholder` | A tag value, a section body or an untagged paragraph is still `fix.placeholder`. |
 | `missing-constraints` | An exported non-pure circuit has no constraints tag. |
 | `constraints-format` | The constraints value is not `k=<n>, rows=<n>`, optionally followed by whitespace and a note such as `(zkir-v3)`. |
 | `constraints-placeholder` | The constraints value still holds a `?`. |
@@ -347,6 +350,11 @@ Rule detail:
   `module Signer` and `@module Utils.` matches `module Utils`.
 - **`forbidden-tag`.** It fires on any doc comment attached to a checked declaration,
   including declarations whose docs are optional.
+- **`doc-placeholder`.** It fires on any attached doc comment, like `forbidden-tag`. Only
+  a value, section body or paragraph equal to `fix.placeholder` counts, so `TODO` inside
+  a sentence is not reported. A section is found by a heading the kind's template lists,
+  else by a heading of letters, digits, spaces and hyphens. The one constraints line the
+  constraints rules read is left to them; any other constraints line is checked.
 - **`unknown-section`.** Gated per tag: a kind that lists no headed entry for `@description`
   never gets the rule on `@description`. It is not fixable.
 - **`tag-order`.** The order is `kinds.<kind>.sections` where the kind has one, else
@@ -444,7 +452,9 @@ Defaults when no config file is found:
   must appear in `tags.forbid` and no value may, or the config is rejected. Both
   spellings are validated like every other tag. An unmapped forbidden tag is reported,
   never rewritten.
-- `fix.placeholder` is the text `fix` writes where it has no value of its own.
+- `fix.placeholder` is the text `fix` writes where it has no value of its own, and the
+  text `doc-placeholder` reports. It must be one line, must not hold `*/`, and must not
+  open with a tag such as `@todo`, or the config is rejected.
 - `rules` takes one key per rule id, valued `"off"`, `"info"`, `"warn"` or `"error"`.
 - `constraints.compiler` is passed as `+<version>` to `compact compile`.
 - `constraints.sources` templates are tried in order; the first existing file wins.

@@ -135,7 +135,7 @@ struct CheckArgs {
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
-    /// Report `k=?` / `rows=?` placeholders as errors instead of warnings.
+    /// Report `k=?` / `rows=?` and `fix.placeholder` placeholders as errors instead of warnings.
     #[arg(long)]
     strict: bool,
 

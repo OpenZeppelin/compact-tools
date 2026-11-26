@@ -144,10 +144,29 @@ impl TagOccurrence {
     }
 }
 
+/// A paragraph of untagged text: one that opens the body, or follows a blank line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Prose {
+    pub text: String,
+    /// 0-based line index of its first line inside the doc comment.
+    pub line_offset: usize,
+    /// 0-based byte offset of its first character in that line; on the first line,
+    /// counted after `/**`.
+    pub column_offset: usize,
+}
+
+/// The block a non-blank, non-tag line continues.
+#[derive(Clone, Copy)]
+enum Open {
+    Tag(usize),
+    Prose(usize),
+}
+
 /// A parsed doc comment. Repeated tags (`@param`) are kept in source order.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DocComment {
     tags: Vec<TagOccurrence>,
+    prose: Vec<Prose>,
 }
 
 impl DocComment {
@@ -158,7 +177,8 @@ impl DocComment {
         let inner = opened.strip_suffix("*/").unwrap_or(opened);
 
         let mut tags: Vec<TagOccurrence> = Vec::new();
-        let mut open: Option<usize> = None;
+        let mut prose: Vec<Prose> = Vec::new();
+        let mut open: Option<Open> = None;
 
         for (line_offset, line) in inner.lines().enumerate() {
             let content = strip_gutter(line).trim();
@@ -175,28 +195,44 @@ impl DocComment {
                     line_offset,
                     column_offset: line.find('@').unwrap_or(0),
                 });
-                open = Some(tags.len() - 1);
+                open = Some(Open::Tag(tags.len() - 1));
                 continue;
             }
 
-            // A non-blank, non-tag line continues the tag above it.
-            if let Some(index) = open
-                && let Some(occurrence) = tags.get_mut(index)
-            {
-                if !occurrence.value.is_empty() {
-                    occurrence.value.push('\n');
+            // A non-blank, non-tag line continues the block above it, or opens prose.
+            let text = match open {
+                Some(Open::Tag(index)) => &mut tags[index].value,
+                Some(Open::Prose(index)) => &mut prose[index].text,
+                None => {
+                    let index = prose.len();
+                    prose.push(Prose {
+                        text: String::new(),
+                        line_offset,
+                        column_offset: line.len() - strip_gutter(line).trim_start().len(),
+                    });
+                    open = Some(Open::Prose(index));
+                    &mut prose[index].text
                 }
-                occurrence.value.push_str(content);
+            };
+            if !text.is_empty() {
+                text.push('\n');
             }
+            text.push_str(content);
         }
 
-        Self { tags }
+        Self { tags, prose }
     }
 
     /// Every tag occurrence, in source order.
     #[must_use]
     pub fn tags(&self) -> &[TagOccurrence] {
         &self.tags
+    }
+
+    /// Every untagged paragraph, in source order.
+    #[must_use]
+    pub fn prose(&self) -> &[Prose] {
+        &self.prose
     }
 
     #[must_use]
@@ -375,6 +411,27 @@ mod tests {
                 Some("A note-based token"),
             ]
         );
+    }
+
+    #[test]
+    fn untagged_paragraphs_are_kept_apart_from_the_tags() {
+        let doc = DocComment::parse(
+            "/**\n * Opening prose\n * on two lines.\n * @notice first\n *\n * loose prose\n */",
+        );
+        let prose: Vec<(&str, usize, usize)> = doc
+            .prose()
+            .iter()
+            .map(|one| (one.text.as_str(), one.line_offset, one.column_offset))
+            .collect();
+
+        assert_eq!(
+            prose,
+            [
+                ("Opening prose\non two lines.", 1, 3),
+                ("loose prose", 5, 3)
+            ]
+        );
+        assert_eq!(doc.value(&Tag::new("@notice")), Some("first"));
     }
 
     #[test]

@@ -117,8 +117,8 @@ fn assert_case(name: &str) {
         "rewritten sources for case {name}"
     );
 
-    // An inserted annotation is a placeholder, which `check` warns about until it is
-    // measured; nothing at error level may survive the fix.
+    // An inserted placeholder, text or measurement, is a warning until a human or
+    // `fill-constraints` replaces it; nothing at error level may survive the fix.
     let (code, stdout) = run(root, &["check", "--no-format", "--diagnostic-level=error"]);
     assert_eq!(stdout, "", "check is clean after fixing case {name}");
     assert_eq!(code, 0, "check exit code after fixing case {name}");
@@ -141,6 +141,44 @@ fn assert_case(name: &str) {
         before,
         "dry-run wrote to case {name}"
     );
+}
+
+#[test]
+fn strict_check_fails_on_every_placeholder_fix_wrote() {
+    // Tag values, section bodies, and the lone line of a kind with no tags.
+    for name in ["sections", "skeleton"] {
+        let directory = work(name);
+        let root = directory.path();
+        run(root, &["fix"]);
+
+        let (code, stdout) = run(
+            root,
+            &[
+                "check",
+                "--no-format",
+                "--strict",
+                "--reporter=concise",
+                "--max-diagnostics=none",
+            ],
+        );
+        let reported = stdout
+            .lines()
+            .filter(|line| line.starts_with('×') && line.contains("lint/doc-placeholder"))
+            .count();
+        let written: usize = sources(&case(name).join("after"))
+            .values()
+            .map(|text| {
+                String::from_utf8_lossy(text)
+                    .lines()
+                    .filter(|line| line.ends_with("TODO"))
+                    .count()
+            })
+            .sum();
+
+        assert!(written > 0, "case {name} writes a placeholder");
+        assert_eq!(reported, written, "placeholders reported for case {name}");
+        assert_eq!(code, 1, "strict check exit code for case {name}");
+    }
 }
 
 #[test]

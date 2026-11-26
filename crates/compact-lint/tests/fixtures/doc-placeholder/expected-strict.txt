@@ -1,0 +1,26 @@
+Unwritten.compact:4:4 lint/doc-placeholder ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × `@notice Privacy` section still holds the placeholder `TODO`.
+
+    2 │  * @module Unwritten
+    3 │  * @description A module whose header still holds what fix wrote.
+  > 4 │  * @notice Privacy:
+      │    ^^^^^^^^^^^^^^^^
+    5 │  * TODO
+    6 │  * @notice Security:
+
+  i Replace the placeholder with the text it stands for.
+
+Unwritten.compact:11:6 lint/doc-placeholder ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × @description value still holds the placeholder `TODO`.
+
+     9 │ export module Unwritten {
+    10 │   /**
+  > 11 │    * @description TODO
+       │      ^^^^^^^^^^^^
+    12 │    * @constraints k=6, rows=28
+    13 │    */
+
+  i Replace the placeholder with the text it stands for.
+

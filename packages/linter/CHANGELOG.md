@@ -8,10 +8,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `check` reports a tag value, section body or untagged paragraph still equal to `fix.placeholder`, such as the `TODO` that `fix` writes, as `doc-placeholder`: a warning that `--strict` makes an error (#244)
+
 ### Changed
 
 - The bin resolves `compact-lint` through the new `@openzeppelin/compact-launcher` dependency. Environment variables, cache paths and download URLs are unchanged (#239)
 - The cached `compact-lint` binary is now verified against the package's `checksums.txt` on every run, and downloaded again when it does not match or is not a regular file. Without `COMPACT_LINT_BINARY`, a run with no `checksums.txt` in the package exits 2. A new cache directory gets mode `0700` (#239)
+- A `fix.placeholder` that opens with a tag, such as `@todo`, is a config error (#244)
+- `fix` puts a blank line under a tag it inserts above untagged prose, so the prose no longer becomes the tag's value (#244)
 
 ## 0.1.0 (2026-11-19)
 
