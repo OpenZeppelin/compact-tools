@@ -29,8 +29,12 @@ case "$name" in
   MockOwnable.compact)
     table="owner 7 74 true
 transferOwnership 13 4871 true
-renounceOwnership 13 4277 true
-initialize 5 10 false"
+renounceOwnership 13 4277 true"
+    ;;
+  MockNotes.compact)
+    table="hash 9 310 true
+peek 5 10 false
+stale 6 40 false"
     ;;
   Vault.compact)
     table="deposit 12 2048 true

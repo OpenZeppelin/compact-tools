@@ -35,6 +35,10 @@ pub struct DocRef {
     pub indent: usize,
 }
 
+/// The constraints value of a circuit the compiler builds no proof for, such as one that
+/// only reads a witness.
+pub const NO_PROOF: &str = "none";
+
 /// A constraints annotation already present on an exported non-pure circuit.
 ///
 /// `check` only reports the annotations it faults; `fill-constraints` rewrites every one
@@ -56,6 +60,9 @@ impl ConstraintSite {
     /// The value without a trailing note such as `(zkir-v3)`.
     #[must_use]
     pub fn measurement(&self) -> &str {
+        if first_word(&self.value) == NO_PROOF {
+            return NO_PROOF;
+        }
         let Some(rows) = self.value.find("rows=") else {
             return &self.value;
         };
@@ -832,9 +839,13 @@ fn value_of(occurrence: &crate::doc::TagOccurrence) -> &str {
     occurrence.value.lines().next().unwrap_or_default().trim()
 }
 
-/// Matches `k=<n|?>,<space>*rows=<n|?>`, optionally followed by whitespace and a note
-/// such as `(zkir-v3)`; returns whether either field is a `?` placeholder.
+/// Matches `k=<n|?>,<space>*rows=<n|?>`, or [`NO_PROOF`], optionally followed by
+/// whitespace and a note such as `(zkir-v3)`; returns whether either field is a `?`
+/// placeholder.
 fn parse_constraints(value: &str) -> Option<bool> {
+    if first_word(value) == NO_PROOF {
+        return Some(false);
+    }
     let rest = value.strip_prefix("k=")?;
     let (k, rest) = rest.split_once(',')?;
     let rows = rest.trim_start().strip_prefix("rows=")?;
@@ -845,6 +856,12 @@ fn parse_constraints(value: &str) -> Option<bool> {
     let k_placeholder = is_placeholder(k)?;
     let rows_placeholder = is_placeholder(rows)?;
     Some(k_placeholder || rows_placeholder)
+}
+
+fn first_word(value: &str) -> &str {
+    value
+        .split_once(char::is_whitespace)
+        .map_or(value, |(word, _rest)| word)
 }
 
 /// A constraints field is either a decimal count or a `?` placeholder.
@@ -868,7 +885,7 @@ fn subject(declaration: &Declaration) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Linter, module_name, parse_constraints};
+    use super::{ConstraintSite, DocRef, Linter, Position, module_name, parse_constraints};
     use crate::config::{Config, DocsPolicy};
     use crate::diagnostic::Level;
     use crate::diagnostic::sentence;
@@ -1189,6 +1206,32 @@ mod tests {
         assert_eq!(parse_constraints("k=?, rows=? (zkir-v3)"), Some(true));
         assert_eq!(parse_constraints("k=6, rows=34(zkir-v3)"), None);
         assert_eq!(parse_constraints("k=6 (zkir-v3), rows=34"), None);
+    }
+
+    #[test]
+    fn constraints_accept_none_for_a_circuit_with_no_proof() {
+        assert_eq!(parse_constraints("none"), Some(false));
+        assert_eq!(parse_constraints("none (reads a witness)"), Some(false));
+        assert_eq!(parse_constraints("None"), None);
+        assert_eq!(parse_constraints("nonee"), None);
+    }
+
+    #[test]
+    fn a_none_value_measures_as_none_whatever_its_note() {
+        let site = |value: &str| ConstraintSite {
+            circuit: "peek".to_owned(),
+            position: Position { line: 1, column: 1 },
+            line_offset: 0,
+            value: value.to_owned(),
+            doc: DocRef {
+                range: 0..0,
+                indent: 0,
+            },
+        };
+
+        assert_eq!(site("none").measurement(), "none");
+        assert_eq!(site("none (reads a witness)").measurement(), "none");
+        assert_eq!(site("k=6, rows=34 (zkir-v3)").measurement(), "k=6, rows=34");
     }
 
     #[test]

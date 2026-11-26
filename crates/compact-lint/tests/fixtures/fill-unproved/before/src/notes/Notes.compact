@@ -1,0 +1,26 @@
+/**
+ * @module Notes
+ * @description Test fixture.
+ */
+export module Notes {
+  /**
+   * @description Hashes a note.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit hash(): [] { }
+
+  /**
+   * @description Returns the input note a witness supplies.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit peek(): [] { }
+
+  /**
+   * @description Returns the input note, measured before it lost its proof.
+   *
+   * @constraints k=6, rows=40 (zkir-v3)
+   */
+  export circuit stale(): [] { }
+}

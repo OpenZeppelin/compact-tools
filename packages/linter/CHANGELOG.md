@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `@constraints none` marks a circuit the compiler builds no proof for, such as one that only reads a witness. `check` accepts it, and `fill-constraints` writes it for every circuit the compiler's report lists with no proof, where it used to leave the circuit unmeasured (#246)
+
 ## 0.2.0 (2026-11-26)
 
 ### Added
