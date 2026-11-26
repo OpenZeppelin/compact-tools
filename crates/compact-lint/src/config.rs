@@ -506,6 +506,13 @@ fn placeholder_defect(placeholder: &str) -> Option<&'static str> {
     if placeholder.contains("*/") {
         return Some("`*/` would close the comment early");
     }
+    let opens_tag = placeholder
+        .trim_start()
+        .strip_prefix('@')
+        .is_some_and(|rest| rest.starts_with(|character: char| character.is_ascii_alphabetic()));
+    if opens_tag {
+        return Some("on a line of its own it would read as a tag");
+    }
     None
 }
 
@@ -540,7 +547,7 @@ pub fn discover(start: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CONFIG_FILE_NAME, Config, DocsPolicy};
+    use super::{CONFIG_FILE_NAME, Config, DocsPolicy, placeholder_defect};
     use crate::diagnostic::Level;
     use crate::doc::{Tag, TagSpec};
     use crate::model::DeclKind;
@@ -817,6 +824,14 @@ mod tests {
         let error = rejection("[lint.fix]\nplaceholder = \"  \"\n");
 
         assert!(error.contains("is empty"), "{error}");
+    }
+
+    #[test]
+    fn a_fix_placeholder_opening_with_a_tag_is_rejected() {
+        let error = rejection("[lint.fix]\nplaceholder = \" @todo\"\n");
+
+        assert!(error.contains("would read as a tag"), "{error}");
+        assert_eq!(placeholder_defect("@ later"), None);
     }
 
     #[test]

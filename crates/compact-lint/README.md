@@ -177,7 +177,7 @@ What each rule's fix does:
 | Rule | Fix |
 | --- | --- |
 | `missing-doc` | Inserts a doc skeleton above the declaration, indented to it. Body lines come from `kinds.<kind>.tags` in config order; `@module` takes the declaration's name, a headed entry becomes a `@tag Heading:` line with `fix.placeholder` under it, every other tag takes `fix.placeholder`. Exported non-pure circuits also get the constraints line. A kind with neither gets a single placeholder line. |
-| `missing-tag` | Inserts each missing entry after the block of the last entry that precedes it in the template order, optional ones included, below every paragraph of that block, else at the top of the body. A headed entry goes in as a two-line section block; the predecessor's block is found by heading, not by bare tag. A missing bare `@description` adopts untagged prose that opens the body instead of writing a placeholder. Text on the `/**` or `*/` line moves onto its own body line first, so a `/** … */` one-liner expands to the multi-line form. |
+| `missing-tag` | Inserts each missing entry after the block of the last entry that precedes it in the template order, optional ones included, below every paragraph of that block, else at the top of the body. A headed entry goes in as a two-line section block; the predecessor's block is found by heading, not by bare tag. A missing bare `@description` adopts untagged prose that opens the body instead of writing a placeholder; any other entry inserted above that prose gets a blank line under it, so the prose stays prose. Text on the `/**` or `*/` line moves onto its own body line first, so a `/** … */` one-liner expands to the multi-line form. |
 | `tag-order` | Splits the comment body into one block per tag, sorts the blocks matching a listed entry into config order, and writes them back into the same slots. Text on the `/**` or `*/` line moves onto its own body line first, so it travels with its block. Prose before the first tag, unlisted blocks and the blank lines separating slots stay put, so a second run reports nothing. |
 | `missing-constraints` | Inserts `<tag> k=?, rows=?` below every paragraph of the `@description` block, but above a paragraph that opens with a label, a line ending in a colon such as `Requirements:`. A blank ` *` line goes before it and, where prose follows, one after. Without a `@description` it opens the body. On a circuit with no doc comment, it inserts a doc comment holding only that line, unless the `missing-doc` skeleton already carries it. Nothing is inserted when a `tags.rename` entry renames another tag in the comment to the constraints tag, and a circuit never gets the constraints tag twice, even when `kinds.circuit.tags` lists it. |
 | `forbidden-tag` | Renames the tag in place, and only where `tags.rename` maps it. |
@@ -352,7 +352,9 @@ Rule detail:
   including declarations whose docs are optional.
 - **`doc-placeholder`.** It fires on any attached doc comment, like `forbidden-tag`. Only
   a value, section body or paragraph equal to `fix.placeholder` counts, so `TODO` inside
-  a sentence is not reported. The constraints value is left to the constraints rules.
+  a sentence is not reported. A section is found by a heading the kind's template lists,
+  else by a heading of letters, digits, spaces and hyphens. The one constraints line the
+  constraints rules read is left to them; any other constraints line is checked.
 - **`unknown-section`.** Gated per tag: a kind that lists no headed entry for `@description`
   never gets the rule on `@description`. It is not fixable.
 - **`tag-order`.** The order is `kinds.<kind>.sections` where the kind has one, else
@@ -451,7 +453,8 @@ Defaults when no config file is found:
   spellings are validated like every other tag. An unmapped forbidden tag is reported,
   never rewritten.
 - `fix.placeholder` is the text `fix` writes where it has no value of its own, and the
-  text `doc-placeholder` reports.
+  text `doc-placeholder` reports. It must be one line, must not hold `*/`, and must not
+  open with a tag such as `@todo`, or the config is rejected.
 - `rules` takes one key per rule id, valued `"off"`, `"info"`, `"warn"` or `"error"`.
 - `constraints.compiler` is passed as `+<version>` to `compact compile`.
 - `constraints.sources` templates are tried in order; the first existing file wins.

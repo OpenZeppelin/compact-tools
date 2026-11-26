@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tree_sitter::{Node, Parser};
 
-use crate::config::{Config, DocsPolicy};
+use crate::config::{Config, DocsPolicy, KindConfig};
 use crate::diagnostic::{Diagnostic, Level, Span, sentence};
-use crate::doc::{Tag, TagSpec};
+use crate::doc::{Tag, TagOccurrence, TagSpec};
 use crate::model::{AttachedDoc, DeclKind, Declaration, declarations};
 use crate::report::{Position, RuleId};
 
@@ -557,7 +557,7 @@ fn check_declaration(declaration: &Declaration, config: &Config, issues: &mut Ve
         }
     }
 
-    check_placeholders(attached, config, issues);
+    check_placeholders(declaration, attached, config, issues);
 
     if declaration.kind == DeclKind::Module {
         check_module_name(declaration, &doc, issues);
@@ -658,8 +658,19 @@ fn check_sections(
 
 /// Tag values, section bodies and untagged paragraphs that still hold `fix.placeholder`,
 /// on any attached comment whatever its docs policy.
-fn check_placeholders(attached: &AttachedDoc, config: &Config, issues: &mut Vec<Issue>) {
+fn check_placeholders(
+    declaration: &Declaration,
+    attached: &AttachedDoc,
+    config: &Config,
+    issues: &mut Vec<Issue>,
+) {
     let placeholder = config.fix.placeholder.trim();
+    let kind_config = config.kinds.get(declaration.kind);
+    // The constraints rules own the one constraints line they read.
+    let measured = takes_constraints(declaration)
+        .then(|| attached.comment.first(&config.constraints.tag))
+        .flatten()
+        .map(|occurrence| occurrence.line_offset);
     let mut found = |position, holder| {
         issues.push(Issue::DocPlaceholder {
             position,
@@ -669,8 +680,7 @@ fn check_placeholders(attached: &AttachedDoc, config: &Config, issues: &mut Vec<
     };
 
     for occurrence in attached.comment.tags() {
-        // `constraints-placeholder` owns the constraints value.
-        if occurrence.tag == config.constraints.tag {
+        if measured == Some(occurrence.line_offset) {
             continue;
         }
         let position = attached.tag_position(occurrence);
@@ -678,8 +688,8 @@ fn check_placeholders(attached: &AttachedDoc, config: &Config, issues: &mut Vec<
             found(position, Holder::Value(occurrence.tag.clone()));
             continue;
         }
-        // The heading is ASCII, so the `:` closing it sits at `heading.len()`.
-        if let Some(heading) = occurrence.heading()
+        // The value opens with the heading, so the `:` closing it sits at `heading.len()`.
+        if let Some(heading) = section_heading(occurrence, kind_config)
             && occurrence.value[heading.len() + 1..].trim() == placeholder
         {
             found(
@@ -697,6 +707,23 @@ fn check_placeholders(attached: &AttachedDoc, config: &Config, issues: &mut Vec<
             found(attached.prose_position(prose), Holder::Prose);
         }
     }
+}
+
+/// The heading a value opens with: a configured one for its tag, which may hold any
+/// character but `:`, else the one [`TagOccurrence::heading`] reads.
+fn section_heading<'a>(occurrence: &'a TagOccurrence, kind: &'a KindConfig) -> Option<&'a str> {
+    kind.tags
+        .iter()
+        .chain(&kind.sections)
+        .filter(|entry| entry.tag == occurrence.tag)
+        .filter_map(|entry| entry.heading.as_deref())
+        .find(|heading| {
+            occurrence
+                .value
+                .strip_prefix(heading)
+                .is_some_and(|rest| rest.starts_with(':'))
+        })
+        .or_else(|| occurrence.heading())
 }
 
 /// `@module <Name>` must name the module it documents.
@@ -1245,6 +1272,41 @@ mod tests {
         assert_eq!(
             reported(source, &config),
             ["2:4 doc-placeholder @description value still holds the placeholder `TODO: write`."]
+        );
+    }
+
+    #[test]
+    fn a_configured_heading_outside_the_heading_grammar_is_read() {
+        let mut config = template_config();
+        config.kinds.module.tags = vec![
+            TagSpec::parse("@module"),
+            TagSpec::parse("@notice Privacy & Security"),
+        ];
+        config.kinds.module.sections = Vec::new();
+        let source =
+            "/**\n * @module M\n * @notice Privacy & Security:\n * TODO\n */\nmodule M {\n}\n";
+
+        assert_eq!(
+            reported(source, &config),
+            [
+                "3:4 doc-placeholder `@notice Privacy & Security` section still holds the placeholder `TODO`."
+            ]
+        );
+    }
+
+    #[test]
+    fn a_constraints_line_no_constraints_rule_reads_is_checked() {
+        let unexported =
+            "/**\n * @description Bumps.\n * @constraints TODO\n */\ncircuit bump(): [] { }\n";
+        let repeated = "/**\n * @description Bumps.\n * @constraints k=6, rows=28\n * @constraints TODO\n */\nexport circuit bump(): [] { }\n";
+
+        assert_eq!(
+            reported(unexported, &circuit_config()),
+            ["3:4 doc-placeholder @constraints value still holds the placeholder `TODO`."]
+        );
+        assert_eq!(
+            reported(repeated, &circuit_config()),
+            ["4:4 doc-placeholder @constraints value still holds the placeholder `TODO`."]
         );
     }
 
