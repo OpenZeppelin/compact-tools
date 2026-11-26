@@ -5,3 +5,6 @@ caller_type = { name = "Badge", module = "who/Who" }
 
 [[mock]]
 module = "door/Lost"
+
+[[mock]]
+module = "door/Maze"

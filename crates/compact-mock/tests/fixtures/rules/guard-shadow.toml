@@ -1,0 +1,4 @@
+[[mock]]
+module = "calc/Dial"
+exclude = ["turn"]
+guard = ["spin"]

@@ -86,6 +86,24 @@ pub enum ConfigError {
         value: String,
         placeholder: String,
     },
+    #[error("config {cfg}: out_dir \"{value}\" must be a path relative to src")]
+    OutDirAbsolute { cfg: String, value: String },
+    #[error(
+        "config {cfg}: {mock}: include \"{value}\" must be a path relative to the output directory"
+    )]
+    IncludeAbsolute {
+        cfg: String,
+        mock: String,
+        value: String,
+    },
+    /// `key` is `out_dir` or `include`; `value` is the key's text as written.
+    #[error("config {cfg}: {mock}: {key} \"{value}\" leads outside the config directory")]
+    OutsideConfig {
+        cfg: String,
+        mock: String,
+        key: String,
+        value: String,
+    },
     #[error("config {cfg}: spdx must be a single line")]
     Spdx { cfg: String },
     #[error("config {cfg}: two mocks are named {mock}")]
@@ -176,6 +194,26 @@ pub enum PlanError {
         circuit: String,
         generics: String,
     },
+    #[error(
+        "{mock}: circuit initialize has type parameters {generics} and the constructor calls it; set circuit_args.initialize"
+    )]
+    GenericInitialize { mock: String, generics: String },
+    /// `constructor` is set for the `initialize` the constructor calls.
+    #[error(
+        "{mock}: {module} exports {count} circuits named {circuit}, and overloads are not supported; {} or write the mock by hand",
+        exclude_hint(.circuit, *.constructor)
+    )]
+    Overloaded {
+        mock: String,
+        module: String,
+        count: usize,
+        circuit: String,
+        constructor: bool,
+    },
+    #[error(
+        "{mock}: guarded circuit {circuit} has a parameter named _invocations, which hides the guard counter; leave {circuit} unguarded"
+    )]
+    GuardShadowed { mock: String, circuit: String },
     #[error("{mock}: circuit_args.{circuit} has {given} arguments; {circuit} takes {takes}")]
     CircuitArgsCount {
         mock: String,
@@ -256,6 +294,48 @@ pub enum PlanError {
         ty: String,
         caller: String,
     },
+    #[error(
+        "{mock}: parameter {param} of initialize has type {ty}, which contains {caller} but is not it; {}",
+        exclude_hint("initialize", true)
+    )]
+    ContainsCallerInitialize {
+        mock: String,
+        param: String,
+        ty: String,
+        caller: String,
+    },
+    /// `constructor` is set for the `initialize` the constructor calls.
+    #[error(
+        "{mock}: {circuit} takes {count} {caller} parameters, and the authenticated mock would pass one caller to all of them; {}, or use the *Caller variant",
+        exclude_hint(.circuit, *.constructor)
+    )]
+    CallerTwice {
+        mock: String,
+        circuit: String,
+        count: usize,
+        caller: String,
+        constructor: bool,
+    },
+    /// `constructor` is set for the `initialize` the constructor calls.
+    #[error(
+        "{mock}: circuit_args.{circuit} sets a type parameter to {arg}, which is or contains {caller}, so the mock could take a caller it does not authenticate; {}",
+        exclude_hint(.circuit, *.constructor)
+    )]
+    CallerArgument {
+        mock: String,
+        circuit: String,
+        arg: String,
+        caller: String,
+        constructor: bool,
+    },
+    #[error(
+        "{mock}: module_args sets a type parameter to {arg}, which is or contains {caller}, so the mock could take a caller it does not authenticate; write the mock by hand"
+    )]
+    CallerModuleArgument {
+        mock: String,
+        arg: String,
+        caller: String,
+    },
     #[error("{mock}: prefix {prefix} is used by two imports ({first} and {second})")]
     PrefixCollision {
         mock: String,
@@ -263,6 +343,16 @@ pub enum PlanError {
         first: String,
         second: String,
     },
+}
+
+/// How to leave `circuit` out of a mock. The `initialize` the constructor calls leaves
+/// only once it is a circuit again.
+fn exclude_hint(circuit: &str, constructor: bool) -> String {
+    if constructor {
+        format!("set init = \"none\" and add {circuit} to exclude")
+    } else {
+        format!("add {circuit} to exclude")
+    }
 }
 
 /// Errors owning, reading or writing a generated file.
@@ -281,6 +371,11 @@ pub enum OutputError {
     #[error("cannot write {path}")]
     Write {
         path: String,
+        #[source]
+        source: io::Error,
+    },
+    #[error("cannot write to stdout")]
+    Stdout {
         #[source]
         source: io::Error,
     },

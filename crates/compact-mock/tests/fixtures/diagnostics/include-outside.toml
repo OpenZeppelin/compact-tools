@@ -1,0 +1,3 @@
+[[mock]]
+module = "ok/Ok"
+include = "../../../../../Ok.fragment.compact"

@@ -1,0 +1,3 @@
+[[mock]]
+module = "near/Near"
+out_dir = "../test/{dir}"

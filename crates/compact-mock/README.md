@@ -69,6 +69,8 @@ Output:
 - Errors go to stderr as `compact-mock: <message>`, each followed by its
   `  caused by: <cause>` lines. More than one error ends with
   `compact-mock: <k> errors; nothing written.`
+- A stdout that cannot be written, such as a closed pipe, is an error:
+  `compact-mock: cannot write to stdout`. `generate` still writes every file first.
 - Counts read `1 mock` in the singular.
 - Paths print relative to the working directory when under it, otherwise absolute.
 
@@ -89,7 +91,7 @@ Output:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `src` | `"src"` | Directory that holds the modules. Must exist |
-| `out_dir` | `"{dir}/test/mocks"` | Output directory, relative to `src`. `{dir}` is the module's directory relative to `src` (`.` at the root), `{parent}` its parent. No other placeholder |
+| `out_dir` | `"{dir}/test/mocks"` | Output directory, relative to `src`. `{dir}` is the module's directory relative to `src` (`.` at the root), `{parent}` its parent. No other placeholder. Not absolute, and inside the config file's directory |
 | `spdx` | none | When set, line 1 of every mock is `// SPDX-License-Identifier: <spdx>`. One line |
 | `[auth]` | absent | Turns on the authenticated and `*Caller` mocks |
 | `[[mock]]` | at least one | One entry per module |
@@ -102,7 +104,7 @@ The tool has no auth layer of its own. The consumer names it here.
 | --- | --- | --- |
 | `module` | required | Authenticator module, relative to `src`, without `.compact` |
 | `prefix` | `<module declaration name>_` | Import prefix for the authenticator |
-| `call` | required | Expression that yields a caller. Starts with an exported circuit of `module` and holds `{salt}` exactly once, inside a `"..."` string. The tool prepends `prefix` |
+| `call` | required | Expression that yields a caller. Starts with a circuit `module` exports, by its `export` keyword or its `export { }` list, and holds `{salt}` exactly once, inside a `"..."` string. The tool prepends `prefix` |
 | `caller_type` | required | `{ name, module }`: the struct whose parameters get injected. Matched by declaration, so a prefixed spelling or an alias of it matches too |
 
 ### `[[mock]]`
@@ -119,10 +121,10 @@ The tool has no auth layer of its own. The consumer names it here.
 | `init` | `"plain"` if the module exports `initialize`, else `"none"` | Constructor shape, see below |
 | `exclude` | `[]` | Module circuits left out of the mock |
 | `disclose` | `[]` | Circuits whose wrapper returns `disclose(...)`. Not for a circuit that returns `[]` |
-| `guard` | `false` | `true` guards every exposed circuit, a list guards those named. A guarded wrapper first increments a private `_invocations: Counter` |
+| `guard` | `false` | `true` guards every exposed circuit, a list guards those named. A guarded wrapper first increments a private `_invocations: Counter`, so no guarded circuit may take a parameter named `_invocations` |
 | `rename` | `{}` | `old = "new"` exposes circuit `old` as `new` |
 | `ledger` | `true` | `false` leaves the module's exported ledger fields out of the mock's export list |
-| `include` | `false` | `true` includes `<name>.fragment.compact` from the output directory. A string names another file there, ending in `.fragment.compact` |
+| `include` | `false` | `true` includes `<name>.fragment.compact` from the output directory. A string names a file relative to the output directory, ending in `.fragment.compact`. Not absolute, and inside the config file's directory |
 | `salt` | the authenticated mock's name | Authenticated mock only |
 | `[mock.auth]`, `[mock.caller]` | absent | Per-variant overrides |
 
@@ -135,6 +137,9 @@ The tool has no auth layer of its own. The consumer names it here.
 - A circuit named in `exclude`, `disclose`, `guard`, `rename` or `circuit_args` must be
   an exported circuit of the module. `disclose`, `guard` and `rename` must also name one
   the mock exposes.
+- `out_dir` and a string `include` may use `..` while the path stays inside the config
+  file's directory: `out_dir = "../test/{dir}"` works with `src = "src"`. A `src`
+  outside that directory therefore rejects every entry.
 
 `init`:
 
@@ -249,9 +254,25 @@ compact-mock: MockOwnableWithAnEvenLongerNameHere: salt "MockOwnableWithAnEvenLo
 
 Caller matching fails closed under `[auth]`:
 
+- A caller type reached through another module's `export { }` matches like a direct
+  import.
 - A parameter type that does not resolve is an error, even in an excluded circuit.
-- A type that contains the caller type without being it (`Maybe<Caller>`) is an error
-  in the authenticated mock. Add that circuit to `exclude`.
+- A type that contains the caller type without being it is an error in the
+  authenticated mock: `Maybe<Caller>`, a nominal alias, or a struct with a field of the
+  caller type at any depth.
+- A circuit with two caller-typed parameters is an error in the authenticated mock,
+  which would pass one caller to both.
+
+For the last two, add the circuit to `exclude`, or keep the `*Caller` mock only
+(`variants = ["caller"]`).
+
+- A `circuit_args` value that is or contains the caller type is an error in every mock,
+  whether or not the module takes a caller. Add that circuit to `exclude`.
+- A `module_args` value that is or contains the caller type is an error in every mock.
+  Write that mock by hand.
+
+For the `initialize` a constructor calls, `exclude` takes effect once `init = "none"` is
+set too.
 
 A module with no caller-typed parameter gives one mock with no injection. Without
 `[auth]`, every module gives one mock and caller parameters pass through.
@@ -327,6 +348,9 @@ The simulators can drop their forwarding methods at the same time: see
 - `initialize` is the only constructor circuit the tool recognizes.
 - A circuit the module re-exports from another file through `export { }` is
   re-exported as is. One that needs a wrapper is an error: exclude it.
+- Overloaded circuits are not supported. An exposed name the module exports twice, or
+  an overloaded `initialize` the constructor calls, is an error: exclude it, or write
+  that mock by hand.
 - `ledger` is all or nothing.
 - A marked file that no entry produces any more is not reported. Delete it by hand.
 - The 32-byte salt limit assumes `pad(32, ...)` in `call`.

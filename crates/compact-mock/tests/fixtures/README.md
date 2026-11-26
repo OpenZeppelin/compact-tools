@@ -12,12 +12,14 @@ expectations under `expected/`: `<run>.txt` (exit code, stdout, stderr) and `<ru
 - `unmarked-file`: a hand-written file at a target path, and a config whose target is
   the module source. Both are refused and nothing is written.
 - `rules`: `calc/*` modules for `disclose`, `guard`, `rename`, `exclude`, `include`,
-  `init`, their errors, an error batch, and the `--check` edits.
+  `init`, their errors, overloads, an error batch, and the `--check` edits.
 - `generics`: module and circuit generic arguments and their arity errors.
 - `types`: type spelling, the export list, module export lists, hidden types, and the
   standard-type allow-list.
-- `auth-layer`: a synthetic authenticator (`auth/Gate`, `who/Who`) for caller matching,
-  variant expansion and overrides, salts, name filtering and the `[auth]` errors.
+- `auth-layer`: a synthetic authenticator (`auth/Gate`, `who/Who`, and `auth/Listed` and
+  `auth/Relay` that export it through `export { }`) for caller matching,
+  `hub/*` re-exports of the caller type, variant expansion and overrides, salts, name
+  filtering and the `[auth]` errors.
 - `rebase`: import paths from each output directory, `out_dir` templates, and a module
   outside `src`.
 - `diagnostics`: configs and broken sources for the remaining error rows.

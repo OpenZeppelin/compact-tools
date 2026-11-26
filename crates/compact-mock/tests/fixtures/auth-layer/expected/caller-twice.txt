@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockPair: swap takes 2 Badge parameters, and the authenticated mock would pass one caller to all of them; add swap to exclude, or use the *Caller variant
+compact-mock: MockPair: initialize takes 2 Badge parameters, and the authenticated mock would pass one caller to all of them; set init = "none" and add initialize to exclude, or use the *Caller variant
+compact-mock: 2 errors; nothing written.

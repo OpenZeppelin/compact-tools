@@ -68,6 +68,39 @@ pub fn split(list: &str) -> Result<Vec<RawParam>, usize> {
     Ok(params)
 }
 
+/// The field types of a struct body, braces included, with comments already blanked.
+///
+/// Fields end in `;` or `,` outside brackets. A field with no top-level `:`, or a body
+/// that does not split, yields its whole text, so caller matching still sees every name.
+#[must_use]
+pub fn field_types(body: &str) -> Vec<String> {
+    let inner = body
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .unwrap_or(body);
+    let Ok(parts) = split_top_level(inner, ';') else {
+        return vec![collapse(inner)];
+    };
+    let mut types = Vec::new();
+    for (_, part) in parts {
+        let Ok(fields) = split_top_level(part, ',') else {
+            types.push(collapse(part));
+            continue;
+        };
+        for (_, field) in fields {
+            if field.trim().is_empty() {
+                continue;
+            }
+            let ty = match split_top_level(field, ':').ok().as_deref() {
+                Some([_, (colon, _), ..]) => collapse(&field[*colon..]),
+                _ => collapse(field),
+            };
+            types.push(ty);
+        }
+    }
+    types
+}
+
 fn leading_space(text: &str) -> usize {
     text.len() - text.trim_start().len()
 }
@@ -235,7 +268,7 @@ const fn is_identifier_continue(ch: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{collapse, identifiers, is_name, rewrite, split};
+    use super::{collapse, field_types, identifiers, is_name, rewrite, split};
 
     fn shapes(list: &str) -> Vec<(Option<String>, String)> {
         split(list)
@@ -365,6 +398,17 @@ mod tests {
             _ => None,
         });
         assert_eq!(rewritten, r#"Pair<Field, Opaque<"T">, 32, M_Local>"#);
+    }
+
+    #[test]
+    fn struct_fields_split_at_semicolons_and_commas_outside_brackets() {
+        assert_eq!(
+            field_types("{ a: Field; b: Either<Bytes<32>, C>, c: Maybe<D> }"),
+            ["Field", "Either<Bytes<32>, C>", "Maybe<D>"]
+        );
+        assert!(field_types("{ }").is_empty());
+        assert_eq!(field_types("{ odd Caller; }"), ["odd Caller"]);
+        assert_eq!(field_types("{ a: Vector<2, F; }"), ["a: Vector<2, F;"]);
     }
 
     #[test]

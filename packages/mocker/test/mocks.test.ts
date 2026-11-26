@@ -22,6 +22,14 @@ import {
   Contract as MockBagNoInit,
 } from './fixtures/artifacts/MockBagNoInit/contract/index.js';
 import {
+  ledger as claimedLedger,
+  Contract as MockClaimed,
+} from './fixtures/artifacts/MockClaimed/contract/index.js';
+import {
+  ledger as claimedFlagLedger,
+  Contract as MockClaimedFlag,
+} from './fixtures/artifacts/MockClaimedFlag/contract/index.js';
+import {
   ledger as hashLedger,
   Contract as MockHash,
 } from './fixtures/artifacts/MockHash/contract/index.js';
@@ -111,6 +119,26 @@ const OwnedCallerSimulator = createSimulator({
   flatCircuits: true,
 });
 
+const ClaimedSimulator = createSimulator({
+  contractFactory: (witnesses: PseudonymWitnesses) =>
+    new MockClaimed<SecretState>(witnesses),
+  defaultPrivateState: (): SecretState => ({ secretKey: ALICE }),
+  contractArgs: () => [],
+  ledgerExtractor: (state) => claimedLedger(state),
+  witnessesFactory: () => pseudonymWitnesses(),
+  flatCircuits: true,
+});
+
+const ClaimedFlagSimulator = createSimulator({
+  contractFactory: (witnesses: PseudonymWitnesses) =>
+    new MockClaimedFlag<SecretState>(witnesses),
+  defaultPrivateState: (): SecretState => ({ secretKey: ALICE }),
+  contractArgs: (isInit: boolean) => [isInit],
+  ledgerExtractor: (state) => claimedFlagLedger(state),
+  witnessesFactory: () => pseudonymWitnesses(),
+  flatCircuits: true,
+});
+
 const PseudonymSimulator = createSimulator({
   contractFactory: (witnesses: PseudonymWitnesses) =>
     new MockPseudonym<SecretState>(witnesses),
@@ -163,7 +191,7 @@ describe('the committed fixture mocks', () => {
       );
 
       expect(run.stdout).toBe('');
-      expect(run.stderr).toContain('6 mocks up to date');
+      expect(run.stderr).toContain('8 mocks up to date');
       expect(run.status).toBe(0);
     },
   );
@@ -194,6 +222,8 @@ describe('the committed fixture mocks', () => {
       'setPair',
       'transferOwnership',
     ]);
+    expect(circuitNames(new MockClaimed(witnesses))).toEqual([]);
+    expect(circuitNames(new MockClaimedFlag(witnesses))).toEqual([]);
     expect(circuitNames(new MockOwnedCaller({}))).toEqual([
       'assertOnlyOwner',
       'owner',
@@ -316,6 +346,52 @@ describe('MockOwnedCaller', () => {
     const sim = await OwnedCallerSimulator.create([owner]);
 
     expect(await sim.getPublicState()).toStrictEqual({});
+  });
+});
+
+describe('MockClaimed', () => {
+  it('stores the caller the constructor authenticates', async () => {
+    const alice = await ClaimedSimulator.create([], {
+      privateState: { secretKey: ALICE },
+    });
+    const bob = await ClaimedSimulator.create([], {
+      privateState: { secretKey: BOB },
+    });
+
+    expect((await alice.getPublicState()).Claimed__claimant).toEqual(
+      pseudonym(ALICE, 'MockClaimed'),
+    );
+    expect((await bob.getPublicState()).Claimed__claimant).toEqual(
+      pseudonym(BOB, 'MockClaimed'),
+    );
+    expect(pseudonym(BOB, 'MockClaimed')).not.toEqual(
+      pseudonym(ALICE, 'MockClaimed'),
+    );
+  });
+});
+
+describe('MockClaimedFlag', () => {
+  const create = (isInit: boolean) =>
+    ClaimedFlagSimulator.create([isInit], {
+      privateState: { secretKey: ALICE },
+    });
+
+  it('authenticates the caller under its own name when isInit is true', async () => {
+    const sim = await create(true);
+
+    expect((await sim.getPublicState()).Claimed__claimant).toEqual(
+      pseudonym(ALICE, 'MockClaimedFlag'),
+    );
+  });
+
+  it('stores no caller when isInit is false', async () => {
+    const sim = await create(false);
+
+    expect((await sim.getPublicState()).Claimed__claimant).toEqual({
+      is_left: false,
+      left: ZERO,
+      right: { bytes: ZERO },
+    });
   });
 });
 

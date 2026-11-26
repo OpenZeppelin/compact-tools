@@ -2,13 +2,14 @@
 
 #![forbid(unsafe_code)]
 
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
 use compact_mock::config::{self, Paths};
-use compact_mock::error::{ConfigError, Error};
+use compact_mock::error::{ConfigError, Error, OutputError};
 use compact_mock::output::{self, Drift, Written};
 use compact_mock::plan;
 use compact_mock::scope::Files;
@@ -65,7 +66,7 @@ fn main() -> ExitCode {
     match std::env::current_dir() {
         Ok(cwd) => generate(&args, &cwd),
         Err(source) => {
-            report(&[Error::from(compact_mock::error::OutputError::Read {
+            report(&[Error::from(OutputError::Read {
                 path: ".".to_owned(),
                 source,
             })]);
@@ -128,20 +129,31 @@ fn prepare(args: &GenerateArgs, paths: &Paths) -> Result<Vec<output::Target>, Ve
     }
 }
 
+/// Writes every target. A failed print stops the printing, not the writes, and fails the
+/// run once every file is written.
 fn write(targets: &[output::Target]) -> ExitCode {
+    let mut out = io::stdout().lock();
+    let mut printed = Ok(());
     let mut written = 0;
     for target in targets {
-        match output::write(target) {
+        let verb = match output::write(target) {
             Ok(Written::Wrote) => {
                 written += 1;
-                println!("wrote {}", target.shown);
+                "wrote"
             }
-            Ok(Written::Unchanged) => println!("unchanged {}", target.shown),
+            Ok(Written::Unchanged) => "unchanged",
             Err(error) => {
                 report(&[error.into()]);
                 return ExitCode::from(EXIT_ERROR);
             }
+        };
+        if printed.is_ok() {
+            printed = writeln!(out, "{verb} {}", target.shown);
         }
+    }
+    if let Err(source) = printed.and_then(|()| out.flush()) {
+        report(&[OutputError::Stdout { source }.into()]);
+        return ExitCode::from(EXIT_ERROR);
     }
     eprintln!(
         "compact-mock: {}, {written} written, {} unchanged.",
@@ -152,21 +164,13 @@ fn write(targets: &[output::Target]) -> ExitCode {
 }
 
 fn check(targets: &[output::Target]) -> ExitCode {
-    let mut drifted = 0;
-    for target in targets {
-        match output::drift(target) {
-            Drift::Clean => {}
-            Drift::Missing => {
-                drifted += 1;
-                println!("missing {}", target.shown);
-            }
-            Drift::Changed(diff) => {
-                drifted += 1;
-                println!("changed {}", target.shown);
-                print!("{diff}");
-            }
+    let drifted = match print_drift(targets) {
+        Ok(drifted) => drifted,
+        Err(source) => {
+            report(&[OutputError::Stdout { source }.into()]);
+            return ExitCode::from(EXIT_ERROR);
         }
-    }
+    };
     if drifted == 0 {
         eprintln!("compact-mock: {} up to date.", count(targets.len()));
         ExitCode::SUCCESS
@@ -177,6 +181,28 @@ fn check(targets: &[output::Target]) -> ExitCode {
         );
         ExitCode::from(EXIT_DRIFT)
     }
+}
+
+/// Prints each missing or changed target with its diff, and returns how many drifted.
+fn print_drift(targets: &[output::Target]) -> io::Result<usize> {
+    let mut out = io::stdout().lock();
+    let mut drifted = 0;
+    for target in targets {
+        match output::drift(target) {
+            Drift::Clean => {}
+            Drift::Missing => {
+                drifted += 1;
+                writeln!(out, "missing {}", target.shown)?;
+            }
+            Drift::Changed(diff) => {
+                drifted += 1;
+                writeln!(out, "changed {}", target.shown)?;
+                write!(out, "{diff}")?;
+            }
+        }
+    }
+    out.flush()?;
+    Ok(drifted)
 }
 
 fn count(mocks: usize) -> String {

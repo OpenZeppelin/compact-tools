@@ -1,0 +1,13 @@
+pragma language_version >= 0.28.0;
+
+module Bin<T> {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export circuit drop(item: T): [] {
+  }
+
+  export circuit gen<U>(u: U): [] {
+  }
+}

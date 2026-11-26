@@ -13,3 +13,6 @@ module = "door/Plain"
 
 [[mock]]
 module = "door/Twin"
+
+[[mock]]
+module = "door/Lobby"

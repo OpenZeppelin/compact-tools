@@ -15,6 +15,18 @@ exclude = ["_setOwner"]
 auth.init = { flag = "isInit" }
 caller.ledger = false
 
+# initialize takes the caller, so the constructor authenticates it: plainly in
+# MockClaimed, under an isInit flag in MockClaimedFlag.
+[[mock]]
+module = "access/Claimed"
+variants = ["auth"]
+
+[[mock]]
+module = "access/Claimed"
+name = "MockClaimedFlag"
+variants = ["auth"]
+init = { flag = "isInit" }
+
 # No caller parameter, so one mock. authenticate returns witness data.
 [[mock]]
 module = "auth/Pseudonym"

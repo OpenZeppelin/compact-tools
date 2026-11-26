@@ -1,0 +1,10 @@
+pragma language_version >= 0.28.0;
+
+module Hub {
+  import CompactStandardLibrary;
+
+  import "../who/Who";
+  import "../who/Who" prefix Who_;
+
+  export { Badge, Who_Badge };
+}

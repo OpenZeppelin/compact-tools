@@ -3,4 +3,5 @@ exit: 2
 --- stderr
 compact-mock: MockLost: parameter caller of enter has type Ghost, which does not resolve; with [auth] set, every parameter type must resolve
 compact-mock: MockLost: parameter guide of wander has type Stranger, which does not resolve; with [auth] set, every parameter type must resolve
-compact-mock: 2 errors; nothing written.
+compact-mock: MockMaze: parameter caller of enter has type Badge, which does not resolve; with [auth] set, every parameter type must resolve
+compact-mock: 3 errors; nothing written.

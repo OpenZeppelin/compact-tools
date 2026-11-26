@@ -1,0 +1,13 @@
+pragma language_version >= 0.28.0;
+
+module Lobby {
+  import CompactStandardLibrary;
+
+  import "../hub/Hub";
+
+  export circuit enter(caller: Badge): [] {
+  }
+
+  export circuit sign(caller: Who_Badge, note: Bytes<32>): [] {
+  }
+}

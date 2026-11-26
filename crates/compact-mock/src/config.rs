@@ -70,6 +70,18 @@ impl Entry {
     pub fn stem(&self) -> &str {
         self.module.rsplit('/').next().unwrap_or(&self.module)
     }
+
+    /// The keys set on this entry that only an authenticated mock uses, in report order.
+    pub fn auth_only_keys(&self) -> impl Iterator<Item = &'static str> {
+        [
+            ("variants", self.variants.is_some()),
+            ("salt", self.settings.salt.is_some()),
+            ("[mock.auth]", self.auth.is_some()),
+            ("[mock.caller]", self.caller.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(key, set)| set.then_some(key))
+    }
 }
 
 /// The two variants an entry with a caller-typed parameter can produce.
@@ -345,7 +357,7 @@ pub fn load(path: &Path, paths: &Paths) -> Result<Config, Vec<Error>> {
     }
 
     if let Some(template) = &raw.out_dir {
-        check_placeholders(template, &cfg, &mut report);
+        check_out_dir(template, &cfg, &mut report);
     }
 
     let auth = raw.auth.map(|auth| {
@@ -422,25 +434,10 @@ fn entry(
         check_name(&key("prefix"), prefix, cfg, report);
     }
     if let Some(template) = &raw.out_dir {
-        check_placeholders(template, cfg, report);
+        check_out_dir(template, cfg, report);
     }
 
-    if !has_auth {
-        let present = [
-            ("variants", raw.variants.is_some()),
-            ("salt", raw.salt.is_some()),
-            ("[mock.auth]", raw.auth.is_some()),
-            ("[mock.caller]", raw.caller.is_some()),
-        ];
-        for (name, _) in present.iter().filter(|(_, set)| *set) {
-            report(ConfigError::NeedsAuth {
-                cfg: cfg.to_owned(),
-                module: module.clone(),
-                key: (*name).to_owned(),
-            });
-        }
-    }
-
+    let mut bad_variants = false;
     let variants = raw.variants.map(|values| {
         let kinds: Vec<Option<VariantKind>> = values
             .iter()
@@ -454,16 +451,50 @@ fn entry(
             .iter()
             .enumerate()
             .any(|(at, kind)| kinds[..at].contains(kind));
-        if kinds.is_empty() || repeated || kinds.contains(&None) {
-            report(ConfigError::Variants {
-                cfg: cfg.to_owned(),
-                module: module.clone(),
-            });
-        }
+        bad_variants = kinds.is_empty() || repeated || kinds.contains(&None);
         kinds.into_iter().flatten().collect()
     });
 
-    if raw
+    let entry = Entry {
+        out_dir: raw.out_dir.unwrap_or_else(|| default_out_dir.to_owned()),
+        module,
+        name: raw.name.clone(),
+        prefix: raw.prefix,
+        module_args: raw.module_args,
+        circuit_args: raw.circuit_args,
+        variants,
+        settings: Settings {
+            name: raw.name,
+            init: raw.init,
+            exclude: raw.exclude,
+            disclose: raw.disclose,
+            guard: raw.guard,
+            rename: raw.rename,
+            include: raw.include,
+            salt: raw.salt,
+            ledger: raw.ledger,
+        },
+        auth: raw.auth,
+        caller: raw.caller,
+    };
+    let module = &entry.module;
+
+    if !has_auth {
+        for key in entry.auth_only_keys() {
+            report(ConfigError::NeedsAuth {
+                cfg: cfg.to_owned(),
+                module: module.clone(),
+                key: key.to_owned(),
+            });
+        }
+    }
+    if bad_variants {
+        report(ConfigError::Variants {
+            cfg: cfg.to_owned(),
+            module: module.clone(),
+        });
+    }
+    if entry
         .caller
         .as_ref()
         .is_some_and(|caller| caller.salt.is_some())
@@ -474,37 +505,14 @@ fn entry(
         });
     }
 
-    let settings = Settings {
-        name: raw.name.clone(),
-        init: raw.init,
-        exclude: raw.exclude,
-        disclose: raw.disclose,
-        guard: raw.guard,
-        rename: raw.rename,
-        include: raw.include,
-        salt: raw.salt,
-        ledger: raw.ledger,
-    };
-    check_settings(&settings, "", &module, cfg, report);
-    if let Some(auth) = &raw.auth {
-        check_settings(auth, "auth.", &module, cfg, report);
+    check_settings(&entry.settings, "", module, cfg, report);
+    if let Some(auth) = &entry.auth {
+        check_settings(auth, "auth.", module, cfg, report);
     }
-    if let Some(caller) = &raw.caller {
-        check_settings(caller, "caller.", &module, cfg, report);
+    if let Some(caller) = &entry.caller {
+        check_settings(caller, "caller.", module, cfg, report);
     }
-
-    Entry {
-        out_dir: raw.out_dir.unwrap_or_else(|| default_out_dir.to_owned()),
-        module,
-        name: raw.name,
-        prefix: raw.prefix,
-        module_args: raw.module_args,
-        circuit_args: raw.circuit_args,
-        variants,
-        settings,
-        auth: raw.auth,
-        caller: raw.caller,
-    }
+    entry
 }
 
 /// The identifier rules a settings table can break. The entry's own `name` is checked
@@ -552,6 +560,23 @@ fn check_module(module: &str, cfg: &str, report: &mut impl FnMut(ConfigError)) {
             module: module.to_owned(),
         });
     }
+}
+
+/// Whether `path` is absolute, or rooted without a drive.
+#[must_use]
+pub fn is_absolute(path: &str) -> bool {
+    let path = Path::new(path);
+    path.is_absolute() || path.has_root()
+}
+
+fn check_out_dir(template: &str, cfg: &str, report: &mut impl FnMut(ConfigError)) {
+    if is_absolute(template) {
+        report(ConfigError::OutDirAbsolute {
+            cfg: cfg.to_owned(),
+            value: template.to_owned(),
+        });
+    }
+    check_placeholders(template, cfg, report);
 }
 
 fn check_placeholders(template: &str, cfg: &str, report: &mut impl FnMut(ConfigError)) {
@@ -1147,6 +1172,16 @@ mod tests {
                 "{template}"
             );
         }
+    }
+
+    #[test]
+    fn an_absolute_out_dir_is_rejected_at_the_top_level_and_in_an_entry() {
+        assert_eq!(
+            rejection("out_dir = \"/m/{dir}\"\n[[mock]]\nmodule = \"a/M\"\nout_dir = \"/n\"\n"),
+            ["/m/{dir}", "/n"].map(|value| format!(
+                "config {CONFIG_FILE_NAME}: out_dir \"{value}\" must be a path relative to src"
+            ))
+        );
     }
 
     #[test]

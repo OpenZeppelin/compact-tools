@@ -405,6 +405,16 @@ mod rules {
     }
 
     #[test]
+    fn an_overloaded_exposed_circuit_or_constructor_initialize_is_an_error() {
+        assert_config("overload");
+    }
+
+    #[test]
+    fn a_guarded_circuit_with_a_parameter_named_invocations_is_an_error() {
+        assert_config("guard-shadow");
+    }
+
+    #[test]
     fn init_flag_gates_initialize_and_takes_the_last_parameter() {
         assert_config("init");
     }
@@ -600,6 +610,11 @@ mod types {
     fn an_export_list_circuit_that_needs_a_wrapper_is_an_error() {
         assert_config(CASE, "export-list-errors", &[]);
     }
+
+    #[test]
+    fn a_type_the_module_export_list_names_is_nameable_by_a_wrapper() {
+        assert_config(CASE, "export-list-wrapper", &[]);
+    }
 }
 
 mod auth_layer {
@@ -615,18 +630,22 @@ mod auth_layer {
     #[test]
     fn caller_parameters_match_by_declaration_through_every_import_form() {
         let directory = assert_config(CASE, "caller-matching", &[]);
-        for name in ["MockDoorCaller", "MockPlainCaller", "MockTwin"] {
+        for name in [
+            "MockDoorCaller",
+            "MockPlainCaller",
+            "MockTwin",
+            "MockLobbyCaller",
+        ] {
             let text = mock(&directory, name);
             assert!(!text.contains("auth/Gate"), "{name}");
             assert!(!text.contains("Gate_authenticate("), "{name}");
         }
-        let door = mock(&directory, "MockDoor");
-        assert_eq!(
-            door.matches("Gate_authenticate(pad(32, \"MockDoor\"))")
-                .count(),
-            4
-        );
-        assert!(!door.contains("Badge"));
+        for (name, calls) in [("MockDoor", 4), ("MockLobby", 2)] {
+            let text = mock(&directory, name);
+            let call = format!("Gate_authenticate(pad(32, \"{name}\"))");
+            assert_eq!(text.matches(&call).count(), calls, "{name}");
+            assert!(!text.contains("Badge"), "{name}");
+        }
     }
 
     #[test]
@@ -665,8 +684,26 @@ mod auth_layer {
     }
 
     #[test]
-    fn a_caller_inside_a_compound_type_or_a_nominal_alias_is_an_error() {
+    fn a_caller_inside_a_compound_type_a_struct_or_a_nominal_alias_is_an_error() {
         assert_config(CASE, "contains-caller", &[]);
+    }
+
+    #[test]
+    fn two_caller_parameters_of_one_circuit_or_initialize_are_an_error_when_authenticated() {
+        assert_config(CASE, "caller-twice", &[]);
+    }
+
+    #[test]
+    fn a_module_or_circuit_argument_that_is_or_holds_the_caller_type_is_an_error_in_every_mock() {
+        assert_config(CASE, "caller-argument", &[]);
+    }
+
+    #[test]
+    fn an_authenticator_circuit_exported_through_an_export_list_is_called() {
+        let directory = assert_config(CASE, "auth-listed", &[]);
+        assert!(
+            mock(&directory, "MockHinge").contains("Listed_authenticate(pad(32, \"MockHinge\"))")
+        );
     }
 
     #[test]
@@ -764,6 +801,59 @@ mod rebase {
     #[test]
     fn parent_for_a_module_at_the_root_of_src_is_an_error() {
         assert_config(CASE, "parent-at-root", &[]);
+    }
+
+    #[test]
+    fn an_out_dir_may_leave_src_while_it_stays_in_the_config_directory() {
+        assert_config(CASE, "out-dir-up", &[]);
+    }
+}
+
+mod closed_stdout {
+    use std::process::{Command, Output, Stdio};
+
+    use assert_cmd::prelude::*;
+
+    use super::{TempDir, tree, workspace};
+
+    /// Runs `generate <args>` in `directory` with stdout a pipe whose reader is closed.
+    fn run(directory: &TempDir, args: &[&str]) -> Output {
+        let (reader, writer) = std::io::pipe().expect("a pipe");
+        drop(reader);
+        Command::cargo_bin("compact-mock")
+            .expect("the binary is built alongside this test")
+            .current_dir(directory.path())
+            .arg("generate")
+            .args(args)
+            .stdout(writer)
+            .stderr(Stdio::piped())
+            .output()
+            .expect("the binary ran")
+    }
+
+    const FAILURE: &str = "compact-mock: cannot write to stdout\n  caused by: ";
+
+    #[test]
+    fn check_on_a_drifted_tree_reports_the_failed_print_and_exits_two() {
+        let directory = workspace("ownable-pair");
+        let output = run(&directory, &["--check"]);
+        let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");
+        assert_eq!(output.status.code(), Some(2), "{stderr}");
+        assert!(stderr.starts_with(FAILURE), "{stderr}");
+        assert_eq!(stderr.lines().count(), 2, "{stderr}");
+    }
+
+    #[test]
+    fn generate_writes_every_mock_before_reporting_the_failed_print() {
+        let directory = workspace("rebase");
+        let before = tree(directory.path());
+        let output = run(&directory, &[]);
+        let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");
+        assert_eq!(output.status.code(), Some(2), "{stderr}");
+        assert!(stderr.starts_with(FAILURE), "{stderr}");
+        assert_eq!(stderr.lines().count(), 2, "{stderr}");
+        let written = super::changed(&before, &tree(directory.path()));
+        assert_eq!(written.len(), 4, "{:?}", written.keys());
     }
 }
 

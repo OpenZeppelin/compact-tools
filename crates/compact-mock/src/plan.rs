@@ -5,11 +5,11 @@
 //! selected mocks only. Every error is collected; nothing is planned when any occurs.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::{
     Config, Entry, Guard, Include, Init, Settings, VariantKind, expand_out_dir, import_path,
-    normalize,
+    is_absolute, normalize,
 };
 use crate::error::{AuthError, ConfigError, Error, PlanError, SourceError};
 use crate::params::{identifiers, is_name, rewrite};
@@ -248,9 +248,10 @@ fn auth_plan(config: &Config, files: &mut Files) -> Result<AuthPlan, Error> {
         .chars()
         .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '$')
         .collect();
-    let exported = module.items.iter().any(
-        |item| matches!(item, Item::Circuit(circuit) if circuit.exported && circuit.name == head),
-    );
+    let exported = surface(files, id)?
+        .circuits
+        .iter()
+        .any(|circuit| circuit.name() == head);
     if !exported {
         return Err(AuthError::Call {
             circuit: head,
@@ -433,19 +434,13 @@ fn expand(
             .collect()
     } else {
         if let Some(auth) = auth {
-            let present = [
-                ("variants", entry.variants.is_some()),
-                ("salt", entry.settings.salt.is_some()),
-                ("[mock.auth]", entry.auth.is_some()),
-                ("[mock.caller]", entry.caller.is_some()),
-            ];
-            for (key, _) in present.iter().filter(|(_, set)| *set) {
+            for key in entry.auth_only_keys() {
                 errors.push(
                     PlanError::NoCallerParam {
                         mock: base.clone(),
                         module: entry.module.clone(),
                         caller: auth.caller.1.clone(),
-                        key: (*key).to_owned(),
+                        key: key.to_owned(),
                     }
                     .into(),
                 );
@@ -560,17 +555,44 @@ fn variant(
             .into(),
         ]);
     };
-    if let Some(Include::File(file)) = &settings.include
-        && !file.ends_with(FRAGMENT_SUFFIX)
-    {
-        errors.push(
-            ConfigError::IncludeSuffix {
-                cfg: config.shown.clone(),
-                mock: name.clone(),
-                value: file.clone(),
-            }
-            .into(),
-        );
+    let out_dir = normalize(&config.src.join(relative));
+    let root = config.path.parent().unwrap_or_else(|| Path::new(""));
+    let outside = |key: &str, value: &str| -> Error {
+        ConfigError::OutsideConfig {
+            cfg: config.shown.clone(),
+            mock: name.clone(),
+            key: key.to_owned(),
+            value: value.to_owned(),
+        }
+        .into()
+    };
+    let out_dir_inside = out_dir.starts_with(root);
+    if !out_dir_inside {
+        errors.push(outside("out_dir", &entry.out_dir));
+    }
+    if let Some(Include::File(file)) = &settings.include {
+        if !file.ends_with(FRAGMENT_SUFFIX) {
+            errors.push(
+                ConfigError::IncludeSuffix {
+                    cfg: config.shown.clone(),
+                    mock: name.clone(),
+                    value: file.clone(),
+                }
+                .into(),
+            );
+        }
+        if is_absolute(file) {
+            errors.push(
+                ConfigError::IncludeAbsolute {
+                    cfg: config.shown.clone(),
+                    mock: name.clone(),
+                    value: file.clone(),
+                }
+                .into(),
+            );
+        } else if out_dir_inside && !normalize(&out_dir.join(file)).starts_with(root) {
+            errors.push(outside("include", file));
+        }
     }
     if !errors.is_empty() {
         return Err(errors);
@@ -580,7 +602,7 @@ fn variant(
         kind: shape.kind,
         name,
         settings,
-        out_dir: normalize(&config.src.join(relative)),
+        out_dir,
         module_file: shape.module_file,
         prefix: shape.prefix.to_owned(),
     })
@@ -681,6 +703,18 @@ impl Planner<'_> {
                 takes: module.generics.len(),
             });
         }
+        if let Some(auth) = self.auth {
+            for arg in &self.entry.module_args {
+                let matched = self.files.caller_match(file, &[], arg, &auth.caller)?;
+                if matches!(matched, CallerMatch::Exact | CallerMatch::Contains) {
+                    self.report(PlanError::CallerModuleArgument {
+                        mock: self.mock(),
+                        arg: arg.clone(),
+                        caller: auth.caller.1.clone(),
+                    });
+                }
+            }
+        }
 
         let exclude = settings.exclude.clone().unwrap_or_default();
         let disclose = settings.disclose.clone().unwrap_or_default();
@@ -751,6 +785,32 @@ impl Planner<'_> {
                 }
             }
         }
+        for (at, name) in exposed_names.iter().enumerate() {
+            let count = exposed_names.iter().filter(|other| *other == name).count();
+            if count > 1 && !exposed_names[..at].contains(name) {
+                self.report(PlanError::Overloaded {
+                    mock: self.mock(),
+                    module: self.entry.module.clone(),
+                    count,
+                    circuit: (*name).to_owned(),
+                    constructor: false,
+                });
+            }
+        }
+        let initializers = surface
+            .circuits
+            .iter()
+            .filter(|circuit| matches!(circuit, Exposable::Own(own) if own.name == INITIALIZE))
+            .count();
+        if init != Init::None && initializers > 1 {
+            self.report(PlanError::Overloaded {
+                mock: self.mock(),
+                module: self.entry.module.clone(),
+                count: initializers,
+                circuit: INITIALIZE.to_owned(),
+                constructor: true,
+            });
+        }
 
         for (circuit, args) in circuit_args {
             let generics = surface.circuits.iter().find_map(|known| match known {
@@ -783,7 +843,7 @@ impl Planner<'_> {
             let renamed = rename.get(circuit.name()).cloned();
             match circuit {
                 Exposable::Own(circuit) => {
-                    let inject = self.injections(file, circuit)?;
+                    let inject = self.injections(file, circuit, false)?;
                     let generic = !circuit.generics.is_empty();
                     if generic && !circuit_args.contains_key(&circuit.name) {
                         self.report(PlanError::GenericNoArgs {
@@ -816,6 +876,7 @@ impl Planner<'_> {
                     }
                     injected |= inject.contains(&true);
                     let args = circuit_args.get(&circuit.name).cloned().unwrap_or_default();
+                    self.check_caller_args(file, &circuit.name, &args, false)?;
                     let scope = TypeScope {
                         file,
                         generics: &circuit.generics,
@@ -823,6 +884,12 @@ impl Planner<'_> {
                         circuit: &circuit.name,
                     };
                     let (params, call_args) = self.forwarded(&scope, circuit, &inject)?;
+                    if guarded && params.iter().any(|param| param.name == GUARD_LEDGER) {
+                        self.report(PlanError::GuardShadowed {
+                            mock: self.mock(),
+                            circuit: circuit.name.clone(),
+                        });
+                    }
                     let ret = self.spell(&scope, &circuit.ret)?;
                     self.collect_signature(&scope, circuit, &inject, &mut types)?;
                     wrappers.push(Wrapper {
@@ -893,16 +960,16 @@ impl Planner<'_> {
 
         let constructor = match (&init, &own_initialize) {
             (Init::Plain | Init::Flag(_), Some(initialize)) => {
-                let inject = self.injections(file, initialize)?;
+                let inject = self.injections(file, initialize, true)?;
                 injected |= inject.contains(&true);
                 if !initialize.generics.is_empty() && !circuit_args.contains_key(INITIALIZE) {
-                    self.report(PlanError::GenericNoArgs {
+                    self.report(PlanError::GenericInitialize {
                         mock: self.mock(),
-                        circuit: INITIALIZE.to_owned(),
                         generics: generics_text(&initialize.generics),
                     });
                 }
                 let args = circuit_args.get(INITIALIZE).cloned().unwrap_or_default();
+                self.check_caller_args(file, INITIALIZE, &args, true)?;
                 let scope = TypeScope {
                     file,
                     generics: &initialize.generics,
@@ -988,7 +1055,13 @@ impl Planner<'_> {
     }
 
     /// Per parameter of `circuit`: whether the authenticated variant injects it.
-    fn injections(&mut self, file: FileId, circuit: &Circuit) -> Result<Vec<bool>, Error> {
+    /// `constructor` is set for the `initialize` the constructor calls.
+    fn injections(
+        &mut self,
+        file: FileId,
+        circuit: &Circuit,
+        constructor: bool,
+    ) -> Result<Vec<bool>, Error> {
         let mut inject = vec![false; circuit.params.len()];
         let (Kind::Auth, Some(auth)) = (self.variant.kind, self.auth) else {
             return Ok(inject);
@@ -999,6 +1072,14 @@ impl Planner<'_> {
                 .caller_match(file, &circuit.generics, &param.ty, &auth.caller)?
             {
                 CallerMatch::Exact => inject[position] = true,
+                CallerMatch::Contains if constructor => {
+                    self.report(PlanError::ContainsCallerInitialize {
+                        mock: self.mock(),
+                        param: param_label(param.name(), position),
+                        ty: param.ty.clone(),
+                        caller: auth.caller.1.clone(),
+                    });
+                }
                 CallerMatch::Contains => self.report(PlanError::ContainsCaller {
                     mock: self.mock(),
                     param: param_label(param.name(), position),
@@ -1010,7 +1091,44 @@ impl Planner<'_> {
                 CallerMatch::Unresolved | CallerMatch::No => {}
             }
         }
+        let count = inject.iter().filter(|injected| **injected).count();
+        if count > 1 {
+            self.report(PlanError::CallerTwice {
+                mock: self.mock(),
+                circuit: circuit.name.clone(),
+                count,
+                caller: auth.caller.1.clone(),
+                constructor,
+            });
+        }
         Ok(inject)
+    }
+
+    /// Under `[auth]`, a circuit argument that is or holds the caller type would let any
+    /// variant take a caller it never authenticates.
+    fn check_caller_args(
+        &mut self,
+        file: FileId,
+        circuit: &str,
+        args: &[String],
+        constructor: bool,
+    ) -> Result<(), Error> {
+        let Some(auth) = self.auth else {
+            return Ok(());
+        };
+        for arg in args {
+            let matched = self.files.caller_match(file, &[], arg, &auth.caller)?;
+            if matches!(matched, CallerMatch::Exact | CallerMatch::Contains) {
+                self.report(PlanError::CallerArgument {
+                    mock: self.mock(),
+                    circuit: circuit.to_owned(),
+                    arg: arg.clone(),
+                    caller: auth.caller.1.clone(),
+                    constructor,
+                });
+            }
+        }
+        Ok(())
     }
 
     /// The wrapper's parameters, and the arguments it forwards in module order.
@@ -1489,7 +1607,7 @@ fn salt_characters_ok(salt: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use super::{
         Call, ImportLine, MAX_SALT_BYTES, MockPlan, Outcome, plan, returns_unit, salt_characters_ok,
@@ -1508,14 +1626,30 @@ mod tests {
             .join(name)
     }
 
-    /// Plans `config` over the sources of fixture case `name`. Paths print relative to it.
+    /// Copies the `.compact` files under `from` to `to`.
+    fn copy_sources(from: &Path, to: &Path) {
+        for entry in std::fs::read_dir(from).expect("the case is readable") {
+            let path = entry.expect("the entry is readable").path();
+            let target = to.join(path.file_name().expect("a file name"));
+            if path.is_dir() {
+                std::fs::create_dir_all(&target).expect("dirs are created");
+                copy_sources(&path, &target);
+            } else if path.extension().is_some_and(|ext| ext == "compact") {
+                std::fs::copy(&path, &target).expect("the source is copied");
+            }
+        }
+    }
+
+    /// Plans `config` over a copy of the sources of fixture case `name`, with the config
+    /// beside `src`. Paths print relative to the copy.
     fn planned(name: &str, config: &str, names: &[&str]) -> Outcome {
-        let root = case(name);
         let directory = tempfile::TempDir::new().expect("a temporary directory");
+        copy_sources(&case(name).join("src"), &directory.path().join("src"));
         let path = directory.path().join("compact-mock.toml");
-        let src = root.join("src").display().to_string();
-        std::fs::write(&path, format!("src = {src:?}\n{config}")).expect("the config is written");
-        let paths = Paths { cwd: root };
+        std::fs::write(&path, config).expect("the config is written");
+        let paths = Paths {
+            cwd: directory.path().to_owned(),
+        };
         let config = load(&path, &paths).expect("the config loads");
         let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
         plan(&config, &mut Files::new(paths), &names)
@@ -1993,6 +2127,81 @@ mod tests {
             [
                 "MockHinge: fragment src/door/test/mocks/MockHinge.fragment.compact does not exist",
                 "MockHingeCaller: fragment src/door/test/mocks/MockHingeCaller.fragment.compact does not exist",
+            ]
+        );
+    }
+
+    #[test]
+    fn exclude_or_the_caller_variant_clears_every_caller_error() {
+        let excluded = plans(planned(
+            "auth-layer",
+            &format!(
+                "{AUTH}[[mock]]\nmodule = \"door/Pair\"\nauth.init = \"none\"\nauth.exclude = [\"swap\", \"initialize\"]\n\n\
+                 [[mock]]\nmodule = \"door/Crate\"\nauth.init = \"none\"\nauth.exclude = [\"ship\", \"initialize\"]\n\n\
+                 [[mock]]\nmodule = \"door/Shelf\"\ncircuit_args = {{ initialize = [\"Badge\"], stack = [\"Maybe<Badge>\"] }}\n\
+                 init = \"none\"\nexclude = [\"stack\", \"initialize\"]\n"
+            ),
+            &[],
+        ));
+        assert_eq!(wrapper_names(&excluded["MockPair"]), ["wave"]);
+        assert_eq!(wrapper_names(&excluded["MockShelf"]), ["open"]);
+        assert!(excluded["MockShelfCaller"].wrappers.is_empty());
+        assert!(excluded["MockCrate"].constructor.is_none());
+
+        let caller_only = plans(planned(
+            "auth-layer",
+            &format!(
+                "{AUTH}[[mock]]\nmodule = \"door/Pair\"\nvariants = [\"caller\"]\n\n\
+                 [[mock]]\nmodule = \"door/Crate\"\nvariants = [\"caller\"]\n"
+            ),
+            &[],
+        ));
+        let names: Vec<&String> = caller_only.keys().collect();
+        assert_eq!(names, ["MockCrateCaller", "MockPairCaller"]);
+    }
+
+    #[test]
+    fn an_authenticator_circuit_may_come_through_an_export_list() {
+        let relay = "[auth]\nmodule = \"auth/Relay\"\ncall = 'authenticate(pad(32, \"{salt}\"))'\ncaller_type = { name = \"Badge\", module = \"who/Who\" }\n\n[[mock]]\nmodule = \"door/Hinge\"\nvariants = [\"auth\"]\n";
+        let plan = plans(planned("auth-layer", relay, &[]))
+            .remove("MockHinge")
+            .expect("planned");
+        assert_eq!(
+            plan.constructor.expect("a constructor").call.args,
+            ["Relay_authenticate(pad(32, \"MockHinge\"))"]
+        );
+    }
+
+    #[test]
+    fn out_dir_and_include_stay_inside_the_config_directory_in_every_table() {
+        let outcome = planned(
+            "auth-layer",
+            &format!(
+                "{AUTH}[[mock]]\nmodule = \"door/Hinge\"\nauth.include = \"/x/MockHinge.fragment.compact\"\n\
+                 caller.include = \"../../../../../MockHinge.fragment.compact\"\n\n\
+                 [[mock]]\nmodule = \"door/Bell\"\nout_dir = \"../../{{dir}}\"\n\n\
+                 [[mock]]\nmodule = \"door/Mirror\"\ninclude = \"../../../../MockMirror.fragment.compact\"\n"
+            ),
+            &[],
+        );
+        let config = "config compact-mock.toml";
+        assert_eq!(
+            errors(&outcome),
+            [
+                format!(
+                    "{config}: MockHinge: include \"/x/MockHinge.fragment.compact\" must be a path relative to the output directory"
+                ),
+                format!(
+                    "{config}: MockHingeCaller: include \"../../../../../MockHinge.fragment.compact\" leads outside the config directory"
+                ),
+                format!(
+                    "{config}: MockBell: out_dir \"../../{{dir}}\" leads outside the config directory"
+                ),
+                format!(
+                    "{config}: MockBellCaller: out_dir \"../../{{dir}}\" leads outside the config directory"
+                ),
+                "MockMirror: fragment MockMirror.fragment.compact does not exist".to_owned(),
+                "MockMirrorCaller: fragment MockMirror.fragment.compact does not exist".to_owned(),
             ]
         );
     }

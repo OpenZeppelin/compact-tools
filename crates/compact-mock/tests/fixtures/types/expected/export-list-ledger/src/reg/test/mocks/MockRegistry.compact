@@ -5,7 +5,15 @@ pragma language_version >= 0.28.0;
 
 import CompactStandardLibrary;
 
-import { isMember, leave, join } from "../../Registry";
+import { isMember, leave, join, pass } from "../../Registry";
 import "../../Registry" prefix Registry_;
 
-export { isMember, leave, join, Registry__members, Registry__count };
+export {
+  Registry_Pass,
+  isMember,
+  leave,
+  join,
+  pass,
+  Registry__members,
+  Registry__count
+};

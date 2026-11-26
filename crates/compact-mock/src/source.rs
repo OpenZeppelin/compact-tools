@@ -134,6 +134,9 @@ pub struct TypeDecl {
     pub name: String,
     pub exported: bool,
     pub kind: TypeKind,
+    pub generics: Vec<GenericParam>,
+    /// A struct's field types, whitespace-collapsed; empty for an enum or alias.
+    pub fields: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -330,10 +333,16 @@ fn type_decl(node: Node<'_>, text: &str) -> TypeDecl {
             nominal: has_token(node, "new"),
         },
     };
+    let fields = match (&kind, node.child_by_field_name("body")) {
+        (TypeKind::Struct, Some(body)) => params::field_types(&blanked(body, text)),
+        _ => Vec::new(),
+    };
     TypeDecl {
         name: field_text(node, "name", text),
         exported: has_token(node, "export"),
         kind,
+        generics: generic_parameters(node, text),
+        fields,
     }
 }
 
@@ -586,6 +595,22 @@ mod tests {
             .collect();
         assert!(matches!(kinds[1], TypeKind::Enum));
         assert!(matches!(kinds[2], TypeKind::Struct));
+    }
+
+    #[test]
+    fn a_struct_keeps_its_type_parameters_and_field_types_without_comments() {
+        let module = parse(
+            Path::new("/m/Box.compact"),
+            "module M {\n  struct Box<T> { a: T; /* b: Wrong; */ c: Maybe<Who>, }\n}\n",
+        )
+        .expect("the module parses")
+        .module
+        .expect("a module");
+        let Item::Type(boxed) = &module.items[0] else {
+            panic!("the struct is the only item");
+        };
+        assert_eq!(boxed.generics[0].name, "T");
+        assert_eq!(boxed.fields, ["T", "Maybe<Who>"]);
     }
 
     #[test]

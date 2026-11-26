@@ -1,8 +1,8 @@
 //! Name resolution across files.
 //!
 //! Files are parsed on first use and cached by canonical path, so a name the plan never
-//! asks about never opens its file. Lookups follow re-exports through selective imports,
-//! up to a fixed depth.
+//! asks about never opens its file. Lookups follow re-exports through selective imports
+//! and through a module's `export { }`, up to a fixed depth.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -264,7 +264,21 @@ impl Files {
         if let Some(decl) = local(file, &module.items, name) {
             return Ok(Resolved::Local(decl));
         }
+        self.imported(file, name, 0)
+    }
 
+    /// Resolves `name` through `file`'s imports: selective, then prefixed, then the
+    /// builtins, then whole-module imports. `depth` counts the files already crossed.
+    fn imported(
+        &mut self,
+        file: FileId,
+        name: &str,
+        depth: usize,
+    ) -> Result<Resolved, SourceError> {
+        let source = self.get(file);
+        let Some(module) = source.module.as_ref() else {
+            return Ok(Resolved::Std);
+        };
         for (index, import) in module.imports.iter().enumerate() {
             if let Some(element) = import
                 .selection
@@ -272,7 +286,7 @@ impl Files {
                 .position(|element| element.local() == name)
             {
                 let original = import.selection[element].name.clone();
-                let lookup = self.through(file, import, &original, 0)?;
+                let lookup = self.through(file, import, &original, depth)?;
                 return Ok(Resolved::Selective {
                     import: index,
                     element,
@@ -289,7 +303,7 @@ impl Files {
             .filter(|(_, _, prefix)| name.len() > prefix.len() && name.starts_with(prefix))
             .max_by_key(|(_, _, prefix)| prefix.len());
         if let Some((index, import, prefix)) = prefixed {
-            let lookup = self.through(file, import, &name[prefix.len()..], 0)?;
+            let lookup = self.through(file, import, &name[prefix.len()..], depth)?;
             return Ok(Resolved::Prefixed {
                 import: index,
                 lookup,
@@ -300,7 +314,9 @@ impl Files {
             return Ok(Resolved::Builtin);
         }
 
-        let mut missing = None;
+        // A missing file or a chain past the depth limit may hold the name, so either
+        // outranks the standard-library fallback.
+        let mut unresolved = None;
         for (index, import) in module.imports.iter().enumerate() {
             let whole = import.selection.is_empty()
                 && import.prefix.is_none()
@@ -308,22 +324,21 @@ impl Files {
             if !whole {
                 continue;
             }
-            match self.through(file, import, name, 0)? {
+            match self.through(file, import, name, depth)? {
                 Lookup::Found(decl) => {
                     return Ok(Resolved::Unprefixed {
                         import: index,
                         lookup: Lookup::Found(decl),
                     });
                 }
-                Lookup::Missing(gap) if missing.is_none() => missing = Some((index, gap)),
-                _ => {}
+                Lookup::NotFound => {}
+                lookup => {
+                    unresolved.get_or_insert((index, lookup));
+                }
             }
         }
-        if let Some((import, gap)) = missing {
-            return Ok(Resolved::Unprefixed {
-                import,
-                lookup: Lookup::Missing(gap),
-            });
+        if let Some((import, lookup)) = unresolved {
+            return Ok(Resolved::Unprefixed { import, lookup });
         }
         Ok(Resolved::Std)
     }
@@ -351,8 +366,9 @@ impl Files {
         }
     }
 
-    /// Finds a declaration named `name` in `file`'s module, following the module's own
-    /// selective imports for names it re-exports.
+    /// Finds a declaration named `name` in `file`'s module. A name the module's
+    /// `export { }` lists resolves in the module's own scope, through every import form;
+    /// any other name follows selective imports only.
     fn find(&mut self, file: FileId, name: &str, depth: usize) -> Result<Lookup, SourceError> {
         if depth > MAX_DEPTH {
             return Ok(Lookup::TooDeep);
@@ -364,6 +380,13 @@ impl Files {
         if let Some(decl) = local(file, &module.items, name) {
             return Ok(Lookup::Found(decl));
         }
+        if listed(&module.items, name) {
+            return Ok(self
+                .imported(file, name, depth)?
+                .lookup()
+                .cloned()
+                .unwrap_or(Lookup::NotFound));
+        }
         for import in &module.imports {
             if let Some(element) = import
                 .selection
@@ -374,6 +397,21 @@ impl Files {
             }
         }
         Ok(Lookup::NotFound)
+    }
+
+    /// The type parameters and field types of the struct `decl` names.
+    fn struct_fields(&self, decl: &Decl) -> Option<(Vec<GenericParam>, Vec<String>)> {
+        self.parsed[decl.file]
+            .module
+            .as_ref()?
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Type(ty) if ty.name == decl.name && ty.kind == TypeKind::Struct => {
+                    Some((ty.generics.clone(), ty.fields.clone()))
+                }
+                _ => None,
+            })
     }
 
     /// How `ty`, written in `file` with circuit `generics`, relates to the declaration
@@ -418,17 +456,30 @@ impl Files {
                 contains = true;
                 continue;
             }
-            let DeclKind::Alias { rhs, nominal } = &decl.kind else {
+            if !matches!(decl.kind, DeclKind::Alias { .. } | DeclKind::Struct) {
                 continue;
-            };
+            }
             if depth >= MAX_DEPTH {
                 return Ok(CallerMatch::Unresolved);
             }
-            match self.caller_match_at(decl.file, &[], rhs, caller, depth + 1)? {
-                CallerMatch::Exact if single && !nominal => return Ok(CallerMatch::Exact),
-                CallerMatch::Exact | CallerMatch::Contains => contains = true,
-                CallerMatch::Unresolved => return Ok(CallerMatch::Unresolved),
-                CallerMatch::No => {}
+            if let DeclKind::Alias { rhs, nominal } = &decl.kind {
+                match self.caller_match_at(decl.file, &[], rhs, caller, depth + 1)? {
+                    CallerMatch::Exact if single && !nominal => return Ok(CallerMatch::Exact),
+                    CallerMatch::Exact | CallerMatch::Contains => contains = true,
+                    CallerMatch::Unresolved => return Ok(CallerMatch::Unresolved),
+                    CallerMatch::No => {}
+                }
+                continue;
+            }
+            let Some((params, fields)) = self.struct_fields(decl) else {
+                continue;
+            };
+            for field in &fields {
+                match self.caller_match_at(decl.file, &params, field, caller, depth + 1)? {
+                    CallerMatch::Exact | CallerMatch::Contains => contains = true,
+                    CallerMatch::Unresolved => return Ok(CallerMatch::Unresolved),
+                    CallerMatch::No => {}
+                }
             }
         }
         Ok(if contains {
@@ -439,8 +490,18 @@ impl Files {
     }
 }
 
-/// The declaration named `name` among `items`, export lists aside.
+/// Whether an `export { }` among `items` names `name`.
+fn listed(items: &[Item], name: &str) -> bool {
+    items.iter().any(|item| match item {
+        Item::ExportList(names) => names.iter().any(|listed| listed == name),
+        _ => false,
+    })
+}
+
+/// The declaration named `name` among `items`. It is exported when its own `export`
+/// keyword or an `export { }` of the module says so.
 fn local(file: FileId, items: &[Item], name: &str) -> Option<Decl> {
+    let in_list = listed(items, name);
     items.iter().find_map(|item| {
         let (exported, kind) = match item {
             Item::Circuit(circuit) if circuit.name == name => (circuit.exported, DeclKind::Circuit),
@@ -462,7 +523,7 @@ fn local(file: FileId, items: &[Item], name: &str) -> Option<Decl> {
         Some(Decl {
             file,
             name: name.to_owned(),
-            exported,
+            exported: exported || in_list,
             kind,
         })
     })
@@ -748,6 +809,106 @@ mod tests {
         assert_eq!(check("Field"), CallerMatch::No);
         assert_eq!(check("Nobody"), CallerMatch::Unresolved);
         assert_eq!(check("Loop"), CallerMatch::Unresolved);
+    }
+
+    #[test]
+    fn an_export_list_re_exports_names_from_whole_and_prefixed_imports() {
+        let (root, mut files) = tree(&[
+            ("id/Id.compact", ID),
+            (
+                "hub/Hub.compact",
+                "module Hub {\n  import \"../id/Id\";\n  import \"../id/Id\" prefix Id_;\n  export { Who, Id_Who };\n}\n",
+            ),
+            (
+                "hub/Quiet.compact",
+                "module Quiet {\n  import \"../id/Id\";\n}\n",
+            ),
+            (
+                "a/M.compact",
+                "module M {\n  import \"../hub/Quiet\";\n  import \"../hub/Hub\";\n}\n",
+            ),
+        ]);
+        let module = load(&mut files, root.path(), "a/M.compact");
+        let id = load(&mut files, root.path(), "id/Id.compact");
+        let caller = (id, "Who".to_owned());
+        let mut check = |ty: &str| files.caller_match(module, &[], ty, &caller).expect("ok");
+        assert_eq!(check("Who"), CallerMatch::Exact);
+        assert_eq!(check("Id_Who"), CallerMatch::Exact);
+        assert_eq!(check("Account"), CallerMatch::No);
+        let resolved = files.resolve(module, &[], "Who").expect("resolves");
+        assert!(matches!(resolved, Resolved::Unprefixed { import: 1, .. }));
+    }
+
+    #[test]
+    fn a_cycle_of_whole_module_re_exports_does_not_resolve() {
+        let (root, mut files) = tree(&[
+            (
+                "A.compact",
+                "module A {\n  import \"./B\";\n  export { X };\n}\n",
+            ),
+            (
+                "B.compact",
+                "module B {\n  import \"./A\";\n  export { X };\n}\n",
+            ),
+            ("M.compact", "module M {\n  import \"./A\";\n}\n"),
+        ]);
+        let module = load(&mut files, root.path(), "M.compact");
+        let resolved = files.resolve(module, &[], "X").expect("resolves");
+        assert!(matches!(
+            resolved,
+            Resolved::Unprefixed {
+                lookup: Lookup::TooDeep,
+                ..
+            }
+        ));
+        assert!(matches!(
+            files.resolve(module, &[], "Maybe").expect("resolves"),
+            Resolved::Std
+        ));
+        let caller = (module, "Nothing".to_owned());
+        assert_eq!(
+            files.caller_match(module, &[], "X", &caller).expect("ok"),
+            CallerMatch::Unresolved
+        );
+    }
+
+    #[test]
+    fn a_declaration_named_by_the_module_export_list_is_exported() {
+        let (root, mut files) = tree(&[(
+            "M.compact",
+            "module M {\n  struct Box { }\n  struct Kept { }\n  export { Box };\n}\n",
+        )]);
+        let module = load(&mut files, root.path(), "M.compact");
+        let exported = |files: &mut Files, name: &str| {
+            files
+                .resolve(module, &[], name)
+                .expect("resolves")
+                .decl()
+                .expect("found")
+                .exported
+        };
+        assert!(exported(&mut files, "Box"));
+        assert!(!exported(&mut files, "Kept"));
+    }
+
+    #[test]
+    fn a_struct_holding_the_caller_type_contains_it() {
+        let (root, mut files) = tree(&[
+            ("id/Id.compact", ID),
+            (
+                "a/M.compact",
+                "module M {\n  import { Who } from \"../id/Id\";\n  struct Held { who: Who; }\n  struct Outer { inner: Held, n: Field }\n  struct Slot<T> { item: T; }\n  struct Plain { n: Field; }\n}\n",
+            ),
+        ]);
+        let module = load(&mut files, root.path(), "a/M.compact");
+        let id = load(&mut files, root.path(), "id/Id.compact");
+        let caller = (id, "Who".to_owned());
+        let mut check = |ty: &str| files.caller_match(module, &[], ty, &caller).expect("ok");
+        assert_eq!(check("Held"), CallerMatch::Contains);
+        assert_eq!(check("Outer"), CallerMatch::Contains);
+        assert_eq!(check("Slot<Who>"), CallerMatch::Contains);
+        assert_eq!(check("Slot<Field>"), CallerMatch::No);
+        assert_eq!(check("Plain"), CallerMatch::No);
     }
 
     #[test]

@@ -1,0 +1,16 @@
+[[mock]]
+module = "calc/Dial"
+
+[[mock]]
+module = "calc/Dial"
+name = "MockDialTurnless"
+exclude = ["turn"]
+
+[[mock]]
+module = "calc/Reset"
+
+[[mock]]
+module = "calc/Reset"
+name = "MockResetNone"
+init = "none"
+exclude = ["initialize"]

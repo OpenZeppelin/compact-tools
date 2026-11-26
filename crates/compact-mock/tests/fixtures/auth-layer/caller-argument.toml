@@ -1,0 +1,13 @@
+[auth]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
+caller_type = { name = "Badge", module = "who/Who" }
+
+[[mock]]
+module = "door/Shelf"
+circuit_args = { initialize = ["Badge"], stack = ["Maybe<Badge>"] }
+
+[[mock]]
+module = "door/Bin"
+module_args = ["Badge"]
+circuit_args = { gen = ["Badge"] }

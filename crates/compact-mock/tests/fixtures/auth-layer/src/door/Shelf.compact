@@ -1,0 +1,16 @@
+pragma language_version >= 0.28.0;
+
+module Shelf {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export circuit initialize<T>(first: T): [] {
+  }
+
+  export circuit open(caller: Badge): [] {
+  }
+
+  export circuit stack<T>(item: T): [] {
+  }
+}

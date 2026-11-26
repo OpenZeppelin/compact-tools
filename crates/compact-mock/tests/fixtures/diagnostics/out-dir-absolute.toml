@@ -1,0 +1,4 @@
+out_dir = "/tmp/mocks/{dir}"
+
+[[mock]]
+module = "ok/Ok"

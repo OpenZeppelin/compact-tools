@@ -24,6 +24,8 @@ struct Row {
     /// An edit to the copied tree before the run.
     setup: Option<fn(&Path)>,
     args: &'static [&'static str],
+    /// Run with stdout a pipe whose reader is closed.
+    closed_stdout: bool,
     /// One stderr line, without the `compact-mock: ` prefix.
     message: &'static str,
 }
@@ -33,6 +35,7 @@ const fn row(case: &'static str, args: &'static [&'static str], message: &'stati
         case: Some(case),
         setup: None,
         args,
+        closed_stdout: false,
         message,
     }
 }
@@ -68,13 +71,18 @@ fn run(row: &Row) -> (i32, String) {
     if let Some(setup) = row.setup {
         setup(directory.path());
     }
-    let output = Command::cargo_bin("compact-mock")
-        .expect("the binary is built alongside this test")
+    let mut command =
+        Command::cargo_bin("compact-mock").expect("the binary is built alongside this test");
+    command
         .current_dir(directory.path())
         .arg("generate")
-        .args(row.args)
-        .output()
-        .expect("the binary ran");
+        .args(row.args);
+    if row.closed_stdout {
+        let (reader, writer) = std::io::pipe().expect("a pipe");
+        drop(reader);
+        command.stdout(writer);
+    }
+    let output = command.output().expect("the binary ran");
     let root = directory
         .path()
         .canonicalize()
@@ -93,6 +101,7 @@ const ROWS: &[Row] = &[
         case: None,
         setup: None,
         args: &[],
+        closed_stdout: false,
         message: "no compact-mock.toml in <root> or any parent; pass --config <FILE>",
     },
     row(
@@ -169,6 +178,31 @@ const ROWS: &[Row] = &[
         "diagnostics",
         &["--config", "placeholder.toml"],
         "config placeholder.toml: out_dir \"{dir}/{name}\" has an unknown placeholder {name}",
+    ),
+    row(
+        "diagnostics",
+        &["--config", "out-dir-absolute.toml"],
+        "config out-dir-absolute.toml: out_dir \"/tmp/mocks/{dir}\" must be a path relative to src",
+    ),
+    row(
+        "diagnostics",
+        &["--config", "include-absolute.toml"],
+        "config include-absolute.toml: MockOk: include \"/tmp/Ok.fragment.compact\" must be a path relative to the output directory",
+    ),
+    row(
+        "diagnostics",
+        &["--config", "out-dir-outside.toml"],
+        "config out-dir-outside.toml: MockOk: out_dir \"../../escaped/{dir}\" leads outside the config directory",
+    ),
+    row(
+        "diagnostics",
+        &["--config", "include-outside.toml"],
+        "config include-outside.toml: MockOk: include \"../../../../../Ok.fragment.compact\" leads outside the config directory",
+    ),
+    row(
+        "diagnostics",
+        &["--config", "sub/src-outside.toml"],
+        "config sub/src-outside.toml: MockOk: out_dir \"{dir}/test/mocks\" leads outside the config directory",
     ),
     row(
         "diagnostics",
@@ -295,6 +329,11 @@ const ROWS: &[Row] = &[
     ),
     row(
         "generics",
+        &["--config", "module-generics-errors.toml"],
+        "MockBag: circuit initialize has type parameters <#k> and the constructor calls it; set circuit_args.initialize",
+    ),
+    row(
+        "generics",
         &["--config", "circuit-generics-errors.toml"],
         "MockPick: circuit_args.choose has 2 arguments; choose takes 1",
     ),
@@ -370,6 +409,66 @@ const ROWS: &[Row] = &[
     ),
     row(
         "auth-layer",
+        &["--config", "contains-caller.toml"],
+        "MockCrate: parameter parcel of ship has type Parcel, which contains Badge but is not it; add ship to exclude",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "contains-caller.toml"],
+        "MockCrate: parameter first of initialize has type Parcel, which contains Badge but is not it; set init = \"none\" and add initialize to exclude",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "caller-twice.toml"],
+        "MockPair: swap takes 2 Badge parameters, and the authenticated mock would pass one caller to all of them; add swap to exclude, or use the *Caller variant",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "caller-twice.toml"],
+        "MockPair: initialize takes 2 Badge parameters, and the authenticated mock would pass one caller to all of them; set init = \"none\" and add initialize to exclude, or use the *Caller variant",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "caller-argument.toml"],
+        "MockShelf: circuit_args.stack sets a type parameter to Maybe<Badge>, which is or contains Badge, so the mock could take a caller it does not authenticate; add stack to exclude",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "caller-argument.toml"],
+        "MockShelf: circuit_args.initialize sets a type parameter to Badge, which is or contains Badge, so the mock could take a caller it does not authenticate; set init = \"none\" and add initialize to exclude",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "caller-argument.toml"],
+        "MockShelfCaller: circuit_args.stack sets a type parameter to Maybe<Badge>, which is or contains Badge, so the mock could take a caller it does not authenticate; add stack to exclude",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "caller-argument.toml"],
+        "MockBin: circuit_args.gen sets a type parameter to Badge, which is or contains Badge, so the mock could take a caller it does not authenticate; add gen to exclude",
+    ),
+    row(
+        "auth-layer",
+        &["--config", "caller-argument.toml"],
+        "MockBin: module_args sets a type parameter to Badge, which is or contains Badge, so the mock could take a caller it does not authenticate; write the mock by hand",
+    ),
+    row(
+        "rules",
+        &["--config", "overload.toml"],
+        "MockDial: calc/Dial exports 2 circuits named turn, and overloads are not supported; add turn to exclude or write the mock by hand",
+    ),
+    row(
+        "rules",
+        &["--config", "overload.toml"],
+        "MockReset: calc/Reset exports 2 circuits named initialize, and overloads are not supported; set init = \"none\" and add initialize to exclude or write the mock by hand",
+    ),
+    row(
+        "rules",
+        &["--config", "guard-shadow.toml"],
+        "MockDial: guarded circuit spin has a parameter named _invocations, which hides the guard counter; leave spin unguarded",
+    ),
+    row(
+        "auth-layer",
         &["--config", "prefix-collision.toml"],
         "MockDoor: prefix Who_ is used by two imports (\"../../../who/Who\" and \"../../Door\")",
     ),
@@ -386,6 +485,7 @@ const ROWS: &[Row] = &[
                 .expect("a directory sits at the target path");
         }),
         args: &["--config", "disclose.toml"],
+        closed_stdout: false,
         message: "cannot read src/calc/test/mocks/MockCalc.compact",
     },
     Row {
@@ -395,7 +495,15 @@ const ROWS: &[Row] = &[
                 .expect("the blocker is written");
         }),
         args: &[],
+        closed_stdout: false,
         message: "cannot write src/far/test/mocks/MockFar.compact",
+    },
+    Row {
+        case: Some("ownable-pair"),
+        setup: None,
+        args: &["--check"],
+        closed_stdout: true,
+        message: "cannot write to stdout",
     },
     // summary
     row(

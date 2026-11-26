@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockDial: calc/Dial exports 2 circuits named turn, and overloads are not supported; add turn to exclude or write the mock by hand
+compact-mock: MockReset: calc/Reset exports 2 circuits named initialize, and overloads are not supported; set init = "none" and add initialize to exclude or write the mock by hand
+compact-mock: 2 errors; nothing written.
