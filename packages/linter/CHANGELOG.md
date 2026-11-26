@@ -8,6 +8,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.2.0 (2026-11-26)
+
 ### Added
 
 - `check` reports a tag value, section body or untagged paragraph still equal to `fix.placeholder`, such as the `TODO` that `fix` writes, as `doc-placeholder`: a warning that `--strict` makes an error (#244)

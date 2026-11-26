@@ -1,7 +1,7 @@
 {
   "name": "@openzeppelin/compact-linter",
   "description": "Doc-comment linter for Compact sources",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "keywords": [
     "compact",
     "lint",
