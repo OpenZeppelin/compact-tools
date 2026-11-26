@@ -1,0 +1,13 @@
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcFlag"
+init = { flag = "ready" }
+
+[[mock]]
+module = "calc/Switch"
+init = { flag = "on" }
+
+[[mock]]
+module = "calc/Switch"
+name = "MockSwitchPlain"
+init = "plain"

@@ -1,0 +1,3 @@
+[[mock]]
+module = "calc/Calc"
+rename = { total = "sum", reset = "clear" }

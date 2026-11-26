@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Members {
+  import CompactStandardLibrary;
+
+  export ledger _members: Set<Bytes<32>>;
+
+  export circuit isMember(who: Bytes<32>): Boolean {
+    return _members.member(disclose(who));
+  }
+}

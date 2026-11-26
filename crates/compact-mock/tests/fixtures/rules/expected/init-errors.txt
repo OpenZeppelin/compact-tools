@@ -1,0 +1,8 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockSum: init = "plain" needs an exported initialize circuit in calc/Sum
+compact-mock: MockSumFlag: init = { flag = "ready" } needs an exported initialize circuit in calc/Sum
+compact-mock: MockCalc: init flag start clashes with an initialize parameter
+compact-mock: MockCalcGuarded: guard names initialize, which MockCalcGuarded does not expose
+compact-mock: 4 errors; nothing written.

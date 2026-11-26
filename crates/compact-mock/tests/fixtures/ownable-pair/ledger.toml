@@ -1,0 +1,12 @@
+spdx = "MIT"
+
+[auth]
+module = "crypto/authentication/AuthPrfPseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+caller_type = { name = "Caller", module = "identifier/Identifier" }
+
+[[mock]]
+module = "access/Ownable"
+ledger = false
+auth.init = { flag = "isInit" }
+caller.ledger = true

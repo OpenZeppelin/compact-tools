@@ -1,0 +1,13 @@
+[[mock]]
+module = "Root"
+
+[[mock]]
+module = "a/b/Deep"
+out_dir = "{parent}/mocks"
+
+[[mock]]
+module = "near/Near"
+out_dir = "{dir}"
+
+[[mock]]
+module = "far/Far"

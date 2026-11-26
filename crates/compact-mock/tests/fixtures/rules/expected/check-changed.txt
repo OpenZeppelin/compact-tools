@@ -1,0 +1,14 @@
+exit: 1
+--- stdout
+changed src/calc/test/mocks/MockCalc.compact
+--- src/calc/test/mocks/MockCalc.compact
++++ src/calc/test/mocks/MockCalc.compact (generated)
+@@ -19,5 +19,5 @@
+ }
+ 
+ export circuit total(): Uint<64> {
+-  return Calc_total();
++  return disclose(Calc_total());
+ }
+--- stderr
+compact-mock: 1 of 1 mock out of date; run compact-mock generate.

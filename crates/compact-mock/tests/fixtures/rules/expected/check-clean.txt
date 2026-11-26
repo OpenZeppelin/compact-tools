@@ -1,0 +1,4 @@
+exit: 0
+--- stdout
+--- stderr
+compact-mock: 1 mock up to date.

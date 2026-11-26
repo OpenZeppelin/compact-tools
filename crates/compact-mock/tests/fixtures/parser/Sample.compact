@@ -1,0 +1,29 @@
+pragma language_version >= 0.28.0;
+
+module Sample<#n, T> {
+  import CompactStandardLibrary;
+  import { Thing, Other as Renamed } from "../lib/Thing";
+  import "./Helper"<Bytes<32>> prefix Helper_;
+
+  export { _shared };
+
+  export struct Point { x: Field; }
+  enum Hidden { A, B }
+  export type Wide = Either<Bytes<32>, /* note */ ContractAddress>;
+  export new type Tag = Bytes<32>;
+
+  export sealed ledger _salt: Bytes<32>;
+  ledger _count: Counter;
+
+  export witness wit_key(): Bytes<32>;
+
+  export pure circuit hash<#k>(
+    value: Vector<k, Field>, // trailing note
+    salt: Bytes<32>,
+  ): Bytes<32> {
+    return pad(32, "");
+  }
+
+  circuit helper({a, b}: Point): [] {
+  }
+}

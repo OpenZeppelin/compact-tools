@@ -1,0 +1,6 @@
+[[mock]]
+module = "lib/Tally"
+name = "MockTallyFresh"
+
+[[mock]]
+module = "lib/Tally"

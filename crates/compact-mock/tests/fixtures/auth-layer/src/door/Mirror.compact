@@ -1,0 +1,15 @@
+pragma language_version >= 0.28.0;
+
+module Mirror {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export pure circuit reflect(caller: Badge): Bytes<32> {
+    return caller.key;
+  }
+
+  export pure circuit echo(value: Bytes<32>): Bytes<32> {
+    return value;
+  }
+}

@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Color {
+  import CompactStandardLibrary;
+
+  export struct Rgb {
+    red: Uint<8>;
+    green: Uint<8>;
+    blue: Uint<8>;
+  }
+}

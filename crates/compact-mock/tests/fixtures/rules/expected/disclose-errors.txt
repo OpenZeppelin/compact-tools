@@ -1,0 +1,7 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockCalc: disclose names nope, which calc/Calc does not export as a circuit
+compact-mock: MockCalc: disclose names reset, which returns []
+compact-mock: MockSum: disclose names clear, which returns []
+compact-mock: 3 errors; nothing written.

@@ -1,0 +1,30 @@
+pragma language_version   >=   0.28.0;
+pragma language_version >= 0.29.0;
+
+module Comments {
+  import CompactStandardLibrary;
+  import "./Helper"<Bytes</* width */32>> prefix Helper_;
+
+  export ledger _slots: Map<
+    Uint<64>, // key
+    Bytes<32>
+  >;
+
+  export type Pair = Either</* left */ Field, Uint<8>>;
+
+  export witness wit_seed(): Bytes<32>;
+  witness wit_hidden(): Field;
+
+  export enum Mode { on, off }
+  struct Hidden { x: Field; }
+
+  export circuit tidy(
+    a: Field, /* b: Wrong, ) */
+    c: Opaque<"x  y">, // c: Wrong,
+  ): Either<
+    Field, // left
+    Uint<8>
+  > {
+    return default<Either<Field, Uint<8>>>;
+  }
+}

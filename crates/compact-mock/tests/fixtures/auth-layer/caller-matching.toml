@@ -1,0 +1,15 @@
+spdx = "Apache-2.0"
+
+[auth]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
+caller_type = { name = "Badge", module = "who/Who" }
+
+[[mock]]
+module = "door/Door"
+
+[[mock]]
+module = "door/Plain"
+
+[[mock]]
+module = "door/Twin"

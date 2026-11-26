@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Near {
+  import CompactStandardLibrary;
+
+  export ledger _hits: Counter;
+
+  export circuit hit(): [] {
+    _hits.increment(1);
+  }
+}

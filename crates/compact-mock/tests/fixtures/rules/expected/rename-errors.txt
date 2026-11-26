@@ -1,0 +1,10 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockCalcA: rename target double clashes with circuit double
+compact-mock: MockCalcB: rename target Calc__total clashes with ledger field Calc__total
+compact-mock: MockCalcC: rename target _invocations clashes with ledger _invocations
+compact-mock: MockCalcD: rename names reset, which MockCalcD does not expose
+compact-mock: MockCalcE: rename target sum clashes with circuit sum
+compact-mock: MockCalcE: rename target sum clashes with circuit sum
+compact-mock: 6 errors; nothing written.

@@ -1,0 +1,17 @@
+[[mock]]
+module = "calc/Sum"
+init = "plain"
+
+[[mock]]
+module = "calc/Sum"
+name = "MockSumFlag"
+init = { flag = "ready" }
+
+[[mock]]
+module = "calc/Calc"
+init = { flag = "start" }
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcGuarded"
+guard = ["initialize"]

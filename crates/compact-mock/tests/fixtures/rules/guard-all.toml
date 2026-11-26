@@ -1,0 +1,4 @@
+[[mock]]
+module = "calc/Calc"
+init = "none"
+guard = true

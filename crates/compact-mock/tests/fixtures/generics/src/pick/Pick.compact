@@ -1,0 +1,16 @@
+pragma language_version >= 0.28.0;
+
+module Pick<T> {
+  import CompactStandardLibrary;
+
+  export pure circuit choose<T>(flag: Boolean, a: T, b: T): T {
+    return flag ? a : b;
+  }
+
+  export circuit keep<#k>(values: Vector<k, Field>): [] {
+  }
+
+  export circuit hold(value: T): T {
+    return value;
+  }
+}

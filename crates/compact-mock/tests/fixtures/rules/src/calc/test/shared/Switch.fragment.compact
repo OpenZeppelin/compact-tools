@@ -1,0 +1,4 @@
+export circuit flipTwice(): [] {
+  Switch_flip();
+  Switch_flip();
+}

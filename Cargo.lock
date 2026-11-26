@@ -459,6 +459,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "compact-mock"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "clap",
+ "compact-tree-sitter",
+ "serde",
+ "similar",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml",
+ "tree-sitter",
+]
+
+[[package]]
 name = "compact-profile"
 version = "0.1.0"
 dependencies = [

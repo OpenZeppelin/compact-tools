@@ -1,0 +1,16 @@
+pragma language_version >= 0.28.0;
+
+module Hinge {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export ledger _keeper: Bytes<32>;
+
+  export circuit initialize(keeper: Badge): [] {
+    _keeper = disclose(keeper.key);
+  }
+
+  export circuit swing(): [] {
+  }
+}

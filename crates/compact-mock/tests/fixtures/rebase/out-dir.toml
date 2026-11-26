@@ -1,0 +1,8 @@
+out_dir = "{dir}/gen"
+
+[[mock]]
+module = "Root"
+
+[[mock]]
+module = "near/Near"
+out_dir = "{dir}/../shared"

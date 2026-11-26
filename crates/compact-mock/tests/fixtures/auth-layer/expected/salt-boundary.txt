@@ -1,0 +1,8 @@
+exit: 0
+--- stdout
+wrote src/door/test/mocks/MockHingeA.compact
+wrote src/door/test/mocks/MockHingeB.compact
+wrote src/door/test/mocks/MockHingeC.compact
+wrote src/door/test/mocks/MockHingeD.compact
+--- stderr
+compact-mock: 4 mocks, 4 written, 0 unchanged.

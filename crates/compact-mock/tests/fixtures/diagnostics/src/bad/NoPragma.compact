@@ -1,0 +1,4 @@
+module NoPragma {
+  export circuit ping(): [] {
+  }
+}

@@ -1,0 +1,3 @@
+[[mock]]
+module = "ok/Ok"
+out_dir = "{dir}/{name}"

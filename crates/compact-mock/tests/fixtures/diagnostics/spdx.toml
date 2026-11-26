@@ -1,0 +1,6 @@
+spdx = """
+MIT
+"""
+
+[[mock]]
+module = "ok/Ok"

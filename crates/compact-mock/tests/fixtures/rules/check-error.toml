@@ -1,0 +1,7 @@
+[[mock]]
+module = "calc/Calc"
+disclose = ["double", "total"]
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcOld"

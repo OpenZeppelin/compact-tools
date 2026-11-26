@@ -1,0 +1,4 @@
+[[mock]]
+module = "pick/Pick"
+module_args = ["Bytes<32>"]
+circuit_args = { choose = ["Field"], keep = ["4"] }

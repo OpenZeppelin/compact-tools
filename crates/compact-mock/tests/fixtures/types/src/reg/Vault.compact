@@ -1,0 +1,14 @@
+pragma language_version >= 0.28.0;
+
+module Vault {
+  import CompactStandardLibrary;
+
+  export sealed ledger _key: Bytes<32>;
+  ledger _secret: Bytes<32>;
+  export ledger _reads: Counter;
+
+  export circuit read(): Bytes<32> {
+    _reads.increment(1);
+    return _key;
+  }
+}

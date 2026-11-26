@@ -1,0 +1,26 @@
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcA"
+rename = { total = "double" }
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcB"
+rename = { total = "Calc__total" }
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcC"
+guard = ["double"]
+rename = { reset = "_invocations" }
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcD"
+exclude = ["reset"]
+rename = { reset = "clear" }
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcE"
+rename = { total = "sum", reset = "sum" }

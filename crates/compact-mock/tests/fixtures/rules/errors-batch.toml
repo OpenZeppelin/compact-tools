@@ -1,0 +1,15 @@
+[[mock]]
+module = "calc/Sum"
+init = "plain"
+
+[[mock]]
+module = "calc/Calc"
+exclude = ["nope"]
+disclose = ["reset"]
+
+[[mock]]
+module = "calc/Gone"
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcOld"

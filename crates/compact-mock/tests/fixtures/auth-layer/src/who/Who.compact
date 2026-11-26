@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Who {
+  import CompactStandardLibrary;
+
+  export struct Badge {
+    key: Bytes<32>;
+  }
+
+  export type Account = Either<Bytes<32>, ContractAddress>;
+}

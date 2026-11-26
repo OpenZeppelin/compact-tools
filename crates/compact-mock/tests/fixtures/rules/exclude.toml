@@ -1,0 +1,3 @@
+[[mock]]
+module = "calc/Calc"
+exclude = ["double", "reset"]

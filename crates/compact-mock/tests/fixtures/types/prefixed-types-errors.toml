@@ -1,0 +1,9 @@
+[[mock]]
+module = "shape/Shape"
+name = "MockShapeHidden"
+guard = ["sketch"]
+
+[[mock]]
+module = "shape/Shape"
+name = "MockShapeType"
+rename = { measure = "Point" }

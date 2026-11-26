@@ -1,0 +1,18 @@
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcA"
+include = true
+
+[[mock]]
+module = "calc/Calc"
+include = true
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcC"
+include = "Calc.extra"
+
+[[mock]]
+module = "calc/Calc"
+name = "MockCalcD"
+include = "Broken.fragment.compact"

@@ -1,0 +1,3 @@
+[[mock]]
+module = "calc/Calc"
+guard = ["double"]

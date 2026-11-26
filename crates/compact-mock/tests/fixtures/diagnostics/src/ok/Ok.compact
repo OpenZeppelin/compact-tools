@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Ok {
+  import CompactStandardLibrary;
+
+  export circuit initialize(): [] {
+  }
+
+  export circuit ping(): [] {
+  }
+}

@@ -1,0 +1,17 @@
+pragma language_version >= 0.28.0;
+
+module Bell {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export ledger _rings: Counter;
+
+  export circuit ring(caller: Badge): [] {
+    _rings.increment(1);
+  }
+
+  export circuit rings(): Uint<64> {
+    return _rings.read();
+  }
+}

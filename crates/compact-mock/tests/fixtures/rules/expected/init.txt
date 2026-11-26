@@ -1,0 +1,7 @@
+exit: 0
+--- stdout
+wrote src/calc/test/mocks/MockCalcFlag.compact
+wrote src/calc/test/mocks/MockSwitch.compact
+wrote src/calc/test/mocks/MockSwitchPlain.compact
+--- stderr
+compact-mock: 3 mocks, 3 written, 0 unchanged.

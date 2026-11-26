@@ -1,0 +1,19 @@
+pragma language_version >= 0.28.0;
+
+module Registry {
+  import CompactStandardLibrary;
+
+  import { _members, isMember } from "./Members";
+
+  export { _members, isMember, leave };
+
+  export ledger _count: Counter;
+
+  export circuit join(who: Bytes<32>): [] {
+    _count.increment(1);
+  }
+
+  circuit leave(): [] {
+    _count.decrement(1);
+  }
+}

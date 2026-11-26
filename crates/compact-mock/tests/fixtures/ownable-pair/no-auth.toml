@@ -1,0 +1,4 @@
+spdx = "MIT"
+
+[[mock]]
+module = "access/Ownable"

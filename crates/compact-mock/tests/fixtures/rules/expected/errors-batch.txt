@@ -1,0 +1,10 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: cannot read src/calc/Gone.compact
+  caused by: No such file or directory (os error 2)
+compact-mock: MockSum: init = "plain" needs an exported initialize circuit in calc/Sum
+compact-mock: MockCalc: exclude names nope, which calc/Calc does not export as a circuit
+compact-mock: MockCalc: disclose names reset, which returns []
+compact-mock: src/calc/test/mocks/MockCalcOld.compact exists without the compact-mock marker; move or delete it to let compact-mock own it
+compact-mock: 5 errors; nothing written.

@@ -1,0 +1,10 @@
+pragma language_version >= 0.28.0;
+
+module Far {
+  import CompactStandardLibrary;
+
+  import { Wide } from "../../vendor/Wide";
+
+  export circuit reach(span: Wide): [] {
+  }
+}

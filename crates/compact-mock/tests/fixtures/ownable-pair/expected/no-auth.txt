@@ -1,0 +1,5 @@
+exit: 0
+--- stdout
+wrote src/access/test/mocks/MockOwnable.compact
+--- stderr
+compact-mock: 1 mock, 1 written, 0 unchanged.

@@ -1,0 +1,14 @@
+pragma language_version >= 0.28.0;
+
+module Pattern {
+  import CompactStandardLibrary;
+
+  export struct Point {
+    x: Field;
+    y: Field;
+  }
+
+  export circuit sum({x, y}: Point): Field {
+    return x + y;
+  }
+}

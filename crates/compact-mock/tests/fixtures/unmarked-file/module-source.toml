@@ -1,0 +1,4 @@
+[[mock]]
+module = "lib/Tally"
+name = "Tally"
+out_dir = "{dir}"

@@ -1,0 +1,20 @@
+[auth]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
+caller_type = { name = "Badge", module = "who/Who" }
+
+[[mock]]
+module = "door/Door"
+name = "MockEntry"
+auth.init = { flag = "armed" }
+auth.salt = "front door"
+caller.init = "none"
+caller.name = "MockEntryOpen"
+
+[[mock]]
+module = "door/Hinge"
+variants = ["caller"]
+
+[[mock]]
+module = "door/Bell"
+auth.name = "MockBellAuth"

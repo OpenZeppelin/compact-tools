@@ -1,0 +1,9 @@
+// Hand-written before the generator existed.
+
+pragma language_version >= 0.28.0;
+
+import CompactStandardLibrary;
+
+import "../../Calc" prefix Calc_;
+
+export { Calc__total };

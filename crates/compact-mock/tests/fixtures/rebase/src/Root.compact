@@ -1,0 +1,10 @@
+pragma language_version >= 0.28.0;
+
+module Root {
+  import CompactStandardLibrary;
+
+  import { Thing } from "./utils/Thing";
+
+  export circuit use(item: Thing): [] {
+  }
+}

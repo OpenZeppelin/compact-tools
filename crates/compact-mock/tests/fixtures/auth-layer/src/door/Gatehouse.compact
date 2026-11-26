@@ -1,0 +1,13 @@
+pragma language_version >= 0.28.0;
+
+module Gatehouse {
+  import CompactStandardLibrary;
+
+  import { Badge as Visitor } from "../who/Who";
+
+  export circuit greet(guest: Visitor): [] {
+  }
+
+  export circuit log(guest: Visitor): [] {
+  }
+}
