@@ -1,4 +1,4 @@
-out_dir = "{dir}/gen"
+out_dir = "{dir}/made"
 
 [[mock]]
 module = "Root"

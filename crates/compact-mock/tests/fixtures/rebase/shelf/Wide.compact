@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Wide {
+  import CompactStandardLibrary;
+
+  export struct Wide {
+    span: Uint<32>;
+  }
+}

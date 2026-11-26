@@ -1,6 +1,6 @@
 exit: 0
 --- stdout
-wrote src/gen/MockRoot.compact
+wrote src/made/MockRoot.compact
 wrote src/shared/MockNear.compact
 --- stderr
 compact-mock: 2 mocks, 2 written, 0 unchanged.
