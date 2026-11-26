@@ -11,9 +11,9 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 
 ### Added
 
-- Each `createSimulator` instance has one async method per circuit, named after it, that calls the circuit through `circuits`. A name the instance already has (a base member, a subclass method, an `Object.prototype` member) keeps its own, and `then` is never installed (#PR_NUMBER)
-- `flatCircuits: true` in the config types those methods on the returned class, so a subclass needs no forwarding methods. Without it the class type is unchanged (#PR_NUMBER)
-- Type exports `FlatCircuits`, `FlatSimulatorClass`, `FlatSimulatorInstance` and `SimulatorClass` (#PR_NUMBER)
+- Each `createSimulator` instance has one async method per circuit, named after it, that calls the circuit through `circuits`. A name the instance already has (a base member, a subclass method, an `Object.prototype` member) keeps its own, and `then` is never installed (#247)
+- `flatCircuits: true` in the config types those methods on the returned class, so a subclass needs no forwarding methods. Without it the class type is unchanged (#247)
+- Type exports `FlatCircuits`, `FlatSimulatorClass`, `FlatSimulatorInstance` and `SimulatorClass` (#247)
 
 ## 0.6.0 (2026-11-16)
 
