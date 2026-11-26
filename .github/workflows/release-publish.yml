@@ -26,6 +26,7 @@ on:
           - compact-deployer
           - compact-launcher
           - compact-linter
+          - compact-mocker
           - compact-profiler
           - compact-simulator
 
@@ -82,6 +83,7 @@ jobs:
           compact-deployer   deployer
           compact-launcher   launcher
           compact-linter     linter     crates/compact-lint     compact-lint     compact-lint
+          compact-mocker     mocker     crates/compact-mock     compact-mock     compact-mock
           compact-profiler   profiler   crates/compact-profile  compact-profile  compact-profile
           compact-simulator  simulator
           '

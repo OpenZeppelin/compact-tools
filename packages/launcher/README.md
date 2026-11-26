@@ -2,8 +2,9 @@
 
 Resolves the prebuilt Rust binary behind a Compact tools bin: an override, a per-user
 cache, or a download from the GitHub release, verified against the digests the calling
-package ships. [`@openzeppelin/compact-linter`](../linter) and
-[`@openzeppelin/compact-profiler`](../profiler) depend on it.
+package ships. [`@openzeppelin/compact-linter`](../linter),
+[`@openzeppelin/compact-profiler`](../profiler) and
+[`@openzeppelin/compact-mocker`](../mocker) depend on it.
 
 ## Usage
 

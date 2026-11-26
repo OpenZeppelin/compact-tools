@@ -1,0 +1,11 @@
+// Hand-written fragment that MockHash.compact includes.
+
+export ledger _seed: Field;
+
+constructor(seed: Field) {
+  _seed = disclose(seed);
+}
+
+export circuit seeded(x: Field): Field {
+  return Hash_mix(_seed, x);
+}

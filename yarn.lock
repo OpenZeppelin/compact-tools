@@ -1070,6 +1070,23 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@openzeppelin/compact-mocker@workspace:packages/mocker":
+  version: 0.0.0-use.local
+  resolution: "@openzeppelin/compact-mocker@workspace:packages/mocker"
+  dependencies:
+    "@midnight-ntwrk/compact-runtime": "npm:0.21.0"
+    "@openzeppelin/compact-launcher": "workspace:^"
+    "@openzeppelin/compact-simulator": "workspace:^"
+    "@tsconfig/node24": "npm:^24.0.3"
+    "@types/node": "npm:26.1.2"
+    typescript: "npm:^6.0.3"
+    vite: "npm:^8.3.8"
+    vitest: "npm:^5.1.1"
+  bin:
+    compact-mock: dist/compactMock.js
+  languageName: unknown
+  linkType: soft
+
 "@openzeppelin/compact-profiler@workspace:packages/profiler":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-profiler@workspace:packages/profiler"
@@ -1090,7 +1107,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@openzeppelin/compact-simulator@workspace:packages/simulator":
+"@openzeppelin/compact-simulator@workspace:^, @openzeppelin/compact-simulator@workspace:packages/simulator":
   version: 0.0.0-use.local
   resolution: "@openzeppelin/compact-simulator@workspace:packages/simulator"
   dependencies:

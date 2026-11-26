@@ -1,0 +1,45 @@
+// Fixture module for the compact-mock end-to-end tests.
+
+pragma language_version >= 0.28.0;
+
+module Owned {
+  import CompactStandardLibrary;
+
+  import { Account, Caller } from "../identity/Id";
+
+  export ledger _initialized: Boolean;
+  export ledger _owner: Account;
+  export ledger _tag: Field;
+  export ledger _value: Field;
+
+  export circuit initialize(initialOwner: Account): [] {
+    assert(!_initialized, "Owned: already initialized");
+    _initialized = true;
+    _owner = disclose(initialOwner);
+  }
+
+  export circuit owner(): Account {
+    assert(_initialized, "Owned: not initialized");
+    return _owner;
+  }
+
+  export circuit assertOnlyOwner(caller: Caller): [] {
+    assert(_initialized, "Owned: not initialized");
+    assert(caller.account == _owner, "Owned: caller is not the owner");
+  }
+
+  export circuit transferOwnership(caller: Caller, newOwner: Account): [] {
+    assertOnlyOwner(caller);
+    _owner = disclose(newOwner);
+  }
+
+  export circuit setPair(tag: Field, caller: Caller, value: Field): [] {
+    assertOnlyOwner(caller);
+    _tag = disclose(tag);
+    _value = disclose(value);
+  }
+
+  export circuit _setOwner(newOwner: Account): [] {
+    _owner = disclose(newOwner);
+  }
+}
