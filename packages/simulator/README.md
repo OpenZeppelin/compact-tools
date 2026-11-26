@@ -175,6 +175,95 @@ public getBalance(): Promise<bigint> {
 }
 ```
 
+### 4. Flat Circuit Methods
+
+Every instance also has one async method per circuit, named after it:
+`await sim.setValue(5n)` calls `sim.circuits.impure.setValue(5n)`. Each call reads
+`circuits` afresh, so witness overrides apply. The methods exist on every class.
+`flatCircuits: true` in the config types them, so a subclass needs no forwarding
+methods.
+
+Before, as in step 2, one forwarding method per circuit:
+
+```typescript
+export class MyContractSimulator extends MyContractSimulatorBase {
+  static async create(/* ... */): Promise<MyContractSimulator> { /* ... */ }
+
+  public getValue(): Promise<bigint> {
+    return this.circuits.impure.getValue();
+  }
+
+  public setValue(val: bigint): Promise<[]> {
+    return this.circuits.impure.setValue(val);
+  }
+
+  public transfer(to: Uint8Array, amount: bigint): Promise<[]> {
+    return this.circuits.impure.transfer(to, amount);
+  }
+}
+```
+
+After, with the flag and no forwards:
+
+```typescript
+const MyContractSimulatorBase = createSimulator<
+  MyContractPrivateState,
+  ReturnType<typeof ledger>,
+  ReturnType<typeof MyContractWitnesses>,
+  MyContract<MyContractPrivateState>,
+  MyContractArgs
+>({
+  contractFactory: (witnesses) => new MyContract<MyContractPrivateState>(witnesses),
+  defaultPrivateState: () => MyContractPrivateState.generate(),
+  contractArgs: (arg1, arg2) => [arg1, arg2],
+  ledgerExtractor: (state) => ledger(state),
+  witnessesFactory: () => MyContractWitnesses(),
+  flatCircuits: true,
+});
+
+export class MyContractSimulator extends MyContractSimulatorBase {
+  static async create(
+    arg1: bigint,
+    arg2: string,
+    options: SimulatorOptions<
+      MyContractPrivateState,
+      ReturnType<typeof MyContractWitnesses>
+    > = {},
+  ): Promise<MyContractSimulator> {
+    return super._create([arg1, arg2], options) as Promise<MyContractSimulator>;
+  }
+}
+
+const sim = await MyContractSimulator.create(1n, 'a');
+await sim.setValue(5n);
+const value = await sim.getValue(); // 5n
+```
+
+Which circuits get a method:
+
+- A name the instance already has when the base constructor runs is skipped: base
+  members (`getPublicState`, `signers`, `as`), subclass methods and accessors, and
+  `Object.prototype` names (`toString`, `constructor`).
+- `then` is never installed. It would make the instance thenable, so
+  `await create()` would call it.
+- A skipped circuit stays reachable through `sim.circuits.impure` or
+  `sim.circuits.pure`.
+- A subclass field of the same name replaces the method after `super()`.
+- The methods are non-enumerable, so spreads, `Object.keys` and JSON are unchanged.
+
+Typing with `flatCircuits: true`:
+
+- Base member names, `Object.prototype` names and `then` keep their own type, or none.
+- A subclass method named like a circuit fails with TS2425. Override it with a field
+  instead, with a type compatible with the circuit's:
+  `public readonly getValue = async (): Promise<bigint> => 42n;`. Or leave that class
+  without the flag.
+- The flag must reach `createSimulator` as the literal `true`. In a config declared
+  earlier it widens to `boolean`, the untyped overload is picked, and the error shows
+  up only at the first circuit call (TS2339). Write it at the call
+  (`createSimulator({ ...config, flatCircuits: true })`), or declare it
+  `flatCircuits: true as const`.
+
 ## Advanced Features
 
 ### 👤 Callers and Signers
@@ -388,6 +477,7 @@ In live mode the address comes from the deployed contract. An explicit
 | Method | Description |
 | ------ | ----------- |
 | `static create(...args, options?)` | Construct a simulator (async; overridden per subclass) |
+| `<circuit>(...args)` | Call a circuit by name (async; see [Flat Circuit Methods](#4-flat-circuit-methods)) |
 | `contractAddress` | The deployed contract's address |
 | `signers` | Alias resolver (`keyFor`, `eitherFor`) for circuit arguments |
 | `as(alias)` | Set the caller for the next call only |

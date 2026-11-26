@@ -9,6 +9,7 @@ import type {
   AsyncCircuits,
   ExtractImpureCircuits,
   ExtractPureCircuits,
+  FlatCircuits,
 } from '../types/index.js';
 import type { SimulatorOptions } from '../types/Options.js';
 import { createDrySimulator } from './createDrySimulator.js';
@@ -35,24 +36,41 @@ export interface BackendDeps<P, L> {
 const resolveBackendKind = (override?: BackendKind): BackendKind =>
   override ?? (process.env.MIDNIGHT_BACKEND === 'live' ? 'live' : 'dry');
 
+type CircuitProxies = Record<
+  CircuitKind,
+  Record<string, (...args: unknown[]) => Promise<unknown>>
+>;
+
 /**
- * Creates a backend-aware simulator class for a contract.
- *
- * One factory, two backends: the produced class runs against the in-memory path
- * ({@link DryBackend}) or a live Midnight node (`LiveBackend`), selected by
- * `MIDNIGHT_BACKEND=dry|live` at construction. `create` is async and
- * circuits return promises ({@link AsyncCircuits}) so a single spec file runs on
- * both backends with uniform `await`.
- *
- * The live adapter is reached only through a runtime dynamic import: a static
- * `import { createSimulator }` never pulls midnight-js into the
- * dependency graph. In live mode the {@link LiveContext} comes from `options.live`
- * or the globally registered live backend (`registerLiveBackend`).
- *
- * @param config - The shared simulator configuration (same shape both backends).
- * @returns A class to extend with per-circuit delegating methods.
+ * Gives `sim` one non-enumerable own method per circuit, which reads
+ * `sim.circuits[kind][name]` on every call. A name `sim` already has (base and
+ * subclass members, `Object.prototype`) is skipped, and so is `then`, which
+ * would make `sim` thenable.
  */
-export function createSimulator<
+function installFlatCircuits(
+  sim: { readonly circuits: object },
+  deps: Pick<BackendDeps<unknown, unknown>, 'pureNames' | 'impureNames'>,
+): void {
+  const groups = [
+    ['impure', deps.impureNames],
+    ['pure', deps.pureNames],
+  ] as const;
+  for (const [kind, names] of groups) {
+    for (const name of names) {
+      if (name in sim || name === 'then') continue;
+      Object.defineProperty(sim, name, {
+        // A subclass field of the same name redefines it after `super()`.
+        configurable: true,
+        writable: true,
+        value: (...args: unknown[]) =>
+          (sim.circuits as CircuitProxies)[kind][name](...args),
+      });
+    }
+  }
+}
+
+/** The class {@link createSimulator} returns; see there. */
+function buildSimulatorClass<
   P,
   L,
   W,
@@ -224,6 +242,7 @@ export function createSimulator<
           deps.impureNames,
         ) as unknown as AsyncCircuits<ExtractImpureCircuits<TContract>, P>,
       };
+      installFlatCircuits(this, deps);
     }
 
     /**
@@ -400,4 +419,139 @@ export function createSimulator<
       this._backend.setWitnesses(witnesses);
     }
   };
+}
+
+/** The class {@link createSimulator} returns without `flatCircuits: true`. */
+export type SimulatorClass<
+  P,
+  L,
+  W,
+  TContract extends IMinimalContract,
+  TArgs extends readonly any[] = readonly any[],
+> = ReturnType<typeof buildSimulatorClass<P, L, W, TContract, TArgs>>;
+
+type SimulatorInstance<
+  P,
+  L,
+  W,
+  TContract extends IMinimalContract,
+  TArgs extends readonly any[],
+> = InstanceType<SimulatorClass<P, L, W, TContract, TArgs>>;
+
+/**
+ * Names that never become flat methods: the `Object.prototype` members, which
+ * every instance already has, and `then`, which would make an instance thenable.
+ */
+export const RESERVED_FLAT_NAMES = [
+  'constructor',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+  'toString',
+  'valueOf',
+  '__proto__',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  'then',
+] as const;
+
+export type ReservedFlatName = (typeof RESERVED_FLAT_NAMES)[number];
+
+/**
+ * A simulator instance plus one method per circuit, except circuits named like
+ * a base member or a {@link ReservedFlatName}. Those stay reachable through
+ * `circuits`.
+ */
+export type FlatSimulatorInstance<
+  P,
+  L,
+  W,
+  TContract extends IMinimalContract,
+  TArgs extends readonly any[] = readonly any[],
+> = SimulatorInstance<P, L, W, TContract, TArgs> &
+  Omit<
+    FlatCircuits<TContract, P>,
+    keyof SimulatorInstance<P, L, W, TContract, TArgs> | ReservedFlatName
+  >;
+
+/** The class {@link createSimulator} returns with `flatCircuits: true`. */
+export type FlatSimulatorClass<
+  P,
+  L,
+  W,
+  TContract extends IMinimalContract,
+  TArgs extends readonly any[] = readonly any[],
+> = Omit<
+  SimulatorClass<P, L, W, TContract, TArgs>,
+  'prototype' | 'create' | '_create'
+> & {
+  /** See {@link SimulatorClass} `create`; resolves to a flat instance. */
+  create(
+    this: new (
+      deps: BackendDeps<P, L>,
+    ) => FlatSimulatorInstance<P, L, W, TContract, TArgs>,
+    ...args: unknown[]
+  ): Promise<FlatSimulatorInstance<P, L, W, TContract, TArgs>>;
+  /** See {@link SimulatorClass} `_create`; resolves to a flat instance. */
+  _create(
+    this: new (
+      deps: BackendDeps<P, L>,
+    ) => FlatSimulatorInstance<P, L, W, TContract, TArgs>,
+    contractArgs?: TArgs,
+    options?: SimulatorOptions<P, W>,
+  ): Promise<FlatSimulatorInstance<P, L, W, TContract, TArgs>>;
+} & (new (
+    deps: BackendDeps<P, L>,
+  ) => FlatSimulatorInstance<P, L, W, TContract, TArgs>);
+
+/**
+ * Creates a backend-aware simulator class for a contract, with the circuits
+ * typed as methods of its instances ({@link FlatSimulatorClass}).
+ */
+export function createSimulator<
+  P,
+  L,
+  W,
+  TContract extends IMinimalContract,
+  TArgs extends readonly any[] = readonly any[],
+>(
+  config: SimulatorConfig<P, L, W, TContract, TArgs> & { flatCircuits: true },
+): FlatSimulatorClass<P, L, W, TContract, TArgs>;
+/**
+ * Creates a backend-aware simulator class for a contract.
+ *
+ * One factory, two backends: the produced class runs against the in-memory path
+ * ({@link DryBackend}) or a live Midnight node (`LiveBackend`), selected by
+ * `MIDNIGHT_BACKEND=dry|live` at construction. `create` is async and
+ * circuits return promises ({@link AsyncCircuits}) so a single spec file runs on
+ * both backends with uniform `await`.
+ *
+ * Each instance also has one method per circuit, named after it. A name the
+ * instance already has, or `then`, is skipped. `flatCircuits: true` in the
+ * config types the methods.
+ *
+ * The live adapter is reached only through a runtime dynamic import: a static
+ * `import { createSimulator }` never pulls midnight-js into the
+ * dependency graph. In live mode the {@link LiveContext} comes from `options.live`
+ * or the globally registered live backend (`registerLiveBackend`).
+ *
+ * @param config - The shared simulator configuration (same shape both backends).
+ * @returns A class to extend.
+ */
+export function createSimulator<
+  P,
+  L,
+  W,
+  TContract extends IMinimalContract,
+  TArgs extends readonly any[] = readonly any[],
+>(
+  config: SimulatorConfig<P, L, W, TContract, TArgs>,
+): SimulatorClass<P, L, W, TContract, TArgs>;
+export function createSimulator(
+  config: SimulatorConfig<any, any, any, any, any>,
+): unknown {
+  return buildSimulatorClass(config);
 }

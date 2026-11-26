@@ -14,7 +14,12 @@ export { PrivateStateMutator } from './core/PrivateStateMutator.js';
 // `createSimulator`. `createLiveContext`/`registerLiveBackend` are
 // values, but their static graph is midnight-js-free (type-only + dynamic
 // import), so exporting them from the main barrel keeps the wall up.
-export type { BackendDeps } from './factory/createSimulator.js';
+export type {
+  BackendDeps,
+  FlatSimulatorClass,
+  FlatSimulatorInstance,
+  SimulatorClass,
+} from './factory/createSimulator.js';
 export { createSimulator } from './factory/createSimulator.js';
 export type { SimulatorConfig } from './factory/SimulatorConfig.js';
 export type {
@@ -64,6 +69,7 @@ export type {
   ContextlessCircuits,
   ExtractImpureCircuits,
   ExtractPureCircuits,
+  FlatCircuits,
   IContractSimulator,
   IMinimalContract,
   InitialStateResult,

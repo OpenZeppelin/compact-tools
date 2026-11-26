@@ -55,3 +55,10 @@ export type AsyncCircuits<Circuits, TState> = ContextlessCircuits<
   Circuits,
   TState
 >;
+
+/** One async method per pure and impure circuit of `TContract`, named after it. */
+export type FlatCircuits<TContract, TState> = AsyncCircuits<
+  ExtractImpureCircuits<TContract>,
+  TState
+> &
+  AsyncCircuits<ExtractPureCircuits<TContract>, TState>;

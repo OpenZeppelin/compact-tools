@@ -43,4 +43,9 @@ export interface SimulatorConfig<
    * Only needed for modules that run on the live backend.
    */
   artifactName?: string;
+  /**
+   * Types one method per circuit on the class `createSimulator` returns, so a
+   * subclass needs no forwarding methods. The methods exist at runtime either way.
+   */
+  flatCircuits?: boolean;
 }

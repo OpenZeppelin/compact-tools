@@ -5,6 +5,7 @@ export type {
   ContextlessCircuits,
   ExtractImpureCircuits,
   ExtractPureCircuits,
+  FlatCircuits,
 } from './Circuit.js';
 export type {
   IMinimalContract,
