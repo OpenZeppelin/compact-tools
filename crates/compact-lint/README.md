@@ -234,6 +234,10 @@ stays the place a syntax error is reported.
 A note after the value, such as `(zkir-v3)`, stays while the measurement matches and is
 dropped when the value changes.
 
+A circuit the compiler's report lists with no proof, such as one that only reads a
+witness, has no constraints and gets `none`. `--no-compile` reads no report, so it leaves
+such a circuit unmeasured.
+
 Each filled value is an `info` diagnostic carrying the annotation's before and after:
 
 ```text
@@ -327,7 +331,7 @@ written.
 | `module-name` | `@module <Name>` does not name the module it documents. |
 | `doc-placeholder` | A tag value, a section body or an untagged paragraph is still `fix.placeholder`. |
 | `missing-constraints` | An exported non-pure circuit has no constraints tag. |
-| `constraints-format` | The constraints value is not `k=<n>, rows=<n>`, optionally followed by whitespace and a note such as `(zkir-v3)`. |
+| `constraints-format` | The constraints value is not `k=<n>, rows=<n>` or `none`, optionally followed by whitespace and a note such as `(zkir-v3)`. |
 | `constraints-placeholder` | The constraints value still holds a `?`. |
 | `constraints-unmeasured` | `fill-constraints` only: the source compiled but measured no circuit of that name. |
 | `constraints-unmeasurable` | `fill-constraints` only: no measurement source resolves for the file. |

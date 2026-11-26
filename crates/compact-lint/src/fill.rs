@@ -12,9 +12,9 @@ use thiserror::Error;
 use crate::config::{Config, ConfigError};
 use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level, Span};
 use crate::edit::{DocOp, Edit, EditKind, WriteError, apply, newline_of, write_atomically};
-use crate::measure::{self, Compiler, Constraints, MeasureError};
+use crate::measure::{self, Compiled, Compiler, Constraints, MeasureError};
 use crate::report::{Position, RuleId};
-use crate::rules::{ConstraintSite, LintError, Linter};
+use crate::rules::{ConstraintSite, LintError, Linter, NO_PROOF};
 use crate::source::{Resolver, Source};
 use crate::target::{self, TargetError};
 use crate::timing::{Phase, Timings};
@@ -195,6 +195,32 @@ fn ensure_unchanged(file: &Work) -> Result<(), FillError> {
     }
 }
 
+/// What `fill-constraints` writes for one circuit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Value {
+    Measured(Constraints),
+    /// The compiler builds no proof for the circuit, so it has no constraints.
+    NoProof,
+}
+
+impl Value {
+    fn text(self) -> String {
+        match self {
+            Self::Measured(constraints) => constraints.value(),
+            Self::NoProof => NO_PROOF.to_owned(),
+        }
+    }
+
+    fn message(self, circuit: &str) -> String {
+        match self {
+            Self::Measured(constraints) => {
+                format!("Circuit `{circuit}` measures {}.", constraints.value())
+            }
+            Self::NoProof => format!("Circuit `{circuit}` has no proof to measure."),
+        }
+    }
+}
+
 /// Compiles each distinct source once, or reads its artifact under `--no-compile`.
 fn measure_sources(
     work: &[Work],
@@ -203,7 +229,7 @@ fn measure_sources(
     cwd: &Path,
     artifacts: &Artifacts,
     timings: &mut Timings,
-) -> Result<BTreeMap<PathBuf, BTreeMap<String, Constraints>>, FillError> {
+) -> Result<BTreeMap<PathBuf, BTreeMap<String, Value>>, FillError> {
     let mut sources: Vec<&PathBuf> = work
         .iter()
         .filter_map(|file| match &file.source {
@@ -228,35 +254,44 @@ fn measure_sources(
         } else {
             "compile"
         });
-        let (list, detail) = if options.no_compile {
+        let (built, detail) = if options.no_compile {
             let path = measure::locate(&artifacts.directory, source)?;
-            let list = measure::read_artifact(&path)?;
-            (list, path.display().to_string())
+            let built = Compiled {
+                measured: measure::read_artifact(&path)?,
+                unproved: Vec::new(),
+            };
+            (built, path.display().to_string())
         } else if options.dry_run {
             // A preview writes nothing to the project, so it compiles into a directory that
             // is removed once the compile ends.
             let scratch = tempfile::tempdir().map_err(FillError::Scratch)?;
             scratch.path().clone_into(&mut compiler.artifacts);
-            let list = compiler.measure(source)?;
-            (list, source.display().to_string())
+            let built = compiler.measure(source)?;
+            (built, source.display().to_string())
         } else {
-            let list = compiler.measure(source)?;
+            let built = compiler.measure(source)?;
             measure::write_artifact(
                 &artifacts.directory,
                 source,
                 &artifacts.recorded(source, cwd),
-                &list,
+                &built.measured,
             )?;
-            (list, source.display().to_string())
+            (built, source.display().to_string())
         };
         phase.stop(timings, detail);
 
-        measured.insert(
-            source.clone(),
-            list.iter()
-                .map(|entry| (entry.name.clone(), entry.constraints()))
-                .collect(),
-        );
+        let values = built
+            .unproved
+            .into_iter()
+            .map(|name| (name, Value::NoProof))
+            .chain(
+                built
+                    .measured
+                    .iter()
+                    .map(|entry| (entry.name.clone(), Value::Measured(entry.constraints()))),
+            )
+            .collect();
+        measured.insert(source.clone(), values);
     }
     Ok(measured)
 }
@@ -265,7 +300,7 @@ fn measure_sources(
 /// when an annotation changed.
 fn fill_file(
     file: &Work,
-    measured: &BTreeMap<PathBuf, BTreeMap<String, Constraints>>,
+    measured: &BTreeMap<PathBuf, BTreeMap<String, Value>>,
     tag: &crate::doc::Tag,
     config: &Config,
     options: &Options,
@@ -308,7 +343,7 @@ fn fill_file(
             continue;
         };
 
-        let value = measurement.value();
+        let value = measurement.text();
         if value == site.measurement() {
             continue;
         }
@@ -335,11 +370,7 @@ fn fill_file(
                 file.path.clone(),
                 RuleId::FILL,
                 Level::Info,
-                format!(
-                    "Circuit `{}` measures {}.",
-                    site.circuit,
-                    measurement.value()
-                ),
+                measurement.message(&site.circuit),
             )
             .at(edit.span)
             .fixed_by(FixPreview::between(title, &file.text, &after), badge),

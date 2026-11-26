@@ -1,0 +1,27 @@
+src/notes/Notes.compact:9:6 fill  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `hash` measures k=9, rows=310.
+
+  i Applied fix: Set @constraints to k=9, rows=310
+
+    9   │ - ···*·@constraints·k=?,·rows=?
+      9 │ + ···*·@constraints·k=9,·rows=310
+
+src/notes/Notes.compact:16:6 fill  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `peek` has no proof to measure.
+
+  i Applied fix: Set @constraints to none
+
+    16    │ - ···*·@constraints·k=?,·rows=?
+       16 │ + ···*·@constraints·none
+
+src/notes/Notes.compact:23:6 fill  FIXED  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Circuit `stale` has no proof to measure.
+
+  i Applied fix: Set @constraints to none
+
+    23    │ - ···*·@constraints·k=6,·rows=40·(zkir-v3)
+       23 │ + ···*·@constraints·none
+

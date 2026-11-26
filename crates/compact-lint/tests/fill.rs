@@ -217,12 +217,17 @@ fn a_note_stays_while_the_measurement_matches() {
 }
 
 #[test]
-fn a_circuit_the_report_marks_unproved_stays_unmeasured() {
-    let directory = work("basic");
+fn a_circuit_the_report_marks_unproved_takes_none() {
+    assert_case("unproved", &[], 0);
+}
+
+#[test]
+fn a_progress_row_for_an_unproved_circuit_is_not_written() {
+    let directory = work("unproved");
     let (_, stdout) = code_and_stdout(&fill(directory.path(), &[]));
 
     assert!(
-        stdout.contains("Circuit `initialize` has no measurement."),
+        stdout.contains("Circuit `peek` has no proof to measure."),
         "{stdout}"
     );
     assert!(

@@ -137,7 +137,7 @@ struct CircuitInfo {
     circuits: Vec<Measurement>,
 }
 
-/// The compiler's circuit list; only `proof` circuits carry constraints.
+/// The compiler's circuit list; only `proof` circuits have constraints to measure.
 #[derive(Debug, Deserialize)]
 struct ContractInfo {
     #[serde(default)]
@@ -156,6 +156,20 @@ const fn proves() -> bool {
     true
 }
 
+/// The compiler's report on one source, split by whether it proves each circuit.
+struct Report {
+    proved: Vec<String>,
+    unproved: Vec<String>,
+}
+
+/// What one compile yields.
+#[derive(Debug, Default)]
+pub struct Compiled {
+    pub measured: Vec<Measurement>,
+    /// Circuits the report lists with no proof, so nothing to measure.
+    pub unproved: Vec<String>,
+}
+
 /// One `compact compile` invocation, reused for every source in a run.
 pub struct Compiler {
     pub binary: OsString,
@@ -168,11 +182,12 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    /// Compiles one source and returns the circuits the compiler measured.
+    /// Compiles one source and returns the circuits the compiler measured, and those its
+    /// report lists with no proof.
     /// # Errors
     /// Returns an error when the binary cannot run, the compile fails, or the
     /// artifacts cannot be read.
-    pub fn measure(&self, source: &Path) -> Result<Vec<Measurement>, MeasureError> {
+    pub fn measure(&self, source: &Path) -> Result<Compiled, MeasureError> {
         let output = self.artifacts.join(stem(source));
         std::fs::create_dir_all(&output).map_err(|cause| MeasureError::Write {
             path: output.clone(),
@@ -189,7 +204,10 @@ impl Compiler {
         }
 
         let mut measured = parse(&cleaned);
-        if let Some(proved) = proved_circuits(&output)? {
+        let mut unproved = Vec::new();
+        if let Some(report) = contract_report(&output)? {
+            let proved = report.proved;
+            unproved = report.unproved;
             let silent: Vec<&str> = proved
                 .iter()
                 .filter(|name| {
@@ -207,7 +225,7 @@ impl Compiler {
             }
             measured.retain(|measurement| proved.contains(&measurement.name));
         }
-        Ok(measured)
+        Ok(Compiled { measured, unproved })
     }
 
     /// Runs the compile under a pty and returns its exit code and raw transcript.
@@ -265,8 +283,8 @@ impl Compiler {
     }
 }
 
-/// The names of the circuits the compiler proved, or `None` without a contract report.
-fn proved_circuits(output: &Path) -> Result<Option<Vec<String>>, MeasureError> {
+/// The compiler's circuit names, split by proof, or `None` without a contract report.
+fn contract_report(output: &Path) -> Result<Option<Report>, MeasureError> {
     let path = CONTRACT_INFO_PATH
         .iter()
         .fold(output.to_owned(), |path, segment| path.join(segment));
@@ -281,13 +299,14 @@ fn proved_circuits(output: &Path) -> Result<Option<Vec<String>>, MeasureError> {
     let info: ContractInfo =
         serde_json::from_str(&text).map_err(|source| MeasureError::Parse { path, source })?;
 
-    Ok(Some(
-        info.circuits
-            .into_iter()
-            .filter(|circuit| circuit.proof)
-            .map(|circuit| circuit.name)
-            .collect(),
-    ))
+    let (proved, unproved) = info
+        .circuits
+        .into_iter()
+        .partition::<Vec<_>, _>(|circuit| circuit.proof);
+    Ok(Some(Report {
+        proved: proved.into_iter().map(|circuit| circuit.name).collect(),
+        unproved: unproved.into_iter().map(|circuit| circuit.name).collect(),
+    }))
 }
 
 /// A source's artifact file, in the directory the compiler writes for it.
