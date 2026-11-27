@@ -22,7 +22,7 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 
 ### Changed
 
-- `Backend` has `consumeSingleCaller()`, which clears the `as()` caller for a call that does not reach the backend. `DryBackend` and `LiveBackend` implement it (#248)
+- **Breaking:** `Backend` has `consumeSingleCaller()`, which clears the `as()` caller for a call that does not reach the backend. `DryBackend` and `LiveBackend` implement it. A `Backend` implemented outside this package must add it (#248)
 
 ### Fixed
 
