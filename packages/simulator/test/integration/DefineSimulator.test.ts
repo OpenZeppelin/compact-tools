@@ -514,25 +514,41 @@ describe('defineSimulator', () => {
       expect(await recorded(sim)).toBe(defaultCaller);
     });
 
-    it('lets an asynchronous extend member consume the as() caller when it settles', async () => {
-      const Async = defineSimulator(FlatArtifact, {
+    it('keeps the as() caller through an extend helper in argument position', async () => {
+      const Helper = defineSimulator(FlatArtifact, {
+        witnesses: FlatWitnesses,
+        privateState: FlatPrivateState.generate,
+        extend: () => ({ noArgs: (): [] => [] }),
+      });
+      const sim = await Helper.create();
+
+      // `noArgs` runs after `as()` and before the circuit.
+      await sim.as('ALICE').recordCaller(...sim.noArgs());
+
+      expect(await recorded(sim)).toBe(sim.signers.resolveDryKey('ALICE'));
+    });
+
+    it('applies the as() caller to the first circuit an extend helper calls', async () => {
+      const Twice = defineSimulator(FlatArtifact, {
         witnesses: FlatWitnesses,
         privateState: FlatPrivateState.generate,
         extend: (sim) => ({
-          recordTwice: async (): Promise<void> => {
+          recordTwice: async (): Promise<string[]> => {
             await sim.recordCaller();
+            const first = await recorded(sim);
             await sim.recordCaller();
+            return [first, await recorded(sim)];
           },
         }),
       });
-      const sim = await Async.create();
+      const sim = await Twice.create();
       await sim.recordCaller();
       const defaultCaller = await recorded(sim);
 
-      await sim.as('ALICE').recordTwice();
-      await sim.recordCaller();
-
-      expect(await recorded(sim)).toBe(defaultCaller);
+      expect(await sim.as('ALICE').recordTwice()).toEqual([
+        sim.signers.resolveDryKey('ALICE'),
+        defaultCaller,
+      ]);
     });
   });
 
