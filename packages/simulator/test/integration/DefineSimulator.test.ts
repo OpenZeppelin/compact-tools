@@ -33,8 +33,8 @@ const ORIGIN = { x: 1n, y: 2n };
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
-/** Declared, so the array's type keeps both parts instead of the wider one. */
-type ClashingParts = (typeof DefineWitnesses | typeof SecretWitnesses)[];
+/** Declared, so the list's type keeps both parts instead of the wider one. */
+type ClashingParts = readonly [typeof DefineWitnesses, typeof SecretWitnesses];
 
 /** Module and authenticator parts, merged by the definition. */
 class DefineSimulator extends defineSimulator(DefineArtifact, {

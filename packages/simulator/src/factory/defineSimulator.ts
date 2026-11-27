@@ -72,13 +72,26 @@ type ArtifactWitnessPart<A extends ContractArtifact, P> = {
     : ContractWitnesses<A>[K];
 };
 
-/** Witness names the contract declares that `W` lacks. */
-type MissingWitnesses<
+/**
+ * The witness names a list of factories surely supplies: at each position, the
+ * names every factory that position can hold returns.
+ */
+type ListedWitnessNames<L extends readonly PartFactory[]> = {
+  [K in keyof L]: [L[K]] extends [PartFactory<infer R>] ? keyof R : never;
+}[number];
+
+/**
+ * Witness names the contract declares that the list `L` does not surely
+ * supply. For a union of lists, the names any one of them lacks.
+ */
+type MissingListedWitnesses<
   A extends ContractArtifact,
-  W,
+  L extends readonly PartFactory[],
 > = string extends keyof ContractWitnesses<A>
   ? never
-  : Exclude<keyof ContractWitnesses<A>, keyof W>;
+  : L extends unknown
+    ? Exclude<keyof ContractWitnesses<A>, ListedWitnessNames<L>>
+    : never;
 
 /** The private state a definition's `privateState` yields. */
 export type DefinedPrivateState<PS> = PS extends readonly (infer F extends
@@ -99,26 +112,30 @@ export type DefinedWitnesses<
 > = WS extends PartFactory ? ReturnType<WS> : ArtifactWitnesses<A, P>;
 
 /** What a definition's `witnesses` must be for the contract and `P`. */
-type WitnessesFor<
-  A extends ContractArtifact,
-  WS,
-  P,
-> = WS extends readonly (infer F extends PartFactory)[]
+type WitnessesFor<A extends ContractArtifact, WS, P> = [WS] extends [
+  readonly PartFactory[],
+]
   ? readonly PartFactory<ArtifactWitnessPart<A, P>>[] &
-      ([MissingWitnesses<A, Composed<F>>] extends [never]
-        ? unknown
-        : { readonly missingWitnesses: MissingWitnesses<A, Composed<F>> })
+      (number extends WS['length']
+        ? {
+            readonly notATuple: 'list the witness factories in an array literal or a tuple';
+          }
+        : [MissingListedWitnesses<A, WS>] extends [never]
+          ? unknown
+          : { readonly missingWitnesses: MissingListedWitnesses<A, WS> })
   : PartFactory<ArtifactWitnesses<A, P>>;
 
 /** Whether a definition's `witnesses` fit the contract and `P`. */
 type WitnessesFit<A extends ContractArtifact, WS, P> = [WS] extends [undefined]
   ? true
   : WS extends readonly (infer F extends PartFactory)[]
-    ? [ReturnType<F>] extends [ArtifactWitnessPart<A, P>]
-      ? [MissingWitnesses<A, Composed<F>>] extends [never]
-        ? true
+    ? number extends WS['length']
+      ? false
+      : [ReturnType<F>] extends [ArtifactWitnessPart<A, P>]
+        ? [MissingListedWitnesses<A, WS>] extends [never]
+          ? true
+          : false
         : false
-      : false
     : WS extends PartFactory
       ? [ReturnType<WS>] extends [ArtifactWitnesses<A, P>]
         ? true
@@ -466,7 +483,7 @@ function defineMembers(
  */
 export function defineSimulator<
   A extends ContractArtifact,
-  WS = undefined,
+  const WS = undefined,
   PS = undefined,
   X = unknown,
   I extends readonly unknown[] = never,
@@ -483,7 +500,7 @@ export function defineSimulator<
 >;
 export function defineSimulator<
   A extends ContractArtifact,
-  WS = undefined,
+  const WS = undefined,
   PS = undefined,
   X = unknown,
   I extends readonly unknown[] = never,
@@ -500,7 +517,7 @@ export function defineSimulator<
 >;
 export function defineSimulator<
   A extends ContractArtifact,
-  WS = undefined,
+  const WS = undefined,
   PS = undefined,
   X = unknown,
 >(

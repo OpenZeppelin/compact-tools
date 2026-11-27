@@ -204,6 +204,53 @@ defineSimulator(artifact, {
   privateState: [moduleState],
 });
 
+// A list must be a tuple: each position must hold a factory every time.
+declare const withAuth: boolean;
+type EitherPart = typeof moduleWitnesses | typeof authWitnesses;
+
+// A literal list and a declared tuple compile.
+defineSimulator(artifact, {
+  witnesses: [moduleWitnesses, authWitnesses],
+  privateState: [moduleState, authState],
+});
+const bothParts: readonly [typeof moduleWitnesses, typeof authWitnesses] = [
+  moduleWitnesses,
+  authWitnesses,
+];
+defineSimulator(artifact, {
+  witnesses: bothParts,
+  privateState: [moduleState, authState],
+});
+
+const someParts: EitherPart[] = withAuth
+  ? [moduleWitnesses, authWitnesses]
+  : [moduleWitnesses];
+defineSimulator(artifact, {
+  // @ts-expect-error a non-tuple list may lack `authWitnesses` at run time.
+  witnesses: someParts,
+  privateState: [moduleState, authState],
+});
+
+declare const anyParts: EitherPart[];
+defineSimulator(artifact, {
+  // @ts-expect-error an explicitly typed non-tuple list.
+  witnesses: anyParts,
+  privateState: [moduleState, authState],
+});
+
+declare const onePart: readonly [EitherPart];
+defineSimulator(artifact, {
+  // @ts-expect-error a position typed `A | B` surely supplies neither part.
+  witnesses: onePart,
+  privateState: [moduleState, authState],
+});
+
+defineSimulator(artifact, {
+  // @ts-expect-error the shorter list lacks the authenticator part.
+  witnesses: withAuth ? [moduleWitnesses, authWitnesses] : [moduleWitnesses],
+  privateState: [moduleState, authState],
+});
+
 // @ts-expect-error a contract with witnesses needs `witnesses`.
 defineSimulator(artifact, { privateState: bundledState });
 
