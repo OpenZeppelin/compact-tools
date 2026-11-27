@@ -274,13 +274,26 @@ export interface SimulatorDefinition<A extends ContractArtifact, WS, PS, X> {
   arity?: number;
 }
 
-/** Requires `witnesses` when the contract declares witnesses. */
-type WitnessesRequired<A extends ContractArtifact> =
+/** Whether the contract declares witnesses. */
+type DeclaresWitnesses<A extends ContractArtifact> =
   string extends keyof ContractWitnesses<A>
-    ? unknown
+    ? false
     : [keyof ContractWitnesses<A>] extends [never]
-      ? unknown
-      : { witnesses: unknown };
+      ? false
+      : true;
+
+/**
+ * The definition of a class without `prepare`. A contract with witnesses needs
+ * one, with `witnesses` set.
+ */
+type PositionalDefinition<
+  A extends ContractArtifact,
+  WS,
+  PS,
+  X,
+> = SimulatorDefinition<A, WS, PS, X> &
+  DefinitionCheck<A, WS, PS> &
+  (DeclaresWitnesses<A> extends true ? { witnesses: object } : unknown);
 
 type AnyDefinition = SimulatorDefinition<
   ContractArtifact,
@@ -452,9 +465,9 @@ export function defineSimulator<
   X = unknown,
 >(
   artifact: A,
-  definition?: SimulatorDefinition<A, WS, PS, X> &
-    DefinitionCheck<A, WS, PS> &
-    WitnessesRequired<A>,
+  ...definition: DeclaresWitnesses<A> extends true
+    ? [definition: PositionalDefinition<A, WS, PS, X>]
+    : [definition?: PositionalDefinition<A, WS, PS, X>]
 ): DefinedSimulatorClass<
   A,
   DefinedPrivateState<PS>,
