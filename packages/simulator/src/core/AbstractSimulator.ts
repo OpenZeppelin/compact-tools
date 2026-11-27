@@ -9,6 +9,22 @@ import type {
 } from '../types/index.js';
 
 /**
+ * Builds the context for a call that starts now and spends the single-use
+ * caller, even if the build throws. A call started while this one is pending
+ * runs as the persistent or default caller.
+ */
+function takeContext<P>(
+  sim: { callerOverride: CoinPublicKey | null },
+  context: () => CircuitContext<P>,
+): CircuitContext<P> {
+  try {
+    return context();
+  } finally {
+    sim.callerOverride = null;
+  }
+}
+
+/**
  * Abstract base class for simulating contract behavior.
  *
  * Provides common functionality for managing circuit contexts and creating proxies
@@ -18,7 +34,7 @@ export abstract class AbstractSimulator<P, L>
   implements IContractSimulator<P, L>
 {
   /**
-   * Single-use caller override (cleared after each circuit call).
+   * Single-use caller override (cleared when the next circuit call starts).
    * Set via `as(caller)` for one-time caller context switching.
    */
   public callerOverride: CoinPublicKey | null = null;
@@ -137,14 +153,10 @@ export abstract class AbstractSimulator<P, L>
             ctx: CircuitContext<P>,
             ...args: unknown[]
           ) => { result: unknown } | Promise<{ result: unknown }>;
-          try {
-            // 0.18 circuits are async; `await` also tolerates the older sync shape.
-            const { result } = await fn(context(), ...args);
-            return result;
-          } finally {
-            // The single-use caller applies to this call only, even a failed one.
-            this.callerOverride = null;
-          }
+          const ctx = takeContext(this, context);
+          // 0.18 circuits are async; `await` also tolerates the older sync shape.
+          const { result } = await fn(ctx, ...args);
+          return result;
         };
       },
     }) as ContextlessCircuits<Circuits, P>;
@@ -185,15 +197,11 @@ export abstract class AbstractSimulator<P, L>
             | { result: unknown; context: CircuitContext<P> }
             | Promise<{ result: unknown; context: CircuitContext<P> }>;
 
-          try {
-            // 0.18 circuits are async; `await` also tolerates the older sync shape.
-            const { result, context: newCtx } = await fn(context(), ...args);
-            updateContext(newCtx);
-            return result;
-          } finally {
-            // The single-use caller applies to this call only, even a failed one.
-            this.callerOverride = null;
-          }
+          const ctx = takeContext(this, context);
+          // 0.18 circuits are async; `await` also tolerates the older sync shape.
+          const { result, context: newCtx } = await fn(ctx, ...args);
+          updateContext(newCtx);
+          return result;
         };
       },
     }) as ContextlessCircuits<Circuits, P>;
