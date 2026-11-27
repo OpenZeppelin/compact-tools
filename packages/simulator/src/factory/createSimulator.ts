@@ -430,12 +430,13 @@ export type SimulatorClass<
   TArgs extends readonly any[] = readonly any[],
 > = ReturnType<typeof buildSimulatorClass<P, L, W, TContract, TArgs>>;
 
-type SimulatorInstance<
+/** An instance of {@link SimulatorClass}. */
+export type SimulatorInstance<
   P,
   L,
   W,
   TContract extends IMinimalContract,
-  TArgs extends readonly any[],
+  TArgs extends readonly any[] = readonly any[],
 > = InstanceType<SimulatorClass<P, L, W, TContract, TArgs>>;
 
 /**

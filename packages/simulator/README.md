@@ -16,6 +16,9 @@ allowing you to simulate contract behavior locally without blockchain deployment
 
 ## Quick Start
 
+For a compiled contract module, [`defineSimulator`](#5-defining-a-simulator-from-the-artifact)
+needs none of the steps below. They show the underlying `createSimulator`.
+
 ```typescript
 import { createSimulator, type SimulatorOptions } from '@openzeppelin/compact-simulator';
 import { Contract, ledger } from './artifacts/MyContract/contract/index.js';
@@ -263,6 +266,229 @@ Typing with `flatCircuits: true`:
   up only at the first circuit call (TS2339). Write it at the call
   (`createSimulator({ ...config, flatCircuits: true })`), or declare it
   `flatCircuits: true as const`.
+
+### 5. Defining a Simulator from the Artifact
+
+`defineSimulator(artifact, definition?)` builds the simulator class from the
+compiled contract module. No config generics, no `create` override, no
+forwarding methods. A spec defines its simulator in one statement:
+
+```typescript
+import { defineSimulator } from '@openzeppelin/compact-simulator';
+import * as MockOwnable from '../artifacts/MockOwnable/contract/index.js';
+import {
+  OwnableHelpers,
+  OwnablePrivateState,
+  OwnableWitnesses,
+} from './witnesses/OwnableWitnesses.js';
+
+class OwnableSimulator extends defineSimulator(MockOwnable, {
+  witnesses: OwnableWitnesses,
+  privateState: OwnablePrivateState.generate,
+  extend: OwnableHelpers,
+  artifactName: 'MockOwnable',
+}) {}
+
+const sim = await OwnableSimulator.create(owner, true, { privateState });
+await sim.transferOwnership(newOwner);
+await sim.privateState.injectSecretKey(otherKey);
+```
+
+The class reads from the artifact:
+
+- `Contract` and `ledger`: the contract factory and the ledger extractor.
+- The constructor arity, from the compiled `initialState`, which checks its
+  argument count first. When it cannot be read, `defineSimulator` throws; pass
+  `arity` instead.
+- `pureCircuits`: each pure circuit is also a synchronous static method
+  (`OwnableSimulator.hash(x)`). A name the class already has (`name`, `length`,
+  `create`, `Object.prototype` names) or `then` is skipped.
+
+Every circuit is an async instance method, as with `flatCircuits: true`.
+
+`create` takes the constructor arguments positionally, then an optional options
+object: `create(owner, true)` or `create(owner, true, { privateState })`. Any
+other argument count throws. The count alone decides, so a struct as the last
+constructor argument is never read as options. It resolves to the calling class.
+The tuple form `_create([owner, true], options)` still works.
+
+Definition fields, all optional:
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `witnesses` | no witnesses | Witness factory, or a list of factories merged into one. |
+| `privateState` | `{}` | Factory for the initial private state, or a list merged into one. |
+| `extend` | none | `(sim) => members`. Added to every instance: helper bags, wrappers, sync versions of circuits. A member replaces the circuit method of the same name. |
+| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. |
+| `artifactName` | none | The `artifacts/<name>/` directory the live backend deploys. |
+| `arity` | read from the artifact | The constructor's argument count. |
+
+The live backend receives a full `SimulatorConfig`: identity `contractArgs`,
+the witness and private-state factories (merged), and `artifactName`.
+
+#### Witnesses and private state from parts
+
+A mock that pairs a module with an authenticator needs both parts' witnesses and
+a private state holding both. List the parts instead of writing a bundled
+factory. Here `TokenWitnesses` and `TokenPrivateState` hold the module's own
+witnesses and keys only, and the authenticator owns `secretKey`:
+
+```typescript
+class TokenSimulator extends defineSimulator(MockToken, {
+  witnesses: [TokenWitnesses, AuthPrfPseudonymWitnesses],
+  privateState: [TokenPrivateState.generate, AuthPrfPseudonymPrivateState.generate],
+}) {}
+// getPrivateState(): Promise<TokenPrivateState & AuthPrfPseudonymPrivateState>
+```
+
+- Each witness receives the whole merged private state and must return it whole.
+  Update it with a spread: `[{ ...privateState, nonce }, value]`.
+- A witness name or private-state key that two parts define throws at `create`:
+  `witness "wit_AuthPrfPseudonymSK" is defined by both "TokenWitnesses" and "AuthPrfPseudonymWitnesses"`.
+  A bundled module factory that already includes the authenticator's witness
+  clashes this way; list the module's own part instead.
+- `composeWitnesses(...parts)` and `composePrivateState(...parts)` return the
+  merged factory, for `createSimulator` or a `prepare` function.
+
+#### Members that are not circuits
+
+Module-specific helpers live next to the module's witnesses and type `sim` with
+`PrivateStateAccess<P>`:
+
+```typescript
+// witnesses/OwnableWitnesses.ts
+export const OwnableHelpers = (sim: PrivateStateAccess<OwnablePrivateState>) => ({
+  privateState: {
+    injectSecretKey: (sk: Uint8Array): Promise<OwnablePrivateState> =>
+      sim.updatePrivateState(OwnablePrivateState.withSecretKey(sk)),
+  },
+});
+```
+
+`prepare` covers a `create` that takes named arguments, defaults, or state the
+witnesses close over:
+
+```typescript
+// witnesses/NoteTokenWitnesses.ts
+export const prepareNoteToken = ({
+  wallet = createNoteWallet(),
+  instanceSalt = INSTANCE_SALT,
+  ...options
+}: NoteTokenOptions = {}) => ({
+  args: [instanceSalt] as const,
+  options: { ...options, witnesses: options.witnesses ?? NoteTokenWitnesses(wallet) },
+  fields: { wallet },
+});
+
+// The spec
+class NoteTokenSimulator extends defineSimulator(MockNoteToken, {
+  privateState: NoteTokenPrivateState.generate,
+  prepare: prepareNoteToken,
+}) {}
+
+const token = await NoteTokenSimulator.create({ instanceSalt });
+token.wallet.pathOverride = path; // read by the witnesses
+```
+
+#### Before and after
+
+Before, a hand-written simulator file per mock:
+
+```typescript
+import { createSimulator, type SimulatorOptions } from '@openzeppelin/compact-simulator';
+import {
+  type ContractAddress,
+  type Either,
+  ledger,
+  Contract as MockOwnable,
+} from '../../../../artifacts/access/test/mocks/MockOwnable/contract/index.js';
+import { OwnablePrivateState, OwnableWitnesses } from '../witnesses/OwnableWitnesses.js';
+
+type OwnableArgs = readonly [initialOwner: Either<Uint8Array, ContractAddress>, isInit: boolean];
+
+const OwnableSimulatorBase = createSimulator<
+  OwnablePrivateState,
+  ReturnType<typeof ledger>,
+  ReturnType<typeof OwnableWitnesses>,
+  MockOwnable<OwnablePrivateState>,
+  OwnableArgs
+>({
+  contractFactory: (witnesses) => new MockOwnable<OwnablePrivateState>(witnesses),
+  defaultPrivateState: () => OwnablePrivateState.generate(),
+  contractArgs: (initialOwner, isInit) => [initialOwner, isInit],
+  ledgerExtractor: (state) => ledger(state),
+  witnessesFactory: () => OwnableWitnesses(),
+  artifactName: 'MockOwnable',
+});
+
+export class OwnableSimulator extends OwnableSimulatorBase {
+  static async create(
+    initialOwner: Either<Uint8Array, ContractAddress>,
+    isInit: boolean,
+    options: SimulatorOptions<OwnablePrivateState, ReturnType<typeof OwnableWitnesses>> = {},
+  ): Promise<OwnableSimulator> {
+    return super.create([initialOwner, isInit], options) as Promise<OwnableSimulator>;
+  }
+
+  public owner(): Promise<Either<Uint8Array, ContractAddress>> {
+    return this.circuits.impure.owner();
+  }
+
+  public transferOwnership(newOwner: Either<Uint8Array, ContractAddress>): Promise<[]> {
+    return this.circuits.impure.transferOwnership(newOwner);
+  }
+
+  public _unsafeTransferOwnership(newOwner: Either<Uint8Array, ContractAddress>): Promise<[]> {
+    return this.circuits.impure._unsafeTransferOwnership(newOwner);
+  }
+
+  public renounceOwnership(): Promise<[]> {
+    return this.circuits.impure.renounceOwnership();
+  }
+
+  public assertOnlyOwner(): Promise<[]> {
+    return this.circuits.impure.assertOnlyOwner();
+  }
+
+  public _transferOwnership(newOwner: Either<Uint8Array, ContractAddress>): Promise<[]> {
+    return this.circuits.impure._transferOwnership(newOwner);
+  }
+
+  public _unsafeUncheckedTransferOwnership(
+    newOwner: Either<Uint8Array, ContractAddress>,
+  ): Promise<[]> {
+    return this.circuits.impure._unsafeUncheckedTransferOwnership(newOwner);
+  }
+
+  public readonly privateState = {
+    injectSecretKey: (newSK: Uint8Array): Promise<OwnablePrivateState> =>
+      this.updatePrivateState(OwnablePrivateState.withSecretKey(newSK)),
+    getCurrentSecretKey: async (): Promise<Uint8Array> => {
+      const sk = (await this.getPrivateState()).secretKey;
+      if (typeof sk === 'undefined') {
+        throw new Error('Missing secret key');
+      }
+      return Uint8Array.from(sk);
+    },
+  };
+}
+```
+
+After, no simulator file. The spec defines the class, and the `privateState` bag
+moves next to the witnesses (`OwnableHelpers` above, with `getCurrentSecretKey`
+added):
+
+```typescript
+class OwnableSimulator extends defineSimulator(MockOwnable, {
+  witnesses: OwnableWitnesses,
+  privateState: OwnablePrivateState.generate,
+  extend: OwnableHelpers,
+  artifactName: 'MockOwnable',
+}) {}
+```
+
+The spec body is unchanged: `OwnableSimulator.create(owner, isInit, { privateState })`,
+`ownable.transferOwnership(...)`, `ownable.privateState.injectSecretKey(...)`.
 
 ## Advanced Features
 

@@ -14,6 +14,10 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 - Each `createSimulator` instance has one async method per circuit, named after it, that calls the circuit through `circuits`. A name the instance already has (a base member, a subclass method, an `Object.prototype` member) keeps its own, and `then` is never installed (#PR_NUMBER)
 - `flatCircuits: true` in the config types those methods on the returned class, so a subclass needs no forwarding methods. Without it the class type is unchanged (#PR_NUMBER)
 - Type exports `FlatCircuits`, `FlatSimulatorClass`, `FlatSimulatorInstance` and `SimulatorClass` (#PR_NUMBER)
+- `defineSimulator(artifact, definition?)` builds a simulator class from a compiled contract module, with no config generics, `create` override or forwarding methods. Every circuit is an async method, every pure circuit also a synchronous static method, and `create(...constructorArgs, options?)` takes the constructor arguments positionally, with the arity read from the compiled contract (#PR_NUMBER)
+- A definition's `witnesses` and `privateState` take a list of factories, merged into one, e.g. a module's and its authenticator's. A witness or private-state key two parts define throws at `create`. `composeWitnesses` and `composePrivateState` return the merged factory for `createSimulator` (#PR_NUMBER)
+- A definition's `extend` adds members to every instance, replacing circuit methods of the same name, and `prepare` maps `create`'s own arguments to the constructor arguments, the options and instance fields (#PR_NUMBER)
+- Type exports `ArtifactContract`, `ArtifactLedger`, `Composed`, `ConstructorArgs`, `ContractArtifact`, `DefinedSimulatorClass`, `DefinedSimulatorInstance`, `PartFactory`, `Parts`, `PositionalInput`, `PreparedCreate`, `PrivateStateAccess`, `PureCircuitStatics`, `ReservedFlatName`, `ReservedStaticName`, `SimulatorDefinition` and `SimulatorInstance` (#PR_NUMBER)
 
 ## 0.6.0 (2026-11-16)
 
