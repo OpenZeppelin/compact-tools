@@ -1,0 +1,6 @@
+[[mock.rules]]
+modules = ["calc/Reset"]
+instances = [
+  { suffix = "" },
+  { suffix = "None", init = "none", exclude = ["initialize"] },
+]

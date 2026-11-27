@@ -1,0 +1,25 @@
+pragma language_version >= 0.28.0;
+
+module Dial {
+  import CompactStandardLibrary;
+
+  export ledger _position: Uint<32>;
+  export ledger _note: Bytes<32>;
+
+  export circuit turn(by: Uint<32>): [] {
+    _position = disclose(by);
+  }
+
+  export circuit turn(by: Uint<32>, twice: Boolean): [] {
+    if (disclose(twice)) {
+      _position = disclose(by);
+    }
+  }
+
+  export circuit turn(by: Uint<32>, twice: Boolean, note: Bytes<32>): [] {
+    _note = disclose(note);
+  }
+
+  export circuit spin(): [] {
+  }
+}

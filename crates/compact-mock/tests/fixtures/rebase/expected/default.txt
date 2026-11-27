@@ -1,8 +1,8 @@
 exit: 0
 --- stdout
-wrote src/test/mocks/MockRoot.compact
-wrote src/a/mocks/MockDeep.compact
-wrote src/near/MockNear.compact
-wrote src/far/test/mocks/MockFar.compact
+wrote src/test/artifacts/MockRoot.compact
+wrote src/a/b/test/artifacts/MockDeep.compact
+wrote src/far/test/artifacts/MockFar.compact
+wrote src/near/test/artifacts/MockNear.compact
 --- stderr
-compact-mock: 4 mocks, 4 written, 0 unchanged.
+compact-mock: 4 mocks, 4 written, 0 unchanged, 0 removed.

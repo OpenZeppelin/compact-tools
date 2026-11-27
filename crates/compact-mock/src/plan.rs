@@ -1,20 +1,24 @@
-//! What each mock contains: variants, exposed circuits, the action per circuit, imports,
-//! the export list, the constructor and the include.
+//! What each mock contains: expansion into mocks and instances, exposed circuits, the
+//! action per circuit, imports, the export list, the constructor and the include.
 //!
-//! Expansion and the config-wide checks run over every entry. Planning runs for the
-//! selected mocks only. Every error is collected; nothing is planned when any occurs.
+//! [`analyze`] validates the authenticators and injectors, walks the candidates, expands
+//! every selected module, and plans the mocks in scope. Module errors stay with their
+//! module, so a run can tolerate the ones outside its scope and the linter can report
+//! them per file.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::config::{
-    Config, Entry, Guard, Include, Init, Settings, VariantKind, expand_out_dir, import_path,
-    is_absolute, normalize,
+    self, AuthSpec, CALLER, Config, FRAGMENT_SUFFIX, Folded, Guard, Include, Init, InjectSpec,
+    Ledger, LedgerNames, Salt, SaltSlot, Scope as InjectScope, Settings, import_path, module_dir,
+    module_stem, normalize,
 };
 use crate::error::{AuthError, ConfigError, Error, PlanError, SourceError};
-use crate::params::{identifiers, is_name, rewrite};
+use crate::params::{collapse, identifiers, is_name, rewrite};
 use crate::scope::{CallerMatch, Decl, DeclKind, FileId, Files, Lookup, MAX_DEPTH, Resolved};
-use crate::source::{Circuit, GenericParam, Item, SourceFile};
+use crate::select::{self, Candidate, Selection, SkipReason};
+use crate::source::{Circuit, GenericParam, Item, Position, SourceFile};
 
 /// Standard-library types a top-level `export { }` accepts.
 const EXPORTABLE_STD: [&str; 12] = [
@@ -32,32 +36,37 @@ const EXPORTABLE_STD: [&str; 12] = [
     "ZswapCoinPublicKey",
 ];
 
-/// The module circuit a constructor calls.
-const INITIALIZE: &str = "initialize";
-const FRAGMENT_SUFFIX: &str = ".fragment.compact";
 const GUARD_LEDGER: &str = "_invocations";
-/// `pad(32, ...)` holds at most this many UTF-8 bytes.
-const MAX_SALT_BYTES: usize = 32;
 
 /// One planned mock, ready to render.
 #[derive(Clone, Debug)]
 pub struct MockPlan {
     pub name: String,
-    /// Absolute path of the generated file.
+    /// Absolute path of the generated source.
     pub path: PathBuf,
-    /// The `module` string as configured, for the header.
+    /// The artifacts directory the source and its compiled output live in.
+    pub artifacts: PathBuf,
+    /// The module path, for the header.
     pub module: String,
     pub spdx: Option<String>,
     pub pragma: String,
-    /// The import block after `import CompactStandardLibrary;`, in emission order.
-    pub imports: Vec<ImportLine>,
-    /// Types, then re-exported circuits, then ledger fields.
+    /// Group 2: one named import per interface.
+    pub interfaces: Vec<ImportLine>,
+    /// Group 3: named imports.
+    pub named: Vec<ImportLine>,
+    /// Group 4: prefixed and whole-module imports.
+    pub prefixed: Vec<ImportLine>,
+    /// `contract implements <I>;` lines, in config order.
+    pub implements: Vec<String>,
+    /// Types, then re-exported circuits, then prefixed pure circuits, then ledger fields.
     pub exports: Vec<String>,
     pub guard_ledger: bool,
     pub constructor: Option<Constructor>,
     pub wrappers: Vec<Wrapper>,
     /// The `include` path, without `.compact`.
     pub include: Option<String>,
+    /// Indices into the module's exported circuits this mock exposes or calls.
+    pub covered: BTreeSet<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,11 +100,13 @@ pub struct Param {
     pub ty: String,
 }
 
+/// The constructor: parameters, then one `Boolean` per flag, then one call per instance.
 #[derive(Clone, Debug)]
 pub struct Constructor {
     pub params: Vec<Param>,
-    pub flag: Option<String>,
-    pub call: Call,
+    pub flags: Vec<String>,
+    /// Each call with the flag that gates it.
+    pub calls: Vec<(Option<String>, Call)>,
 }
 
 #[derive(Clone, Debug)]
@@ -109,182 +120,416 @@ pub struct Wrapper {
     pub call: Call,
 }
 
-/// The authenticated variant, the `*Caller` variant, or the only mock of an entry.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind {
-    Auth,
-    Caller,
-    Single,
-}
-
-/// One mock an entry expands to.
+/// An exported circuit of a module, for coverage.
 #[derive(Clone, Debug)]
-struct Variant {
-    entry: usize,
-    kind: Kind,
-    name: String,
-    settings: Settings,
-    /// Absolute output directory.
-    out_dir: PathBuf,
-    module_file: FileId,
-    prefix: String,
+pub struct SurfaceCircuit {
+    pub name: String,
+    pub at: Position,
 }
 
-impl Variant {
-    fn path(&self) -> PathBuf {
-        self.out_dir.join(format!("{}.compact", self.name))
+/// What a run plans: every mock in scope, or only the named ones.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Scope<'a> {
+    /// Only modules whose file lies under this directory are planned. Errors of the
+    /// other modules never fail the run.
+    pub dir: Option<&'a Path>,
+    /// Only these mocks are planned; empty plans every mock in scope.
+    pub names: &'a [String],
+}
+
+impl Scope<'_> {
+    fn covers(&self, file: &Path) -> bool {
+        self.dir.is_none_or(|dir| file.starts_with(dir))
     }
 }
 
-/// The resolved `[auth]` table.
+/// One candidate module and what became of it.
+#[derive(Debug)]
+pub struct ModuleResult {
+    pub module: String,
+    pub file: PathBuf,
+    pub in_scope: bool,
+    pub status: Status,
+}
+
+#[derive(Debug)]
+pub enum Status {
+    Excluded,
+    Unmatched,
+    Skipped(SkipReason),
+    /// Read and expanded. `errors` holds expansion and planning errors; `plans` the
+    /// mocks planned without error.
+    Mocks {
+        names: Vec<String>,
+        artifacts: PathBuf,
+        plans: Vec<MockPlan>,
+        circuits: Vec<SurfaceCircuit>,
+        errors: Vec<Error>,
+    },
+    /// Failed before its mocks were known.
+    Failed(Vec<Error>),
+}
+
+/// Everything a run found before writing.
+#[derive(Debug, Default)]
+pub struct Analysis {
+    /// Config-level errors: authenticators, injectors, rules, duplicates, names.
+    pub config_errors: Vec<Error>,
+    /// Information lines: rules that apply to no module.
+    pub notes: Vec<String>,
+    pub modules: Vec<ModuleResult>,
+}
+
+impl Analysis {
+    /// Every error that fails a run: config-level ones, then those of modules in scope.
+    #[must_use]
+    pub fn fatal(&self) -> Vec<&Error> {
+        let mut errors: Vec<&Error> = self.config_errors.iter().collect();
+        for module in &self.modules {
+            if !module.in_scope {
+                continue;
+            }
+            match &module.status {
+                Status::Mocks { errors: found, .. } | Status::Failed(found) => {
+                    errors.extend(found.iter());
+                }
+                _ => {}
+            }
+        }
+        errors
+    }
+
+    /// The plans to write, in expansion order.
+    #[must_use]
+    pub fn plans(&self) -> Vec<&MockPlan> {
+        self.modules
+            .iter()
+            .filter(|module| module.in_scope)
+            .flat_map(|module| match &module.status {
+                Status::Mocks { plans, .. } => plans.iter().collect(),
+                _ => Vec::new(),
+            })
+            .collect()
+    }
+}
+
+/// A resolved non-`caller` authenticator.
 struct AuthPlan {
     prefix: String,
     file: PathBuf,
     call: String,
-    caller: (FileId, String),
+    slot: Option<SaltSlot>,
 }
 
-/// What a run found before writing: errors no single mock owns, then each selected
-/// mock in config order with its plan or its errors.
-#[derive(Debug, Default)]
-pub struct Outcome {
-    /// `[auth]`, source, expansion, duplicate and name errors, in config order.
-    pub errors: Vec<Error>,
-    pub mocks: Vec<Result<MockPlan, Vec<Error>>>,
+/// A resolved injector.
+struct InjectPlan {
+    prefix: String,
+    file: PathBuf,
+    call: String,
+    ty: (FileId, String),
+    scope: InjectScope,
 }
 
-/// Expands every entry, checks the config-wide rules, then plans the mocks `names`
-/// selects (all of them when empty), in config order.
-///
-/// An `[auth]` error stops the run, since every expansion depends on it. An entry that
-/// fails to expand drops out, and the others are still planned so every error prints.
+/// Validated `[mock.auth]`, `[mock.inject]` and `caller_type`.
+struct Context {
+    caller: Option<(FileId, String)>,
+    auths: BTreeMap<String, AuthPlan>,
+    injectors: BTreeMap<String, InjectPlan>,
+}
+
+/// Validates the config against the sources, expands every selected module, and plans
+/// the mocks `scope` selects.
 #[must_use]
-pub fn plan(config: &Config, files: &mut Files, names: &[String]) -> Outcome {
-    let mut outcome = Outcome::default();
+pub fn analyze(config: &Config, files: &mut Files, scope: Scope<'_>) -> Analysis {
+    let mut analysis = Analysis::default();
+    let context = match context(config, files) {
+        Ok(context) => context,
+        Err(errors) => {
+            analysis.config_errors = errors;
+            return analysis;
+        }
+    };
+    let candidates = match select::candidates(config) {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            analysis.config_errors.push(error.into());
+            return analysis;
+        }
+    };
+    let src_shown = files.paths().show(&config.src);
+    analysis.notes.extend(
+        select::unused_rules(config, &candidates, &src_shown)
+            .iter()
+            .map(ToString::to_string),
+    );
 
-    let auth = match &config.auth {
-        Some(_) => match auth_plan(config, files) {
-            Ok(auth) => Some(auth),
+    let mut expanded: Vec<(usize, Expanded)> = Vec::new();
+    for candidate in &candidates {
+        let in_scope = scope.covers(&candidate.file);
+        let status = match select::select(config, &candidate.module) {
+            Selection::Excluded => Status::Excluded,
+            Selection::Unmatched => Status::Unmatched,
+            Selection::Selected(rules) => match expand(config, files, &context, candidate, rules) {
+                Ok(Expansion::Skipped(reason)) => Status::Skipped(reason),
+                Ok(Expansion::Mocks(mut module)) => {
+                    let names = module.mocks.iter().map(|mock| mock.name.clone()).collect();
+                    let circuits = module
+                        .surface
+                        .circuits
+                        .iter()
+                        .map(|circuit| SurfaceCircuit {
+                            name: circuit.name().to_owned(),
+                            at: circuit.at(),
+                        })
+                        .collect();
+                    let errors = std::mem::take(&mut module.errors);
+                    expanded.push((analysis.modules.len(), module));
+                    Status::Mocks {
+                        names,
+                        artifacts: config.artifacts_dir(&candidate.module),
+                        plans: Vec::new(),
+                        circuits,
+                        errors,
+                    }
+                }
+                Err(errors) => Status::Failed(errors),
+            },
+        };
+        analysis.modules.push(ModuleResult {
+            module: candidate.module.clone(),
+            file: candidate.file.clone(),
+            in_scope,
+            status,
+        });
+    }
+
+    let mut found = Vec::new();
+    check_rules(config, &analysis, &expanded, &mut found);
+    check_duplicates(config, &analysis, &mut found);
+    check_names(config, &analysis, scope.names, &mut found);
+    analysis.config_errors.append(&mut found);
+
+    for (index, module) in &expanded {
+        if !analysis.modules[*index].in_scope {
+            continue;
+        }
+        let mut plans = Vec::new();
+        let mut errors = Vec::new();
+        for spec in &module.mocks {
+            if !scope.names.is_empty() && !scope.names.contains(&spec.name) {
+                continue;
+            }
+            let mut planner = Planner::new(config, files, &context, module, spec);
+            let result = planner.plan();
+            let mut found = std::mem::take(&mut planner.errors);
+            match result {
+                Ok(plan) if found.is_empty() => plans.push(plan),
+                Ok(_) => errors.append(&mut found),
+                Err(error) => {
+                    errors.append(&mut found);
+                    errors.push(error);
+                }
+            }
+        }
+        if let Status::Mocks {
+            plans: slot,
+            errors: existing,
+            ..
+        } = &mut analysis.modules[*index].status
+        {
+            *slot = plans;
+            existing.append(&mut errors);
+        }
+    }
+    analysis
+}
+
+fn context(config: &Config, files: &mut Files) -> Result<Context, Vec<Error>> {
+    let mut errors: Vec<Error> = Vec::new();
+    let caller = match &config.caller_type {
+        Some(ty) => match type_decl(config, files, &ty.module, &ty.name, false) {
+            Ok(Some(decl)) => Some(decl),
+            Ok(None) => {
+                errors.push(
+                    AuthError::CallerType {
+                        module: ty.module.clone(),
+                        name: ty.name.clone(),
+                    }
+                    .into(),
+                );
+                None
+            }
             Err(error) => {
-                outcome.errors.push(error);
-                return outcome;
+                errors.push(error.into());
+                None
             }
         },
         None => None,
     };
-
-    let mut variants = Vec::new();
-    let mut expanded_all = true;
-    for (index, entry) in config.entries.iter().enumerate() {
-        match expand(config, files, auth.as_ref(), index, entry) {
-            Ok(mut expanded) => variants.append(&mut expanded),
-            Err(mut found) => {
-                expanded_all = false;
-                outcome.errors.append(&mut found);
-            }
-        }
-    }
-    check_duplicates(config, files, &variants, &mut outcome.errors);
-
-    // A name may belong to an entry that failed to expand, so it is unknown only when
-    // every entry expanded.
-    if expanded_all {
-        for name in names {
-            if !variants.iter().any(|variant| &variant.name == name) {
-                outcome.errors.push(
-                    ConfigError::UnknownName {
-                        name: name.clone(),
-                        cfg: config.shown.clone(),
-                    }
-                    .into(),
-                );
-            }
-        }
-    }
-
-    for variant in &variants {
-        if !names.is_empty() && !names.contains(&variant.name) {
+    let mut auths = BTreeMap::new();
+    for spec in config.auths.values() {
+        if spec.is_caller() {
             continue;
         }
-        let mut planner = Planner {
-            config,
-            files: &mut *files,
-            auth: auth.as_ref(),
-            entry: &config.entries[variant.entry],
-            variant,
-            errors: Vec::new(),
-            needs: Needs::default(),
-        };
-        let result = planner.plan();
-        let mut errors = std::mem::take(&mut planner.errors);
-        outcome.mocks.push(match result {
-            Ok(plan) if errors.is_empty() => Ok(plan),
-            Ok(_) => Err(errors),
-            Err(error) => {
-                errors.push(error);
-                Err(errors)
+        match auth_plan(config, files, spec, caller.as_ref()) {
+            Ok(Some(plan)) => {
+                auths.insert(spec.name.clone(), plan);
             }
+            Ok(None) => {}
+            Err(error) => errors.push(error),
+        }
+    }
+    let mut injectors = BTreeMap::new();
+    for spec in config.injectors.values() {
+        match inject_plan(config, files, spec) {
+            Ok(plan) => {
+                injectors.insert(spec.name.clone(), plan);
+            }
+            Err(error) => errors.push(error),
+        }
+    }
+    if errors.is_empty() {
+        Ok(Context {
+            caller,
+            auths,
+            injectors,
+        })
+    } else {
+        Err(errors)
+    }
+}
+
+/// The struct or `new type` (or enum, when `enums`) `name` that `module` declares.
+fn type_decl(
+    config: &Config,
+    files: &mut Files,
+    module: &str,
+    name: &str,
+    enums: bool,
+) -> Result<Option<(FileId, String)>, SourceError> {
+    let id = files.require(&config.module_file(module))?;
+    let source = files.get(id);
+    let declares = source.module.as_ref().is_some_and(|module| {
+        module.items.iter().any(|item| match item {
+            Item::Type(decl) if decl.name == name => match &decl.kind {
+                crate::source::TypeKind::Struct => true,
+                crate::source::TypeKind::Enum => enums,
+                crate::source::TypeKind::Alias { nominal, .. } => *nominal,
+            },
+            _ => false,
+        })
+    });
+    Ok(declares.then(|| (id, name.to_owned())))
+}
+
+/// The leading identifier of a call template.
+fn call_head(call: &str) -> String {
+    call.chars()
+        .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '$')
+        .collect()
+}
+
+/// The exported circuit `name` of the module in `file`, with the file that declares it.
+fn exported_circuit(
+    files: &mut Files,
+    file: FileId,
+    name: &str,
+) -> Result<Option<(FileId, Circuit)>, SourceError> {
+    for circuit in surface(files, file)?.circuits {
+        if circuit.name() != name {
+            continue;
+        }
+        return Ok(match circuit {
+            Exposable::Own(circuit) => Some((file, circuit)),
+            Exposable::Listed { decl, .. } => files.circuit(&decl).map(|found| (decl.file, found)),
         });
     }
-    outcome
+    Ok(None)
 }
 
-fn module_file(config: &Config, module: &str) -> PathBuf {
-    normalize(&config.src.join(format!("{module}.compact")))
-}
-
-fn auth_plan(config: &Config, files: &mut Files) -> Result<AuthPlan, Error> {
-    let auth = config
-        .auth
-        .as_ref()
-        .expect("auth_plan runs only with [auth] set");
-    let file = module_file(config, &auth.module);
+fn auth_plan(
+    config: &Config,
+    files: &mut Files,
+    spec: &AuthSpec,
+    caller: Option<&(FileId, String)>,
+) -> Result<Option<AuthPlan>, Error> {
+    let (Some(module_path), Some(call), Some(caller)) = (&spec.module, &spec.call, caller) else {
+        return Ok(None);
+    };
+    let file = config.module_file(module_path);
     let id = files.require(&file)?;
     let source = files.get(id);
     let module = single_module(&source, files)?;
-
-    let head: String = auth
-        .call
-        .chars()
-        .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '$')
-        .collect();
-    let exported = surface(files, id)?
-        .circuits
-        .iter()
-        .any(|circuit| circuit.name() == head);
-    if !exported {
+    let head = call_head(call);
+    let Some((declaring, circuit)) = exported_circuit(files, id, &head)? else {
         return Err(AuthError::Call {
+            name: spec.name.clone(),
             circuit: head,
-            module: auth.module.clone(),
+            module: module_path.clone(),
+        }
+        .into());
+    };
+    if files.caller_match(declaring, &circuit.generics, &circuit.ret, caller)? != CallerMatch::Exact
+    {
+        return Err(AuthError::Returns {
+            name: spec.name.clone(),
+            circuit: head,
+            ty: circuit.ret.clone(),
+            caller: caller.1.clone(),
         }
         .into());
     }
-
-    let caller_id = files.require(&module_file(config, &auth.caller_type.module))?;
-    let caller_source = files.get(caller_id);
-    let declares = caller_source.module.as_ref().is_some_and(|module| {
-        module.items.iter().any(|item| {
-            matches!(item, Item::Type(decl)
-                if decl.name == auth.caller_type.name
-                    && decl.kind == crate::source::TypeKind::Struct)
-        })
-    });
-    if !declares {
-        return Err(AuthError::CallerType {
-            module: auth.caller_type.module.clone(),
-            name: auth.caller_type.name.clone(),
-        }
-        .into());
-    }
-
-    Ok(AuthPlan {
-        prefix: auth
+    Ok(Some(AuthPlan {
+        prefix: spec
             .prefix
             .clone()
             .unwrap_or_else(|| format!("{}_", module.name)),
         file,
-        call: auth.call.clone(),
-        caller: (caller_id, auth.caller_type.name.clone()),
+        call: call.clone(),
+        slot: spec.slot(),
+    }))
+}
+
+fn inject_plan(config: &Config, files: &mut Files, spec: &InjectSpec) -> Result<InjectPlan, Error> {
+    let Some(ty) = type_decl(config, files, &spec.ty.module, &spec.ty.name, true)? else {
+        return Err(AuthError::InjectType {
+            name: spec.name.clone(),
+            module: spec.ty.module.clone(),
+            ty: spec.ty.name.clone(),
+        }
+        .into());
+    };
+    let file = config.module_file(&spec.module);
+    let id = files.require(&file)?;
+    let source = files.get(id);
+    let module = single_module(&source, files)?;
+    let head = call_head(&spec.call);
+    let Some((declaring, circuit)) = exported_circuit(files, id, &head)? else {
+        return Err(AuthError::InjectCall {
+            name: spec.name.clone(),
+            circuit: head,
+            module: spec.module.clone(),
+        }
+        .into());
+    };
+    if files.caller_match(declaring, &circuit.generics, &circuit.ret, &ty)? != CallerMatch::Exact {
+        return Err(AuthError::InjectReturns {
+            name: spec.name.clone(),
+            circuit: head,
+            ty: circuit.ret.clone(),
+            target: spec.ty.name.clone(),
+        }
+        .into());
+    }
+    Ok(InjectPlan {
+        prefix: spec
+            .prefix
+            .clone()
+            .unwrap_or_else(|| format!("{}_", module.name)),
+        file,
+        call: spec.call.clone(),
+        ty,
+        scope: spec.scope,
     })
 }
 
@@ -306,7 +551,11 @@ fn single_module<'a>(
 #[derive(Clone, Debug)]
 enum Exposable {
     Own(Circuit),
-    Listed { name: String, decl: Decl },
+    Listed {
+        name: String,
+        decl: Decl,
+        at: Position,
+    },
 }
 
 impl Exposable {
@@ -316,9 +565,17 @@ impl Exposable {
             Self::Listed { name, .. } => name,
         }
     }
+
+    const fn at(&self) -> Position {
+        match self {
+            Self::Own(circuit) => circuit.at,
+            Self::Listed { at, .. } => *at,
+        }
+    }
 }
 
 /// The module's exported circuits and exported ledger fields, in module order.
+#[derive(Clone, Debug, Default)]
 struct Surface {
     circuits: Vec<Exposable>,
     ledgers: Vec<String>,
@@ -326,21 +583,21 @@ struct Surface {
 
 fn surface(files: &mut Files, file: FileId) -> Result<Surface, SourceError> {
     let source = files.get(file);
-    let mut circuits: Vec<Exposable> = Vec::new();
-    let mut ledgers: Vec<String> = Vec::new();
+    let mut found = Surface::default();
     let Some(module) = source.module.as_ref() else {
-        return Ok(Surface { circuits, ledgers });
+        return Ok(found);
     };
     for item in &module.items {
         match item {
             Item::Circuit(circuit) if circuit.exported => {
-                circuits.push(Exposable::Own(circuit.clone()));
+                found.circuits.push(Exposable::Own(circuit.clone()));
             }
-            Item::Ledger(ledger) if ledger.exported && !ledgers.contains(&ledger.name) => {
-                ledgers.push(ledger.name.clone());
+            Item::Ledger(ledger) if ledger.exported && !found.ledgers.contains(&ledger.name) => {
+                found.ledgers.push(ledger.name.clone());
             }
             Item::ExportList(names) => {
-                for name in names {
+                for named in names {
+                    let name = &named.name;
                     let resolved = files.resolve(file, &[], name)?;
                     if let Some(Lookup::Missing(missing)) = resolved.lookup() {
                         return Err(files.missing_error(missing));
@@ -349,16 +606,21 @@ fn surface(files: &mut Files, file: FileId) -> Result<Surface, SourceError> {
                         continue;
                     };
                     match decl.kind {
-                        DeclKind::Ledger if !ledgers.contains(name) => ledgers.push(name.clone()),
-                        DeclKind::Circuit if circuits.iter().all(|known| known.name() != name) => {
+                        DeclKind::Ledger if !found.ledgers.contains(name) => {
+                            found.ledgers.push(name.clone());
+                        }
+                        DeclKind::Circuit
+                            if found.circuits.iter().all(|known| known.name() != name) =>
+                        {
                             if let Resolved::Local(_) = resolved {
                                 if let Some(circuit) = files.circuit(decl) {
-                                    circuits.push(Exposable::Own(circuit));
+                                    found.circuits.push(Exposable::Own(circuit));
                                 }
                             } else {
-                                circuits.push(Exposable::Listed {
+                                found.circuits.push(Exposable::Listed {
                                     name: name.clone(),
                                     decl: decl.clone(),
+                                    at: named.at,
                                 });
                             }
                         }
@@ -369,118 +631,255 @@ fn surface(files: &mut Files, file: FileId) -> Result<Surface, SourceError> {
             _ => {}
         }
     }
-    Ok(Surface { circuits, ledgers })
+    Ok(found)
 }
 
-/// Reads an entry's module and expands it into its variants.
+/// One mock a module expands to.
+#[derive(Clone, Debug)]
+struct MockSpec {
+    name: String,
+    /// The authenticator, or `None` for a module without a caller parameter.
+    auth: Option<String>,
+    merged: bool,
+    instances: Vec<InstanceSpec>,
+    settings: Settings,
+}
+
+/// One module instance inside a mock.
+#[derive(Clone, Debug)]
+struct InstanceSpec {
+    /// The suffix as configured, for messages and merged names.
+    suffix: String,
+    prefix: String,
+    module_args: Vec<String>,
+    circuit_args: BTreeMap<String, Vec<String>>,
+    init: Init,
+    salt: Option<Salt>,
+    exclude: Vec<String>,
+    rename: BTreeMap<String, String>,
+}
+
+/// A selected module, read and expanded.
+struct Expanded {
+    module: String,
+    file: FileId,
+    surface: Surface,
+    rules: Vec<usize>,
+    mocks: Vec<MockSpec>,
+    errors: Vec<Error>,
+}
+
+enum Expansion {
+    Skipped(SkipReason),
+    Mocks(Expanded),
+}
+
+/// One group of instances: a stand-alone instance or a merged group.
+struct Group {
+    name: String,
+    merged: bool,
+    members: Vec<config::Instance>,
+}
+
+fn groups(folded: &Folded) -> Vec<Group> {
+    let Some(instances) = &folded.instances else {
+        return vec![Group {
+            name: String::new(),
+            merged: false,
+            members: vec![config::Instance::default()],
+        }];
+    };
+    if folded.merge {
+        return vec![Group {
+            name: String::new(),
+            merged: true,
+            members: instances.clone(),
+        }];
+    }
+    let mut groups: Vec<Group> = Vec::new();
+    for instance in instances {
+        match &instance.group {
+            None => groups.push(Group {
+                name: instance.suffix.clone(),
+                merged: false,
+                members: vec![instance.clone()],
+            }),
+            Some(group) => match groups
+                .iter_mut()
+                .find(|known| known.merged && &known.name == group)
+            {
+                Some(known) => known.members.push(instance.clone()),
+                None => groups.push(Group {
+                    name: group.clone(),
+                    merged: true,
+                    members: vec![instance.clone()],
+                }),
+            },
+        }
+    }
+    groups
+}
+
+/// `{dir}`: each segment with its first letter upper-cased, joined with nothing.
+fn dir_camel(module: &str) -> String {
+    module_dir(module)
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| {
+            let mut chars = segment.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().chain(chars).collect()
+            })
+        })
+        .collect()
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "expansion reads best as one pass in rule order"
+)]
 fn expand(
     config: &Config,
     files: &mut Files,
-    auth: Option<&AuthPlan>,
-    index: usize,
-    entry: &Entry,
-) -> Result<Vec<Variant>, Vec<Error>> {
-    let path = module_file(config, &entry.module);
-    let id = files.require(&path).map_err(|error| vec![error.into()])?;
+    context: &Context,
+    candidate: &Candidate,
+    rules: Vec<usize>,
+) -> Result<Expansion, Vec<Error>> {
+    let id = files
+        .require(&candidate.file)
+        .map_err(|error| vec![error.into()])?;
     let source = files.get(id);
+    if source.module.is_none() {
+        return Ok(Expansion::Skipped(SkipReason::NotAModule));
+    }
     let module = single_module(&source, files).map_err(|error| vec![error.into()])?;
+    let surface = surface(files, id).map_err(|error| vec![error.into()])?;
+    if surface.circuits.is_empty() {
+        return Ok(Expansion::Skipped(SkipReason::NoExportedCircuits));
+    }
     if source.pragma.is_none() {
         return Err(vec![
             SourceError::NoPragma {
-                path: files.paths().show(&path),
+                path: files.paths().show(&candidate.file),
             }
             .into(),
         ]);
     }
 
+    let folded = config::fold(config, &rules);
+    let stem = module_stem(&candidate.module);
     let mut errors: Vec<Error> = Vec::new();
-    let base = entry
-        .name
-        .clone()
-        .unwrap_or_else(|| format!("Mock{}", entry.stem()));
-    if entry.name.is_none() && !is_name(&base) {
-        errors.push(
-            ConfigError::Identifier {
-                cfg: config.shown.clone(),
-                key: format!("{}: name", entry.module),
-                value: base.clone(),
-            }
-            .into(),
-        );
-    }
-    let prefix = entry
-        .prefix
-        .clone()
-        .unwrap_or_else(|| format!("{}_", module.name));
-
-    let has_caller = match auth {
-        Some(auth) => {
-            scan_callers(files, id, auth, &base, &mut errors).map_err(|error| vec![error.into()])?
-        }
+    let has_caller = match &context.caller {
+        Some(caller) => scan_callers(files, id, &surface, caller, stem, &mut errors)
+            .map_err(|error| vec![error.into()])?,
         None => false,
     };
-
-    let kinds: Vec<Kind> = if has_caller {
-        let allowed = entry
-            .variants
-            .clone()
-            .unwrap_or_else(|| vec![VariantKind::Auth, VariantKind::Caller]);
-        [Kind::Auth, Kind::Caller]
-            .into_iter()
-            .filter(|kind| match kind {
-                Kind::Auth => allowed.contains(&VariantKind::Auth),
-                _ => allowed.contains(&VariantKind::Caller),
-            })
+    let auths: Vec<Option<&AuthSpec>> = if has_caller {
+        folded
+            .auth
+            .iter()
+            .filter_map(|name| config.auths.get(name))
+            .map(Some)
             .collect()
     } else {
-        if let Some(auth) = auth {
-            for key in entry.auth_only_keys() {
+        vec![None]
+    };
+
+    let decl_prefix = format!("{}_", module.name);
+    let mut mocks = Vec::new();
+    for group in groups(&folded) {
+        for auth in &auths {
+            let settings = match auth {
+                Some(auth) => config::settings_for(config, &rules, &folded.settings, &auth.name),
+                None => folded.settings.clone(),
+            };
+            let suffix = auth.map_or("", |auth| auth.suffix.as_str());
+            let name = folded
+                .name
+                .replace("{module}", stem)
+                .replace("{instance}", &group.name)
+                .replace("{suffix}", suffix)
+                .replace("{dir}", &dir_camel(&candidate.module));
+            if !is_name(&name) {
                 errors.push(
-                    PlanError::NoCallerParam {
-                        mock: base.clone(),
-                        module: entry.module.clone(),
-                        caller: auth.caller.1.clone(),
-                        key: key.to_owned(),
+                    ConfigError::NameIdentifier {
+                        cfg: config.shown.clone(),
+                        template: folded.name.clone(),
+                        value: name.clone(),
+                        module: candidate.module.clone(),
                     }
                     .into(),
                 );
+                continue;
             }
-        }
-        vec![Kind::Single]
-    };
-
-    let mut variants = Vec::new();
-    for kind in kinds {
-        let shape = VariantShape {
-            index,
-            kind,
-            base: &base,
-            prefix: &prefix,
-            module_file: id,
-        };
-        match variant(config, entry, &shape) {
-            Ok(variant) => variants.push(variant),
-            Err(mut found) => errors.append(&mut found),
+            let instances = group
+                .members
+                .iter()
+                .map(|instance| InstanceSpec {
+                    suffix: instance.suffix.clone(),
+                    prefix: instance.prefix.clone().unwrap_or_else(|| {
+                        if group.merged {
+                            format!("{}{}_", module.name, instance.suffix)
+                        } else {
+                            folded.prefix.clone().unwrap_or_else(|| decl_prefix.clone())
+                        }
+                    }),
+                    module_args: instance
+                        .module_args
+                        .clone()
+                        .unwrap_or_else(|| folded.module_args.clone()),
+                    circuit_args: instance
+                        .circuit_args
+                        .clone()
+                        .unwrap_or_else(|| folded.circuit_args.clone()),
+                    init: instance
+                        .init
+                        .clone()
+                        .or_else(|| settings.init.clone())
+                        .unwrap_or(Init::Auto),
+                    salt: instance.salt.clone().or_else(|| settings.salt.clone()),
+                    exclude: instance
+                        .exclude
+                        .clone()
+                        .or_else(|| settings.exclude.clone())
+                        .unwrap_or_default(),
+                    rename: instance
+                        .rename
+                        .clone()
+                        .or_else(|| settings.rename.clone())
+                        .unwrap_or_default(),
+                })
+                .collect();
+            mocks.push(MockSpec {
+                name,
+                auth: auth.map(|auth| auth.name.clone()),
+                merged: group.merged,
+                instances,
+                settings,
+            });
         }
     }
 
-    if errors.is_empty() {
-        Ok(variants)
-    } else {
-        Err(errors)
-    }
+    Ok(Expansion::Mocks(Expanded {
+        module: candidate.module.clone(),
+        file: id,
+        surface,
+        rules,
+        mocks,
+        errors,
+    }))
 }
 
 /// Whether any exported circuit takes the caller type. Parameter types that do not
-/// resolve are reported against `base`.
+/// resolve are reported against the module stem.
 fn scan_callers(
     files: &mut Files,
     id: FileId,
-    auth: &AuthPlan,
-    base: &str,
+    surface: &Surface,
+    caller: &(FileId, String),
+    stem: &str,
     errors: &mut Vec<Error>,
 ) -> Result<bool, SourceError> {
-    let surface = surface(files, id)?;
     let mut has_caller = false;
     for circuit in &surface.circuits {
         let (file, circuit) = match circuit {
@@ -491,11 +890,11 @@ fn scan_callers(
             },
         };
         for (position, param) in circuit.params.iter().enumerate() {
-            match files.caller_match(file, &circuit.generics, &param.ty, &auth.caller)? {
+            match files.caller_match(file, &circuit.generics, &param.ty, caller)? {
                 CallerMatch::Exact | CallerMatch::Contains => has_caller = true,
                 CallerMatch::Unresolved => errors.push(
                     PlanError::Unresolved {
-                        mock: base.to_owned(),
+                        mock: format!("Mock{stem}"),
                         param: param_label(param.name(), position),
                         circuit: circuit.name.clone(),
                         ty: param.ty.clone(),
@@ -509,135 +908,207 @@ fn scan_callers(
     Ok(has_caller)
 }
 
-/// What every variant of one entry shares.
-struct VariantShape<'a> {
-    index: usize,
-    kind: Kind,
-    base: &'a str,
-    prefix: &'a str,
-    module_file: FileId,
-}
-
-/// One variant's name, effective settings and output directory.
-fn variant(
-    config: &Config,
-    entry: &Entry,
-    shape: &VariantShape<'_>,
-) -> Result<Variant, Vec<Error>> {
-    let (name, settings) = match shape.kind {
-        Kind::Auth => {
-            let table = entry.auth.clone().unwrap_or_default();
-            (
-                table.name.clone().unwrap_or_else(|| shape.base.to_owned()),
-                table.over(&entry.settings),
-            )
-        }
-        Kind::Caller => {
-            let table = entry.caller.clone().unwrap_or_default();
-            (
-                table
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("{}Caller", shape.base)),
-                table.over(&entry.settings),
-            )
-        }
-        Kind::Single => (shape.base.to_owned(), entry.settings.clone()),
-    };
-    let mut errors: Vec<Error> = Vec::new();
-    let Ok(relative) = expand_out_dir(&entry.out_dir, &entry.module) else {
-        return Err(vec![
-            ConfigError::ParentAtRoot {
-                cfg: config.shown.clone(),
-                mock: name,
-                module: entry.module.clone(),
-            }
-            .into(),
-        ]);
-    };
-    let out_dir = normalize(&config.src.join(relative));
-    let root = config.path.parent().unwrap_or_else(|| Path::new(""));
-    let outside = |key: &str, value: &str| -> Error {
-        ConfigError::OutsideConfig {
-            cfg: config.shown.clone(),
-            mock: name.clone(),
-            key: key.to_owned(),
-            value: value.to_owned(),
-        }
-        .into()
-    };
-    let out_dir_inside = out_dir.starts_with(root);
-    if !out_dir_inside {
-        errors.push(outside("out_dir", &entry.out_dir));
-    }
-    if let Some(Include::File(file)) = &settings.include {
-        if !file.ends_with(FRAGMENT_SUFFIX) {
-            errors.push(
-                ConfigError::IncludeSuffix {
-                    cfg: config.shown.clone(),
-                    mock: name.clone(),
-                    value: file.clone(),
-                }
-                .into(),
-            );
-        }
-        if is_absolute(file) {
-            errors.push(
-                ConfigError::IncludeAbsolute {
-                    cfg: config.shown.clone(),
-                    mock: name.clone(),
-                    value: file.clone(),
-                }
-                .into(),
-            );
-        } else if out_dir_inside && !normalize(&out_dir.join(file)).starts_with(root) {
-            errors.push(outside("include", file));
-        }
-    }
-    if !errors.is_empty() {
-        return Err(errors);
-    }
-    Ok(Variant {
-        entry: shape.index,
-        kind: shape.kind,
-        name,
-        settings,
-        out_dir,
-        module_file: shape.module_file,
-        prefix: shape.prefix.to_owned(),
-    })
-}
-
 fn param_label(name: Option<&str>, position: usize) -> String {
     name.map_or_else(|| (position + 1).to_string(), str::to_owned)
 }
 
-/// Generated names and paths are unique, ignoring ASCII case.
-fn check_duplicates(config: &Config, files: &Files, variants: &[Variant], errors: &mut Vec<Error>) {
-    let mut names: HashMap<String, &str> = HashMap::new();
-    let mut paths: HashMap<String, &str> = HashMap::new();
-    for variant in variants {
-        if names
-            .insert(variant.name.to_ascii_lowercase(), &variant.name)
-            .is_some()
-        {
-            errors.push(
-                ConfigError::DuplicateName {
-                    cfg: config.shown.clone(),
-                    mock: variant.name.clone(),
+/// The circuit name a `rename` key names: `name` or `name(T1, T2)`.
+fn rename_circuit(key: &str) -> &str {
+    key.split_once('(').map_or(key, |(name, _)| name.trim())
+}
+
+/// Rule-level checks: every circuit or ledger field a rule names is exported by at least
+/// one module it applies to. A rule with an unreadable module is not checked.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one pass over each rule's keys reads best as one function"
+)]
+fn check_rules(
+    config: &Config,
+    analysis: &Analysis,
+    expanded: &[(usize, Expanded)],
+    errors: &mut Vec<Error>,
+) {
+    for (index, rule) in config.rules.iter().enumerate() {
+        let mut circuits: BTreeSet<&str> = BTreeSet::new();
+        let mut ledgers: BTreeSet<&str> = BTreeSet::new();
+        let mut owned_init: BTreeSet<&str> = BTreeSet::new();
+        let mut complete = true;
+        let mut planned = false;
+        for (position, module) in analysis.modules.iter().enumerate() {
+            if !rule.applies(&module.module) {
+                continue;
+            }
+            match &module.status {
+                Status::Failed(_) => complete = false,
+                Status::Mocks { .. } => {
+                    if let Some((_, found)) = expanded.iter().find(|(at, _)| *at == position) {
+                        if !found.rules.contains(&index) {
+                            continue;
+                        }
+                        planned = true;
+                        for circuit in &found.surface.circuits {
+                            circuits.insert(circuit.name());
+                            if let Exposable::Own(own) = circuit {
+                                owned_init.insert(&own.name);
+                            }
+                        }
+                        ledgers.extend(found.surface.ledgers.iter().map(String::as_str));
+                    }
                 }
-                .into(),
-            );
+                _ => {}
+            }
+        }
+        // Only modules the rule still applies to after every exclusion count, and a rule
+        // with none of them names nothing that could be checked.
+        if !complete || !planned {
             continue;
         }
-        let shown = files.paths().show(&variant.path());
-        if let Some(first) = paths.insert(shown.to_ascii_lowercase(), &variant.name) {
+        let mut named: Vec<(&str, String)> = Vec::new();
+        let mut ledger_names: Vec<String> = Vec::new();
+        let mut inits: Vec<Init> = Vec::new();
+        let mut collect = |settings: &Settings| {
+            for name in settings.exclude.iter().flatten() {
+                named.push(("exclude", name.clone()));
+            }
+            for name in settings.disclose.iter().flatten() {
+                named.push(("disclose", name.clone()));
+            }
+            if let Some(Guard::Some(list)) = &settings.guard {
+                for name in list {
+                    named.push(("guard", name.clone()));
+                }
+            }
+            for key in settings.rename.iter().flat_map(BTreeMap::keys) {
+                named.push(("rename", rename_circuit(key).to_owned()));
+            }
+            if let Some(Ledger::Some(list)) = &settings.ledger {
+                ledger_names.extend(list.iter().cloned());
+            }
+            if let Some(init) = &settings.init
+                && init.explicit()
+            {
+                inits.push(init.clone());
+            }
+        };
+        collect(&rule.settings);
+        for table in rule.overrides.values() {
+            collect(table);
+        }
+        for instance in rule.instances.iter().flatten() {
+            for name in instance.exclude.iter().flatten() {
+                named.push(("exclude", name.clone()));
+            }
+            for key in instance.rename.iter().flat_map(BTreeMap::keys) {
+                named.push(("rename", rename_circuit(key).to_owned()));
+            }
+            for key in instance.circuit_args.iter().flat_map(BTreeMap::keys) {
+                named.push(("circuit_args", key.clone()));
+            }
+            if let Some(init) = &instance.init
+                && init.explicit()
+            {
+                inits.push(init.clone());
+            }
+        }
+        for key in rule.circuit_args.iter().flat_map(BTreeMap::keys) {
+            named.push(("circuit_args", key.clone()));
+        }
+        let mut reported: BTreeSet<(String, String)> = BTreeSet::new();
+        for (key, circuit) in named {
+            if !circuits.contains(circuit.as_str())
+                && reported.insert((key.to_owned(), circuit.clone()))
+            {
+                errors.push(
+                    ConfigError::RuleCircuit {
+                        cfg: config.shown.clone(),
+                        number: rule.number,
+                        key: key.to_owned(),
+                        circuit,
+                    }
+                    .into(),
+                );
+            }
+        }
+        for field in ledger_names {
+            if !ledgers.contains(field.as_str())
+                && reported.insert(("ledger".to_owned(), field.clone()))
+            {
+                errors.push(
+                    ConfigError::RuleLedger {
+                        cfg: config.shown.clone(),
+                        number: rule.number,
+                        field,
+                    }
+                    .into(),
+                );
+            }
+        }
+        for init in inits {
+            let circuit = init.circuit().to_owned();
+            if !owned_init.contains(circuit.as_str())
+                && reported.insert(("init".to_owned(), circuit.clone()))
+            {
+                errors.push(
+                    ConfigError::RuleInit {
+                        cfg: config.shown.clone(),
+                        number: rule.number,
+                        init: init.to_string(),
+                        circuit,
+                    }
+                    .into(),
+                );
+            }
+        }
+    }
+}
+
+/// Mock names are unique ignoring ASCII case, across the whole expansion.
+fn check_duplicates(config: &Config, analysis: &Analysis, errors: &mut Vec<Error>) {
+    let mut seen: HashMap<String, (&str, &str)> = HashMap::new();
+    for module in &analysis.modules {
+        let Status::Mocks { names, .. } = &module.status else {
+            continue;
+        };
+        for name in names {
+            match seen.get(&name.to_ascii_lowercase()) {
+                Some((_, first)) => errors.push(
+                    ConfigError::DuplicateName {
+                        cfg: config.shown.clone(),
+                        mock: name.clone(),
+                        first: (*first).to_owned(),
+                        second: module.module.clone(),
+                    }
+                    .into(),
+                ),
+                None => {
+                    seen.insert(name.to_ascii_lowercase(), (name, &module.module));
+                }
+            }
+        }
+    }
+}
+
+/// A NAME argument must name a mock of the expansion. Unknown only when every module
+/// expanded, since a failed one may hold it.
+fn check_names(config: &Config, analysis: &Analysis, names: &[String], errors: &mut Vec<Error>) {
+    let complete = analysis
+        .modules
+        .iter()
+        .all(|module| !matches!(module.status, Status::Failed(_)));
+    if !complete {
+        return;
+    }
+    for name in names {
+        let known = analysis.modules.iter().any(|module| match &module.status {
+            Status::Mocks { names: found, .. } => found.contains(name),
+            _ => false,
+        });
+        if !known {
             errors.push(
-                ConfigError::DuplicatePath {
+                ConfigError::UnknownName {
+                    name: name.clone(),
                     cfg: config.shown.clone(),
-                    mock: first.to_owned(),
-                    other: variant.name.clone(),
-                    path: shown,
                 }
                 .into(),
             );
@@ -648,12 +1119,22 @@ fn check_duplicates(config: &Config, files: &Files, variants: &[Variant], errors
 /// Imports the emitted text depends on.
 #[derive(Default)]
 struct Needs {
-    /// Selective elements, as (import, element) indices of the module's imports.
-    elements: BTreeSet<(usize, usize)>,
-    /// Prefixed and whole-module imports, by index.
-    imports: BTreeSet<usize>,
-    /// Some emitted text names `<prefix><name>`.
-    module_prefix: bool,
+    /// Selective elements, as (file, import, element).
+    elements: BTreeSet<(FileId, usize, usize)>,
+    /// Prefixed and whole-module imports, as (file, import).
+    imports: BTreeSet<(FileId, usize)>,
+    /// Files whose imports were needed, in first-use order.
+    order: Vec<FileId>,
+    /// Instances whose prefix some emitted text names.
+    prefixes: BTreeSet<usize>,
+}
+
+impl Needs {
+    fn touch(&mut self, file: FileId) {
+        if !self.order.contains(&file) {
+            self.order.push(file);
+        }
+    }
 }
 
 /// The scope a type is written in.
@@ -664,448 +1145,756 @@ struct TypeScope<'a> {
     circuit: &'a str,
 }
 
+/// What a mock collects across its instances before the plan is assembled.
+#[derive(Default)]
+struct Assembly {
+    types: BTreeSet<String>,
+    reexports: Vec<String>,
+    plain_ledgers: Vec<String>,
+    pure_exports: Vec<String>,
+    ledger_exports: Vec<String>,
+    wrappers: Vec<Wrapper>,
+    params: Vec<(Param, String)>,
+    flags: Vec<String>,
+    calls: Vec<(Option<String>, Call)>,
+    has_constructor: bool,
+    covered: BTreeSet<usize>,
+    /// Every name the mock declares, with what declares it and an identity, for the
+    /// clash check. One identity may claim its name twice.
+    taken: Vec<(String, String, String)>,
+    /// Identities of wrappers whose name is not their circuit's: renamed, overload
+    /// numbered or merged.
+    renamed: BTreeSet<String>,
+}
+
+/// The authenticator call of one instance: not yet computed, failed (its salt error is
+/// reported once), or ready.
+#[derive(Clone, Debug)]
+enum AuthExpr {
+    Pending,
+    Failed,
+    Ready(String),
+}
+
 struct Planner<'a> {
     config: &'a Config,
     files: &'a mut Files,
+    module: &'a Expanded,
+    spec: &'a MockSpec,
+    caller: Option<&'a (FileId, String)>,
     auth: Option<&'a AuthPlan>,
-    entry: &'a Entry,
-    variant: &'a Variant,
+    injectors: Vec<&'a InjectPlan>,
     errors: Vec<Error>,
     needs: Needs,
+    current: usize,
+    /// Per instance: the authenticator call once computed.
+    auth_exprs: Vec<AuthExpr>,
+    used_auth: bool,
+    used_injectors: BTreeSet<usize>,
 }
 
-impl Planner<'_> {
+impl<'a> Planner<'a> {
+    fn new(
+        config: &'a Config,
+        files: &'a mut Files,
+        context: &'a Context,
+        module: &'a Expanded,
+        spec: &'a MockSpec,
+    ) -> Self {
+        let auth = spec
+            .auth
+            .as_ref()
+            .filter(|name| name.as_str() != CALLER)
+            .and_then(|name| context.auths.get(name));
+        let injectors = spec
+            .settings
+            .inject
+            .iter()
+            .flatten()
+            .filter_map(|name| context.injectors.get(name))
+            .collect();
+        Self {
+            config,
+            files,
+            module,
+            spec,
+            caller: context.caller.as_ref(),
+            auth,
+            injectors,
+            errors: Vec::new(),
+            needs: Needs::default(),
+            current: 0,
+            auth_exprs: vec![AuthExpr::Pending; spec.instances.len()],
+            used_auth: false,
+            used_injectors: BTreeSet::new(),
+        }
+    }
+
     fn mock(&self) -> String {
-        self.variant.name.clone()
+        self.spec.name.clone()
     }
 
     fn report(&mut self, error: impl Into<Error>) {
         self.errors.push(error.into());
     }
 
-    #[allow(
-        clippy::too_many_lines,
-        reason = "one pass in rule order reads best as one function"
-    )]
+    fn inst(&self) -> &'a InstanceSpec {
+        &self.spec.instances[self.current]
+    }
+
+    fn artifacts(&self) -> PathBuf {
+        self.config.artifacts_dir(&self.module.module)
+    }
+
     fn plan(&mut self) -> Result<MockPlan, Error> {
-        let file = self.variant.module_file;
+        let file = self.module.file;
         let source = self.files.get(file);
         let module = source.module.clone().expect("expansion checked the module");
-        let settings = self.variant.settings.clone();
-        let surface = surface(self.files, file)?;
-        let names: Vec<&str> = surface.circuits.iter().map(Exposable::name).collect();
+        self.check_module_args(&module)?;
 
-        if self.entry.module_args.len() != module.generics.len() {
-            self.report(PlanError::ModuleArgsCount {
+        let mut assembly = Assembly::default();
+        for index in 0..self.spec.instances.len() {
+            self.current = index;
+            self.instance(&mut assembly)?;
+        }
+        if assembly.wrappers.iter().any(|wrapper| wrapper.guard) {
+            assembly.taken.push((
+                GUARD_LEDGER.to_owned(),
+                format!("ledger {GUARD_LEDGER}"),
+                "guard".to_owned(),
+            ));
+        }
+
+        let (include, fragment_exports, fragment_constructor) = self.include()?;
+        if fragment_constructor && assembly.has_constructor {
+            let path = self.fragment_path();
+            self.report(PlanError::FragmentConstructor {
                 mock: self.mock(),
-                given: self.entry.module_args.len(),
-                module: self.entry.module.clone(),
-                takes: module.generics.len(),
+                path: self.files.paths().show(&path),
             });
         }
-        if let Some(auth) = self.auth {
-            for arg in &self.entry.module_args {
-                let matched = self.files.caller_match(file, &[], arg, &auth.caller)?;
-                if matches!(matched, CallerMatch::Exact | CallerMatch::Contains) {
-                    self.report(PlanError::CallerModuleArgument {
-                        mock: self.mock(),
-                        arg: arg.clone(),
-                        caller: auth.caller.1.clone(),
-                    });
-                }
+        for (index, circuit) in self.module.surface.circuits.iter().enumerate() {
+            if fragment_exports.iter().any(|name| name == circuit.name()) {
+                assembly.covered.insert(index);
             }
         }
+        if include.is_some() {
+            self.needs.prefixes.extend(0..self.spec.instances.len());
+        }
 
-        let exclude = settings.exclude.clone().unwrap_or_default();
+        let (interfaces, implements) = self.implements(&assembly, &fragment_exports)?;
+        let (named, prefixed) = self.imports(&module, &assembly)?;
+        let named = without_interfaces(named, &interfaces);
+        self.check_witnesses(&interfaces, &named, &prefixed);
+        self.check_clashes(&assembly, &named);
+
+        let constructor = assembly.has_constructor.then(|| Constructor {
+            params: assembly
+                .params
+                .iter()
+                .map(|(param, _)| param.clone())
+                .collect(),
+            flags: assembly.flags.clone(),
+            calls: assembly.calls.clone(),
+        });
+        let guard_ledger = assembly.wrappers.iter().any(|wrapper| wrapper.guard);
+        let mut exports: Vec<String> = assembly.types.into_iter().collect();
+        exports.extend(assembly.reexports);
+        exports.extend(assembly.pure_exports);
+        exports.extend(assembly.ledger_exports);
+        let mut seen = BTreeSet::new();
+        exports.retain(|name| seen.insert(name.clone()));
+
+        let artifacts = self.artifacts();
+        Ok(MockPlan {
+            name: self.spec.name.clone(),
+            path: artifacts.join(format!("{}.compact", self.spec.name)),
+            artifacts,
+            module: self.module.module.clone(),
+            spdx: self.config.spdx.clone(),
+            pragma: source.pragma.clone().unwrap_or_default(),
+            interfaces,
+            named,
+            prefixed,
+            implements,
+            exports,
+            guard_ledger,
+            constructor,
+            wrappers: assembly.wrappers,
+            include,
+            covered: assembly.covered,
+        })
+    }
+
+    /// Module argument arity per instance, the caller in a module argument, and two
+    /// instances of one merged group sharing their arguments.
+    fn check_module_args(&mut self, module: &crate::source::Module) -> Result<(), Error> {
+        let takes = module.generics.len();
+        let mut seen: Vec<(String, String)> = Vec::new();
+        for index in 0..self.spec.instances.len() {
+            let inst = &self.spec.instances[index];
+            if takes > 0 && inst.module_args.is_empty() {
+                self.report(PlanError::GenericModule {
+                    mock: self.mock(),
+                    module: self.module.module.clone(),
+                    count: takes,
+                });
+            } else if inst.module_args.len() != takes {
+                self.report(PlanError::ModuleArgsCount {
+                    mock: self.mock(),
+                    given: inst.module_args.len(),
+                    module: self.module.module.clone(),
+                    takes,
+                });
+            }
+            if let Some(caller) = self.caller {
+                for arg in &inst.module_args {
+                    let matched = self
+                        .files
+                        .caller_match(self.module.file, &[], arg, caller)?;
+                    if matches!(matched, CallerMatch::Exact | CallerMatch::Contains) {
+                        self.report(PlanError::CallerModuleArgument {
+                            mock: self.mock(),
+                            arg: arg.clone(),
+                            caller: caller.1.clone(),
+                        });
+                    }
+                }
+            }
+            for (name, args) in &inst.circuit_args {
+                let takes = self
+                    .module
+                    .surface
+                    .circuits
+                    .iter()
+                    .find(|circuit| circuit.name() == name)
+                    .map(|circuit| match circuit {
+                        Exposable::Own(own) => own.generics.len(),
+                        Exposable::Listed { decl, .. } => self
+                            .files
+                            .circuit(decl)
+                            .map_or(0, |target| target.generics.len()),
+                    });
+                match takes {
+                    Some(0) => self.report(PlanError::CircuitArgsNotGeneric {
+                        mock: self.mock(),
+                        circuit: name.clone(),
+                    }),
+                    Some(takes) if takes != args.len() => {
+                        self.report(PlanError::CircuitArgsCount {
+                            mock: self.mock(),
+                            circuit: name.clone(),
+                            given: args.len(),
+                            takes,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            if self.spec.merged {
+                let key: String = inst
+                    .module_args
+                    .join(",")
+                    .chars()
+                    .filter(|ch| !ch.is_whitespace())
+                    .collect();
+                if let Some((first, _)) = seen.iter().find(|(_, args)| *args == key) {
+                    self.report(PlanError::SameArgs {
+                        mock: self.mock(),
+                        instances: format!("{first} and {}", inst.suffix),
+                        args: format!(
+                            "{}; compactc would share one instance of {}",
+                            generic_args_text(&inst.module_args),
+                            self.module.module
+                        ),
+                    });
+                }
+                seen.push((inst.suffix.clone(), key));
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one instance in rule order reads best as one function"
+    )]
+    fn instance(&mut self, out: &mut Assembly) -> Result<(), Error> {
+        let file = self.module.file;
+        let inst = self.inst();
+        let surface = &self.module.surface;
+        let settings = &self.spec.settings;
+        let merged = self.spec.merged;
         let disclose = settings.disclose.clone().unwrap_or_default();
         let guard_all = matches!(settings.guard, Some(Guard::All(true)));
         let guard_list = match &settings.guard {
             Some(Guard::Some(list)) => list.clone(),
             _ => Vec::new(),
         };
-        let rename = settings.rename.clone().unwrap_or_default();
-        let circuit_args = &self.entry.circuit_args;
 
-        let keyed: [(&str, Vec<&String>); 5] = [
-            ("exclude", exclude.iter().collect()),
-            ("disclose", disclose.iter().collect()),
-            ("guard", guard_list.iter().collect()),
-            ("rename", rename.keys().collect()),
-            ("circuit_args", circuit_args.keys().collect()),
-        ];
-        for (key, listed) in &keyed {
-            for circuit in listed {
-                if !names.contains(&circuit.as_str()) {
-                    self.report(PlanError::UnknownCircuit {
-                        mock: self.mock(),
-                        key: (*key).to_owned(),
-                        circuit: (*circuit).clone(),
-                        module: self.entry.module.clone(),
-                    });
-                }
-            }
-        }
-
-        let own_initialize = surface.circuits.iter().find_map(|circuit| match circuit {
-            Exposable::Own(circuit) if circuit.name == INITIALIZE => Some(circuit.clone()),
-            _ => None,
-        });
-        let init = settings
-            .init
-            .clone()
-            .unwrap_or(if own_initialize.is_some() {
-                Init::Plain
-            } else {
-                Init::None
-            });
-        if init != Init::None && own_initialize.is_none() {
-            self.report(PlanError::NoInitialize {
-                mock: self.mock(),
-                init: init.to_string(),
-                module: self.entry.module.clone(),
-            });
-        }
-
-        let exposed: Vec<Exposable> = surface
+        // The constructor and the init circuit it consumes.
+        let init_circuit = inst.init.circuit().to_owned();
+        let own_inits: Vec<Circuit> = surface
             .circuits
             .iter()
-            .filter(|circuit| !(circuit.name() == INITIALIZE && init != Init::None))
-            .filter(|circuit| !exclude.iter().any(|name| name == circuit.name()))
-            .cloned()
+            .filter_map(|circuit| match circuit {
+                Exposable::Own(own) if own.name == init_circuit => Some(own.clone()),
+                _ => None,
+            })
             .collect();
-        let exposed_names: Vec<&str> = exposed.iter().map(Exposable::name).collect();
-        for (key, listed) in &keyed[1..4] {
-            for circuit in listed {
-                if names.contains(&circuit.as_str()) && !exposed_names.contains(&circuit.as_str()) {
-                    self.report(PlanError::NotExposed {
-                        mock: self.mock(),
-                        key: (*key).to_owned(),
-                        circuit: (*circuit).clone(),
-                    });
-                }
-            }
-        }
-        for (at, name) in exposed_names.iter().enumerate() {
-            let count = exposed_names.iter().filter(|other| *other == name).count();
-            if count > 1 && !exposed_names[..at].contains(name) {
-                self.report(PlanError::Overloaded {
-                    mock: self.mock(),
-                    module: self.entry.module.clone(),
-                    count,
-                    circuit: (*name).to_owned(),
-                    constructor: false,
-                });
-            }
-        }
-        let initializers = surface
-            .circuits
-            .iter()
-            .filter(|circuit| matches!(circuit, Exposable::Own(own) if own.name == INITIALIZE))
-            .count();
-        if init != Init::None && initializers > 1 {
+        let constructs = !matches!(inst.init, Init::None) && !own_inits.is_empty();
+        if constructs && own_inits.len() > 1 {
             self.report(PlanError::Overloaded {
                 mock: self.mock(),
-                module: self.entry.module.clone(),
-                count: initializers,
-                circuit: INITIALIZE.to_owned(),
+                module: self.module.module.clone(),
+                count: own_inits.len(),
+                circuit: init_circuit.clone(),
                 constructor: true,
             });
         }
 
-        for (circuit, args) in circuit_args {
-            let generics = surface.circuits.iter().find_map(|known| match known {
-                Exposable::Own(own) if &own.name == circuit => Some(own.generics.len()),
-                Exposable::Listed { name, .. } if name == circuit => Some(0),
-                _ => None,
-            });
-            match generics {
-                Some(0) => self.report(PlanError::CircuitArgsNotGeneric {
-                    mock: self.mock(),
-                    circuit: circuit.clone(),
-                }),
-                Some(takes) if takes != args.len() => self.report(PlanError::CircuitArgsCount {
-                    mock: self.mock(),
-                    circuit: circuit.clone(),
-                    given: args.len(),
-                    takes,
-                }),
-                _ => {}
+        // Overload counts and rename keys that pick no overload.
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for circuit in &surface.circuits {
+            *counts.entry(circuit.name()).or_default() += 1;
+        }
+        for key in inst.rename.keys() {
+            if key.contains('(') {
+                let name = rename_circuit(key);
+                let matches = surface.circuits.iter().any(|circuit| {
+                    circuit.name() == name && self.signature_key(circuit).as_deref() == Some(key)
+                });
+                if counts.contains_key(name) && !matches {
+                    self.report(PlanError::RenameOverload {
+                        mock: self.mock(),
+                        key: key.clone(),
+                        circuit: name.to_owned(),
+                    });
+                }
             }
         }
 
-        let mut types = BTreeSet::new();
-        let mut reexports: Vec<String> = Vec::new();
-        let mut wrappers: Vec<Wrapper> = Vec::new();
-        let mut injected = false;
-        for circuit in &exposed {
+        let mut ordinal: HashMap<&str, usize> = HashMap::new();
+        for (index, circuit) in surface.circuits.iter().enumerate() {
+            let count = counts[circuit.name()];
+            let k = {
+                let entry = ordinal.entry(circuit.name()).or_default();
+                *entry += 1;
+                *entry
+            };
+            // The constructor calls its init circuit whether or not `exclude` lists it.
+            if constructs && matches!(circuit, Exposable::Own(own) if own.name == init_circuit) {
+                out.covered.insert(index);
+                continue;
+            }
+            if inst.exclude.iter().any(|name| name == circuit.name()) {
+                continue;
+            }
+            out.covered.insert(index);
             let guarded = guard_all || guard_list.iter().any(|name| name == circuit.name());
             let disclosed = disclose.iter().any(|name| name == circuit.name());
-            let renamed = rename.get(circuit.name()).cloned();
-            match circuit {
-                Exposable::Own(circuit) => {
-                    let inject = self.injections(file, circuit, false)?;
-                    let generic = !circuit.generics.is_empty();
-                    if generic && !circuit_args.contains_key(&circuit.name) {
-                        self.report(PlanError::GenericNoArgs {
-                            mock: self.mock(),
-                            circuit: circuit.name.clone(),
-                            generics: generics_text(&circuit.generics),
-                        });
-                    }
-                    if disclosed && returns_unit(&circuit.ret) {
-                        self.report(PlanError::DiscloseUnit {
-                            mock: self.mock(),
-                            circuit: circuit.name.clone(),
-                        });
-                    }
-                    let wraps = inject.contains(&true)
-                        || generic
-                        || disclosed
-                        || guarded
-                        || renamed.is_some();
-                    if !wraps {
-                        reexports.push(circuit.name.clone());
-                        let scope = TypeScope {
-                            file,
-                            generics: &circuit.generics,
-                            circuit_args: &[],
-                            circuit: &circuit.name,
-                        };
-                        self.collect_signature(&scope, circuit, &[], &mut types)?;
-                        continue;
-                    }
-                    injected |= inject.contains(&true);
-                    let args = circuit_args.get(&circuit.name).cloned().unwrap_or_default();
-                    self.check_caller_args(file, &circuit.name, &args, false)?;
-                    let scope = TypeScope {
-                        file,
-                        generics: &circuit.generics,
-                        circuit_args: &args,
-                        circuit: &circuit.name,
-                    };
-                    let (params, call_args) = self.forwarded(&scope, circuit, &inject)?;
-                    if guarded && params.iter().any(|param| param.name == GUARD_LEDGER) {
-                        self.report(PlanError::GuardShadowed {
-                            mock: self.mock(),
-                            circuit: circuit.name.clone(),
-                        });
-                    }
-                    let ret = self.spell(&scope, &circuit.ret)?;
-                    self.collect_signature(&scope, circuit, &inject, &mut types)?;
-                    wrappers.push(Wrapper {
-                        name: renamed.unwrap_or_else(|| circuit.name.clone()),
-                        pure: circuit.pure && !inject.contains(&true) && !guarded,
-                        params,
-                        ret,
-                        guard: guarded,
-                        disclose: disclosed,
-                        call: Call {
-                            callee: format!(
-                                "{}{}{}",
-                                self.variant.prefix,
-                                circuit.name,
-                                generic_args_text(&args)
-                            ),
-                            args: call_args,
-                        },
-                    });
-                }
-                Exposable::Listed { name, decl } => {
-                    let target = self.files.circuit(decl);
-                    let mut wraps = disclosed || guarded || renamed.is_some();
-                    if let Some(target) = &target {
-                        wraps |= !target.generics.is_empty();
-                        if self.variant.kind == Kind::Auth
-                            && let Some(auth) = self.auth
-                        {
-                            for param in &target.params {
-                                let matched = self.files.caller_match(
-                                    decl.file,
-                                    &target.generics,
-                                    &param.ty,
-                                    &auth.caller,
-                                )?;
-                                wraps |= matched != CallerMatch::No;
-                            }
-                        }
-                    }
-                    if wraps {
-                        self.report(PlanError::ExportListWrapper {
-                            mock: self.mock(),
-                            circuit: name.clone(),
-                            module: self.entry.module.clone(),
-                        });
-                        continue;
-                    }
-                    reexports.push(name.clone());
-                    if let Some(target) = &target {
-                        let scope = TypeScope {
-                            file: decl.file,
-                            generics: &target.generics,
-                            circuit_args: &[],
-                            circuit: name,
-                        };
-                        for text in target
-                            .params
-                            .iter()
-                            .map(|param| &param.ty)
-                            .chain([&target.ret])
-                        {
-                            self.collect_types(&scope, text, false, &mut types, 0)?;
-                        }
-                    }
-                }
-            }
-        }
+            let signature = self.signature_key(circuit);
+            let renamed = signature
+                .as_ref()
+                .and_then(|key| inst.rename.get(key))
+                .or_else(|| (k == 1).then(|| inst.rename.get(circuit.name())).flatten())
+                .cloned();
+            let base = if count > 1 && k > 1 {
+                format!("{}{k}", circuit.name())
+            } else {
+                circuit.name().to_owned()
+            };
+            let exposed_name = match (&renamed, merged) {
+                (Some(target), _) => target.clone(),
+                (None, true) => format!("{base}{}", inst.suffix),
+                (None, false) => base,
+            };
 
-        let constructor = match (&init, &own_initialize) {
-            (Init::Plain | Init::Flag(_), Some(initialize)) => {
-                let inject = self.injections(file, initialize, true)?;
-                injected |= inject.contains(&true);
-                if !initialize.generics.is_empty() && !circuit_args.contains_key(INITIALIZE) {
-                    self.report(PlanError::GenericInitialize {
-                        mock: self.mock(),
-                        generics: generics_text(&initialize.generics),
-                    });
-                }
-                let args = circuit_args.get(INITIALIZE).cloned().unwrap_or_default();
-                self.check_caller_args(file, INITIALIZE, &args, true)?;
+            let (declaring, target) = match circuit {
+                Exposable::Own(own) => (file, Some(own.clone())),
+                Exposable::Listed { decl, .. } => (decl.file, self.files.circuit(decl)),
+            };
+            let Some(target) = target else {
+                out.reexports.push(circuit.name().to_owned());
+                out.taken.push((
+                    circuit.name().to_owned(),
+                    format!("circuit {}", circuit.name()),
+                    format!("circuit {}:{index}", self.current),
+                ));
+                continue;
+            };
+            let inject = self.injections(declaring, &target, false)?;
+            let generic = !target.generics.is_empty();
+            let wraps = inject.iter().any(Option::is_some)
+                || generic
+                || disclosed
+                || guarded
+                || renamed.is_some()
+                || count > 1
+                || merged;
+            if merged && target.pure && count == 1 {
+                out.pure_exports
+                    .push(format!("{}{}", inst.prefix, circuit.name()));
+                out.taken.push((
+                    format!("{}{}", inst.prefix, circuit.name()),
+                    format!("pure circuit {}{}", inst.prefix, circuit.name()),
+                    format!("pure {}:{index}", self.current),
+                ));
+                self.needs.prefixes.insert(self.current);
+            }
+            let own = declaring == file;
+            if !wraps {
+                out.reexports.push(circuit.name().to_owned());
+                out.taken.push((
+                    circuit.name().to_owned(),
+                    format!("circuit {}", circuit.name()),
+                    format!("circuit {}:{index}", self.current),
+                ));
                 let scope = TypeScope {
-                    file,
-                    generics: &initialize.generics,
-                    circuit_args: &args,
-                    circuit: INITIALIZE,
+                    file: declaring,
+                    generics: &target.generics,
+                    circuit_args: &[],
+                    circuit: circuit.name(),
                 };
-                let (params, call_args) = self.forwarded(&scope, initialize, &inject)?;
-                self.collect_signature(&scope, initialize, &inject, &mut types)?;
-                let flag = match &init {
-                    Init::Flag(flag) => {
-                        if params.iter().any(|param| &param.name == flag) {
-                            self.report(PlanError::FlagClash {
-                                mock: self.mock(),
-                                flag: flag.clone(),
-                            });
-                        }
-                        Some(flag.clone())
-                    }
-                    _ => None,
-                };
-                Some(Constructor {
-                    params,
-                    flag,
-                    call: Call {
-                        callee: format!(
-                            "{}{INITIALIZE}{}",
-                            self.variant.prefix,
-                            generic_args_text(&args)
-                        ),
-                        args: call_args,
-                    },
-                })
+                self.collect_signature(&scope, &target, &[], own, &mut out.types)?;
+                continue;
             }
-            _ => None,
-        };
-
-        let ledgers: Vec<String> = if settings.ledger.unwrap_or(true) {
-            surface
-                .ledgers
-                .iter()
-                .map(|ledger| format!("{}{ledger}", self.variant.prefix))
-                .collect()
-        } else {
-            Vec::new()
-        };
-        let guard_ledger = wrappers.iter().any(|wrapper| wrapper.guard);
-
-        if injected {
-            self.check_salt();
+            if generic && !inst.circuit_args.contains_key(circuit.name()) {
+                self.report(PlanError::GenericNoArgs {
+                    mock: self.mock(),
+                    circuit: circuit.name().to_owned(),
+                    generics: generics_text(&target.generics),
+                });
+            }
+            if disclosed && returns_unit(&target.ret) {
+                self.report(PlanError::DiscloseUnit {
+                    mock: self.mock(),
+                    circuit: circuit.name().to_owned(),
+                });
+            }
+            let args = inst
+                .circuit_args
+                .get(circuit.name())
+                .cloned()
+                .unwrap_or_default();
+            self.check_caller_args(file, circuit.name(), &args, false)?;
+            let scope = TypeScope {
+                file: declaring,
+                generics: &target.generics,
+                circuit_args: &args,
+                circuit: circuit.name(),
+            };
+            let (params, call_args) = self.forwarded(&scope, &target, &inject)?;
+            if guarded && params.iter().any(|param| param.name == GUARD_LEDGER) {
+                self.report(PlanError::GuardShadowed {
+                    mock: self.mock(),
+                    circuit: circuit.name().to_owned(),
+                });
+            }
+            let ret = self.spell(&scope, &target.ret)?;
+            let dropped: Vec<bool> = inject.iter().map(Option::is_some).collect();
+            self.collect_signature(&scope, &target, &dropped, own, &mut out.types)?;
+            self.needs.prefixes.insert(self.current);
+            let identity = format!("circuit {}:{index}", self.current);
+            if exposed_name != circuit.name() {
+                out.renamed.insert(identity.clone());
+            }
+            out.taken.push((
+                exposed_name.clone(),
+                format!("circuit {exposed_name}"),
+                identity,
+            ));
+            out.wrappers.push(Wrapper {
+                name: exposed_name,
+                pure: target.pure && !inject.iter().any(Option::is_some) && !guarded,
+                params,
+                ret,
+                guard: guarded,
+                disclose: disclosed,
+                call: Call {
+                    callee: format!(
+                        "{}{}{}",
+                        inst.prefix,
+                        circuit.name(),
+                        generic_args_text(&args)
+                    ),
+                    args: call_args,
+                },
+            });
         }
 
-        let imports = self.imports(
-            &module,
-            file,
-            &reexports,
-            &wrappers,
-            constructor.is_some(),
-            &ledgers,
-            injected,
-        )?;
-
-        self.check_renames(&exposed, &rename, &types, &ledgers, &imports, guard_ledger);
-
-        let include = self.include(&init)?;
-
-        let mut exports: Vec<String> = types.into_iter().collect();
-        exports.extend(reexports);
-        exports.extend(ledgers);
-
-        Ok(MockPlan {
-            name: self.variant.name.clone(),
-            path: self.variant.path(),
-            module: self.entry.module.clone(),
-            spdx: self.config.spdx.clone(),
-            pragma: source.pragma.clone().unwrap_or_default(),
-            imports,
-            exports,
-            guard_ledger,
-            constructor,
-            wrappers,
-            include,
-        })
+        if constructs && let Some(init) = own_inits.first() {
+            self.constructor(init, out)?;
+        }
+        self.ledgers(out);
+        Ok(())
     }
 
-    /// Per parameter of `circuit`: whether the authenticated variant injects it.
-    /// `constructor` is set for the `initialize` the constructor calls.
+    /// `name(T1, T2)` for a circuit, from its written parameter types.
+    fn signature_key(&self, circuit: &Exposable) -> Option<String> {
+        let target = match circuit {
+            Exposable::Own(own) => own.clone(),
+            Exposable::Listed { decl, .. } => self.files.circuit(decl)?,
+        };
+        let types: Vec<String> = target
+            .params
+            .iter()
+            .map(|param| collapse(&param.ty))
+            .collect();
+        Some(format!("{}({})", circuit.name(), types.join(", ")))
+    }
+
+    fn constructor(&mut self, init: &Circuit, out: &mut Assembly) -> Result<(), Error> {
+        let file = self.module.file;
+        let instance = self.inst();
+        let inject = self.injections(file, init, true)?;
+        if !init.generics.is_empty() && !instance.circuit_args.contains_key(&init.name) {
+            self.report(PlanError::GenericInitialize {
+                mock: self.mock(),
+                circuit: init.name.clone(),
+                generics: generics_text(&init.generics),
+            });
+        }
+        let args = instance
+            .circuit_args
+            .get(&init.name)
+            .cloned()
+            .unwrap_or_default();
+        self.check_caller_args(file, &init.name, &args, true)?;
+        let scope = TypeScope {
+            file,
+            generics: &init.generics,
+            circuit_args: &args,
+            circuit: &init.name,
+        };
+        let (params, call_args) = self.forwarded(&scope, init, &inject)?;
+        let dropped: Vec<bool> = inject.iter().map(Option::is_some).collect();
+        self.collect_signature(&scope, init, &dropped, true, &mut out.types)?;
+        self.needs.prefixes.insert(self.current);
+        for param in params {
+            match out
+                .params
+                .iter()
+                .find(|(known, _)| known.name == param.name)
+            {
+                Some((known, first)) if known.ty != param.ty => {
+                    let first = format!("{} in instance {first}", known.ty);
+                    self.report(PlanError::CtorParamClash {
+                        mock: self.mock(),
+                        param: param.name.clone(),
+                        first,
+                        second: format!("{} in instance {}", param.ty, instance.suffix),
+                    });
+                }
+                Some(_) => {}
+                None => out.params.push((param, instance.suffix.clone())),
+            }
+        }
+        let flag = instance.init.flag().map(str::to_owned);
+        if let Some(flag) = &flag {
+            if out.params.iter().any(|(param, _)| &param.name == flag) {
+                self.report(PlanError::FlagClash {
+                    mock: self.mock(),
+                    flag: flag.clone(),
+                });
+            }
+            if !out.flags.contains(flag) {
+                out.flags.push(flag.clone());
+            }
+        }
+        out.has_constructor = true;
+        out.calls.push((
+            flag,
+            Call {
+                callee: format!(
+                    "{}{}{}",
+                    instance.prefix,
+                    init.name,
+                    generic_args_text(&args)
+                ),
+                args: call_args,
+            },
+        ));
+        Ok(())
+    }
+
+    fn ledgers(&mut self, out: &mut Assembly) {
+        let inst = self.inst();
+        let settings = &self.spec.settings;
+        let fields: Vec<&String> = match &settings.ledger {
+            None | Some(Ledger::All(true)) => self.module.surface.ledgers.iter().collect(),
+            Some(Ledger::All(false)) => Vec::new(),
+            Some(Ledger::Some(list)) => self
+                .module
+                .surface
+                .ledgers
+                .iter()
+                .filter(|field| list.contains(field))
+                .collect(),
+        };
+        let plain = settings.ledger_names == Some(LedgerNames::Plain) && !self.spec.merged;
+        for field in fields {
+            if plain {
+                out.plain_ledgers.push(field.clone());
+                out.ledger_exports.push(field.clone());
+                out.taken.push((
+                    field.clone(),
+                    format!("ledger field {field}"),
+                    format!("ledger {field}"),
+                ));
+            } else {
+                let name = format!("{}{field}", inst.prefix);
+                out.taken.push((
+                    name.clone(),
+                    format!("ledger field {name}"),
+                    format!("ledger {name}"),
+                ));
+                out.ledger_exports.push(name);
+                self.needs.prefixes.insert(self.current);
+            }
+        }
+    }
+
+    /// Per parameter of `circuit` (declared in `file`): the expression the mock passes
+    /// instead, if any. `constructor` is set for the init circuit the constructor calls.
     fn injections(
         &mut self,
         file: FileId,
         circuit: &Circuit,
         constructor: bool,
-    ) -> Result<Vec<bool>, Error> {
-        let mut inject = vec![false; circuit.params.len()];
-        let (Kind::Auth, Some(auth)) = (self.variant.kind, self.auth) else {
-            return Ok(inject);
-        };
-        for (position, param) in circuit.params.iter().enumerate() {
-            match self
-                .files
-                .caller_match(file, &circuit.generics, &param.ty, &auth.caller)?
-            {
-                CallerMatch::Exact => inject[position] = true,
-                CallerMatch::Contains if constructor => {
-                    self.report(PlanError::ContainsCallerInitialize {
+    ) -> Result<Vec<Option<String>>, Error> {
+        let mut inject: Vec<Option<String>> = vec![None; circuit.params.len()];
+        if let (Some(_), Some(caller)) = (self.auth, self.caller) {
+            let mut count = 0;
+            for (position, param) in circuit.params.iter().enumerate() {
+                match self
+                    .files
+                    .caller_match(file, &circuit.generics, &param.ty, caller)?
+                {
+                    CallerMatch::Exact => {
+                        count += 1;
+                        if let Some(expr) = self.auth_expr() {
+                            inject[position] = Some(expr);
+                        }
+                    }
+                    CallerMatch::Contains if constructor => {
+                        self.report(PlanError::ContainsCallerInitialize {
+                            mock: self.mock(),
+                            circuit: circuit.name.clone(),
+                            param: param_label(param.name(), position),
+                            contains: format!("{}, which contains {}", param.ty, caller.1),
+                        });
+                    }
+                    CallerMatch::Contains => self.report(PlanError::ContainsCaller {
                         mock: self.mock(),
                         param: param_label(param.name(), position),
+                        circuit: circuit.name.clone(),
                         ty: param.ty.clone(),
-                        caller: auth.caller.1.clone(),
-                    });
+                        caller: caller.1.clone(),
+                    }),
+                    // Expansion already reported it.
+                    CallerMatch::Unresolved | CallerMatch::No => {}
                 }
-                CallerMatch::Contains => self.report(PlanError::ContainsCaller {
+            }
+            if count > 1 {
+                self.report(PlanError::CallerTwice {
                     mock: self.mock(),
-                    param: param_label(param.name(), position),
                     circuit: circuit.name.clone(),
-                    ty: param.ty.clone(),
-                    caller: auth.caller.1.clone(),
-                }),
-                // Expansion already reported it.
-                CallerMatch::Unresolved | CallerMatch::No => {}
+                    count,
+                    caller: caller.1.clone(),
+                    constructor,
+                });
+            }
+            if count > 0 {
+                self.used_auth = true;
             }
         }
-        let count = inject.iter().filter(|injected| **injected).count();
-        if count > 1 {
-            self.report(PlanError::CallerTwice {
-                mock: self.mock(),
-                circuit: circuit.name.clone(),
-                count,
-                caller: auth.caller.1.clone(),
-                constructor,
-            });
+        let caller_injected = inject.iter().any(Option::is_some);
+        for (index, injector) in self.injectors.clone().into_iter().enumerate() {
+            if injector.scope == InjectScope::Caller && !caller_injected {
+                continue;
+            }
+            for (position, param) in circuit.params.iter().enumerate() {
+                if inject[position].is_some() {
+                    continue;
+                }
+                let matched =
+                    self.files
+                        .caller_match(file, &circuit.generics, &param.ty, &injector.ty)?;
+                if matched == CallerMatch::Exact {
+                    inject[position] = Some(format!("{}{}", injector.prefix, injector.call));
+                    self.used_injectors.insert(index);
+                }
+            }
         }
         Ok(inject)
     }
 
-    /// Under `[auth]`, a circuit argument that is or holds the caller type would let any
-    /// variant take a caller it never authenticates.
+    /// The authenticator call for the current instance, with its salt slot filled. Salt
+    /// errors are reported once per instance.
+    fn auth_expr(&mut self) -> Option<String> {
+        match &self.auth_exprs[self.current] {
+            AuthExpr::Ready(expr) => return Some(expr.clone()),
+            AuthExpr::Failed => return None,
+            AuthExpr::Pending => {}
+        }
+        let expr = self.compute_auth_expr();
+        self.auth_exprs[self.current] = expr.clone().map_or(AuthExpr::Failed, AuthExpr::Ready);
+        expr
+    }
+
+    fn compute_auth_expr(&mut self) -> Option<String> {
+        let auth = self.auth?;
+        let inst = self.inst();
+        let filled = match &auth.slot {
+            None => auth.call.clone(),
+            Some(slot) => match inst.salt.clone() {
+                Some(Salt::Ledger(field)) => {
+                    if !self.module.surface.ledgers.contains(&field) {
+                        self.report(PlanError::SaltLedger {
+                            mock: self.mock(),
+                            field,
+                            module: self.module.module.clone(),
+                        });
+                        return None;
+                    }
+                    self.needs.prefixes.insert(self.current);
+                    slot.fill_expr(&auth.call, &format!("{}{field}", inst.prefix))
+                }
+                Some(Salt::Expr(expr)) => slot.fill_expr(&auth.call, &expr),
+                text => {
+                    let salt = match text {
+                        Some(Salt::Text(salt)) => salt,
+                        _ => self.spec.name.clone(),
+                    };
+                    let mut ok = true;
+                    if !salt_characters_ok(&salt) {
+                        self.report(PlanError::SaltChars { mock: self.mock() });
+                        ok = false;
+                    }
+                    if let Some(width) = slot.width
+                        && salt.len() > width
+                    {
+                        self.report(PlanError::SaltLength {
+                            mock: self.mock(),
+                            bytes: salt.len(),
+                            salt,
+                            width,
+                        });
+                        return None;
+                    }
+                    if !ok {
+                        return None;
+                    }
+                    slot.fill_text(&auth.call, &salt)
+                }
+            },
+        };
+        Some(format!("{}{filled}", auth.prefix))
+    }
+
+    /// A circuit argument that is or holds the caller type would let the mock take a
+    /// caller it never authenticates.
     fn check_caller_args(
         &mut self,
         file: FileId,
@@ -1113,17 +1902,17 @@ impl Planner<'_> {
         args: &[String],
         constructor: bool,
     ) -> Result<(), Error> {
-        let Some(auth) = self.auth else {
+        let Some(caller) = self.caller else {
             return Ok(());
         };
         for arg in args {
-            let matched = self.files.caller_match(file, &[], arg, &auth.caller)?;
+            let matched = self.files.caller_match(file, &[], arg, caller)?;
             if matches!(matched, CallerMatch::Exact | CallerMatch::Contains) {
                 self.report(PlanError::CallerArgument {
                     mock: self.mock(),
                     circuit: circuit.to_owned(),
                     arg: arg.clone(),
-                    caller: auth.caller.1.clone(),
+                    caller: caller.1.clone(),
                     constructor,
                 });
             }
@@ -1136,13 +1925,13 @@ impl Planner<'_> {
         &mut self,
         scope: &TypeScope<'_>,
         circuit: &Circuit,
-        inject: &[bool],
+        inject: &[Option<String>],
     ) -> Result<(Vec<Param>, Vec<String>), Error> {
         let mut params = Vec::new();
         let mut args = Vec::new();
         for (position, param) in circuit.params.iter().enumerate() {
-            if inject[position] {
-                args.push(self.auth_call());
+            if let Some(expr) = &inject[position] {
+                args.push(expr.clone());
                 continue;
             }
             let Some(name) = param.name() else {
@@ -1162,40 +1951,10 @@ impl Planner<'_> {
         Ok((params, args))
     }
 
-    fn salt(&self) -> String {
-        self.variant
-            .settings
-            .salt
-            .clone()
-            .unwrap_or_else(|| self.variant.name.clone())
-    }
-
-    fn auth_call(&self) -> String {
-        let auth = self.auth.expect("only the authenticated variant injects");
-        format!(
-            "{}{}",
-            auth.prefix,
-            auth.call.replacen("{salt}", &self.salt(), 1)
-        )
-    }
-
-    fn check_salt(&mut self) {
-        let salt = self.salt();
-        if !salt_characters_ok(&salt) {
-            self.report(PlanError::SaltChars { mock: self.mock() });
-        }
-        if salt.len() > MAX_SALT_BYTES {
-            self.report(PlanError::SaltLength {
-                mock: self.mock(),
-                bytes: salt.len(),
-                salt,
-            });
-        }
-    }
-
     /// Rewrites type text for the mock's scope, recording the imports it needs.
     fn spell(&mut self, scope: &TypeScope<'_>, ty: &str) -> Result<String, Error> {
         let mut replacements: HashMap<String, Option<String>> = HashMap::new();
+        let own = scope.file == self.module.file;
         for name in identifiers(ty).map(str::to_owned).collect::<Vec<_>>() {
             if replacements.contains_key(&name) {
                 continue;
@@ -1203,19 +1962,30 @@ impl Planner<'_> {
             let resolved = self.files.resolve(scope.file, scope.generics, &name)?;
             let replacement = match &resolved {
                 Resolved::CircuitGeneric(index) => scope.circuit_args.get(*index).cloned(),
-                Resolved::ModuleGeneric(index) => self.entry.module_args.get(*index).cloned(),
+                Resolved::ModuleGeneric(index) if own => {
+                    self.inst().module_args.get(*index).cloned()
+                }
+                Resolved::ModuleGeneric(_) => {
+                    self.hidden(scope.circuit, &name);
+                    None
+                }
                 Resolved::Local(decl) if decl.kind.is_type() => {
-                    if decl.exported {
-                        self.needs.module_prefix = true;
+                    let visible = if own {
+                        decl.exported
                     } else {
-                        self.report(PlanError::HiddenType {
-                            mock: self.mock(),
-                            circuit: scope.circuit.to_owned(),
-                            ty: name.clone(),
-                            module: self.entry.module.clone(),
-                        });
+                        // A type local to another file is nameable only when the module
+                        // re-exports that very declaration.
+                        matches!(
+                            self.files.resolve(self.module.file, &[], &name)?.decl(),
+                            Some(found) if found == decl && found.exported
+                        )
+                    };
+                    if visible {
+                        self.needs.prefixes.insert(self.current);
+                    } else {
+                        self.hidden(scope.circuit, &name);
                     }
-                    Some(format!("{}{}", self.variant.prefix, decl.name))
+                    Some(format!("{}{}", self.inst().prefix, decl.name))
                 }
                 Resolved::Selective {
                     import,
@@ -1223,12 +1993,14 @@ impl Planner<'_> {
                     lookup,
                 } => {
                     self.require_found(lookup)?;
-                    self.needs.elements.insert((*import, *element));
+                    self.needs.touch(scope.file);
+                    self.needs.elements.insert((scope.file, *import, *element));
                     None
                 }
                 Resolved::Prefixed { import, lookup } | Resolved::Unprefixed { import, lookup } => {
                     self.require_found(lookup)?;
-                    self.needs.imports.insert(*import);
+                    self.needs.touch(scope.file);
+                    self.needs.imports.insert((scope.file, *import));
                     None
                 }
                 _ => None,
@@ -1240,6 +2012,15 @@ impl Planner<'_> {
         }))
     }
 
+    fn hidden(&mut self, circuit: &str, ty: &str) {
+        self.report(PlanError::HiddenType {
+            mock: self.mock(),
+            circuit: circuit.to_owned(),
+            ty: ty.to_owned(),
+            module: self.module.module.clone(),
+        });
+    }
+
     fn require_found(&self, lookup: &Lookup) -> Result<(), Error> {
         match lookup {
             Lookup::Missing(missing) => Err(self.files.missing_error(missing).into()),
@@ -1247,27 +2028,28 @@ impl Planner<'_> {
         }
     }
 
-    /// Collects the export-list types of a module circuit's signature, minus the
-    /// parameters the wrapper drops.
+    /// Collects the export-list types of a circuit's signature, minus the parameters the
+    /// wrapper drops. `own` is set for a circuit the module itself declares.
     fn collect_signature(
         &mut self,
         scope: &TypeScope<'_>,
         circuit: &Circuit,
         dropped: &[bool],
+        own: bool,
         types: &mut BTreeSet<String>,
     ) -> Result<(), Error> {
         for (position, param) in circuit.params.iter().enumerate() {
             if dropped.get(position).copied().unwrap_or(false) {
                 continue;
             }
-            self.collect_types(scope, &param.ty, true, types, 0)?;
+            self.collect_types(scope, &param.ty, own, types, 0)?;
         }
-        self.collect_types(scope, &circuit.ret, true, types, 0)
+        self.collect_types(scope, &circuit.ret, own, types, 0)
     }
 
     /// Adds the exportable types `ty` names. `own` is the module's own scope, where
     /// structs and enums are nameable and generic arguments are substituted; another
-    /// file contributes standard types only.
+    /// file contributes standard types only. Contract types are never exported.
     fn collect_types(
         &mut self,
         scope: &TypeScope<'_>,
@@ -1282,13 +2064,15 @@ impl Planner<'_> {
         for name in identifiers(ty).map(str::to_owned).collect::<Vec<_>>() {
             let resolved = self.files.resolve(scope.file, scope.generics, &name)?;
             let substituted = match resolved {
-                Resolved::CircuitGeneric(index) if own => scope.circuit_args.get(index),
-                Resolved::ModuleGeneric(index) if own => self.entry.module_args.get(index),
+                Resolved::CircuitGeneric(index) if own => scope.circuit_args.get(index).cloned(),
+                Resolved::ModuleGeneric(index) if own => {
+                    self.inst().module_args.get(index).cloned()
+                }
                 _ => None,
             };
             if let Some(argument) = substituted {
                 types.extend(
-                    identifiers(argument)
+                    identifiers(&argument)
                         .filter(|name| EXPORTABLE_STD.contains(name))
                         .map(str::to_owned),
                 );
@@ -1336,19 +2120,21 @@ impl Planner<'_> {
                             Resolved::Local(_) => {
                                 // A struct the module keeps private has no name in the mock.
                                 if decl.exported {
-                                    self.needs.module_prefix = true;
-                                    types.insert(format!("{}{}", self.variant.prefix, decl.name));
+                                    self.needs.prefixes.insert(self.current);
+                                    types.insert(format!("{}{}", self.inst().prefix, decl.name));
                                 }
                             }
                             Resolved::Selective {
                                 import, element, ..
                             } => {
-                                self.needs.elements.insert((*import, *element));
+                                self.needs.touch(scope.file);
+                                self.needs.elements.insert((scope.file, *import, *element));
                                 types.insert(name);
                             }
                             Resolved::Prefixed { import, .. }
                             | Resolved::Unprefixed { import, .. } => {
-                                self.needs.imports.insert(*import);
+                                self.needs.touch(scope.file);
+                                self.needs.imports.insert((scope.file, *import));
                                 types.insert(name);
                             }
                             _ => {}
@@ -1361,103 +2147,124 @@ impl Planner<'_> {
         Ok(())
     }
 
-    /// The import block: replicated module imports, the authenticator, then the module
-    /// itself, selectively and under its prefix.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "each input is one run of the import block"
-    )]
+    /// Groups 3 and 4 of the import block.
+    #[allow(clippy::too_many_lines, reason = "the groups fill in emission order")]
     fn imports(
         &mut self,
         module: &crate::source::Module,
-        file: FileId,
-        reexports: &[String],
-        wrappers: &[Wrapper],
-        has_constructor: bool,
-        ledgers: &[String],
-        injected: bool,
-    ) -> Result<Vec<ImportLine>, Error> {
-        let out_dir = self.variant.out_dir.clone();
-        let mut lines = Vec::new();
-        for (index, import) in module.imports.iter().enumerate() {
-            let Some(target) = self.files.import_file(file, import) else {
+        assembly: &Assembly,
+    ) -> Result<(Vec<ImportLine>, Vec<ImportLine>), Error> {
+        let artifacts = self.artifacts();
+        let file = self.module.file;
+        let mut named = Vec::new();
+        let mut replicated_prefixed = Vec::new();
+        let mut order = vec![file];
+        order.extend(self.needs.order.iter().copied().filter(|id| *id != file));
+        for from in order {
+            let source = self.files.get(from);
+            let Some(from_module) = source.module.as_ref() else {
                 continue;
             };
-            let names: Vec<String> = import
-                .selection
-                .iter()
-                .enumerate()
-                .filter(|(element, _)| self.needs.elements.contains(&(index, *element)))
-                .map(|(_, element)| element.spelled())
-                .collect();
-            let whole_needed = self.needs.imports.contains(&index);
-            if names.is_empty() && !whole_needed {
-                continue;
-            }
-            let path = import_path(&out_dir, &target);
-            let args = match &import.generic_args {
-                Some(text) => {
-                    let scope = TypeScope {
-                        file,
-                        generics: &[],
-                        circuit_args: &[],
-                        circuit: "an import",
-                    };
-                    self.spell(&scope, text)?
+            for (index, import) in from_module.imports.iter().enumerate() {
+                let Some(target) = self.files.import_file(from, import) else {
+                    continue;
+                };
+                let selected: Vec<String> = import
+                    .selection
+                    .iter()
+                    .enumerate()
+                    .filter(|(element, _)| self.needs.elements.contains(&(from, index, *element)))
+                    .map(|(_, element)| element.spelled())
+                    .collect();
+                let whole_needed = self.needs.imports.contains(&(from, index));
+                if selected.is_empty() && !whole_needed {
+                    continue;
                 }
-                None => String::new(),
-            };
-            if !names.is_empty() {
-                lines.push(ImportLine::Selective { names, path, args });
-            } else if let Some(prefix) = &import.prefix {
-                lines.push(ImportLine::Prefixed {
-                    path,
+                let path = import_path(&artifacts, &target);
+                let args = match &import.generic_args {
+                    Some(text) => {
+                        let scope = TypeScope {
+                            file: from,
+                            generics: &[],
+                            circuit_args: &[],
+                            circuit: "an import",
+                        };
+                        self.spell(&scope, text)?
+                    }
+                    None => String::new(),
+                };
+                if !selected.is_empty() {
+                    named.push(ImportLine::Selective {
+                        names: selected,
+                        path,
+                        args,
+                    });
+                } else if let Some(prefix) = &import.prefix {
+                    replicated_prefixed.push(ImportLine::Prefixed {
+                        path,
+                        args,
+                        prefix: prefix.clone(),
+                    });
+                } else {
+                    replicated_prefixed.push(ImportLine::Whole { path, args });
+                }
+            }
+        }
+        let _ = module;
+
+        let module_path = import_path(&artifacts, &self.config.module_file(&self.module.module));
+        if !self.spec.merged {
+            let args = generic_args_text(&self.spec.instances[0].module_args);
+            let mut listed = assembly.reexports.clone();
+            listed.extend(assembly.plain_ledgers.iter().cloned());
+            if !listed.is_empty() {
+                named.push(ImportLine::Selective {
+                    names: listed,
+                    path: module_path.clone(),
                     args,
-                    prefix: prefix.clone(),
                 });
-            } else {
-                lines.push(ImportLine::Whole { path, args });
             }
         }
 
-        if injected && let Some(auth) = self.auth {
-            lines.push(ImportLine::Prefixed {
-                path: import_path(&out_dir, &auth.file),
+        let mut prefixed = Vec::new();
+        if self.used_auth
+            && let Some(auth) = self.auth
+        {
+            prefixed.push(ImportLine::Prefixed {
+                path: import_path(&artifacts, &auth.file),
                 args: String::new(),
                 prefix: auth.prefix.clone(),
             });
         }
-
-        let module_path = import_path(&out_dir, &module_file(self.config, &self.entry.module));
-        let module_args = generic_args_text(&self.entry.module_args);
-        if !reexports.is_empty() {
-            lines.push(ImportLine::Selective {
-                names: reexports.to_vec(),
-                path: module_path.clone(),
-                args: module_args.clone(),
-            });
+        for (index, injector) in self.injectors.iter().enumerate() {
+            if self.used_injectors.contains(&index) {
+                prefixed.push(ImportLine::Prefixed {
+                    path: import_path(&artifacts, &injector.file),
+                    args: String::new(),
+                    prefix: injector.prefix.clone(),
+                });
+            }
         }
-        if !wrappers.is_empty()
-            || has_constructor
-            || !ledgers.is_empty()
-            || self.needs.module_prefix
-        {
-            lines.push(ImportLine::Prefixed {
-                path: module_path,
-                args: module_args,
-                prefix: self.variant.prefix.clone(),
-            });
+        prefixed.extend(replicated_prefixed);
+        for (index, inst) in self.spec.instances.iter().enumerate() {
+            if self.spec.merged || self.needs.prefixes.contains(&index) {
+                prefixed.push(ImportLine::Prefixed {
+                    path: module_path.clone(),
+                    args: generic_args_text(&inst.module_args),
+                    prefix: inst.prefix.clone(),
+                });
+            }
         }
 
         let mut seen: Vec<ImportLine> = Vec::new();
-        let mut prefixes: BTreeMap<String, String> = BTreeMap::new();
-        for line in lines {
+        let mut by_prefix: BTreeMap<String, String> = BTreeMap::new();
+        for line in prefixed {
             if seen.contains(&line) {
                 continue;
             }
             if let ImportLine::Prefixed { path, args, prefix } = &line {
                 let spelled = format!("\"{path}\"{args}");
-                if let Some(first) = prefixes.get(prefix) {
+                if let Some(first) = by_prefix.get(prefix) {
                     self.report(PlanError::PrefixCollision {
                         mock: self.mock(),
                         prefix: prefix.clone(),
@@ -1465,105 +2272,254 @@ impl Planner<'_> {
                         second: spelled,
                     });
                 } else {
-                    prefixes.insert(prefix.clone(), spelled);
+                    by_prefix.insert(prefix.clone(), spelled);
                 }
             }
             seen.push(line);
         }
-        Ok(seen)
+        let mut named_seen: Vec<ImportLine> = Vec::new();
+        for line in named {
+            if !named_seen.contains(&line) {
+                named_seen.push(line);
+            }
+        }
+        Ok((named_seen, seen))
     }
 
-    /// A rename target must not clash with any other name the mock exports or declares.
-    fn check_renames(
+    /// Group 2 and the `contract implements` lines, after checking every interface
+    /// circuit is exposed.
+    fn implements(
         &mut self,
-        exposed: &[Exposable],
-        rename: &BTreeMap<String, String>,
-        types: &BTreeSet<String>,
-        ledgers: &[String],
-        imports: &[ImportLine],
-        guard_ledger: bool,
+        assembly: &Assembly,
+        fragment_exports: &[String],
+    ) -> Result<(Vec<ImportLine>, Vec<String>), Error> {
+        let mut imports = Vec::new();
+        let mut lines = Vec::new();
+        let artifacts = self.artifacts();
+        let exposed: BTreeSet<&str> = assembly
+            .wrappers
+            .iter()
+            .map(|wrapper| wrapper.name.as_str())
+            .chain(assembly.reexports.iter().map(String::as_str))
+            .chain(fragment_exports.iter().map(String::as_str))
+            .collect();
+        for entry in self.spec.settings.implements.clone().unwrap_or_default() {
+            let file = self.config.module_file(&entry.module);
+            let id = self.files.require(&file)?;
+            let source = self.files.get(id);
+            let contract = source.module.as_ref().and_then(|module| {
+                module.items.iter().find_map(|item| match item {
+                    Item::Contract(contract)
+                        if contract.name == entry.name && contract.exported =>
+                    {
+                        Some(contract.clone())
+                    }
+                    _ => None,
+                })
+            });
+            let Some(contract) = contract else {
+                self.report(PlanError::ImplementsNoContract {
+                    mock: self.mock(),
+                    interface: entry.name.clone(),
+                    module: entry.module.clone(),
+                });
+                continue;
+            };
+            for circuit in &contract.circuits {
+                if !exposed.contains(circuit.as_str()) {
+                    let fragment = self.fragment_path();
+                    self.report(PlanError::ImplementsMissing {
+                        mock: self.mock(),
+                        interface: entry.name.clone(),
+                        circuit: circuit.clone(),
+                        fragment: self.files.paths().show(&fragment),
+                    });
+                }
+            }
+            imports.push(ImportLine::Selective {
+                names: vec![entry.name.clone()],
+                path: import_path(&artifacts, &file),
+                args: String::new(),
+            });
+            lines.push(entry.name.clone());
+        }
+        Ok((imports, lines))
+    }
+
+    /// Two witness declarations with one name, from two files the mock imports.
+    fn check_witnesses(
+        &mut self,
+        interfaces: &[ImportLine],
+        named: &[ImportLine],
+        prefixed: &[ImportLine],
     ) {
-        let mut taken: Vec<(String, String, Option<&str>)> = Vec::new();
-        for circuit in exposed {
-            let name = rename
-                .get(circuit.name())
-                .cloned()
-                .unwrap_or_else(|| circuit.name().to_owned());
-            taken.push((
-                name.clone(),
-                format!("circuit {name}"),
-                Some(circuit.name()),
-            ));
+        let artifacts = self.artifacts();
+        let roots: Vec<PathBuf> = interfaces
+            .iter()
+            .chain(named)
+            .chain(prefixed)
+            .map(|line| match line {
+                ImportLine::Selective { path, .. }
+                | ImportLine::Prefixed { path, .. }
+                | ImportLine::Whole { path, .. } => {
+                    normalize(&artifacts.join(format!("{path}.compact")))
+                }
+            })
+            .collect();
+        let found = self.files.witnesses(&roots);
+        let mut first: BTreeMap<&str, FileId> = BTreeMap::new();
+        let mut reported: BTreeSet<&str> = BTreeSet::new();
+        let mut clashes = Vec::new();
+        for (file, name) in &found {
+            match first.get(name.as_str()) {
+                Some(known) if known != file && reported.insert(name) => {
+                    clashes.push((name.clone(), *known, *file));
+                }
+                Some(_) => {}
+                None => {
+                    first.insert(name, *file);
+                }
+            }
         }
-        for ty in types {
-            taken.push((ty.clone(), format!("type {ty}"), None));
+        for (witness, left, right) in clashes {
+            let first = self.files.paths().show(&self.files.path(left));
+            let second = self.files.paths().show(&self.files.path(right));
+            self.report(PlanError::WitnessClash {
+                mock: self.mock(),
+                witness,
+                first,
+                second,
+            });
         }
-        for ledger in ledgers {
-            taken.push((ledger.clone(), format!("ledger field {ledger}"), None));
+    }
+
+    /// No two names the mock declares or imports are equal. A clash is reported against
+    /// the entry that is not the renamed wrapper.
+    fn check_clashes(&mut self, assembly: &Assembly, named: &[ImportLine]) {
+        let renamed = &assembly.renamed;
+        let mut taken: Vec<(String, String, String)> = assembly.taken.clone();
+        for ty in &assembly.types {
+            taken.push((ty.clone(), format!("type {ty}"), format!("type {ty}")));
         }
-        for line in imports {
+        for line in named {
             if let ImportLine::Selective { names, .. } = line {
                 for spelled in names {
                     let local = spelled.rsplit(" as ").next().unwrap_or(spelled);
-                    // Listed once beside a type export of the same name. A circuit entry
-                    // does not count, so a rename onto an imported name still clashes.
-                    if !taken
+                    // A name imported to be re-exported or exported as a type is the
+                    // same entity; a wrapper renamed onto it is not.
+                    let same = taken
                         .iter()
-                        .any(|(name, _, owner)| name == local && owner.is_none())
-                    {
-                        taken.push((local.to_owned(), format!("import {local}"), None));
+                        .any(|(name, _, identity)| name == local && !renamed.contains(identity));
+                    if !same {
+                        taken.push((
+                            local.to_owned(),
+                            format!("import {local}"),
+                            format!("import {local}"),
+                        ));
                     }
                 }
             }
         }
-        if guard_ledger {
-            taken.push((
-                GUARD_LEDGER.to_owned(),
-                format!("ledger {GUARD_LEDGER}"),
-                None,
-            ));
-        }
-        for (old, new) in rename {
-            let clash = taken
-                .iter()
-                .find(|(name, _, owner)| name == new && *owner != Some(old.as_str()));
-            if let Some((_, existing, _)) = clash {
-                let existing = existing.clone();
-                self.report(PlanError::RenameClash {
-                    mock: self.mock(),
-                    target: new.clone(),
-                    existing,
-                });
+        let mut order: Vec<&str> = Vec::new();
+        let mut groups: HashMap<&str, Vec<&(String, String, String)>> = HashMap::new();
+        for entry in &taken {
+            let group = groups.entry(entry.0.as_str()).or_default();
+            if group.is_empty() {
+                order.push(&entry.0);
             }
+            group.push(entry);
+        }
+        let mut clashes = Vec::new();
+        for name in order {
+            let group = &groups[name];
+            let Some(last) = group.last() else {
+                continue;
+            };
+            let target = group
+                .iter()
+                .find(|entry| renamed.contains(&entry.2))
+                .unwrap_or(last);
+            if let Some(existing) = group.iter().find(|entry| entry.2 != target.2) {
+                clashes.push((name.to_owned(), existing.1.clone()));
+            }
+        }
+        for (target, existing) in clashes {
+            self.report(PlanError::RenameClash {
+                mock: self.mock(),
+                target,
+                existing,
+            });
         }
     }
 
-    /// The `include` line, after checking the fragment exists and parses.
-    fn include(&mut self, init: &Init) -> Result<Option<String>, Error> {
-        let file = match &self.variant.settings.include {
-            Some(Include::Default(true)) => format!("{}{FRAGMENT_SUFFIX}", self.variant.name),
-            Some(Include::File(file)) if file.ends_with(FRAGMENT_SUFFIX) => file.clone(),
-            _ => return Ok(None),
-        };
-        let path = normalize(&self.variant.out_dir.join(&file));
-        let shown = self.files.paths().show(&path);
-        if !path.is_file() {
-            self.report(PlanError::FragmentMissing {
-                mock: self.mock(),
-                path: shown,
-            });
-            return Ok(None);
+    /// The conventional fragment path, `<test_dir>/<name>.fragment.compact`.
+    fn fragment_path(&self) -> PathBuf {
+        let test_dir = self.config.test_dir(&self.module.module);
+        match &self.spec.settings.include {
+            Some(Include::File(file)) => normalize(&test_dir.join(file)),
+            _ => test_dir.join(format!("{}{FRAGMENT_SUFFIX}", self.spec.name)),
+        }
+    }
+
+    /// The `include` line, the fragment's exported circuits, and whether it declares a
+    /// constructor.
+    fn include(&mut self) -> Result<(Option<String>, Vec<String>, bool), Error> {
+        let path = self.fragment_path();
+        match &self.spec.settings.include {
+            Some(Include::Default(false)) => return Ok((None, Vec::new(), false)),
+            Some(Include::File(_)) => {
+                if !path.is_file() {
+                    self.report(PlanError::FragmentMissing {
+                        mock: self.mock(),
+                        path: self.files.paths().show(&path),
+                    });
+                    return Ok((None, Vec::new(), false));
+                }
+            }
+            _ => {
+                if !path.is_file() {
+                    return Ok((None, Vec::new(), false));
+                }
+            }
         }
         let id = self.files.require(&path)?;
-        if self.files.get(id).has_constructor && *init != Init::None {
-            self.report(PlanError::FragmentConstructor {
-                mock: self.mock(),
-                path: shown,
-            });
-        }
-        let without = file.strip_suffix(".compact").unwrap_or(&file).to_owned();
-        Ok(Some(without))
+        let fragment = self.files.get(id);
+        let spelled = import_path(&self.artifacts(), &path);
+        let without = spelled
+            .strip_suffix(".fragment.compact")
+            .map_or_else(|| spelled.clone(), |stem| format!("{stem}.fragment"));
+        Ok((
+            Some(without),
+            fragment.exported_circuits.clone(),
+            fragment.has_constructor,
+        ))
     }
+}
+
+/// Group 3 minus the names group 2 already imports from the same path.
+fn without_interfaces(named: Vec<ImportLine>, interfaces: &[ImportLine]) -> Vec<ImportLine> {
+    named
+        .into_iter()
+        .filter_map(|line| match line {
+            ImportLine::Selective { names, path, args } => {
+                let kept: Vec<String> = names
+                    .into_iter()
+                    .filter(|name| {
+                        !interfaces.iter().any(|interface| {
+                            matches!(interface, ImportLine::Selective { names: taken, path: at, args: none }
+                                if *at == path && none.is_empty() && args.is_empty() && taken.contains(name))
+                        })
+                    })
+                    .collect();
+                (!kept.is_empty()).then_some(ImportLine::Selective {
+                    names: kept,
+                    path,
+                    args,
+                })
+            }
+            other => Some(other),
+        })
+        .collect()
 }
 
 /// Whether a return type is `[]`, however it is spaced.
@@ -1605,684 +2561,4 @@ fn salt_characters_ok(salt: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-    use std::path::{Path, PathBuf};
-
-    use super::{
-        Call, ImportLine, MAX_SALT_BYTES, MockPlan, Outcome, plan, returns_unit, salt_characters_ok,
-    };
-    use crate::config::{Paths, load};
-    use crate::render::render;
-    use crate::scope::Files;
-
-    const AUTH: &str = "[auth]\nmodule = \"auth/Gate\"\ncall = 'authenticate(pad(32, \"{salt}\"))'\ncaller_type = { name = \"Badge\", module = \"who/Who\" }\n";
-
-    const GATE_CALL: &str = "Gate_authenticate(pad(32, \"MockDoor\"))";
-
-    fn case(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures")
-            .join(name)
-    }
-
-    /// Copies the `.compact` files under `from` to `to`.
-    fn copy_sources(from: &Path, to: &Path) {
-        for entry in std::fs::read_dir(from).expect("the case is readable") {
-            let path = entry.expect("the entry is readable").path();
-            let target = to.join(path.file_name().expect("a file name"));
-            if path.is_dir() {
-                std::fs::create_dir_all(&target).expect("dirs are created");
-                copy_sources(&path, &target);
-            } else if path.extension().is_some_and(|ext| ext == "compact") {
-                std::fs::copy(&path, &target).expect("the source is copied");
-            }
-        }
-    }
-
-    /// Plans `config` over a copy of the sources of fixture case `name`, with the config
-    /// beside `src`. Paths print relative to the copy.
-    fn planned(name: &str, config: &str, names: &[&str]) -> Outcome {
-        let directory = tempfile::TempDir::new().expect("a temporary directory");
-        copy_sources(&case(name).join("src"), &directory.path().join("src"));
-        let path = directory.path().join("compact-mock.toml");
-        std::fs::write(&path, config).expect("the config is written");
-        let paths = Paths {
-            cwd: directory.path().to_owned(),
-        };
-        let config = load(&path, &paths).expect("the config loads");
-        let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
-        plan(&config, &mut Files::new(paths), &names)
-    }
-
-    /// Every error of a run, in print order.
-    fn errors(outcome: &Outcome) -> Vec<String> {
-        let mut found: Vec<String> = outcome.errors.iter().map(ToString::to_string).collect();
-        for mock in &outcome.mocks {
-            if let Err(errors) = mock {
-                found.extend(errors.iter().map(ToString::to_string));
-            }
-        }
-        found
-    }
-
-    /// The plans of a run that must succeed, by mock name.
-    fn plans(outcome: Outcome) -> BTreeMap<String, MockPlan> {
-        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
-        outcome
-            .mocks
-            .into_iter()
-            .map(|mock| {
-                let plan = mock.unwrap_or_else(|errors| panic!("{errors:?}"));
-                (plan.name.clone(), plan)
-            })
-            .collect()
-    }
-
-    fn wrapper_names(plan: &MockPlan) -> Vec<&str> {
-        plan.wrappers
-            .iter()
-            .map(|wrapper| wrapper.name.as_str())
-            .collect()
-    }
-
-    /// Every import line of `plan` that names `path`.
-    fn module_imports<'a>(plan: &'a MockPlan, path: &str) -> Vec<&'a ImportLine> {
-        plan.imports
-            .iter()
-            .filter(|line| match line {
-                ImportLine::Selective { path: at, .. }
-                | ImportLine::Prefixed { path: at, .. }
-                | ImportLine::Whole { path: at, .. } => at == path,
-            })
-            .collect()
-    }
-
-    #[test]
-    fn each_transform_forces_a_wrapper_and_anything_else_is_re_exported() {
-        let calc = plans(planned(
-            "rules",
-            "[[mock]]\nmodule = \"calc/Calc\"\ninit = \"none\"\ndisclose = [\"double\"]\nguard = [\"total\"]\nrename = { reset = \"clear\" }\n",
-            &[],
-        ));
-        let calc = &calc["MockCalc"];
-        assert_eq!(wrapper_names(calc), ["double", "total", "clear"]);
-        assert_eq!(calc.exports, ["initialize", "Calc__total"]);
-
-        let pick = plans(planned(
-            "generics",
-            "[[mock]]\nmodule = \"pick/Pick\"\nmodule_args = [\"Field\"]\ncircuit_args = { choose = [\"Field\"], keep = [\"1\"] }\n",
-            &[],
-        ));
-        assert_eq!(wrapper_names(&pick["MockPick"]), ["choose", "keep"]);
-        assert_eq!(pick["MockPick"].exports, ["hold"]);
-
-        let door = plans(planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Door\"\n"),
-            &[],
-        ));
-        assert_eq!(
-            wrapper_names(&door["MockDoor"]),
-            ["open", "openFor", "knock"]
-        );
-        assert!(door["MockDoorCaller"].wrappers.is_empty());
-
-        for plan in [
-            calc,
-            &pick["MockPick"],
-            &door["MockDoor"],
-            &door["MockDoorCaller"],
-        ] {
-            for line in &plan.imports {
-                if let ImportLine::Selective { names, .. } = line {
-                    for name in names {
-                        assert!(!wrapper_names(plan).contains(&name.as_str()), "{name}");
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn a_wrapper_stays_pure_only_without_injection_or_guard() {
-        let purity = |config: &str| {
-            let plan = plans(planned("rules", config, &[]))
-                .remove("MockCalc")
-                .expect("planned");
-            plan.wrappers
-                .iter()
-                .find(|wrapper| wrapper.call.callee == "Calc_double")
-                .map(|wrapper| wrapper.pure)
-        };
-        let entry = "[[mock]]\nmodule = \"calc/Calc\"\n";
-        assert_eq!(
-            purity(&format!("{entry}disclose = [\"double\"]\n")),
-            Some(true)
-        );
-        assert_eq!(
-            purity(&format!("{entry}rename = {{ double = \"twice\" }}\n")),
-            Some(true)
-        );
-        assert_eq!(
-            purity(&format!("{entry}guard = [\"double\"]\n")),
-            Some(false)
-        );
-
-        let mirror = plans(planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Mirror\"\ndisclose = [\"echo\"]\n"),
-            &[],
-        ));
-        let pure: Vec<(&str, bool)> = mirror["MockMirror"]
-            .wrappers
-            .iter()
-            .map(|wrapper| (wrapper.name.as_str(), wrapper.pure))
-            .collect();
-        assert_eq!(pure, [("reflect", false), ("echo", true)]);
-        assert_eq!(wrapper_names(&mirror["MockMirrorCaller"]), ["echo"]);
-    }
-
-    #[test]
-    fn initialize_leaves_the_surface_only_when_the_constructor_calls_it() {
-        let calc = |init: &str| {
-            plans(planned(
-                "rules",
-                &format!("[[mock]]\nmodule = \"calc/Calc\"\ninit = {init}\n"),
-                &[],
-            ))
-            .remove("MockCalc")
-            .expect("planned")
-        };
-        let none = calc("\"none\"");
-        assert!(none.constructor.is_none());
-        assert!(none.exports.contains(&"initialize".to_owned()));
-        for init in ["\"plain\"", "{ flag = \"ready\" }"] {
-            let plan = calc(init);
-            let constructor = plan.constructor.as_ref().expect("a constructor");
-            assert_eq!(constructor.call.callee, "Calc_initialize");
-            assert_eq!(constructor.flag.is_some(), init.contains("flag"));
-            assert!(!plan.exports.contains(&"initialize".to_owned()));
-            assert!(!wrapper_names(&plan).contains(&"initialize"));
-        }
-    }
-
-    #[test]
-    fn a_circuit_the_module_keeps_private_is_never_exposed() {
-        let plan = plans(planned(
-            "rules",
-            "[[mock]]\nmodule = \"calc/Calc\"\ninit = \"none\"\n",
-            &[],
-        ))
-        .remove("MockCalc")
-        .expect("planned");
-        assert!(!plan.exports.contains(&"helper".to_owned()));
-        assert_eq!(
-            errors(&planned(
-                "rules",
-                "[[mock]]\nmodule = \"calc/Calc\"\nexclude = [\"helper\"]\n",
-                &[]
-            )),
-            ["MockCalc: exclude names helper, which calc/Calc does not export as a circuit"]
-        );
-    }
-
-    #[test]
-    fn every_listing_key_names_an_exported_circuit() {
-        let outcome = planned(
-            "rules",
-            "[[mock]]\nmodule = \"calc/Calc\"\nexclude = [\"a\"]\ndisclose = [\"b\"]\nguard = [\"c\"]\nrename = { d = \"e\" }\ncircuit_args = { f = [\"Field\"] }\n",
-            &[],
-        );
-        assert_eq!(
-            errors(&outcome),
-            [
-                ("exclude", "a"),
-                ("disclose", "b"),
-                ("guard", "c"),
-                ("rename", "d"),
-                ("circuit_args", "f"),
-            ]
-            .map(|(key, circuit)| format!(
-                "MockCalc: {key} names {circuit}, which calc/Calc does not export as a circuit"
-            ))
-        );
-    }
-
-    #[test]
-    fn a_selective_alias_is_replicated_and_exported_as_written() {
-        let plan = plans(planned(
-            "auth-layer",
-            "[[mock]]\nmodule = \"door/Gatehouse\"\nguard = [\"log\"]\n",
-            &[],
-        ))
-        .remove("MockGatehouse")
-        .expect("planned");
-        assert_eq!(
-            plan.imports[0],
-            ImportLine::Selective {
-                names: vec!["Badge as Visitor".to_owned()],
-                path: "../../../who/Who".to_owned(),
-                args: String::new(),
-            }
-        );
-        assert_eq!(plan.exports, ["Visitor", "greet"]);
-        assert_eq!(plan.wrappers[0].params[0].ty, "Visitor");
-    }
-
-    #[test]
-    fn disclose_or_guard_on_an_excluded_circuit_is_an_error() {
-        let outcome = planned(
-            "rules",
-            "[[mock]]\nmodule = \"calc/Calc\"\nexclude = [\"total\", \"double\"]\ndisclose = [\"total\"]\nguard = [\"double\"]\n",
-            &[],
-        );
-        assert_eq!(
-            errors(&outcome),
-            [
-                "MockCalc: disclose names total, which MockCalc does not expose",
-                "MockCalc: guard names double, which MockCalc does not expose",
-            ]
-        );
-    }
-
-    #[test]
-    fn only_allow_listed_standard_types_and_nameable_structs_are_exported() {
-        let plan = plans(planned(
-            "types",
-            "[[mock]]\nmodule = \"curve/Curve\"\n",
-            &[],
-        ))
-        .remove("MockCurve")
-        .expect("planned");
-        assert_eq!(
-            plan.exports,
-            [
-                "Either",
-                "Maybe",
-                "MerkleTreeDigest",
-                "Secp256k1EcdsaSignature",
-                "ZswapCoinPublicKey",
-                "mix",
-            ]
-        );
-        assert_eq!(
-            plan.imports,
-            [ImportLine::Selective {
-                names: vec!["mix".to_owned()],
-                path: "../../Curve".to_owned(),
-                args: String::new(),
-            }]
-        );
-    }
-
-    #[test]
-    fn sealed_and_plain_exported_ledgers_follow_module_order() {
-        let plan = plans(planned("types", "[[mock]]\nmodule = \"reg/Vault\"\n", &[]))
-            .remove("MockVault")
-            .expect("planned");
-        assert_eq!(plan.exports, ["read", "Vault__key", "Vault__reads"]);
-    }
-
-    #[test]
-    fn the_module_is_imported_once_under_one_path_and_argument_text() {
-        let plan = plans(planned(
-            "generics",
-            "[[mock]]\nmodule = \"bag/Bag\"\nmodule_args = [\"2\", \"Bytes<32>\"]\ncircuit_args = { initialize = [\"3\"] }\n",
-            &[],
-        ))
-        .remove("MockBag")
-        .expect("planned");
-        let spelled: Vec<(&str, &str)> = module_imports(&plan, "../../Bag")
-            .into_iter()
-            .map(|line| match line {
-                ImportLine::Selective { path, args, .. }
-                | ImportLine::Prefixed { path, args, .. }
-                | ImportLine::Whole { path, args } => (path.as_str(), args.as_str()),
-            })
-            .collect();
-        assert_eq!(spelled, [("../../Bag", "<2, Bytes<32>>"); 2]);
-    }
-
-    #[test]
-    fn replicated_imports_name_types_only() {
-        let plan = plans(planned(
-            "types",
-            "[[mock]]\nmodule = \"shape/Stamp\"\n",
-            &[],
-        ))
-        .remove("MockStamp")
-        .expect("planned");
-        assert_eq!(
-            module_imports(&plan, "../../../geo/Factory"),
-            [&ImportLine::Selective {
-                names: vec!["Pin".to_owned()],
-                path: "../../../geo/Factory".to_owned(),
-                args: String::new(),
-            }]
-        );
-    }
-
-    #[test]
-    fn disclose_appears_only_around_listed_calls_and_the_flag() {
-        let plan = plans(planned(
-            "rules",
-            "[[mock]]\nmodule = \"calc/Calc\"\ninit = { flag = \"ready\" }\ndisclose = [\"double\", \"total\"]\n",
-            &[],
-        ))
-        .remove("MockCalc")
-        .expect("planned");
-        let text = render(&plan);
-        assert_eq!(text.matches("disclose(").count(), 3);
-        assert!(text.contains("if (disclose(ready)) {"));
-    }
-
-    #[test]
-    fn injected_arguments_keep_their_position_and_share_one_expression() {
-        let door = plans(planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Door\"\n"),
-            &[],
-        ))
-        .remove("MockDoor")
-        .expect("planned");
-        let knock = door
-            .wrappers
-            .iter()
-            .find(|wrapper| wrapper.name == "knock")
-            .expect("knock");
-        assert_eq!(
-            knock.call,
-            Call {
-                callee: "Door_knock".to_owned(),
-                args: vec!["times".to_owned(), GATE_CALL.to_owned(), "note".to_owned()],
-            }
-        );
-        let constructor = door.constructor.expect("a constructor");
-        assert_eq!(constructor.call.args, [GATE_CALL, "opener"]);
-        let params: Vec<&str> = knock
-            .params
-            .iter()
-            .map(|param| param.name.as_str())
-            .collect();
-        assert_eq!(params, ["times", "note"]);
-    }
-
-    #[test]
-    fn caller_and_single_mocks_never_import_or_call_the_authenticator() {
-        let door = plans(planned(
-            "auth-layer",
-            &format!(
-                "{AUTH}[[mock]]\nmodule = \"door/Door\"\n\n[[mock]]\nmodule = \"door/Twin\"\n"
-            ),
-            &[],
-        ));
-        for name in ["MockDoorCaller", "MockTwin"] {
-            let text = render(&door[name]);
-            assert!(!text.contains("auth/Gate"), "{name}");
-            assert!(!text.contains("Gate_authenticate("), "{name}");
-        }
-
-        let pass = "[auth]\nmodule = \"auth/Pass\"\ncall = 'authenticate(pad(32, \"{salt}\"))'\ncaller_type = { name = \"Ticket\", module = \"auth/Pass\" }\n\n[[mock]]\nmodule = \"door/Turnstile\"\n";
-        let turnstile = plans(planned("auth-layer", pass, &[]));
-        let prefixed = ImportLine::Prefixed {
-            path: "../../../auth/Pass".to_owned(),
-            args: String::new(),
-            prefix: "Pass_".to_owned(),
-        };
-        let authenticated = &turnstile["MockTurnstile"];
-        assert_eq!(
-            authenticated
-                .imports
-                .iter()
-                .filter(|line| **line == prefixed)
-                .count(),
-            1
-        );
-        assert!(render(authenticated).contains("Pass_authenticate(pad(32, \"MockTurnstile\"))"));
-        let caller = &turnstile["MockTurnstileCaller"];
-        assert!(caller.imports.contains(&prefixed));
-        assert!(!render(caller).contains("Pass_authenticate("));
-        assert_eq!(caller.exports, ["Pass_Receipt", "Ticket", "enter"]);
-    }
-
-    #[test]
-    fn the_salt_is_the_authenticated_name_unless_a_salt_is_set() {
-        let call = |table: &str| {
-            let plans = plans(planned(
-                "auth-layer",
-                &format!("{AUTH}[[mock]]\nmodule = \"door/Hinge\"\n{table}"),
-                &[],
-            ));
-            let authenticated = plans
-                .values()
-                .find(|plan| {
-                    plan.constructor
-                        .as_ref()
-                        .is_some_and(|ctor| ctor.params.is_empty())
-                })
-                .expect("the authenticated mock");
-            let names: Vec<&String> = plans.keys().collect();
-            (
-                format!("{names:?}"),
-                authenticated.constructor.as_ref().expect("ctor").call.args[0].clone(),
-            )
-        };
-        assert_eq!(
-            call("auth.name = \"MockHingeAuth\"\n"),
-            (
-                "[\"MockHingeAuth\", \"MockHingeCaller\"]".to_owned(),
-                "Gate_authenticate(pad(32, \"MockHingeAuth\"))".to_owned()
-            )
-        );
-        assert_eq!(
-            call("salt = \"one\"\n").1,
-            "Gate_authenticate(pad(32, \"one\"))"
-        );
-        assert_eq!(
-            call("salt = \"one\"\nauth.salt = \"two\"\n").1,
-            "Gate_authenticate(pad(32, \"two\"))"
-        );
-    }
-
-    #[test]
-    fn a_flag_may_reuse_a_parameter_name_the_authenticated_variant_drops() {
-        let outcome = planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Door\"\ninit = {{ flag = \"keeper\" }}\n"),
-            &[],
-        );
-        assert_eq!(
-            errors(&outcome),
-            ["MockDoorCaller: init flag keeper clashes with an initialize parameter"]
-        );
-    }
-
-    #[test]
-    fn two_renames_may_swap_names() {
-        let plan = plans(planned(
-            "rules",
-            "[[mock]]\nmodule = \"calc/Calc\"\nrename = { total = \"reset\", reset = \"total\" }\n",
-            &[],
-        ))
-        .remove("MockCalc")
-        .expect("planned");
-        let pairs: Vec<(&str, &str)> = plan
-            .wrappers
-            .iter()
-            .map(|wrapper| (wrapper.name.as_str(), wrapper.call.callee.as_str()))
-            .collect();
-        assert_eq!(pairs, [("reset", "Calc_total"), ("total", "Calc_reset")]);
-    }
-
-    #[test]
-    fn include_true_names_one_fragment_per_variant() {
-        let outcome = planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Hinge\"\ninclude = true\n"),
-            &[],
-        );
-        assert_eq!(
-            errors(&outcome),
-            [
-                "MockHinge: fragment src/door/test/mocks/MockHinge.fragment.compact does not exist",
-                "MockHingeCaller: fragment src/door/test/mocks/MockHingeCaller.fragment.compact does not exist",
-            ]
-        );
-    }
-
-    #[test]
-    fn exclude_or_the_caller_variant_clears_every_caller_error() {
-        let excluded = plans(planned(
-            "auth-layer",
-            &format!(
-                "{AUTH}[[mock]]\nmodule = \"door/Pair\"\nauth.init = \"none\"\nauth.exclude = [\"swap\", \"initialize\"]\n\n\
-                 [[mock]]\nmodule = \"door/Crate\"\nauth.init = \"none\"\nauth.exclude = [\"ship\", \"initialize\"]\n\n\
-                 [[mock]]\nmodule = \"door/Shelf\"\ncircuit_args = {{ initialize = [\"Badge\"], stack = [\"Maybe<Badge>\"] }}\n\
-                 init = \"none\"\nexclude = [\"stack\", \"initialize\"]\n"
-            ),
-            &[],
-        ));
-        assert_eq!(wrapper_names(&excluded["MockPair"]), ["wave"]);
-        assert_eq!(wrapper_names(&excluded["MockShelf"]), ["open"]);
-        assert!(excluded["MockShelfCaller"].wrappers.is_empty());
-        assert!(excluded["MockCrate"].constructor.is_none());
-
-        let caller_only = plans(planned(
-            "auth-layer",
-            &format!(
-                "{AUTH}[[mock]]\nmodule = \"door/Pair\"\nvariants = [\"caller\"]\n\n\
-                 [[mock]]\nmodule = \"door/Crate\"\nvariants = [\"caller\"]\n"
-            ),
-            &[],
-        ));
-        let names: Vec<&String> = caller_only.keys().collect();
-        assert_eq!(names, ["MockCrateCaller", "MockPairCaller"]);
-    }
-
-    #[test]
-    fn an_authenticator_circuit_may_come_through_an_export_list() {
-        let relay = "[auth]\nmodule = \"auth/Relay\"\ncall = 'authenticate(pad(32, \"{salt}\"))'\ncaller_type = { name = \"Badge\", module = \"who/Who\" }\n\n[[mock]]\nmodule = \"door/Hinge\"\nvariants = [\"auth\"]\n";
-        let plan = plans(planned("auth-layer", relay, &[]))
-            .remove("MockHinge")
-            .expect("planned");
-        assert_eq!(
-            plan.constructor.expect("a constructor").call.args,
-            ["Relay_authenticate(pad(32, \"MockHinge\"))"]
-        );
-    }
-
-    #[test]
-    fn out_dir_and_include_stay_inside_the_config_directory_in_every_table() {
-        let outcome = planned(
-            "auth-layer",
-            &format!(
-                "{AUTH}[[mock]]\nmodule = \"door/Hinge\"\nauth.include = \"/x/MockHinge.fragment.compact\"\n\
-                 caller.include = \"../../../../../MockHinge.fragment.compact\"\n\n\
-                 [[mock]]\nmodule = \"door/Bell\"\nout_dir = \"../../{{dir}}\"\n\n\
-                 [[mock]]\nmodule = \"door/Mirror\"\ninclude = \"../../../../MockMirror.fragment.compact\"\n"
-            ),
-            &[],
-        );
-        let config = "config compact-mock.toml";
-        assert_eq!(
-            errors(&outcome),
-            [
-                format!(
-                    "{config}: MockHinge: include \"/x/MockHinge.fragment.compact\" must be a path relative to the output directory"
-                ),
-                format!(
-                    "{config}: MockHingeCaller: include \"../../../../../MockHinge.fragment.compact\" leads outside the config directory"
-                ),
-                format!(
-                    "{config}: MockBell: out_dir \"../../{{dir}}\" leads outside the config directory"
-                ),
-                format!(
-                    "{config}: MockBellCaller: out_dir \"../../{{dir}}\" leads outside the config directory"
-                ),
-                "MockMirror: fragment MockMirror.fragment.compact does not exist".to_owned(),
-                "MockMirrorCaller: fragment MockMirror.fragment.compact does not exist".to_owned(),
-            ]
-        );
-    }
-
-    #[test]
-    fn an_unresolved_parameter_type_fails_even_when_its_circuit_is_excluded() {
-        let outcome = planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Lost\"\nexclude = [\"enter\", \"wander\"]\n"),
-            &[],
-        );
-        assert_eq!(errors(&outcome).len(), 2);
-        assert!(
-            errors(&outcome)
-                .iter()
-                .all(|error| error.contains("does not resolve"))
-        );
-    }
-
-    #[test]
-    fn an_export_list_circuit_taking_the_caller_needs_a_wrapper_when_authenticated() {
-        let outcome = planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Porch\"\n"),
-            &[],
-        );
-        assert_eq!(
-            errors(&outcome),
-            [
-                "MockPorch: open is re-exported by door/Porch's export list and needs a wrapper; add it to exclude"
-            ]
-        );
-        let caller = plans(planned(
-            "auth-layer",
-            &format!("{AUTH}[[mock]]\nmodule = \"door/Porch\"\nvariants = [\"caller\"]\n"),
-            &[],
-        ));
-        assert_eq!(caller["MockPorchCaller"].exports, ["open", "wait"]);
-    }
-
-    #[test]
-    fn planning_and_rendering_twice_gives_the_same_bytes() {
-        let config = format!("{AUTH}[[mock]]\nmodule = \"door/Door\"\n");
-        let first = plans(planned("auth-layer", &config, &[]));
-        let second = plans(planned("auth-layer", &config, &[]));
-        for (name, plan) in &first {
-            assert_eq!(render(plan), render(&second[name]), "{name}");
-            assert!(render(plan).ends_with("}\n") && !render(plan).ends_with("\n\n"));
-        }
-    }
-
-    #[test]
-    fn a_unit_return_type_is_recognized_however_it_is_spaced() {
-        assert!(returns_unit("[]"));
-        assert!(returns_unit("[ ]"));
-        assert!(!returns_unit("Field"));
-        assert!(!returns_unit("Vector<0, Field>"));
-    }
-
-    #[test]
-    fn the_salt_limit_counts_utf8_bytes() {
-        let fits = [
-            "a".repeat(32),
-            format!("{}é", "a".repeat(30)),
-            format!("{}aaaa", "🙂".repeat(7)),
-        ];
-        for salt in &fits {
-            assert!(salt.len() <= MAX_SALT_BYTES, "{salt}");
-        }
-        let over = format!("{}é", "a".repeat(31));
-        assert_eq!(over.chars().count(), 32);
-        assert!(over.len() > MAX_SALT_BYTES);
-        assert!("MockConfidentialFungibleTokenRegister".len() > MAX_SALT_BYTES);
-    }
-
-    #[test]
-    fn a_salt_rejects_empty_quotes_backslashes_and_controls() {
-        assert!(salt_characters_ok("MockGate"));
-        assert!(salt_characters_ok("e\u{301}"));
-        for salt in ["", "a\"b", "a\\nb", "a\tb", "a\nb", "a\u{7f}"] {
-            assert!(!salt_characters_ok(salt), "{salt:?}");
-        }
-    }
-}
+mod tests;

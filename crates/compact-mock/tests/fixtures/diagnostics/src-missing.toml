@@ -1,4 +1,5 @@
+[mock]
 src = "sources"
 
-[[mock]]
-module = "ok/Ok"
+[[mock.rules]]
+modules = ["ok/Ok"]

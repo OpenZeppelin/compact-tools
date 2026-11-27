@@ -1,26 +1,24 @@
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcA"
+[[mock.rules]]
+modules = ["calc/Calc"]
+guard = ["double"]
+
+[[mock.rules.instances]]
+suffix = "A"
 rename = { total = "double" }
 
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcB"
+[[mock.rules.instances]]
+suffix = "B"
 rename = { total = "Calc__total" }
 
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcC"
-guard = ["double"]
+[[mock.rules.instances]]
+suffix = "C"
 rename = { reset = "_invocations" }
 
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcD"
+[[mock.rules.instances]]
+suffix = "D"
 exclude = ["reset"]
 rename = { reset = "clear" }
 
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcE"
+[[mock.rules.instances]]
+suffix = "E"
 rename = { total = "sum", reset = "sum" }

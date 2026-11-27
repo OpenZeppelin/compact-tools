@@ -1,4 +1,0 @@
-exit: 2
---- stdout
---- stderr
-compact-mock: config parent-at-root.toml: MockRoot: out_dir uses {parent}, but Root sits at the root of src

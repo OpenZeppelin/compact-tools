@@ -1,2 +1,2 @@
-[[mock]]
-module = "bad/my-module"
+[[mock.rules]]
+modules = ["bad/my-module"]

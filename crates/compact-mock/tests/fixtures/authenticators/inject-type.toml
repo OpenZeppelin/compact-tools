@@ -1,0 +1,8 @@
+[mock.inject.raw]
+module = "random/Blind"
+type = { name = "Raw", module = "random/Blind" }
+call = "zero()"
+
+[[mock.rules]]
+modules = ["access/Shielded"]
+inject = ["raw"]

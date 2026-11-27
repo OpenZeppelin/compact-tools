@@ -1,3 +1,5 @@
-[[mock]]
-module = "ok/Ok"
-exlcude = ["ping"]
+[mock]
+exlcude = ["ok/Ok"]
+
+[[mock.rules]]
+modules = ["ok/Ok"]

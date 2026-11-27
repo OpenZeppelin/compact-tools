@@ -1,0 +1,15 @@
+pragma language_version >= 0.28.0;
+
+module Adder {
+  import CompactStandardLibrary;
+
+  export ledger _count: Counter;
+
+  export pure circuit twice(a: Field): Field {
+    return a + a;
+  }
+
+  export circuit bump(): [] {
+    _count.increment(1);
+  }
+}

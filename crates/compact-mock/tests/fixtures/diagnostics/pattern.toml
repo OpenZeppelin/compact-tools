@@ -1,3 +1,3 @@
-[[mock]]
-module = "bad/Pattern"
+[[mock.rules]]
+modules = ["bad/Pattern"]
 guard = ["sum"]

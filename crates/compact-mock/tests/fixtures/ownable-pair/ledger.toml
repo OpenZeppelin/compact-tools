@@ -1,12 +1,14 @@
+[mock]
 spdx = "MIT"
-
-[auth]
-module = "crypto/authentication/AuthPrfPseudonym"
-call = 'authenticate(pad(32, "{salt}"))'
 caller_type = { name = "Caller", module = "identifier/Identifier" }
 
-[[mock]]
-module = "access/Ownable"
+[mock.auth.prf]
+module = "crypto/authentication/AuthPrfPseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["access/Ownable"]
+auth = ["prf", "caller"]
 ledger = false
-auth.init = { flag = "isInit" }
+prf.init = { flag = "isInit" }
 caller.ledger = true

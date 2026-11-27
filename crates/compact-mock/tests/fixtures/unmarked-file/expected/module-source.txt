@@ -1,4 +1,0 @@
-exit: 2
---- stdout
---- stderr
-compact-mock: src/lib/Tally.compact exists without the compact-mock marker; move or delete it to let compact-mock own it

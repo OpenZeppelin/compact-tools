@@ -1,0 +1,13 @@
+pragma language_version >= 0.28.0;
+
+module Prf {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  witness secretKey(): Bytes<32>;
+
+  export circuit authenticate(salt: Bytes<32>): Badge {
+    return Badge { key: persistentHash<Vector<2, Bytes<32>>>([salt, secretKey()]) };
+  }
+}

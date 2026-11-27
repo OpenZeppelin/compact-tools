@@ -1,0 +1,177 @@
+# The compact-contracts `[mock]` table that passed the v2 acceptance run, appended to
+# its root compact.toml. compact-mock reads only [mock]; every other table is ignored.
+#
+# Two differences from the design table: the CFT rule keeps MockConfidentialFungibleToken
+# and its Caller hand-written (a spec reads its contract-info.json by path), and the last
+# rule sets `ledger = false` where specs pin an empty public ledger.
+
+[mock]
+src = "contracts/src"
+spdx = "MIT"
+caller_type = { name = "Caller", module = "identifier/Identifier" }
+exclude = [
+  "archive/**",                                              # not in the unit project
+  "crypto/prf/*",                                            # every mock circuit is reference logic
+  "crypto/authentication/AuthPrfPseudonym",                  # spec names the artifact by a path string
+  "crypto/randomness/RandBlinding",                          # same
+  "token/extensions/ConfidentialNoteFungibleTokenDelivery",  # path strings and a mock-source read
+  "token/presets/ZOwnableNativeShieldedToken",               # path string
+  "token/extensions/NativeShieldedTokenPublicSupplyCore",    # no mock today
+]
+
+[mock.auth.prf]
+module = "crypto/authentication/AuthPrfPseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[mock.inject.blinding]
+module = "crypto/randomness/RandBlinding"
+type = { name = "Blinding", module = "crypto/randomness/RandBlinding" }
+call = "read()"
+
+[[mock.rules]]
+modules = ["**"]
+auth = ["prf", "caller"]
+
+[[mock.rules]]
+modules = ["access/Ownable", "access/ShieldedAccessControl"]
+prf.init = { flag = "isInit" }
+
+[[mock.rules]]
+modules = ["token/FungibleToken", "token/NonFungibleToken"]
+prf.init = { flag = "init" }
+
+[[mock.rules]]
+modules = ["access/ShieldedAccessControl"]
+salt = { ledger = "_instanceSalt" }
+inject = ["blinding"]
+
+[[mock.rules]]
+modules = ["access/ZOwnablePK", "multisig/Forwarder*"]
+init = { flag = "isInit" }
+
+[[mock.rules]]
+modules = ["token/NativeShieldedToken", "token/NativeShieldedTokenCore", "token/NativeShieldedTokenFamily"]
+init = { flag = "init" }
+
+[[mock.rules]]
+modules = ["crypto/EcdhMask", "crypto/Ecdsa", "crypto/Eip712", "crypto/ElGamal", "identifier/**", "utils/EvmAbi"]
+guard = true
+
+[[mock.rules]]
+modules = ["crypto/ElGamal"]
+exclude = ["secretToScalar", "derivePk", "expandRandomness", "encryptZero"]  # in the fragment, they read _anchor
+
+[[mock.rules]]
+modules = ["math/UintN"]
+merge = true
+guard = true
+instances = [
+  { suffix = "0", prefix = "U0_", module_args = ["0"] },
+  { suffix = "1", prefix = "U1_", module_args = ["1"] },
+  { suffix = "7", prefix = "U7_", module_args = ["7"] },
+  { suffix = "8", prefix = "U8_", module_args = ["8"] },
+  { suffix = "64", prefix = "U64_", module_args = ["64"] },
+  { suffix = "247", prefix = "U247_", module_args = ["247"] },
+  { suffix = "248", prefix = "U248_", module_args = ["248"] },
+]
+
+[[mock.rules]]
+modules = ["multisig/ForwarderPrivate"]
+rename = { _deposit = "deposit", _drain = "drain", _calculateParentCommitment = "calculateParentCommitment" }
+
+[[mock.rules]]
+modules = ["multisig/ForwarderShielded", "multisig/ForwarderUnshielded"]
+prefix = "Forwarder_"
+rename = { _deposit = "deposit" }
+
+[[mock.rules]]
+modules = ["multisig/*Treasury*"]
+prefix = "Treasury_"
+
+[[mock.rules]]
+modules = ["multisig/ProposalManager"]
+prefix = "Proposal_"
+
+[[mock.rules]]
+modules = ["multisig/Secp256k1EcdsaMultisig"]
+instances = [
+  { suffix = "1To1", module_args = ["1"], init = "none", exclude = ["initialize"] },
+  { suffix = "1To3", module_args = ["1"], circuit_args = { initialize = ["3"] } },
+  { suffix = "2To1", module_args = ["2"], init = "none", exclude = ["initialize"] },
+  { suffix = "2To3", module_args = ["2"], init = "none", exclude = ["initialize"] },
+  { suffix = "3To3", module_args = ["3"], circuit_args = { initialize = ["3"] } },
+  { suffix = "2", group = "2To3And3To3", prefix = "Two_", module_args = ["2"],
+    circuit_args = { initialize = ["3"] }, rename = { assertApprovals = "assertApprovals2Approvals" } },
+  { suffix = "3", group = "2To3And3To3", prefix = "Three_", module_args = ["3"],
+    circuit_args = { initialize = ["3"] }, init = { flag = "initializeThree" },
+    rename = { assertApprovals = "assertApprovals3Approvals" } },
+]
+
+[[mock.rules]]
+modules = ["multisig/Signer"]
+module_args = ["Bytes<32>"]
+ledger_names = "plain"
+
+[[mock.rules]]
+modules = ["multisig/presets/NativeShieldedStatelessTreasury"]
+ledger_names = "plain"
+instances = [
+  { suffix = "_1To3", module_args = ["1"], circuit_args = { initialize = ["3"] } },
+  { suffix = "_2To3", module_args = ["2"], circuit_args = { initialize = ["3"] }, init = { flag = "isInit" } },
+]
+
+[[mock.rules]]
+modules = ["multisig/presets/NativeShieldedTokenIssuer"]
+ledger_names = "plain"
+instances = [
+  { suffix = "1To3", module_args = ["1"], circuit_args = { initialize = ["3"] } },
+  { suffix = "2To3", module_args = ["2"], circuit_args = { initialize = ["3"] }, init = { flag = "isInit" } },
+]
+
+[[mock.rules]]
+modules = ["security/Allowlist"]
+rename = { _allow = "allow", _disallow = "disallow" }
+
+[[mock.rules]]
+modules = ["security/Blocklist"]
+rename = { _block = "block", _unblock = "unblock" }
+
+[[mock.rules]]
+modules = ["security/Pausable"]
+rename = { _pause = "pause", _unpause = "unpause" }
+
+[[mock.rules]]
+modules = ["security/Initializable"]
+init = "none"
+
+[[mock.rules]]
+modules = ["token/ConfidentialFungibleToken"]
+prefix = "CFT_"
+instances = [{ suffix = "Register", salt = "MockCFTRegister" }]  # the unsuffixed mock stays hand-written
+
+[[mock.rules]]
+modules = ["token/ConfidentialNoteFungibleToken"]
+prefix = "Core_"
+module_args = ["32"]
+init = "none"
+exclude = ["initialize"]
+disclose = ["_spenderPk", "_inputNote", "_consumeNote"]  # as the hand-written base mock does
+instances = [{ suffix = "CtorMint" }, { suffix = "Init" }]
+
+[[mock.rules]]
+modules = ["token/MultiToken"]
+prf.init = "none"  # MockMultiToken's Maybe-gated constructor is in its fragment; initialize stays exposed
+
+[[mock.rules]]
+modules = ["token/NativeShieldedTokenCore", "token/extensions/*PublicSupply"]
+ledger_names = "plain"
+
+[[mock.rules]]
+modules = ["utils/Utils"]
+circuit_args = { canonicalize = ["ZswapCoinPublicKey", "ContractAddress"] }
+rename = { canonicalize = "canonicalizeKeyOrAddress" }
+
+# Specs of these modules pin an empty public ledger.
+[[mock.rules]]
+modules = ["access/AccessControl", "access/Ownable", "token/FungibleToken", "token/NonFungibleToken"]
+ledger = false

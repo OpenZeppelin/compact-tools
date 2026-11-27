@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: src/broken/Broken.compact:4:10: parse error

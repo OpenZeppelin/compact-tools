@@ -1,9 +1,0 @@
-exit: 0
---- stdout
-wrote src/door/test/mocks/MockEntry.compact
-wrote src/door/test/mocks/MockEntryOpen.compact
-wrote src/door/test/mocks/MockHingeCaller.compact
-wrote src/door/test/mocks/MockBellAuth.compact
-wrote src/door/test/mocks/MockBellCaller.compact
---- stderr
-compact-mock: 5 mocks, 5 written, 0 unchanged.

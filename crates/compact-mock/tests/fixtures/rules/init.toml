@@ -1,13 +1,10 @@
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcFlag"
-init = { flag = "ready" }
+[[mock.rules]]
+modules = ["calc/Calc"]
+instances = [{ suffix = "Flag", init = { flag = "ready" } }]
 
-[[mock]]
-module = "calc/Switch"
-init = { flag = "on" }
-
-[[mock]]
-module = "calc/Switch"
-name = "MockSwitchPlain"
-init = "plain"
+[[mock.rules]]
+modules = ["calc/Switch"]
+instances = [
+  { suffix = "", init = { flag = "on" } },
+  { suffix = "Plain", init = "plain" },
+]

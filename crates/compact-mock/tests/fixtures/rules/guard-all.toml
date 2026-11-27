@@ -1,4 +1,4 @@
-[[mock]]
-module = "calc/Calc"
+[[mock.rules]]
+modules = ["calc/Calc"]
 init = "none"
 guard = true

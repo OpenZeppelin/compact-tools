@@ -1,0 +1,30 @@
+[mock]
+caller_type = { name = "Badge", module = "who/Who" }
+
+[mock.auth.prf]
+module = "auth/Prf"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[mock.inject.blinding]
+module = "random/Blind"
+type = { name = "Blinding", module = "random/Blind" }
+call = "read()"
+
+[mock.inject.blinding_all]
+module = "random/Blind"
+type = { name = "Blinding", module = "random/Blind" }
+call = "read()"
+scope = "all"
+
+[[mock.rules]]
+modules = ["access/Shielded", "access/Open"]
+auth = ["prf", "caller"]
+
+[[mock.rules]]
+modules = ["access/Shielded"]
+inject = ["blinding"]
+
+[[mock.rules]]
+modules = ["access/Open"]
+inject = ["blinding_all"]
+disclose = ["computeAccountCommitment"]

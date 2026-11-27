@@ -1,13 +1,17 @@
-[auth]
-module = "auth/Gate"
-call = 'authenticate(pad(32, "{salt}"))'
+[mock]
 caller_type = { name = "Badge", module = "who/Who" }
 
-[[mock]]
-module = "door/Shelf"
+[mock.auth.gate]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["door/Shelf"]
+auth = ["gate", "caller"]
 circuit_args = { initialize = ["Badge"], stack = ["Maybe<Badge>"] }
 
-[[mock]]
-module = "door/Bin"
+[[mock.rules]]
+modules = ["door/Bin"]
+auth = ["gate", "caller"]
 module_args = ["Badge"]
 circuit_args = { gen = ["Badge"] }

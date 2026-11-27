@@ -1,0 +1,5 @@
+[mock]
+test_dir = "{dir}/spec/unit"
+
+[[mock.rules]]
+modules = ["Root", "near/Near"]

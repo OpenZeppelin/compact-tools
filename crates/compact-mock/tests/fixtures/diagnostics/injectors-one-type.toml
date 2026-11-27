@@ -1,0 +1,13 @@
+[mock.inject.first]
+module = "ok/Ok"
+type = { name = "Token", module = "ok/Ok" }
+call = "ping()"
+
+[mock.inject.second]
+module = "ok/Ok"
+type = { name = "Token", module = "ok/Ok" }
+call = "ping()"
+
+[[mock.rules]]
+modules = ["ok/Ok"]
+inject = ["first", "second"]

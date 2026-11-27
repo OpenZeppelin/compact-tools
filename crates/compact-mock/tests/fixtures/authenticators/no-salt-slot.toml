@@ -1,0 +1,11 @@
+[mock]
+caller_type = { name = "Badge", module = "who/Who" }
+
+[mock.auth.ecdsa]
+module = "auth/Ecdsa"
+call = "authenticateForThisContract()"
+
+[[mock.rules]]
+modules = ["access/Owned"]
+auth = ["ecdsa"]
+ecdsa.salt = "x"

@@ -1,0 +1,5 @@
+# compact-mock owns this directory. It deletes the mocks listed here once no rule produces them.
+MockBell
+MockBellCaller
+MockHinge
+MockHingeCaller

@@ -36,17 +36,25 @@ pub struct Decl {
 pub enum DeclKind {
     Struct,
     Enum,
-    Alias { rhs: String, nominal: bool },
+    Alias {
+        rhs: String,
+        nominal: bool,
+    },
     Circuit,
     Ledger,
     Witness,
+    /// A `contract` declaration: a type that is never exported at the top level.
+    Contract,
 }
 
 impl DeclKind {
-    /// Struct, enum or alias.
+    /// Struct, enum, alias or contract.
     #[must_use]
     pub const fn is_type(&self) -> bool {
-        matches!(self, Self::Struct | Self::Enum | Self::Alias { .. })
+        matches!(
+            self,
+            Self::Struct | Self::Enum | Self::Alias { .. } | Self::Contract
+        )
     }
 }
 
@@ -490,10 +498,53 @@ impl Files {
     }
 }
 
+impl Files {
+    /// Every witness declared over the transitive import closure of `roots`, as
+    /// (declaring file, name), in walk order. A root or import that does not resolve or
+    /// does not parse is skipped.
+    pub fn witnesses(&mut self, roots: &[PathBuf]) -> Vec<(FileId, String)> {
+        let mut seen: Vec<FileId> = Vec::new();
+        let mut pending: Vec<PathBuf> = roots.iter().rev().cloned().collect();
+        let mut found = Vec::new();
+        while let Some(path) = pending.pop() {
+            let Ok(Some(id)) = self.load(&path) else {
+                continue;
+            };
+            if seen.contains(&id) {
+                continue;
+            }
+            seen.push(id);
+            let source = self.get(id);
+            let Some(module) = source.module.as_ref() else {
+                continue;
+            };
+            for item in &module.items {
+                if let Item::Witness(witness) = item {
+                    found.push((id, witness.name.clone()));
+                }
+            }
+            let mut next: Vec<PathBuf> = module
+                .imports
+                .iter()
+                .filter_map(|import| self.import_file(id, import))
+                .collect();
+            next.reverse();
+            pending.extend(next);
+        }
+        found
+    }
+
+    /// The canonical path of a parsed file, for messages and identity.
+    #[must_use]
+    pub fn path(&self, id: FileId) -> PathBuf {
+        self.parsed[id].path.clone()
+    }
+}
+
 /// Whether an `export { }` among `items` names `name`.
 fn listed(items: &[Item], name: &str) -> bool {
     items.iter().any(|item| match item {
-        Item::ExportList(names) => names.iter().any(|listed| listed == name),
+        Item::ExportList(names) => names.iter().any(|listed| listed.name == name),
         _ => false,
     })
 }
@@ -507,6 +558,9 @@ fn local(file: FileId, items: &[Item], name: &str) -> Option<Decl> {
             Item::Circuit(circuit) if circuit.name == name => (circuit.exported, DeclKind::Circuit),
             Item::Ledger(ledger) if ledger.name == name => (ledger.exported, DeclKind::Ledger),
             Item::Witness(witness) if witness.name == name => (witness.exported, DeclKind::Witness),
+            Item::Contract(contract) if contract.name == name => {
+                (contract.exported, DeclKind::Contract)
+            }
             Item::Type(decl) if decl.name == name => (
                 decl.exported,
                 match &decl.kind {

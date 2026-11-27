@@ -1,0 +1,10 @@
+exit: 0
+--- stdout
+wrote src/access/test/artifacts/MockOwned.compact
+wrote src/access/test/artifacts/MockOwnedCaller.compact
+wrote src/access/extensions/test/artifacts/MockPausedCaller.compact
+wrote src/math/test/artifacts/MockAdder.compact
+--- stderr
+compact-mock: skipped presets/Preset: not a module
+compact-mock: skipped who/Who: no exported circuits
+compact-mock: 4 mocks, 4 written, 0 unchanged, 0 removed.

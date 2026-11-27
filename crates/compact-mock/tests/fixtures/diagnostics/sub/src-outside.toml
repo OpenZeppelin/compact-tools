@@ -1,4 +1,0 @@
-src = "../src"
-
-[[mock]]
-module = "ok/Ok"

@@ -1,0 +1,7 @@
+[[mock.rules]]
+modules = ["math/UintN"]
+merge = true
+instances = [
+  { suffix = "A", module_args = ["2"] },
+  { suffix = "B", module_args = [" 2 "] },
+]

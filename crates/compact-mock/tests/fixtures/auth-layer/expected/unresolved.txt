@@ -1,7 +1,8 @@
 exit: 2
 --- stdout
 --- stderr
-compact-mock: MockLost: parameter caller of enter has type Ghost, which does not resolve; with [auth] set, every parameter type must resolve
-compact-mock: MockLost: parameter guide of wander has type Stranger, which does not resolve; with [auth] set, every parameter type must resolve
-compact-mock: MockMaze: parameter caller of enter has type Badge, which does not resolve; with [auth] set, every parameter type must resolve
-compact-mock: 3 errors; nothing written.
+compact-mock: MockLost: parameter caller of enter has type Ghost, which does not resolve; with caller_type set, every parameter type must resolve
+compact-mock: MockLost: parameter guide of wander has type Stranger, which does not resolve; with caller_type set, every parameter type must resolve
+compact-mock: src/door/Lost.compact: import "../gone/Gone" does not resolve to src/gone/Gone.compact
+compact-mock: MockMaze: parameter caller of enter has type Badge, which does not resolve; with caller_type set, every parameter type must resolve
+compact-mock: 4 errors; nothing written.

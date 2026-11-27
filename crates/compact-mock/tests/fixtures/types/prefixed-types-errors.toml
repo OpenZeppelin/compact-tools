@@ -1,9 +1,6 @@
-[[mock]]
-module = "shape/Shape"
-name = "MockShapeHidden"
-guard = ["sketch"]
-
-[[mock]]
-module = "shape/Shape"
-name = "MockShapeType"
-rename = { measure = "Point" }
+[[mock.rules]]
+modules = ["shape/Shape"]
+instances = [
+  { suffix = "Hidden", rename = { sketch = "draft" } },
+  { suffix = "Type", rename = { measure = "Point" } },
+]

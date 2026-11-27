@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: config name-dup.toml: two mocks are named MockCore (ignoring case), from access/Core and token/Core; add {dir} or {instance} to the name template
+compact-mock: config name-dup.toml: two mocks are named MockCore (ignoring case), from access/Core and token/extensions/Core; add {dir} or {instance} to the name template
+compact-mock: 2 errors; nothing written.

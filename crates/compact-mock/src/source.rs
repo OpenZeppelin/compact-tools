@@ -20,11 +20,29 @@ pub struct SourceFile {
     pub module: Option<Module>,
     /// Whether a top-level `constructor` is declared.
     pub has_constructor: bool,
+    /// Top-level `export circuit` names, in source order (a fragment's exports).
+    pub exported_circuits: Vec<String>,
+}
+
+/// A 1-based line and column (in characters).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+}
+
+/// A name with the position it is written at.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Named {
+    pub name: String,
+    pub at: Position,
 }
 
 #[derive(Clone, Debug)]
 pub struct Module {
     pub name: String,
+    /// Where the module's name is written.
+    pub at: Position,
     pub generics: Vec<GenericParam>,
     /// Imports inside the module body, in source order.
     pub imports: Vec<Import>,
@@ -86,8 +104,9 @@ pub enum Item {
     Witness(Witness),
     Ledger(Ledger),
     Type(TypeDecl),
+    Contract(Contract),
     /// `export { a, b }` inside the module.
-    ExportList(Vec<String>),
+    ExportList(Vec<Named>),
 }
 
 impl Item {
@@ -99,6 +118,7 @@ impl Item {
             Self::Witness(witness) => Some(&witness.name),
             Self::Ledger(ledger) => Some(&ledger.name),
             Self::Type(decl) => Some(&decl.name),
+            Self::Contract(contract) => Some(&contract.name),
             Self::ExportList(_) => None,
         }
     }
@@ -107,12 +127,23 @@ impl Item {
 #[derive(Clone, Debug)]
 pub struct Circuit {
     pub name: String,
+    /// Where the circuit's name is written.
+    pub at: Position,
     pub exported: bool,
     pub pure: bool,
     pub generics: Vec<GenericParam>,
     pub params: Vec<RawParam>,
     /// Return type, whitespace-collapsed.
     pub ret: String,
+}
+
+/// `contract Name { circuit ...; }`: an interface.
+#[derive(Clone, Debug)]
+pub struct Contract {
+    pub name: String,
+    pub exported: bool,
+    /// The circuit names its body declares, in order.
+    pub circuits: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -179,6 +210,7 @@ pub fn parse(path: &Path, text: &str) -> Result<SourceFile, ParseFailure> {
         module_count: 0,
         module: None,
         has_constructor: false,
+        exported_circuits: Vec::new(),
     };
     let mut cursor = root.walk();
     for node in root.named_children(&mut cursor) {
@@ -187,6 +219,9 @@ pub fn parse(path: &Path, text: &str) -> Result<SourceFile, ParseFailure> {
                 file.pragma = Some(slice(node, text).to_owned());
             }
             "constructor_declaration" => file.has_constructor = true,
+            "circuit_declaration" if has_token(node, "export") => {
+                file.exported_circuits.push(field_text(node, "name", text));
+            }
             "module_declaration" => {
                 file.module_count += 1;
                 if file.module.is_none() {
@@ -212,6 +247,15 @@ fn first_defect(node: Node<'_>) -> Option<Node<'_>> {
 
 /// 1-based line and column (in characters) of a byte offset.
 fn position(text: &str, offset: usize) -> ParseFailure {
+    let at = position_of(text, offset);
+    ParseFailure::At {
+        line: at.line,
+        column: at.column,
+    }
+}
+
+/// 1-based line and column (in characters) of a byte offset.
+fn position_of(text: &str, offset: usize) -> Position {
     let mut offset = offset.min(text.len());
     while !text.is_char_boundary(offset) {
         offset -= 1;
@@ -220,12 +264,21 @@ fn position(text: &str, offset: usize) -> ParseFailure {
     let line = before.matches('\n').count() + 1;
     let line_start = before.rfind('\n').map_or(0, |at| at + 1);
     let column = before[line_start..].chars().count() + 1;
-    ParseFailure::At { line, column }
+    Position { line, column }
+}
+
+/// Where the `name` field of `node` starts.
+fn name_position(node: Node<'_>, text: &str) -> Position {
+    node.child_by_field_name("name")
+        .map_or_else(Position::default, |name| {
+            position_of(text, name.start_byte())
+        })
 }
 
 fn module(node: Node<'_>, text: &str) -> Result<Module, ParseFailure> {
     let mut module = Module {
         name: field_text(node, "name", text),
+        at: name_position(node, text),
         generics: generic_parameters(node, text),
         imports: Vec::new(),
         items: Vec::new(),
@@ -242,7 +295,10 @@ fn module(node: Node<'_>, text: &str) -> Result<Module, ParseFailure> {
                 let names = child
                     .named_children(&mut inner)
                     .filter(|name| name.kind() == "identifier")
-                    .map(|name| slice(name, text).to_owned())
+                    .map(|name| Named {
+                        name: slice(name, text).to_owned(),
+                        at: position_of(text, name.start_byte()),
+                    })
                     .collect();
                 module.items.push(Item::ExportList(names));
             }
@@ -260,6 +316,14 @@ fn module(node: Node<'_>, text: &str) -> Result<Module, ParseFailure> {
             "struct_declaration" | "enum_declaration" | "type_declaration" => {
                 module.items.push(Item::Type(type_decl(child, text)));
             }
+            "contract_declaration" => module.items.push(Item::Contract(Contract {
+                name: field_text(child, "name", text),
+                exported: has_token(child, "export"),
+                circuits: child
+                    .child_by_field_name("body")
+                    .map(|body| contract_circuits(&blanked(body, text)))
+                    .unwrap_or_default(),
+            })),
             _ => {}
         }
     }
@@ -316,12 +380,23 @@ fn circuit(node: Node<'_>, text: &str) -> Result<Circuit, ParseFailure> {
     };
     Ok(Circuit {
         name: field_text(node, "name", text),
+        at: name_position(node, text),
         exported: has_token(node, "export"),
         pure: has_token(node, "pure"),
         generics: generic_parameters(node, text),
         params,
         ret: type_text(node.child_by_field_name("type"), text),
     })
+}
+
+/// The circuit names a contract body declares: each identifier after a `circuit` word.
+fn contract_circuits(body: &str) -> Vec<String> {
+    let words: Vec<&str> = params::identifiers(body).collect();
+    words
+        .windows(2)
+        .filter(|pair| pair[0] == "circuit")
+        .map(|pair| pair[1].to_owned())
+        .collect()
 }
 
 fn type_decl(node: Node<'_>, text: &str) -> TypeDecl {
@@ -461,7 +536,8 @@ mod tests {
         let Item::ExportList(names) = &module.items[0] else {
             panic!("the export list comes first");
         };
-        assert_eq!(names, &["_shared"]);
+        let names: Vec<&str> = names.iter().map(|named| named.name.as_str()).collect();
+        assert_eq!(names, ["_shared"]);
 
         let Item::Type(wide) = &module.items[3] else {
             panic!("the alias is the fourth item");

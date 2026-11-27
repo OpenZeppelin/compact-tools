@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Other {
+  import CompactStandardLibrary;
+
+  export circuit twice(x: Uint<64>): Uint<64> {
+    return (x + x) as Uint<64>;
+  }
+}

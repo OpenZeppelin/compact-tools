@@ -1,4 +1,0 @@
-exit: 2
---- stdout
---- stderr
-compact-mock: MockRegistry: isMember is re-exported by reg/Registry's export list and needs a wrapper; add it to exclude

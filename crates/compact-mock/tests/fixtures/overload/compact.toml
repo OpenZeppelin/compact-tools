@@ -1,0 +1,9 @@
+[[mock.rules]]
+modules = ["dial/Dial"]
+
+[[mock.rules.instances]]
+suffix = ""
+
+[[mock.rules.instances]]
+suffix = "Renamed"
+rename = { "turn(Uint<32>, Boolean)" = "turnTwice", spin = "rotate" }

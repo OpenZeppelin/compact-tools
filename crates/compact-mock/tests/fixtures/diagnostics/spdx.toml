@@ -1,6 +1,7 @@
+[mock]
 spdx = """
 MIT
 """
 
-[[mock]]
-module = "ok/Ok"
+[[mock.rules]]
+modules = ["ok/Ok"]

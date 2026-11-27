@@ -1,0 +1,7 @@
+exit: 0
+--- stdout
+wrote src/access/test/artifacts/MockOwned.compact
+wrote src/access/test/artifacts/MockOwnedEcdsa.compact
+wrote src/access/test/artifacts/MockOwnedCaller.compact
+--- stderr
+compact-mock: 3 mocks, 3 written, 0 unchanged, 0 removed.

@@ -1,3 +1,0 @@
-[[mock]]
-module = "reg/Registry"
-guard = ["pass"]

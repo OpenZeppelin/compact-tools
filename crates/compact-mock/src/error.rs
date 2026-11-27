@@ -20,12 +20,14 @@ pub enum Error {
     Plan(#[from] PlanError),
     #[error(transparent)]
     Output(#[from] OutputError),
+    #[error(transparent)]
+    Build(#[from] BuildError),
 }
 
-/// Errors in `compact-mock.toml`, its discovery, and the mock names it selects.
+/// Errors in the `[mock]` table, its discovery, and the mock names it selects.
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("no compact-mock.toml in {cwd} or any parent; pass --config <FILE>")]
+    #[error("no compact.toml in {cwd} or any parent; pass --config <FILE>")]
     NotFound { cwd: String },
     #[error("cannot read config {cfg}")]
     Read {
@@ -39,84 +41,207 @@ pub enum ConfigError {
         #[source]
         source: toml::de::Error,
     },
-    #[error("config {cfg} has no [[mock]] entry")]
-    NoEntries { cfg: String },
+    #[error("config {cfg} has no [mock] table")]
+    NoMockTable { cfg: String },
+    /// `message` is the TOML or serde text, which names the offending key.
+    #[error("config {cfg}: {at}: {message}")]
+    Invalid {
+        cfg: String,
+        at: String,
+        message: String,
+    },
+    #[error("config {cfg}: [mock] has no [[mock.rules]] entry")]
+    NoRules { cfg: String },
+    #[error(
+        "config {cfg}: test_dir \"{value}\" must start with {{dir}}/ and use no other placeholder, no .. and no absolute path"
+    )]
+    TestDir { cfg: String, value: String },
     #[error("config {cfg}: module \"{module}\" is a path relative to src, without .compact")]
     Module { cfg: String, module: String },
     #[error("config {cfg}: src directory {dir} does not exist")]
     Src { cfg: String, dir: String },
+    #[error("config {cfg}: src \"{value}\" must be a path relative to the config file")]
+    SrcAbsolute { cfg: String, value: String },
     #[error("config {cfg}: {key} \"{value}\" is not an identifier")]
     Identifier {
         cfg: String,
         key: String,
         value: String,
     },
-    #[error("config {cfg}: {module}: {key} needs an [auth] table")]
-    NeedsAuth {
+    #[error("config {cfg}: {key} \"{value}\" may hold only letters, digits and _")]
+    Suffix {
         cfg: String,
-        module: String,
-        key: String,
-    },
-    #[error(
-        "config {cfg}: {module}: variants must be a non-empty subset of [\"auth\", \"caller\"]"
-    )]
-    Variants { cfg: String, module: String },
-    #[error("config {cfg}: {module}: salt applies to the authenticated variant only")]
-    CallerSalt { cfg: String, module: String },
-    #[error("config {cfg}: {mock}: include \"{value}\" must end in .fragment.compact")]
-    IncludeSuffix {
-        cfg: String,
-        mock: String,
-        value: String,
-    },
-    #[error(
-        "config {cfg}: [auth].call must contain {{salt}} exactly once, inside a \"...\" string"
-    )]
-    SaltPlaceholder { cfg: String },
-    #[error("config {cfg}: {mock}: out_dir uses {{parent}}, but {module} sits at the root of src")]
-    ParentAtRoot {
-        cfg: String,
-        mock: String,
-        module: String,
-    },
-    /// `placeholder` is spelled as written, braces included: `{name}`, or `{dir` unclosed.
-    #[error("config {cfg}: out_dir \"{value}\" has an unknown placeholder {placeholder}")]
-    Placeholder {
-        cfg: String,
-        value: String,
-        placeholder: String,
-    },
-    #[error("config {cfg}: out_dir \"{value}\" must be a path relative to src")]
-    OutDirAbsolute { cfg: String, value: String },
-    #[error(
-        "config {cfg}: {mock}: include \"{value}\" must be a path relative to the output directory"
-    )]
-    IncludeAbsolute {
-        cfg: String,
-        mock: String,
-        value: String,
-    },
-    /// `key` is `out_dir` or `include`; `value` is the key's text as written.
-    #[error("config {cfg}: {mock}: {key} \"{value}\" leads outside the config directory")]
-    OutsideConfig {
-        cfg: String,
-        mock: String,
         key: String,
         value: String,
     },
     #[error("config {cfg}: spdx must be a single line")]
     Spdx { cfg: String },
-    #[error("config {cfg}: two mocks are named {mock}")]
-    DuplicateName { cfg: String, mock: String },
-    #[error("config {cfg}: {mock} and {other} both write {path}")]
-    DuplicatePath {
+    #[error("config {cfg}: {at}: invalid glob \"{pattern}\"")]
+    Glob {
+        cfg: String,
+        at: String,
+        pattern: String,
+        #[source]
+        source: globset::Error,
+    },
+    #[error("config {cfg}: [[mock.rules]] #{number} has no modules")]
+    RuleModules { cfg: String, number: usize },
+    #[error("config {cfg}: [[mock.rules]] #{number} applies to no module under {src}")]
+    RuleUnused {
+        cfg: String,
+        number: usize,
+        src: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: unknown key {key}; not a rule key or an authenticator name"
+    )]
+    UnknownRuleKey {
+        cfg: String,
+        number: usize,
+        key: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: {key} names {circuit}, which no module the rule applies to exports"
+    )]
+    RuleCircuit {
+        cfg: String,
+        number: usize,
+        key: String,
+        circuit: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: ledger names {field}, which no module the rule applies to exports as a ledger field"
+    )]
+    RuleLedger {
+        cfg: String,
+        number: usize,
+        field: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: init = {init}, but no module the rule applies to exports {circuit}"
+    )]
+    RuleInit {
+        cfg: String,
+        number: usize,
+        init: String,
+        circuit: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: auth names {name}, which [mock.auth] does not define"
+    )]
+    AuthUndefined {
+        cfg: String,
+        number: usize,
+        name: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: inject names {name}, which [mock.inject] does not define"
+    )]
+    InjectUndefined {
+        cfg: String,
+        number: usize,
+        name: String,
+    },
+    #[error("config {cfg}: [[mock.rules]] #{number}: merge needs instances")]
+    MergeNeedsInstances { cfg: String, number: usize },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: ledger_names = \"plain\" does not combine with a merged group"
+    )]
+    PlainWithMerge { cfg: String, number: usize },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: instance \"{suffix}\" sets {key}, which an instance cannot set"
+    )]
+    InstanceKey {
+        cfg: String,
+        number: usize,
+        suffix: String,
+        key: String,
+    },
+    #[error("config {cfg}: [[mock.rules]] #{number}: instance suffix \"{suffix}\" appears twice")]
+    SuffixTwice {
+        cfg: String,
+        number: usize,
+        suffix: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: name \"{value}\" has an unknown placeholder {{{placeholder}}}"
+    )]
+    NamePlaceholder {
+        cfg: String,
+        number: usize,
+        value: String,
+        placeholder: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: injectors {first} and {second} both stand in for {ty}"
+    )]
+    InjectorsOneType {
+        cfg: String,
+        number: usize,
+        first: String,
+        second: String,
+        ty: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: salt does not apply to the caller authenticator"
+    )]
+    CallerSalt { cfg: String, number: usize },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: {name}.salt is set, but [mock.auth.{name}].call takes no salt"
+    )]
+    NoSaltSlot {
+        cfg: String,
+        number: usize,
+        name: String,
+    },
+    #[error(
+        "config {cfg}: [[mock.rules]] #{number}: include \"{value}\" must name a .fragment.compact file under the test directory"
+    )]
+    IncludeFile {
+        cfg: String,
+        number: usize,
+        value: String,
+    },
+    #[error("config {cfg}: {at}: salt expr must be one non-empty line")]
+    SaltExpr { cfg: String, at: String },
+    #[error("config {cfg}: authenticator name {name} is a rule key; pick another name")]
+    AuthNameIsRuleKey { cfg: String, name: String },
+    #[error("config {cfg}: authenticator or injector name {name} must match [a-z][a-z0-9_]*")]
+    AuthName { cfg: String, name: String },
+    #[error("config {cfg}: [mock.auth.caller] may set only suffix")]
+    CallerTable { cfg: String },
+    #[error("config {cfg}: [mock.auth.{name}] needs module and call")]
+    AuthFields { cfg: String, name: String },
+    #[error(
+        "config {cfg}: [mock.auth.{name}].call: {{salt}} may appear once, as pad(<n>, \"{{salt}}\") or \"{{salt}}\""
+    )]
+    SaltSlot { cfg: String, name: String },
+    #[error("config {cfg}: [mock.auth.{name}] needs [mock].caller_type")]
+    AuthNeedsCallerType { cfg: String, name: String },
+    #[error("config {cfg}: [mock.inject.{name}].call takes no placeholder")]
+    InjectPlaceholder { cfg: String, name: String },
+    #[error(
+        "config {cfg}: two mocks are named {mock} (ignoring case), from {first} and {second}; add {{dir}} or {{instance}} to the name template"
+    )]
+    DuplicateName {
         cfg: String,
         mock: String,
-        other: String,
-        path: String,
+        first: String,
+        second: String,
+    },
+    #[error(
+        "config {cfg}: name template \"{template}\" gives \"{value}\" for {module}, which is not an identifier"
+    )]
+    NameIdentifier {
+        cfg: String,
+        template: String,
+        value: String,
+        module: String,
     },
     #[error("no mock named {name} in {cfg}")]
     UnknownName { name: String, cfg: String },
+    #[error("--dir {dir} does not exist")]
+    DirMissing { dir: String },
 }
 
 /// Errors reading or parsing a Compact source the plan needs.
@@ -146,38 +271,49 @@ pub enum SourceError {
     },
 }
 
-/// Errors in the `[auth]` table that need the authenticator's source to detect.
+/// Errors in `[mock.auth.*]`, `[mock.inject.*]` and `caller_type` that need the
+/// sources to detect.
 #[derive(Debug, Error)]
 pub enum AuthError {
-    #[error("[auth].call calls {circuit}, which {module} does not export")]
-    Call { circuit: String, module: String },
-    #[error("[auth].caller_type: {module} declares no struct {name}")]
+    #[error("[mock.auth.{name}].call calls {circuit}, which {module} does not export")]
+    Call {
+        name: String,
+        circuit: String,
+        module: String,
+    },
+    #[error("[mock.auth.{name}].call: {circuit} returns {ty}, not {caller}")]
+    Returns {
+        name: String,
+        circuit: String,
+        ty: String,
+        caller: String,
+    },
+    #[error("[mock].caller_type: {module} declares no struct or new type {name}")]
     CallerType { module: String, name: String },
+    #[error("[mock.inject.{name}].call calls {circuit}, which {module} does not export")]
+    InjectCall {
+        name: String,
+        circuit: String,
+        module: String,
+    },
+    #[error("[mock.inject.{name}].call: {circuit} returns {ty}, not {target}")]
+    InjectReturns {
+        name: String,
+        circuit: String,
+        ty: String,
+        target: String,
+    },
+    #[error("[mock.inject.{name}].type: {module} declares no struct, enum or new type {ty}")]
+    InjectType {
+        name: String,
+        module: String,
+        ty: String,
+    },
 }
 
 /// Errors planning one mock. `mock` is the generated name.
 #[derive(Debug, Error)]
 pub enum PlanError {
-    #[error("{mock}: {module} has no {caller} parameter, so {key} does not apply")]
-    NoCallerParam {
-        mock: String,
-        module: String,
-        caller: String,
-        key: String,
-    },
-    #[error("{mock}: {key} names {circuit}, which {module} does not export as a circuit")]
-    UnknownCircuit {
-        mock: String,
-        key: String,
-        circuit: String,
-        module: String,
-    },
-    #[error("{mock}: {key} names {circuit}, which {mock} does not expose")]
-    NotExposed {
-        mock: String,
-        key: String,
-        circuit: String,
-    },
     #[error("{mock}: rename target {target} clashes with {existing}")]
     RenameClash {
         mock: String,
@@ -195,9 +331,13 @@ pub enum PlanError {
         generics: String,
     },
     #[error(
-        "{mock}: circuit initialize has type parameters {generics} and the constructor calls it; set circuit_args.initialize"
+        "{mock}: circuit {circuit} has type parameters {generics} and the constructor calls it; set circuit_args.{circuit}"
     )]
-    GenericInitialize { mock: String, generics: String },
+    GenericInitialize {
+        mock: String,
+        circuit: String,
+        generics: String,
+    },
     /// `constructor` is set for the `initialize` the constructor calls.
     #[error(
         "{mock}: {module} exports {count} circuits named {circuit}, and overloads are not supported; {} or write the mock by hand",
@@ -230,13 +370,7 @@ pub enum PlanError {
         module: String,
         takes: usize,
     },
-    #[error("{mock}: init = {init} needs an exported initialize circuit in {module}")]
-    NoInitialize {
-        mock: String,
-        init: String,
-        module: String,
-    },
-    #[error("{mock}: init flag {flag} clashes with an initialize parameter")]
+    #[error("{mock}: init flag {flag} clashes with a constructor parameter")]
     FlagClash { mock: String, flag: String },
     #[error(
         "{mock}: parameter {index} of {circuit} is a pattern; a wrapper needs a named parameter"
@@ -256,18 +390,72 @@ pub enum PlanError {
         module: String,
     },
     #[error(
-        "{mock}: {circuit} is re-exported by {module}'s export list and needs a wrapper; add it to exclude"
+        "{mock}: salt \"{salt}\" is {bytes} bytes; pad({width}, ...) takes at most {width}. Set salt"
     )]
-    ExportListWrapper {
-        mock: String,
-        circuit: String,
-        module: String,
-    },
-    #[error("{mock}: salt \"{salt}\" is {bytes} bytes; pad(32, ...) takes at most 32. Set salt")]
     SaltLength {
         mock: String,
         salt: String,
         bytes: usize,
+        width: usize,
+    },
+    #[error("{mock}: salt ledger field {field} is not an exported ledger field of {module}")]
+    SaltLedger {
+        mock: String,
+        field: String,
+        module: String,
+    },
+    #[error("{mock}: {module} takes {count} generic arguments; set module_args or instances")]
+    GenericModule {
+        mock: String,
+        module: String,
+        count: usize,
+    },
+    #[error("{mock}: rename key \"{key}\" matches no overload of {circuit}")]
+    RenameOverload {
+        mock: String,
+        key: String,
+        circuit: String,
+    },
+    /// `instances` reads `<a> and <b>`; `args` names the module too.
+    #[error("{mock}: instances {instances} pass the same module arguments {args}")]
+    SameArgs {
+        mock: String,
+        instances: String,
+        args: String,
+    },
+    /// `first` and `second` read `<type> in instance <suffix>`.
+    #[error("{mock}: constructor parameter {param} has type {first} and {second}")]
+    CtorParamClash {
+        mock: String,
+        param: String,
+        first: String,
+        second: String,
+    },
+    #[error(
+        "{mock}: witness {witness} is declared by both {first} and {second}; compactc binds both to one witness function. Remove one import or write the mock by hand"
+    )]
+    WitnessClash {
+        mock: String,
+        witness: String,
+        first: String,
+        second: String,
+    },
+    #[error(
+        "{mock}: implements {interface}, but {module} declares no exported contract {interface}"
+    )]
+    ImplementsNoContract {
+        mock: String,
+        interface: String,
+        module: String,
+    },
+    #[error(
+        "{mock}: implements {interface}, but exposes no circuit {circuit}; add it to {fragment}"
+    )]
+    ImplementsMissing {
+        mock: String,
+        interface: String,
+        circuit: String,
+        fragment: String,
     },
     #[error("{mock}: salt must be non-empty and must not contain \", \\ or a control character")]
     SaltChars { mock: String },
@@ -276,7 +464,7 @@ pub enum PlanError {
     #[error("{mock}: fragment {path} declares a constructor; set init = \"none\"")]
     FragmentConstructor { mock: String, path: String },
     #[error(
-        "{mock}: parameter {param} of {circuit} has type {ty}, which does not resolve; with [auth] set, every parameter type must resolve"
+        "{mock}: parameter {param} of {circuit} has type {ty}, which does not resolve; with caller_type set, every parameter type must resolve"
     )]
     Unresolved {
         mock: String,
@@ -294,19 +482,20 @@ pub enum PlanError {
         ty: String,
         caller: String,
     },
+    /// `contains` reads `<type>, which contains <caller type>`.
     #[error(
-        "{mock}: parameter {param} of initialize has type {ty}, which contains {caller} but is not it; {}",
-        exclude_hint("initialize", true)
+        "{mock}: parameter {param} of {circuit} has type {contains} but is not it; {}",
+        exclude_hint(.circuit, true)
     )]
     ContainsCallerInitialize {
         mock: String,
+        circuit: String,
         param: String,
-        ty: String,
-        caller: String,
+        contains: String,
     },
     /// `constructor` is set for the `initialize` the constructor calls.
     #[error(
-        "{mock}: {circuit} takes {count} {caller} parameters, and the authenticated mock would pass one caller to all of them; {}, or use the *Caller variant",
+        "{mock}: {circuit} takes {count} {caller} parameters, and the authenticated mock would pass one caller to all of them; {}, or use the caller mock",
         exclude_hint(.circuit, *.constructor)
     )]
     CallerTwice {
@@ -355,13 +544,13 @@ fn exclude_hint(circuit: &str, constructor: bool) -> String {
     }
 }
 
-/// Errors owning, reading or writing a generated file.
+/// Errors owning, reading, writing or removing generated files.
 #[derive(Debug, Error)]
 pub enum OutputError {
     #[error(
-        "{path} exists without the compact-mock marker; move or delete it to let compact-mock own it"
+        "{dir} exists and has no .compact-mock-stamp; compact-mock writes only into directories it owns. Move it away or empty it"
     )]
-    NotOwned { path: String },
+    NotOwned { dir: String },
     #[error("cannot read {path}")]
     Read {
         path: String,
@@ -374,9 +563,28 @@ pub enum OutputError {
         #[source]
         source: io::Error,
     },
+    #[error("cannot remove {path}")]
+    Remove {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
     #[error("cannot write to stdout")]
     Stdout {
         #[source]
         source: io::Error,
     },
+}
+
+/// Errors running the `compact` toolchain.
+#[derive(Debug, Error)]
+pub enum BuildError {
+    #[error("cannot run {bin}; install the Compact toolchain or pass --compact-bin")]
+    CannotRun {
+        bin: String,
+        #[source]
+        source: io::Error,
+    },
+    #[error("compact compile failed for {path} (exit {code})")]
+    Failed { path: String, code: String },
 }

@@ -1,18 +1,11 @@
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcA"
-include = true
+[[mock.rules]]
+modules = ["calc/Calc"]
+instances = [{ suffix = "Fragment" }]
 
-[[mock]]
-module = "calc/Calc"
-include = true
+[[mock.rules]]
+modules = ["calc/Switch"]
+include = "MockSwitch.fragment.compact"
 
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcC"
-include = "Calc.extra"
-
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcD"
+[[mock.rules]]
+modules = ["calc/Sum"]
 include = "Broken.fragment.compact"

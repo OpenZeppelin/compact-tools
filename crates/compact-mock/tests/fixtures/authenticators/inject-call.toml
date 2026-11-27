@@ -1,0 +1,8 @@
+[mock.inject.blinding]
+module = "random/Blind"
+type = { name = "Blinding", module = "random/Blind" }
+call = "peek()"
+
+[[mock.rules]]
+modules = ["access/Shielded"]
+inject = ["blinding"]

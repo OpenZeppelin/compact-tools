@@ -1,45 +1,27 @@
-[auth]
-module = "auth/Gate"
-call = 'authenticate(pad(32, "{salt}"))'
+[mock]
 caller_type = { name = "Badge", module = "who/Who" }
 
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeLong"
-variants = ["auth"]
-salt = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaé"
+[mock.auth.gate]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
 
-[[mock]]
-module = "door/Hinge"
-name = "MockConfidentialFungibleTokenRegister"
-variants = ["auth"]
+[[mock.rules]]
+modules = ["door/Hinge"]
+auth = ["gate"]
+instances = [
+  { suffix = "Long", salt = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaé" },
+  { suffix = "Empty", salt = "" },
+  { suffix = "Quote", salt = 'a"b' },
+  { suffix = "Slash", salt = 'a\nb' },
+  { suffix = "Tab", salt = "a\tb" },
+]
 
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeEmpty"
-variants = ["auth"]
-salt = ""
+[[mock.rules]]
+modules = ["door/Bell"]
+auth = ["gate"]
+name = "MockConfidentialFungibleTokenRegister{suffix}"
 
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeQuote"
-variants = ["auth"]
-salt = 'a"b'
-
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeSlash"
-variants = ["auth"]
-salt = 'a\nb'
-
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeTab"
-variants = ["auth"]
-salt = "a\tb"
-
-[[mock]]
-module = "door/Bell"
-name = "MockBellLong"
-exclude = ["ring"]
+[[mock.rules]]
+modules = ["door/Twin"]
+auth = ["gate"]
 salt = "this salt is far longer than thirty-two bytes"

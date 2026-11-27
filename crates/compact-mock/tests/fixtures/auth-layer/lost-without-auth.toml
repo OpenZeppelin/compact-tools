@@ -1,2 +1,2 @@
-[[mock]]
-module = "door/Lost"
+[[mock.rules]]
+modules = ["door/Lost"]

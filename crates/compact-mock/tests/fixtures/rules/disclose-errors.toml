@@ -1,7 +1,7 @@
-[[mock]]
-module = "calc/Calc"
+[[mock.rules]]
+modules = ["calc/Calc"]
 disclose = ["reset", "nope"]
 
-[[mock]]
-module = "calc/Sum"
+[[mock.rules]]
+modules = ["calc/Sum"]
 disclose = ["clear"]

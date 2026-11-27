@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Thing {
+  import CompactStandardLibrary;
+
+  export ledger _value: Uint<64>;
+
+  export circuit set(x: Uint<64>): [] {
+    _value = disclose(x);
+  }
+}

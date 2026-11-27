@@ -1,6 +1,0 @@
-[[mock]]
-module = "ok/Ok"
-
-[[mock]]
-module = "bad/Pattern"
-name = "Mockok"

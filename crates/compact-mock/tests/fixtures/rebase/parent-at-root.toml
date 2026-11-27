@@ -1,7 +1,0 @@
-out_dir = "{parent}/mocks"
-
-[[mock]]
-module = "Root"
-
-[[mock]]
-module = "near/Near"

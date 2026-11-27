@@ -1,0 +1,3 @@
+[[mock.rules]]
+modules = ["Root", "access/Core", "token/**"]
+name = "Mock{dir}{module}{instance}{suffix}"

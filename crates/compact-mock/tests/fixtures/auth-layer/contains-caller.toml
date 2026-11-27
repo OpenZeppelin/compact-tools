@@ -1,10 +1,10 @@
-[auth]
-module = "auth/Gate"
-call = 'authenticate(pad(32, "{salt}"))'
+[mock]
 caller_type = { name = "Badge", module = "who/Who" }
 
-[[mock]]
-module = "door/Latch"
+[mock.auth.gate]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
 
-[[mock]]
-module = "door/Crate"
+[[mock.rules]]
+modules = ["door/Latch", "door/Crate"]
+auth = ["gate", "caller"]

@@ -1,4 +1,4 @@
-[[mock]]
-module = "bag/Bag"
+[[mock.rules]]
+modules = ["bag/Bag"]
 module_args = ["2", "Bytes<32>"]
 circuit_args = { initialize = ["3"] }

@@ -1,8 +1,7 @@
-[[mock]]
-module = "calc/Calc"
-init = "none"
-include = true
+[[mock.rules]]
+modules = ["calc/Calc"]
+instances = [{ suffix = "Fragment", init = "none" }]
 
-[[mock]]
-module = "calc/Switch"
-include = "../shared/Switch.fragment.compact"
+[[mock.rules]]
+modules = ["calc/Switch"]
+include = "shared/Switch.fragment.compact"

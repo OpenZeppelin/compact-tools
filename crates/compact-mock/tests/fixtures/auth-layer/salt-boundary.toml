@@ -1,28 +1,16 @@
-[auth]
-module = "auth/Gate"
-call = 'authenticate(pad(32, "{salt}"))'
+[mock]
 caller_type = { name = "Badge", module = "who/Who" }
 
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeA"
-variants = ["auth"]
-salt = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+[mock.auth.gate]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
 
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeB"
-variants = ["auth"]
-salt = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaé"
-
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeC"
-variants = ["auth"]
-auth.salt = "🙂🙂🙂🙂🙂🙂🙂aaaa"
-
-[[mock]]
-module = "door/Hinge"
-name = "MockHingeD"
-variants = ["auth"]
-salt = "e\u0301"
+[[mock.rules]]
+modules = ["door/Hinge"]
+auth = ["gate"]
+instances = [
+  { suffix = "A", salt = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+  { suffix = "B", salt = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaé" },
+  { suffix = "C", salt = "🙂🙂🙂🙂🙂🙂🙂aaaa" },
+  { suffix = "D", salt = "e\u0301" },
+]

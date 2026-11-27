@@ -1,0 +1,19 @@
+pragma language_version >= 0.28.0;
+
+module Blind {
+  import CompactStandardLibrary;
+
+  export new type Blinding = Bytes<32>;
+
+  export type Raw = Bytes<32>;
+
+  witness blindingFactor(): Bytes<32>;
+
+  export circuit read(): Blinding {
+    return blindingFactor() as Blinding;
+  }
+
+  export pure circuit zero(): Bytes<32> {
+    return default<Bytes<32>>;
+  }
+}

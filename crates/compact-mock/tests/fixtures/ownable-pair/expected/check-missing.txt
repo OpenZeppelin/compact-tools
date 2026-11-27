@@ -1,6 +1,0 @@
-exit: 1
---- stdout
-missing src/access/test/mocks/MockOwnable.compact
-missing src/access/test/mocks/MockOwnableCaller.compact
---- stderr
-compact-mock: 2 of 2 mocks out of date; run compact-mock generate.

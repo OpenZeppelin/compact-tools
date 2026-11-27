@@ -1,8 +1,8 @@
 exit: 2
 --- stdout
 --- stderr
-compact-mock: MockHingeLong: salt "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaé" is 33 bytes; pad(32, ...) takes at most 32. Set salt
 compact-mock: MockConfidentialFungibleTokenRegister: salt "MockConfidentialFungibleTokenRegister" is 37 bytes; pad(32, ...) takes at most 32. Set salt
+compact-mock: MockHingeLong: salt "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaé" is 33 bytes; pad(32, ...) takes at most 32. Set salt
 compact-mock: MockHingeEmpty: salt must be non-empty and must not contain ", \ or a control character
 compact-mock: MockHingeQuote: salt must be non-empty and must not contain ", \ or a control character
 compact-mock: MockHingeSlash: salt must be non-empty and must not contain ", \ or a control character

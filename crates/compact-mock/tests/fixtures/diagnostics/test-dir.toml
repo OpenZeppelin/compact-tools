@@ -1,0 +1,5 @@
+[mock]
+test_dir = "test"
+
+[[mock.rules]]
+modules = ["ok/Ok"]

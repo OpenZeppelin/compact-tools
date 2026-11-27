@@ -1,0 +1,4 @@
+[[mock.rules]]
+modules = ["count/Count"]
+implements = [{ name = "Tally", module = "iface/Iface" }]
+include = false

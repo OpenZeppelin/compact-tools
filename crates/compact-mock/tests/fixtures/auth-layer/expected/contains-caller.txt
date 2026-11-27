@@ -1,8 +1,8 @@
 exit: 2
 --- stdout
 --- stderr
-compact-mock: MockLatch: parameter who of hold has type Maybe<Badge>, which contains Badge but is not it; add hold to exclude
-compact-mock: MockLatch: parameter label of tag has type Tagged, which contains Badge but is not it; add tag to exclude
 compact-mock: MockCrate: parameter parcel of ship has type Parcel, which contains Badge but is not it; add ship to exclude
 compact-mock: MockCrate: parameter first of initialize has type Parcel, which contains Badge but is not it; set init = "none" and add initialize to exclude
+compact-mock: MockLatch: parameter who of hold has type Maybe<Badge>, which contains Badge but is not it; add hold to exclude
+compact-mock: MockLatch: parameter label of tag has type Tagged, which contains Badge but is not it; add tag to exclude
 compact-mock: 4 errors; nothing written.

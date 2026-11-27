@@ -1,3 +1,0 @@
-[[mock]]
-module = "ok/Ok"
-include = "/tmp/Ok.fragment.compact"

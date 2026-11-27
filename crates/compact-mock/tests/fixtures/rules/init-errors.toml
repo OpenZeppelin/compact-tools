@@ -1,17 +1,11 @@
-[[mock]]
-module = "calc/Sum"
+[[mock.rules]]
+modules = ["calc/Sum"]
 init = "plain"
 
-[[mock]]
-module = "calc/Sum"
-name = "MockSumFlag"
+[[mock.rules]]
+modules = ["calc/Sum"]
 init = { flag = "ready" }
 
-[[mock]]
-module = "calc/Calc"
+[[mock.rules]]
+modules = ["calc/Calc"]
 init = { flag = "start" }
-
-[[mock]]
-module = "calc/Calc"
-name = "MockCalcGuarded"
-guard = ["initialize"]

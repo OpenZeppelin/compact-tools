@@ -1,0 +1,13 @@
+exit: 1
+--- stdout
+wrote src/lib/test/artifacts/MockAlpha.compact
+wrote src/lib/test/artifacts/MockFail.compact
+wrote src/lib/test/artifacts/MockZeta.compact
+compiled src/lib/test/artifacts/MockAlpha
+--- stderr
+compact-mock: 3 mocks, 3 written, 0 unchanged, 0 removed.
+stub: cannot compile src/lib/test/artifacts/MockFail.compact
+compact-mock: compact compile failed for src/lib/test/artifacts/MockFail.compact (exit 3)
+--- compact calls
+compile src/lib/test/artifacts/MockAlpha.compact src/lib/test/artifacts/MockAlpha
+compile src/lib/test/artifacts/MockFail.compact src/lib/test/artifacts/MockFail

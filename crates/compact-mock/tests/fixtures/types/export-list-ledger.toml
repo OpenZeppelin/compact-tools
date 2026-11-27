@@ -1,2 +1,2 @@
-[[mock]]
-module = "reg/Registry"
+[[mock.rules]]
+modules = ["reg/Registry"]

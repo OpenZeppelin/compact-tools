@@ -1,11 +1,11 @@
 exit: 0
 --- stdout
-wrote src/door/test/mocks/MockDoor.compact
-wrote src/door/test/mocks/MockDoorCaller.compact
-wrote src/door/test/mocks/MockPlain.compact
-wrote src/door/test/mocks/MockPlainCaller.compact
-wrote src/door/test/mocks/MockTwin.compact
-wrote src/door/test/mocks/MockLobby.compact
-wrote src/door/test/mocks/MockLobbyCaller.compact
+wrote src/door/test/artifacts/MockDoor.compact
+wrote src/door/test/artifacts/MockDoorCaller.compact
+wrote src/door/test/artifacts/MockLobby.compact
+wrote src/door/test/artifacts/MockLobbyCaller.compact
+wrote src/door/test/artifacts/MockPlain.compact
+wrote src/door/test/artifacts/MockPlainCaller.compact
+wrote src/door/test/artifacts/MockTwin.compact
 --- stderr
-compact-mock: 7 mocks, 7 written, 0 unchanged.
+compact-mock: 7 mocks, 7 written, 0 unchanged, 0 removed.

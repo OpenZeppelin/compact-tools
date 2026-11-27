@@ -1,0 +1,3 @@
+[[mock.rules]]
+modules = ["dial/Dial"]
+rename = { "turn(Field)" = "turnField" }

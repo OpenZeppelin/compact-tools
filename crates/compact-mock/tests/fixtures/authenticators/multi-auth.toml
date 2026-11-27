@@ -1,0 +1,16 @@
+[mock]
+caller_type = { name = "Badge", module = "who/Who" }
+
+[mock.auth.prf]
+module = "auth/Prf"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[mock.auth.ecdsa]
+module = "auth/Ecdsa"
+call = "authenticateForThisContract()"
+suffix = "Ecdsa"
+
+[[mock.rules]]
+modules = ["access/Owned"]
+auth = ["prf", "ecdsa", "caller"]
+salt = "owned"
