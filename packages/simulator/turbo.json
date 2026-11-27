@@ -1,0 +1,19 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "types": {
+      "dependsOn": ["^build", "build", "compile:fixtures"],
+      "inputs": [
+        "src/**/*.ts",
+        "test/**/*.ts",
+        "dist-test/**/*.ts",
+        "tsconfig.json",
+        "tsconfig.types.json",
+        "tsconfig.test.json",
+        "tsconfig.dist.json"
+      ],
+      "outputs": []
+    }
+  }
+}

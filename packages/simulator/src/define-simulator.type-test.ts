@@ -207,6 +207,15 @@ defineSimulator(artifact, {
 // @ts-expect-error a contract with witnesses needs `witnesses`.
 defineSimulator(artifact, { privateState: bundledState });
 
+// @ts-expect-error a contract with witnesses needs a definition.
+defineSimulator(artifact);
+
+// @ts-expect-error `witnesses` cannot be `undefined`.
+defineSimulator(artifact, { witnesses: undefined });
+
+// A contract without witnesses needs no definition.
+defineSimulator(stateless);
+
 // A part generic over the merged state, and the parts merged for `createSimulator`.
 
 createSimulator<
@@ -308,14 +317,51 @@ defineSimulator(artifact, {
   }),
 });
 
-// @ts-expect-error `wit_secret` is missing from the prepared witnesses.
 defineSimulator(artifact, {
   privateState: bundledState,
   prepare: () => ({
     args: [new Uint8Array(32), [1n] as bigint[]] as const,
+    // @ts-expect-error `wit_secret` is missing from the prepared witnesses.
     options: { witnesses: moduleWitnesses() },
   }),
 });
+
+defineSimulator(artifact, {
+  privateState: bundledState,
+  // @ts-expect-error neither the definition nor `prepare` supplies the witnesses.
+  prepare: () => ({ args: [new Uint8Array(32), [1n] as bigint[]] as const }),
+});
+
+defineSimulator(artifact, {
+  privateState: bundledState,
+  prepare: () => ({
+    args: [new Uint8Array(32), [1n] as bigint[]] as const,
+    // @ts-expect-error the prepared options leave the witnesses out.
+    options: { privateState: bundledState() },
+  }),
+});
+
+declare const maybeWitnesses: typeof bundledWitnesses | undefined;
+
+// @ts-expect-error the definition's witnesses can be `undefined`.
+defineSimulator(artifact, {
+  witnesses: maybeWitnesses,
+  privateState: bundledState,
+  prepare: () => ({ args: [new Uint8Array(32), [1n] as bigint[]] as const }),
+});
+
+// The prepared options supply them instead.
+defineSimulator(artifact, {
+  witnesses: maybeWitnesses,
+  privateState: bundledState,
+  prepare: () => ({
+    args: [new Uint8Array(32), [1n] as bigint[]] as const,
+    options: { witnesses: bundledWitnesses() },
+  }),
+});
+
+// @ts-expect-error a positional definition's witnesses cannot be `undefined`.
+defineSimulator(artifact, { witnesses: maybeWitnesses });
 
 // Helpers written outside the spec, as a witnesses file writes them.
 const stateHelpers = (sim: PrivateStateAccess<ModuleState>) => ({

@@ -254,7 +254,9 @@ export interface SimulatorDefinition<A extends ContractArtifact, WS, PS, X> {
   privateState?: PS;
   /**
    * Adds members to every instance, e.g. a `privateState` helper bag. They
-   * replace circuit methods of the same name.
+   * replace circuit methods of the same name. A function that replaces a
+   * circuit spends the `as()` caller like the circuit; other members leave it
+   * to the next circuit call, like subclass methods.
    */
   extend?: (
     sim: DefinedSimulatorInstance<
@@ -272,13 +274,63 @@ export interface SimulatorDefinition<A extends ContractArtifact, WS, PS, X> {
   arity?: number;
 }
 
-/** Requires `witnesses` when the contract declares witnesses. */
-type WitnessesRequired<A extends ContractArtifact> =
+/** Whether the contract declares witnesses. */
+type DeclaresWitnesses<A extends ContractArtifact> =
   string extends keyof ContractWitnesses<A>
-    ? unknown
+    ? false
     : [keyof ContractWitnesses<A>] extends [never]
-      ? unknown
-      : { witnesses: unknown };
+      ? false
+      : true;
+
+/**
+ * The definition of a class without `prepare`. A contract with witnesses needs
+ * one, with `witnesses` set.
+ */
+type PositionalDefinition<
+  A extends ContractArtifact,
+  WS,
+  PS,
+  X,
+> = SimulatorDefinition<A, WS, PS, X> &
+  DefinitionCheck<A, WS, PS> &
+  (DeclaresWitnesses<A> extends true ? { witnesses: object } : unknown);
+
+/**
+ * The definition of a class with `prepare`. For a contract with witnesses,
+ * `Source` names what supplies them: the definition's `witnesses`, set to an
+ * object, or the `options` that `prepare` returns.
+ */
+type PreparedDefinition<
+  A extends ContractArtifact,
+  WS,
+  PS,
+  X,
+  I extends readonly unknown[],
+  F,
+  Source extends 'definition' | 'prepare',
+> = SimulatorDefinition<A, WS, PS, X> &
+  DefinitionCheck<A, WS, PS> &
+  (Source extends 'definition' ? { witnesses: object } : unknown) & {
+    /**
+     * Replaces the positional form: maps `create`'s arguments to the
+     * constructor arguments, the options, and fields for the new instance.
+     */
+    prepare: (...input: I) => PreparedCreate<
+      A,
+      DefinedPrivateState<PS>,
+      DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
+      F
+    > &
+      (Source extends 'prepare'
+        ? DeclaresWitnesses<A> extends true
+          ? {
+              options: {
+                witnesses: DefinedWitnesses<A, WS, DefinedPrivateState<PS>>;
+              };
+            }
+          : unknown
+        : unknown);
+  };
 
 type AnyDefinition = SimulatorDefinition<
   ContractArtifact,
@@ -364,12 +416,12 @@ function consumingCaller(
 
 /**
  * Defines each own member of `members` on `target`, like a class field.
- * Accessors stay accessors; `wrap` maps function values.
+ * Accessors stay accessors; `wrap` maps data values by key.
  */
 function defineMembers(
   target: object,
   members: object,
-  wrap: (value: unknown) => unknown = (value) => value,
+  wrap: (key: PropertyKey, value: unknown) => unknown = (_key, value) => value,
 ): void {
   const descriptors = Object.getOwnPropertyDescriptors(members);
   for (const key of Reflect.ownKeys(descriptors)) {
@@ -383,7 +435,7 @@ function defineMembers(
             configurable: true,
             enumerable: true,
             writable: true,
-            value: wrap(value),
+            value: wrap(key, value),
           },
     );
   }
@@ -421,21 +473,24 @@ export function defineSimulator<
   F = unknown,
 >(
   artifact: A,
-  definition: SimulatorDefinition<A, WS, PS, X> &
-    DefinitionCheck<A, WS, PS> & {
-      /**
-       * Replaces the positional form: maps `create`'s arguments to the
-       * constructor arguments, the options, and fields for the new instance.
-       */
-      prepare: (
-        ...input: I
-      ) => PreparedCreate<
-        A,
-        DefinedPrivateState<PS>,
-        DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
-        F
-      >;
-    },
+  definition: PreparedDefinition<A, WS, PS, X, I, F, 'definition'>,
+): PreparedSimulatorClass<
+  A,
+  DefinedPrivateState<PS>,
+  DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
+  X & F,
+  I
+>;
+export function defineSimulator<
+  A extends ContractArtifact,
+  WS = undefined,
+  PS = undefined,
+  X = unknown,
+  I extends readonly unknown[] = never,
+  F = unknown,
+>(
+  artifact: A,
+  definition: PreparedDefinition<A, WS, PS, X, I, F, 'prepare'>,
 ): PreparedSimulatorClass<
   A,
   DefinedPrivateState<PS>,
@@ -450,9 +505,9 @@ export function defineSimulator<
   X = unknown,
 >(
   artifact: A,
-  definition?: SimulatorDefinition<A, WS, PS, X> &
-    DefinitionCheck<A, WS, PS> &
-    WitnessesRequired<A>,
+  ...definition: DeclaresWitnesses<A> extends true
+    ? [definition: PositionalDefinition<A, WS, PS, X>]
+    : [definition?: PositionalDefinition<A, WS, PS, X>]
 ): DefinedSimulatorClass<
   A,
   DefinedPrivateState<PS>,
@@ -506,9 +561,12 @@ export function defineSimulator(
       if (!extend) return;
       const members = extend(this as never) as object;
       assertNotReserved('extend', members);
+      // A member that replaces a circuit spends the `as()` caller like the
+      // circuit. Other members behave like subclass methods.
+      const circuitNames = new Set([...deps.pureNames, ...deps.impureNames]);
       const consume = () => deps.backend.consumeSingleCaller();
-      defineMembers(this, members, (value) =>
-        typeof value === 'function'
+      defineMembers(this, members, (key, value) =>
+        typeof value === 'function' && circuitNames.has(key as string)
           ? consumingCaller(value as (...args: unknown[]) => unknown, consume)
           : value,
       );

@@ -14,6 +14,11 @@ allowing you to simulate contract behavior locally without blockchain deployment
 > **Upgrading from 0.3.x?** Construction and every circuit call are now
 > asynchronous. See the [changelog](https://github.com/OpenZeppelin/compact-tools/blob/main/packages/simulator/CHANGELOG.md).
 
+> **Upgrading from 0.6.x?** `as()` applies to exactly one call on both
+> backends. On dry it used to stay in effect after the call, so a spec that
+> relied on that can fail. Call `as()` before each call that needs the caller,
+> or use `setPersistentCaller()`.
+
 ## Quick Start
 
 For a compiled contract module, [`defineSimulator`](#5-defining-a-simulator-from-the-artifact)
@@ -328,7 +333,7 @@ Definition fields, all optional:
 | `witnesses` | no witnesses | Witness factory, or a list of factories merged into one. Required when the contract declares witnesses, unless `prepare` supplies them. |
 | `privateState` | `{}` | Factory for the initial private state, or a list merged into one. |
 | `extend` | none | `(sim) => members`. Added to every instance: helper bags, wrappers, sync versions of circuits. A member replaces the circuit method of the same name. Getters stay getters. |
-| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. The class has no `_create`. |
+| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. Without definition `witnesses`, a contract with witnesses needs `options.witnesses`. The class has no `_create`. |
 | `artifactName` | none | The `artifacts/<name>/` directory the live backend deploys. |
 | `arity` | read from the artifact | The constructor's argument count. |
 
@@ -541,11 +546,12 @@ const owner = await simulator.signers.eitherFor('OWNER');
 ```
 
 `as()` applies to the next call: a circuit method, a `circuits` call, or a
-top-level function `extend` added (not one inside a helper bag). That call
-spends it even if it fails. The call after it runs as the persistent caller, or
-the default one. Arguments run first, so in
-`sim.as('OWNER').transfer(sim.helper())` the `extend` member `helper` spends
-the caller and `transfer` runs as the default caller.
+function `extend` adds in place of a circuit method. That call spends it even if
+it fails. The call after it runs as the persistent caller, or the default one.
+Other `extend` members behave like subclass methods and do not spend the
+caller, so in `sim.as('OWNER').transfer(sim.helper())` the `transfer` circuit
+runs as `OWNER`. A helper that makes several circuit calls spends the caller on
+its first call. To run all of them as one caller, use `setPersistentCaller()`.
 
 > `ownPublicKey()` is a witness value and MUST NOT be used as an authentication
 > mechanism. These helpers exist for circuits that take the caller as an input
