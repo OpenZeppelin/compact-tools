@@ -143,6 +143,12 @@ impl Globs {
         self.set.is_match(module)
     }
 
+    /// The indices of the patterns that match `module`.
+    #[must_use]
+    pub fn matching(&self, module: &str) -> Vec<usize> {
+        self.set.matches(module)
+    }
+
     fn build(patterns: Vec<String>) -> Result<Self, (String, globset::Error)> {
         let mut builder = GlobSetBuilder::new();
         for pattern in &patterns {
@@ -174,6 +180,8 @@ pub struct AuthSpec {
     pub call: Option<String>,
     pub prefix: Option<String>,
     pub suffix: String,
+    /// The caller-typed parameters the call replaces, by name.
+    pub params: Vec<String>,
 }
 
 impl AuthSpec {
@@ -227,6 +235,8 @@ pub struct InjectSpec {
     pub call: String,
     pub prefix: Option<String>,
     pub scope: Scope,
+    /// The parameters of `ty` the call replaces, by name.
+    pub params: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -261,6 +271,17 @@ impl Rule {
     #[must_use]
     pub fn applies(&self, module: &str) -> bool {
         self.modules.matches(module) && !self.exclude_modules.matches(module)
+    }
+
+    /// Whether the rule applies to `module` and lists its exact path, not only a glob.
+    #[must_use]
+    pub fn names(&self, module: &str) -> bool {
+        self.applies(module)
+            && self
+                .modules
+                .patterns
+                .iter()
+                .any(|pattern| pattern == module)
     }
 }
 
@@ -586,6 +607,7 @@ struct RawAuth {
     call: Option<String>,
     prefix: Option<String>,
     suffix: Option<String>,
+    params: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -598,6 +620,7 @@ struct RawInject {
     prefix: Option<String>,
     #[serde(default)]
     scope: Scope,
+    params: Option<Vec<String>>,
 }
 
 /// The rule-only keys; the per-authenticator ones are read into [`Settings`].
@@ -722,7 +745,12 @@ pub fn load(path: &Path, paths: &Paths) -> Result<Config, Vec<Error>> {
         });
     }
     let src = normalize(&base.join(src_text));
-    if !src.is_dir() {
+    if !is_absolute(src_text) && !src.starts_with(&base) {
+        report(ConfigError::SrcOutside {
+            cfg: cfg.clone(),
+            value: src_text.to_owned(),
+        });
+    } else if !src.is_dir() {
         report(ConfigError::Src {
             cfg: cfg.clone(),
             dir: paths.show(&src),
@@ -765,6 +793,7 @@ pub fn load(path: &Path, paths: &Paths) -> Result<Config, Vec<Error>> {
             call: None,
             prefix: None,
             suffix: "Caller".to_owned(),
+            params: vec![CALLER.to_owned()],
         },
     );
     for (name, auth) in raw.auth {
@@ -792,6 +821,13 @@ pub fn load(path: &Path, paths: &Paths) -> Result<Config, Vec<Error>> {
                 name: name.clone(),
             });
         }
+        let params = check_params(
+            &format!("[mock.inject.{name}].params"),
+            inject.params,
+            &name,
+            &cfg,
+            &mut report,
+        );
         injectors.insert(
             name.clone(),
             InjectSpec {
@@ -801,6 +837,7 @@ pub fn load(path: &Path, paths: &Paths) -> Result<Config, Vec<Error>> {
                 call: inject.call,
                 prefix: inject.prefix,
                 scope: inject.scope,
+                params,
             },
         );
     }
@@ -839,6 +876,22 @@ pub fn load(path: &Path, paths: &Paths) -> Result<Config, Vec<Error>> {
     }
 }
 
+/// The `[mock].test_dir` tail of the config at `path`, its default when unset. `None` when
+/// the file does not read or parse, has no `[mock]` table, or the value is malformed.
+#[must_use]
+pub fn mock_test_tail(path: &Path) -> Option<Vec<String>> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let table: toml::Table = toml::from_str(&text).ok()?;
+    let toml::Value::Table(mock) = table.get(MOCK_TABLE)? else {
+        return None;
+    };
+    match mock.get("test_dir") {
+        None => test_tail(DEFAULT_TEST_DIR),
+        Some(toml::Value::String(template)) => test_tail(template),
+        Some(_) => None,
+    }
+}
+
 /// `test_dir` after `{dir}/`, split into segments, or `None` when the form is wrong.
 fn test_tail(template: &str) -> Option<Vec<String>> {
     let rest = template.strip_prefix(DIR_PLACEHOLDER)?;
@@ -864,7 +917,11 @@ fn auth_spec(
     report: &mut impl FnMut(ConfigError),
 ) -> Option<AuthSpec> {
     if name == CALLER {
-        if auth.module.is_some() || auth.call.is_some() || auth.prefix.is_some() {
+        if auth.module.is_some()
+            || auth.call.is_some()
+            || auth.prefix.is_some()
+            || auth.params.is_some()
+        {
             report(ConfigError::CallerTable {
                 cfg: cfg.to_owned(),
             });
@@ -878,8 +935,16 @@ fn auth_spec(
             call: None,
             prefix: None,
             suffix: auth.suffix.unwrap_or_else(|| "Caller".to_owned()),
+            params: vec![CALLER.to_owned()],
         });
     }
+    let params = check_params(
+        &format!("[mock.auth.{name}].params"),
+        auth.params,
+        CALLER,
+        cfg,
+        report,
+    );
     check_auth_name(name, cfg, report);
     let (Some(module), Some(call)) = (auth.module, auth.call) else {
         report(ConfigError::AuthFields {
@@ -913,7 +978,33 @@ fn auth_spec(
         call: Some(call),
         prefix: auth.prefix,
         suffix: auth.suffix.unwrap_or_default(),
+        params,
     })
+}
+
+/// `params`, or `[default]` when unset. Each entry must be an identifier, and the list
+/// must not be empty.
+fn check_params(
+    key: &str,
+    params: Option<Vec<String>>,
+    default: &str,
+    cfg: &str,
+    report: &mut impl FnMut(ConfigError),
+) -> Vec<String> {
+    let Some(params) = params else {
+        return vec![default.to_owned()];
+    };
+    if params.is_empty() {
+        report(ConfigError::Invalid {
+            cfg: cfg.to_owned(),
+            at: key.to_owned(),
+            message: "names no parameter".to_owned(),
+        });
+    }
+    for param in &params {
+        check_name(key, param, cfg, report);
+    }
+    params
 }
 
 /// Authenticator and injector names: `[a-z][a-z0-9_]*`, never a rule key.

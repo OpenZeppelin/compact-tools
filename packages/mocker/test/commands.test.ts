@@ -135,7 +135,7 @@ describe.skipIf(skipped)(title('compact-mock build'), () => {
     expect(mock('build', '--dir', 'src/missing').status).toBe(2);
   });
 
-  it('exits 1 when a mock breaks the interface it implements', () => {
+  it('exits 2 before compiling when a mock breaks the interface it implements', () => {
     const iface = join(repo, 'src', 'iface', 'Counting.compact');
     writeFileSync(
       iface,
@@ -153,8 +153,11 @@ describe.skipIf(skipped)(title('compact-mock build'), () => {
       'src/count',
     );
 
-    expect(run.status).toBe(1);
-    expect(`${run.stdout}${run.stderr}`).toMatch(/rather than Uint<32>/);
+    expect(run.status).toBe(2);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain(
+      'implements Tally, but its circuit bump takes (Uint<16>) where Tally declares (Uint<32>)',
+    );
   });
 });
 

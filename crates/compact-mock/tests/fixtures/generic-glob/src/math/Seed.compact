@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Seed {
+  import CompactStandardLibrary;
+
+  export circuit initialize<T>(x: T): [] {
+  }
+
+  export circuit go(): [] {
+  }
+}

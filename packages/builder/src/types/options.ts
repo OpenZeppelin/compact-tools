@@ -138,6 +138,12 @@ export interface BuilderOnlyOptions {
    * @default []
    */
   copyToDist?: string[];
+  /**
+   * Patterns both stages always skip, on top of `exclude` or its default. A
+   * non-empty `only` does not lift them. Same matching rules as `exclude`.
+   * @default []
+   */
+  alwaysExclude?: string[];
 }
 
 /**

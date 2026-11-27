@@ -11,7 +11,7 @@ use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level};
 use crate::edit::{apply, newline_of};
 use crate::fix;
 use crate::format::{self, FormatError};
-use crate::mock_coverage::{self, MockCoverageError};
+use crate::mock_coverage;
 use crate::report::RuleId;
 use crate::rules::{LintError, Linter};
 use crate::target::{self, TargetError};
@@ -25,8 +25,6 @@ pub enum CheckError {
     Lint(#[from] LintError),
     #[error(transparent)]
     Format(#[from] FormatError),
-    #[error(transparent)]
-    MockCoverage(#[from] MockCoverageError),
     #[error("cannot read {path}")]
     Read {
         path: PathBuf,
@@ -110,7 +108,7 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
 
     let coverage_level = target.config.rules.get(RuleId::MOCK_COVERAGE);
     let phase = Phase::start("mock coverage");
-    let found = mock_coverage::check(&target, coverage_level, cwd)?;
+    let found = mock_coverage::check(&target, coverage_level, cwd);
     phase.stop(timings, format!("{} findings", found.len()));
     diagnostics.extend(found);
 

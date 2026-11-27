@@ -22,6 +22,10 @@ pub struct SourceFile {
     pub has_constructor: bool,
     /// Top-level `export circuit` names, in source order (a fragment's exports).
     pub exported_circuits: Vec<String>,
+    /// Top-level `witness` names (a fragment's witnesses).
+    pub witnesses: Vec<String>,
+    /// Top-level imports (a fragment's imports).
+    pub imports: Vec<Import>,
 }
 
 /// A 1-based line and column (in characters).
@@ -142,8 +146,17 @@ pub struct Circuit {
 pub struct Contract {
     pub name: String,
     pub exported: bool,
-    /// The circuit names its body declares, in order.
-    pub circuits: Vec<String>,
+    /// The circuits its body declares, in order.
+    pub circuits: Vec<ContractCircuit>,
+}
+
+/// One circuit of a contract body.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractCircuit {
+    pub name: String,
+    /// The parameter types as written, whitespace-collapsed; `None` for a generic circuit
+    /// or a list that does not split.
+    pub params: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -211,6 +224,8 @@ pub fn parse(path: &Path, text: &str) -> Result<SourceFile, ParseFailure> {
         module: None,
         has_constructor: false,
         exported_circuits: Vec::new(),
+        witnesses: Vec::new(),
+        imports: Vec::new(),
     };
     let mut cursor = root.walk();
     for node in root.named_children(&mut cursor) {
@@ -219,6 +234,8 @@ pub fn parse(path: &Path, text: &str) -> Result<SourceFile, ParseFailure> {
                 file.pragma = Some(slice(node, text).to_owned());
             }
             "constructor_declaration" => file.has_constructor = true,
+            "witness_declaration" => file.witnesses.push(field_text(node, "name", text)),
+            "import_declaration" => file.imports.push(import(node, text)),
             "circuit_declaration" if has_token(node, "export") => {
                 file.exported_circuits.push(field_text(node, "name", text));
             }
@@ -389,14 +406,49 @@ fn circuit(node: Node<'_>, text: &str) -> Result<Circuit, ParseFailure> {
     })
 }
 
-/// The circuit names a contract body declares: each identifier after a `circuit` word.
-fn contract_circuits(body: &str) -> Vec<String> {
-    let words: Vec<&str> = params::identifiers(body).collect();
-    words
-        .windows(2)
-        .filter(|pair| pair[0] == "circuit")
-        .map(|pair| pair[1].to_owned())
-        .collect()
+/// The circuits a contract body declares: each identifier after a `circuit` word, with
+/// the parameter list that follows it.
+fn contract_circuits(body: &str) -> Vec<ContractCircuit> {
+    let ident = |ch: char| ch.is_ascii_alphanumeric() || ch == '_' || ch == '$';
+    let mut found = Vec::new();
+    let mut at = 0;
+    while let Some(offset) = body[at..].find("circuit") {
+        let start = at + offset;
+        at = start + "circuit".len();
+        let bounded = !body[..start].ends_with(ident) && !body[at..].starts_with(ident);
+        let rest = body[at..].trim_start();
+        let name: String = rest.chars().take_while(|ch| ident(*ch)).collect();
+        if !bounded || name.is_empty() {
+            continue;
+        }
+        let after = rest[name.len()..].trim_start();
+        let params = after.starts_with('(').then_some(()).and_then(|()| {
+            let close = closing_paren(after)?;
+            params::split(&after[..=close])
+                .ok()
+                .map(|list| list.into_iter().map(|param| param.ty).collect())
+        });
+        found.push(ContractCircuit { name, params });
+    }
+    found
+}
+
+/// The byte offset of the `)` that closes the `(` at the start of `text`.
+fn closing_paren(text: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    for (at, ch) in text.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(at);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn type_decl(node: Node<'_>, text: &str) -> TypeDecl {

@@ -56,6 +56,11 @@ struct Selection {
     /// Only mocks of modules under this directory; stale removal stays inside it.
     #[arg(long, value_name = "DIR")]
     dir: Option<PathBuf>,
+
+    /// Only mocks whose module source or generated source matches this compact-compiler
+    /// file glob (repeatable). Deletes nothing.
+    #[arg(long, value_name = "GLOB")]
+    only: Vec<String>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -72,6 +77,11 @@ struct BuildArgs {
     #[arg(long, value_name = "DIR")]
     dir: Option<PathBuf>,
 
+    /// Only mocks whose module source or generated source matches this compact-compiler
+    /// file glob (repeatable). Deletes nothing.
+    #[arg(long, value_name = "GLOB")]
+    only: Vec<String>,
+
     /// Pass --skip-zk to compact compile. `SKIP_ZK=true` does the same.
     #[arg(long)]
     skip_zk: bool,
@@ -79,6 +89,10 @@ struct BuildArgs {
     /// The `compact` executable.
     #[arg(long, value_name = "PATH", env = COMPACT_BIN_ENV, default_value = "compact")]
     compact_bin: OsString,
+
+    /// Arguments after `--`, passed to every `compact compile` before the paths.
+    #[arg(last = true, value_name = "COMPILE_ARGS")]
+    compile_args: Vec<String>,
 }
 
 fn main() -> ExitCode {
@@ -128,6 +142,7 @@ fn run_build(args: BuildArgs, paths: &Paths) -> ExitCode {
         names,
         config: args.config,
         dir: args.dir,
+        only: args.only,
     };
     let plans = match generate(&selection, paths) {
         Ok(plans) => plans,
@@ -137,6 +152,7 @@ fn run_build(args: BuildArgs, paths: &Paths) -> ExitCode {
         version,
         skip_zk: args.skip_zk || build::skip_zk_from_env(),
         compact_bin: args.compact_bin,
+        extra: args.compile_args,
     };
     let mut out = io::stdout().lock();
     for plan in &plans {
@@ -188,6 +204,13 @@ fn generate(selection: &Selection, paths: &Paths) -> Result<Vec<MockPlan>, ExitC
         }
         None => None,
     };
+    if let Some(note) = dir
+        .as_deref()
+        .and_then(|dir| dir_note(dir, &config.src, paths))
+    {
+        eprintln!("compact-mock: {note}");
+        return Ok(Vec::new());
+    }
     let mut names: Vec<String> = Vec::new();
     for name in &selection.names {
         if !names.contains(name) {
@@ -201,15 +224,24 @@ fn generate(selection: &Selection, paths: &Paths) -> Result<Vec<MockPlan>, ExitC
         Scope {
             dir: dir.as_deref(),
             names: &names,
+            only: &selection.only,
         },
     );
 
     for note in &analysis.notes {
         eprintln!("compact-mock: {note}");
     }
-    for module in &analysis.modules {
-        if let (true, Status::Skipped(reason)) = (module.in_scope, &module.status) {
-            eprintln!("compact-mock: skipped {}: {}", module.module, reason.text());
+    for module in analysis.modules.iter().filter(|module| module.in_scope) {
+        match &module.status {
+            Status::Skipped(reason) => {
+                eprintln!("compact-mock: skipped {}: {}", module.module, reason.text());
+            }
+            Status::Mocks { warnings, .. } => {
+                for warning in warnings {
+                    eprintln!("compact-mock: {warning}");
+                }
+            }
+            _ => {}
         }
     }
     let fatal = analysis.fatal();
@@ -219,6 +251,9 @@ fn generate(selection: &Selection, paths: &Paths) -> Result<Vec<MockPlan>, ExitC
     }
 
     let plans: Vec<MockPlan> = analysis.plans().into_iter().cloned().collect();
+    if !selection.only.is_empty() && plans.is_empty() {
+        eprintln!("compact-mock: --only matches no mock");
+    }
     let mut targets: Vec<Target> = Vec::new();
     let mut errors: Vec<Error> = Vec::new();
     for plan in &plans {
@@ -232,7 +267,7 @@ fn generate(selection: &Selection, paths: &Paths) -> Result<Vec<MockPlan>, ExitC
         &analysis,
         &targets,
         dir.as_deref(),
-        names.is_empty(),
+        names.is_empty() && selection.only.is_empty(),
     );
     let own_plan = match own::plan(&produced, paths) {
         Ok(own_plan) => own_plan,
@@ -243,6 +278,9 @@ fn generate(selection: &Selection, paths: &Paths) -> Result<Vec<MockPlan>, ExitC
     };
     if !errors.is_empty() {
         return Err(fail(&errors));
+    }
+    for note in &own_plan.notes {
+        eprintln!("compact-mock: {note}");
     }
 
     let outcome = own::execute(&own_plan, &targets, paths, &mut |_| Ok(()));
@@ -341,11 +379,42 @@ fn produced(
         Some(_) => None,
     });
     Produced {
+        src: config.src.clone(),
+        test_tail: config.test_tail.clone(),
         written,
         expansion,
         unsure,
         examine: examine.flatten(),
     }
+}
+
+/// Why `--dir` selects nothing to write: it lies outside `src` and does not contain it,
+/// or it reaches `src` only through a symlink.
+fn dir_note(dir: &Path, src: &Path, paths: &Paths) -> Option<String> {
+    let shown = paths.show(dir);
+    let src_shown = paths.show(src);
+    if dir.starts_with(src) {
+        return own::linked_component(dir, src).map(|link| {
+            format!(
+                "--dir {shown} goes through the symlink {}; nothing written",
+                paths.show(&link)
+            )
+        });
+    }
+    if src.starts_with(dir) {
+        return None;
+    }
+    let linked = match (std::fs::canonicalize(dir), std::fs::canonicalize(src)) {
+        (Ok(dir), Ok(src)) => dir.starts_with(&src) || src.starts_with(&dir),
+        _ => false,
+    };
+    Some(if linked {
+        format!(
+            "--dir {shown} reaches [mock].src {src_shown} only through a symlink; pass a path under {src_shown}. Nothing written"
+        )
+    } else {
+        format!("--dir {shown} is outside [mock].src {src_shown}; nothing written")
+    })
 }
 
 fn count(mocks: usize) -> String {

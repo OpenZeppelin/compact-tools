@@ -2,6 +2,7 @@
 caller_type = { name = "Badge", module = "who/Who" }
 
 [mock.auth.listed]
+params = ["caller", "keeper"]
 module = "auth/Listed"
 call = 'authenticate(pad(32, "{salt}"))'
 

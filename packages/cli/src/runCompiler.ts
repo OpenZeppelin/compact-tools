@@ -182,6 +182,11 @@ function showUsageHelp(): void {
       '  --no-mocks        Skip the compact-mock build that runs when compact.toml has a [mock] table',
     ),
   );
+  console.log(
+    chalk.yellow(
+      '                    The mock build also gets --only and the other compiler flags',
+    ),
+  );
   console.log(chalk.yellow('\nArtifact Output Structure:'));
   console.log(chalk.yellow('  Default (flattened): <out>/<ContractName>/'));
   console.log(

@@ -1,6 +1,7 @@
 //! Which modules and circuits the generated mocks cover, for `compact-lint`'s
 //! `mock-coverage` rule. Plans every mock in memory and writes nothing.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::config::{self, Paths};
@@ -74,6 +75,9 @@ pub fn coverage(config: &Path, cwd: &Path) -> Result<Option<Vec<ModuleCoverage>>
             Status::Excluded => CoverageStatus::Excluded,
             Status::Skipped(reason) => CoverageStatus::Skipped(reason),
             Status::Unmatched => match at {
+                Some(_) if plan::exports_no_circuit(&mut files, &module.file) => {
+                    CoverageStatus::Skipped(SkipReason::NoExportedCircuits)
+                }
                 Some(_) => CoverageStatus::Unmatched,
                 None => CoverageStatus::Skipped(SkipReason::NotAModule),
             },
@@ -117,6 +121,36 @@ pub fn coverage(config: &Path, cwd: &Path) -> Result<Option<Vec<ModuleCoverage>>
         });
     }
     Ok(Some(found))
+}
+
+/// Per module file, the generated sources of its mocks in expansion order. `None` when the
+/// config has no `[mock]` table or it fails to load.
+#[must_use]
+pub fn generated_sources(config: &Path, cwd: &Path) -> Option<BTreeMap<PathBuf, Vec<PathBuf>>> {
+    let paths = Paths {
+        cwd: config::normalize(cwd),
+    };
+    let path = paths.absolute(config);
+    if !config::has_mock_table(&path, &paths).ok()? {
+        return None;
+    }
+    let config = config::load(&path, &paths).ok()?;
+    let mut files = Files::new(paths);
+    let analysis = plan::analyze(&config, &mut files, Scope::default());
+    let mut found = BTreeMap::new();
+    for module in analysis.modules {
+        if let Status::Mocks {
+            names, artifacts, ..
+        } = module.status
+        {
+            let sources = names
+                .iter()
+                .map(|name| artifacts.join(format!("{name}.compact")))
+                .collect();
+            found.insert(module.file, sources);
+        }
+    }
+    Some(found)
 }
 
 /// Where the file's module name is written, when it parses and holds a module.
@@ -240,7 +274,7 @@ mod tests {
     #[test]
     fn a_module_whose_mocks_fail_to_plan_is_failed_with_its_errors() {
         let directory = tree(
-            "[mock]\n[[mock.rules]]\nmodules = [\"a/*\"]\n",
+            "[mock]\n[[mock.rules]]\nmodules = [\"a/Gen\"]\n",
             &[(
                 "src/a/Gen.compact",
                 "pragma language_version >= 0.28.0;\nmodule Gen<#N> {\n  export circuit go(): [] { }\n}\n",

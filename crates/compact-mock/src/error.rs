@@ -62,6 +62,8 @@ pub enum ConfigError {
     Src { cfg: String, dir: String },
     #[error("config {cfg}: src \"{value}\" must be a path relative to the config file")]
     SrcAbsolute { cfg: String, value: String },
+    #[error("config {cfg}: src \"{value}\" leaves the config file's directory")]
+    SrcOutside { cfg: String, value: String },
     #[error("config {cfg}: {key} \"{value}\" is not an identifier")]
     Identifier {
         cfg: String,
@@ -91,6 +93,12 @@ pub enum ConfigError {
         cfg: String,
         number: usize,
         src: String,
+    },
+    #[error("config {cfg}: {at} pattern \"{pattern}\" excludes nothing")]
+    ExcludeUnused {
+        cfg: String,
+        at: String,
+        pattern: String,
     },
     #[error(
         "config {cfg}: [[mock.rules]] #{number}: unknown key {key}; not a rule key or an authenticator name"
@@ -338,17 +346,14 @@ pub enum PlanError {
         circuit: String,
         generics: String,
     },
-    /// `constructor` is set for the `initialize` the constructor calls.
     #[error(
-        "{mock}: {module} exports {count} circuits named {circuit}, and overloads are not supported; {} or write the mock by hand",
-        exclude_hint(.circuit, *.constructor)
+        "{mock}: {module} exports {count} circuits named {circuit}, so the constructor cannot pick one to call; set init = \"none\" to expose them as numbered circuits, or write the mock by hand"
     )]
     Overloaded {
         mock: String,
         module: String,
         count: usize,
         circuit: String,
-        constructor: bool,
     },
     #[error(
         "{mock}: guarded circuit {circuit} has a parameter named _invocations, which hides the guard counter; leave {circuit} unguarded"
@@ -397,6 +402,14 @@ pub enum PlanError {
         salt: String,
         bytes: usize,
         width: usize,
+    },
+    #[error(
+        "{mock}: the constructor authenticates the caller it passes to {circuit} under salt {salt}, which is not set before {circuit} runs; use a string salt or set init = \"none\""
+    )]
+    SaltBeforeInit {
+        mock: String,
+        circuit: String,
+        salt: String,
     },
     #[error("{mock}: salt ledger field {field} is not an exported ledger field of {module}")]
     SaltLedger {
@@ -456,6 +469,16 @@ pub enum PlanError {
         interface: String,
         circuit: String,
         fragment: String,
+    },
+    /// `params` reads `<found>) where <interface> declares (<expected>`.
+    #[error(
+        "{mock}: implements {interface}, but its circuit {circuit} takes ({params}); when an injected parameter is the difference, set implements per authenticator (caller.implements)"
+    )]
+    ImplementsSignature {
+        mock: String,
+        interface: String,
+        circuit: String,
+        params: String,
     },
     #[error("{mock}: salt must be non-empty and must not contain \", \\ or a control character")]
     SaltChars { mock: String },
@@ -551,6 +574,14 @@ pub enum OutputError {
         "{dir} exists and has no .compact-mock-stamp; compact-mock writes only into directories it owns. Move it away or empty it"
     )]
     NotOwned { dir: String },
+    #[error(
+        "{path} is a symlink; compact-mock never writes or deletes through one. Replace it with a directory"
+    )]
+    Symlink { path: String },
+    #[error(
+        "{path} exists, is not listed in .compact-mock-stamp and lacks the compact-mock header; compact-mock does not overwrite it. Move it away or delete it"
+    )]
+    NotGenerated { path: String },
     #[error("cannot read {path}")]
     Read {
         path: String,

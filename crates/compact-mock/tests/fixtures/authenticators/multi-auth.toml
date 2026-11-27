@@ -2,10 +2,12 @@
 caller_type = { name = "Badge", module = "who/Who" }
 
 [mock.auth.prf]
+params = ["caller", "owner"]
 module = "auth/Prf"
 call = 'authenticate(pad(32, "{salt}"))'
 
 [mock.auth.ecdsa]
+params = ["caller", "owner"]
 module = "auth/Ecdsa"
 call = "authenticateForThisContract()"
 suffix = "Ecdsa"

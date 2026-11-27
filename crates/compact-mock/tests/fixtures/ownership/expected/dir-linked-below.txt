@@ -1,0 +1,4 @@
+exit: 0
+--- stdout
+--- stderr
+compact-mock: --dir src/alias goes through the symlink src/alias; nothing written

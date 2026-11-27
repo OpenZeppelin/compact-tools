@@ -1,6 +1,7 @@
 /**
  * The `compact-mock build` step `compact-compiler` runs before compiling when the nearest
- * `compact.toml` has a `[mock]` table.
+ * `compact.toml` has a `[mock]` table, and the generated-file excludes `compact-builder`
+ * shares.
  */
 
 import { spawn } from 'node:child_process';
@@ -16,13 +17,13 @@ import { parse } from 'smol-toml';
 /** Skips the mock build. Stripped before the compiler sees the arguments. */
 export const NO_MOCKS_FLAG = '--no-mocks';
 
-/** Keeps generated mock sources and fragments out of the compiler's own walk. */
-export const MOCK_EXCLUDES: readonly string[] = [
-  '--exclude',
-  '*/artifacts/*',
-  '--exclude',
-  '*.fragment.compact',
-];
+/** Passed to `compact-mock build` as its own flag, never after `--`. */
+const SKIP_ZK_FLAG = '--skip-zk';
+
+const DIR_PLACEHOLDER = '{dir}/';
+/** `{dir}/test`, the default `[mock].test_dir`, after `{dir}/`. */
+const DEFAULT_TEST_TAIL: readonly string[] = ['test'];
+const FRAGMENT_GLOB = '*.fragment.compact';
 
 export const MOCKER_PACKAGE = '@openzeppelin/compact-mocker';
 export const MOCKER_BIN = 'compact-mock';
@@ -101,11 +102,11 @@ export function findCompactToml(
   }
 }
 
-/** Whether the file parses as TOML and has a top-level `mock` table. */
-export function hasMockTable(
+/** The top-level `mock` table of a TOML file, if it has one. */
+export function readMockTable(
   path: string,
   host: Pick<MockBuildHost, 'readFile'>,
-): boolean {
+): Readonly<Record<string, unknown>> | undefined {
   let document: Record<string, unknown>;
   try {
     document = parse(host.readFile(path));
@@ -116,12 +117,73 @@ export function hasMockTable(
     );
   }
   const mock = document.mock;
-  return (
-    typeof mock === 'object' &&
-    mock !== null &&
-    !Array.isArray(mock) &&
-    !(mock instanceof Date)
-  );
+  if (
+    typeof mock !== 'object' ||
+    mock === null ||
+    Array.isArray(mock) ||
+    mock instanceof Date
+  ) {
+    return undefined;
+  }
+  return mock as Record<string, unknown>;
+}
+
+/** Whether the file parses as TOML and has a top-level `mock` table. */
+export function hasMockTable(
+  path: string,
+  host: Pick<MockBuildHost, 'readFile'>,
+): boolean {
+  return readMockTable(path, host) !== undefined;
+}
+
+/** The nearest `compact.toml` at or above `cwd` and its `[mock]` table, if it has one. */
+function nearestMockConfig(
+  host: Pick<MockBuildHost, 'cwd' | 'isFile' | 'readFile'>,
+): { path: string; table: Readonly<Record<string, unknown>> } | undefined {
+  const path = findCompactToml(host.cwd, host);
+  if (path === undefined) {
+    return undefined;
+  }
+  const table = readMockTable(path, host);
+  return table === undefined ? undefined : { path, table };
+}
+
+/** The `test_dir` segments after `{dir}/`, or `undefined` for a value compact-mock rejects. */
+function testDirTail(testDir: unknown): string[] | undefined {
+  if (typeof testDir !== 'string' || !testDir.startsWith(DIR_PLACEHOLDER)) {
+    return undefined;
+  }
+  const rest = testDir.slice(DIR_PLACEHOLDER.length);
+  if (/[{}\\]/.test(rest) || rest.startsWith('/')) {
+    return undefined;
+  }
+  const segments = rest
+    .split('/')
+    .filter((segment) => segment !== '' && segment !== '.');
+  return segments.length === 0 || segments.includes('..')
+    ? undefined
+    : segments;
+}
+
+/**
+ * Globs for the mocks compact-mock writes under `[mock].test_dir` and for fragments. A
+ * malformed `test_dir` gets the default's globs, and compact-mock reports it.
+ */
+export function mockExcludes(testDir: unknown): string[] {
+  const tail = testDirTail(testDir) ?? DEFAULT_TEST_TAIL;
+  return [`*/${tail.join('/')}/artifacts/*`, FRAGMENT_GLOB];
+}
+
+/**
+ * What `compact-builder` never compiles or ships: {@link mockExcludes} of the nearest
+ * `compact.toml`, with the default `test_dir` when it has no `[mock]` table.
+ *
+ * @throws {CompactTomlParseError} The nearest `compact.toml` cannot be read or parsed.
+ */
+export function builderExcludes(
+  host: Pick<MockBuildHost, 'cwd' | 'isFile' | 'readFile'>,
+): string[] {
+  return mockExcludes(nearestMockConfig(host)?.table.test_dir);
 }
 
 /** `COMPACT_MOCK_BINARY`, else the mocker package's bin run with this Node. */
@@ -158,19 +220,33 @@ export function searchDir(options: CompilerOptions): string {
   return options.targetDir ? join(srcDir, options.targetDir) : srcDir;
 }
 
-/** `build` arguments: only the toolchain version, `--skip-zk`, the scope and the config. */
+/**
+ * `build` arguments: the toolchain version, `--skip-zk`, the scope (`--dir`, `--only`) and
+ * the config, then the other compiler flags after `--` for every `compact compile` it runs.
+ */
 export function mockBuildArgs(
   options: CompilerOptions,
   configPath: string,
 ): string[] {
+  const flags = (options.flags ?? '')
+    .split(/\s+/)
+    .filter((flag) => flag !== '');
+  const compileFlags = flags.filter((flag) => flag !== SKIP_ZK_FLAG);
   const args = ['build'];
   if (options.version) {
     args.push(`+${options.version}`);
   }
-  if ((options.flags ?? '').split(/\s+/).includes('--skip-zk')) {
-    args.push('--skip-zk');
+  if (flags.includes(SKIP_ZK_FLAG)) {
+    args.push(SKIP_ZK_FLAG);
   }
-  args.push('--dir', searchDir(options), '--config', configPath);
+  args.push('--dir', searchDir(options));
+  for (const glob of options.only ?? []) {
+    args.push('--only', glob);
+  }
+  args.push('--config', configPath);
+  if (compileFlags.length > 0) {
+    args.push('--', ...compileFlags);
+  }
   return args;
 }
 
@@ -189,12 +265,18 @@ export async function prepareCompile(
   const noMocks = argv.includes(NO_MOCKS_FLAG);
   const args = argv.filter((arg) => arg !== NO_MOCKS_FLAG);
 
-  const configPath = findCompactToml(host.cwd, host);
-  if (configPath === undefined || !hasMockTable(configPath, host)) {
+  const config = nearestMockConfig(host);
+  if (config === undefined) {
     return args;
   }
 
-  const compilerArgs = [...args, ...MOCK_EXCLUDES];
+  const compilerArgs = [
+    ...args,
+    ...mockExcludes(config.table.test_dir).flatMap((glob) => [
+      '--exclude',
+      glob,
+    ]),
+  ];
   if (noMocks) {
     return compilerArgs;
   }
@@ -206,14 +288,14 @@ export async function prepareCompile(
 
   const mocker = resolveMocker(host);
   if (mocker === undefined) {
-    throw new MockerNotInstalledError(configPath);
+    throw new MockerNotInstalledError(config.path);
   }
   host.log('[COMPILE] Building mocks (compact-mock)');
   let exit: number | string;
   try {
     exit = await host.run(
       mocker.command,
-      [...mocker.args, ...mockBuildArgs(options, configPath)],
+      [...mocker.args, ...mockBuildArgs(options, config.path)],
       host.cwd,
     );
   } catch (error) {

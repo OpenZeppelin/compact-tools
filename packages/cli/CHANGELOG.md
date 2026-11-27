@@ -11,12 +11,13 @@ Releases before this file see the `compact-cli/v*` tags.
 
 ### Added
 
-- `compact-compiler` runs `compact-mock build` before compiling when the nearest `compact.toml` has a `[mock]` table, passing on `+<version>`, `--skip-zk` and the search directory. Its own walk then excludes `*/artifacts/*` and `*.fragment.compact`. It needs `@openzeppelin/compact-mocker` or `COMPACT_MOCK_BINARY`, and a failed mock build stops the compile (#247)
+- `compact-compiler` runs `compact-mock build` before compiling when the nearest `compact.toml` has a `[mock]` table, passing on `+<version>`, `--skip-zk`, the search directory, the `--only` globs and, after `--`, the other compiler flags. Its own walk then excludes the artifacts directory under `[mock].test_dir` (`*/test/artifacts/*` by default) and `*.fragment.compact`. It needs `@openzeppelin/compact-mocker` or `COMPACT_MOCK_BINARY`, and a failed mock build stops the compile (#247)
 - `compact-compiler --no-mocks` skips the mock build (#247)
 
 ### Changed
 
-- `compact-compiler` fails when the nearest `compact.toml` does not parse (#247)
+- `compact-builder` never compiles or ships generated mocks or fragments. It always applies the same two excludes, with the default `test_dir` when the nearest `compact.toml` has no `[mock]` table, through the new `@openzeppelin/compact-builder` option `alwaysExclude`, which `only` does not lift and which keeps the default `Mock*` copy excludes (#247)
+- `compact-compiler` and `compact-builder` fail when the nearest `compact.toml` does not parse (#247)
 
 ## 0.3.1 (2026-11-19)
 

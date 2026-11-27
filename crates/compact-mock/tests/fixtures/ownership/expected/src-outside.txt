@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: config src-outside.toml: src "../outside" leaves the config file's directory

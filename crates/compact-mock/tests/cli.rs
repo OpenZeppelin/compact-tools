@@ -679,6 +679,20 @@ mod auth_layer {
     }
 
     #[test]
+    fn a_caller_typed_parameter_not_named_in_params_stays_a_circuit_argument() {
+        let directory = assert_config(CASE, "caller-named", &[]);
+        let text = mock(&directory, "MockPair");
+        assert!(
+            text.contains("export circuit swap(target: Badge): [] {"),
+            "{text}"
+        );
+        assert!(
+            text.contains("constructor(keeper: Badge, heir: Badge) {"),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn a_module_or_circuit_argument_that_is_or_holds_the_caller_type_is_an_error_in_every_mock() {
         assert_config(CASE, "caller-argument", &[]);
     }
@@ -689,6 +703,18 @@ mod auth_layer {
         assert!(
             mock(&directory, "MockHinge").contains("Listed_authenticate(pad(32, \"MockHinge\"))")
         );
+    }
+
+    #[test]
+    fn an_interface_circuit_whose_caller_the_wrapper_injects_is_an_error() {
+        assert_config(CASE, "implements-caller", &[]);
+    }
+
+    #[test]
+    fn an_interface_set_on_the_caller_mock_only_is_implemented() {
+        let directory = assert_config(CASE, "implements-per-auth", &[]);
+        assert!(mock(&directory, "MockDoorCaller").contains("contract implements Opener;"));
+        assert!(!mock(&directory, "MockDoor").contains("implements"));
     }
 
     #[test]
@@ -830,6 +856,20 @@ mod authenticators {
     }
 
     #[test]
+    fn an_injector_fills_only_parameters_its_params_name() {
+        let directory = assert_config(CASE, "inject-named", &[]);
+        for name in ["MockOpen", "MockOpenCaller"] {
+            let text = read(&directory, &format!("{OUT}/{name}.compact"));
+            assert!(!text.contains("Blind_read()"), "{name}: {text}");
+        }
+    }
+
+    #[test]
+    fn a_ledger_or_expression_salt_with_a_caller_in_initialize_is_an_error() {
+        assert_config(CASE, "salt-before-init", &[]);
+    }
+
+    #[test]
     fn a_ledger_salt_replaces_the_whole_slot_with_the_prefixed_field() {
         let directory = assert_config(CASE, "salt-ledger", &[]);
         let vault = read(&directory, &format!("{OUT}/MockVault.compact"));
@@ -868,6 +908,11 @@ mod instances {
     #[test]
     fn a_merged_group_wraps_every_instance_and_shares_one_constructor() {
         assert_config(CASE, "merge", &[]);
+    }
+
+    #[test]
+    fn merged_instances_whose_numeric_arguments_share_a_value_are_an_error() {
+        assert_config(CASE, "same-value", &[]);
     }
 }
 
@@ -922,6 +967,29 @@ mod witness_clash {
     fn one_witness_reached_twice_is_allowed() {
         assert_config(CASE, "diamond", &[]);
     }
+
+    #[test]
+    fn a_fragment_witness_named_like_an_imported_one_is_an_error() {
+        assert_config(CASE, "fragment", &[]);
+    }
+}
+
+mod generic_glob {
+    use super::{assert_config, assert_run, read};
+
+    const CASE: &str = "generic-glob";
+
+    #[test]
+    fn a_glob_skips_a_generic_module_or_circuit_without_arguments_and_succeeds() {
+        let directory = assert_run(CASE, "default", &[]);
+        let text = read(&directory, "src/math/test/artifacts/MockBox.compact");
+        assert!(!text.contains("wrap"), "{text}");
+    }
+
+    #[test]
+    fn an_exact_module_path_keeps_the_errors() {
+        assert_config(CASE, "exact", &[]);
+    }
 }
 
 mod fragment_import {
@@ -937,7 +1005,10 @@ mod fragment_import {
 mod ownership {
     use std::path::Path;
 
-    use super::{assert_run, assert_run_with};
+    use super::{
+        TempDir, assert_config, assert_run, assert_run_with, assert_transcript, assert_unchanged,
+        generate, run, tree, workspace,
+    };
 
     const CASE: &str = "ownership";
     const OUT: &str = "src/lib/test/artifacts";
@@ -967,7 +1038,7 @@ mod ownership {
     }
 
     #[test]
-    fn a_stale_symlink_is_removed_as_a_link_and_its_target_stays() {
+    fn a_stale_symlink_is_kept_and_reported_and_its_target_stays() {
         let directory = assert_run_with(CASE, "symlink", &[], |root| {
             let outside = root.join("outside");
             std::fs::create_dir_all(&outside).expect("the target is created");
@@ -977,6 +1048,186 @@ mod ownership {
             std::os::unix::fs::symlink(&outside, &gone).expect("the link is created");
         });
         assert!(directory.path().join("outside/keep.txt").is_file());
+        assert!(std::fs::symlink_metadata(directory.path().join(OUT).join("MockGone")).is_ok());
+    }
+
+    #[test]
+    fn a_stale_entry_without_the_header_or_compiled_output_is_kept_and_reported() {
+        let directory = assert_run_with(CASE, "stale-foreign", &[], |root| {
+            let out = root.join(OUT);
+            std::fs::write(out.join("MockGone.compact"), "// hand-written\n").expect("written");
+            std::fs::write(out.join("MockGone/notes.txt"), "mine\n").expect("written");
+        });
+        assert!(
+            directory
+                .path()
+                .join(OUT)
+                .join("MockGone.compact")
+                .is_file()
+        );
+        assert!(
+            directory
+                .path()
+                .join(OUT)
+                .join("MockGone/notes.txt")
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn a_stale_mock_with_an_spdx_line_above_the_header_is_removed() {
+        let directory = assert_run_with(CASE, "stale-spdx", &[], |root| {
+            std::fs::write(
+                root.join("compact.toml"),
+                "[mock]\nspdx = \"MIT\"\n\n[[mock.rules]]\nmodules = [\"lib/Lib\"]\n",
+            )
+            .expect("written");
+            std::fs::write(
+                root.join(OUT).join("MockGone.compact"),
+                "// SPDX-License-Identifier: MIT\n// Generated by compact-mock from lib/Gone. Do not edit by hand.\n",
+            )
+            .expect("written");
+        });
+        assert!(!directory.path().join(OUT).join("MockGone.compact").exists());
+    }
+
+    #[test]
+    fn a_stamp_outside_an_artifacts_directory_deletes_nothing_and_is_reported() {
+        let directory = assert_run_with(CASE, "stray-stamp", &[], |root| {
+            let stamp = "# compact-mock owns this directory.\nLib\nlib\n";
+            std::fs::write(root.join("src/lib/.compact-mock-stamp"), stamp).expect("written");
+            std::fs::write(root.join("src/.compact-mock-stamp"), stamp).expect("written");
+        });
+        assert!(directory.path().join("src/lib/Lib.compact").is_file());
+    }
+
+    #[test]
+    fn an_unlisted_file_without_the_header_is_never_overwritten() {
+        assert_run_with(CASE, "unlisted", &[], |root| {
+            let out = root.join(OUT);
+            std::fs::write(out.join("MockLib.compact"), "// hand-written\n").expect("written");
+            std::fs::write(
+                out.join(".compact-mock-stamp"),
+                "# compact-mock owns this directory.\nMockGone\n",
+            )
+            .expect("written");
+        });
+    }
+
+    #[test]
+    fn a_symlinked_directory_above_the_artifacts_directory_is_refused() {
+        assert_run_with(CASE, "linked-parent", &[], |root: &Path| {
+            let test = root.join("src/lib/test");
+            let elsewhere = root.join("elsewhere");
+            std::fs::rename(&test, &elsewhere).expect("the directory moves");
+            std::os::unix::fs::symlink(&elsewhere, &test).expect("the link is created");
+        });
+    }
+
+    #[test]
+    fn a_rename_that_changes_only_case_never_deletes_the_new_spelling() {
+        let directory = assert_run_with(CASE, "case-rename", &[], |root| {
+            std::fs::write(
+                root.join("compact.toml"),
+                "[[mock.rules]]\nmodules = [\"lib/Lib\"]\nname = \"MockLIB\"\n",
+            )
+            .expect("written");
+            std::fs::write(
+                root.join(OUT).join("MockLib.compact"),
+                "// Generated by compact-mock from lib/Lib. Do not edit by hand.\n",
+            )
+            .expect("written");
+        });
+        assert!(directory.path().join(OUT).join("MockLib.compact").is_file());
+    }
+
+    /// Runs `generate <args>` once after `setup`, compares the transcript, and checks the
+    /// tree did not change.
+    fn assert_untouched(run_name: &str, args: &[&str], setup: impl FnOnce(&Path)) {
+        let directory = workspace(CASE);
+        setup(directory.path());
+        let before = tree(directory.path());
+        let outcome = run(directory.path(), &generate(args));
+        assert_transcript(CASE, run_name, &outcome.transcript(&[]));
+        assert_unchanged(run_name, &before, &tree(directory.path()));
+    }
+
+    #[test]
+    fn dir_outside_src_writes_nothing_and_succeeds_with_a_note() {
+        assert_untouched("dir-outside", &["--dir", "elsewhere"], |root| {
+            std::fs::create_dir(root.join("elsewhere")).expect("created");
+        });
+    }
+
+    #[test]
+    fn dir_through_a_symlink_writes_nothing_and_succeeds_with_a_note() {
+        assert_untouched("dir-linked", &["--dir", "link/lib"], |root| {
+            std::os::unix::fs::symlink(root.join("src"), root.join("link")).expect("linked");
+        });
+    }
+
+    #[test]
+    fn dir_through_a_symlink_below_src_writes_nothing_and_succeeds_with_a_note() {
+        assert_untouched("dir-linked-below", &["--dir", "src/alias"], |root| {
+            std::os::unix::fs::symlink(root.join("src/lib"), root.join("src/alias"))
+                .expect("linked");
+        });
+    }
+
+    #[test]
+    fn dir_above_src_keeps_working() {
+        assert_run(CASE, "dir-above", &["--dir", "."]);
+    }
+
+    #[test]
+    fn a_symlinked_working_directory_does_not_trip_the_symlink_check() {
+        let directory = workspace(CASE);
+        let holder = TempDir::new().expect("a temporary directory");
+        let linked = holder.path().join("workspace");
+        std::os::unix::fs::symlink(directory.path(), &linked).expect("linked");
+        let outcome = run(&linked, &generate(&["--dir", "src/lib"]));
+        assert_eq!(outcome.code, 0, "{}", outcome.stderr);
+        assert!(
+            outcome
+                .stdout
+                .contains("wrote src/lib/test/artifacts/MockLib.compact"),
+            "{}",
+            outcome.stdout
+        );
+    }
+
+    #[test]
+    fn a_file_named_twice_compact_is_its_own_module() {
+        assert_run_with(CASE, "double-suffix", &[], |root| {
+            std::fs::copy(
+                root.join("src/lib/Lib.compact"),
+                root.join("src/lib/Lib.compact.compact"),
+            )
+            .expect("copied");
+        });
+    }
+
+    #[test]
+    fn an_exclude_pattern_that_excludes_nothing_is_reported() {
+        assert_config(CASE, "exclude-unused", &[]);
+    }
+
+    #[test]
+    fn src_outside_the_config_directory_is_an_error() {
+        assert_config(CASE, "src-outside", &[]);
+    }
+
+    #[test]
+    fn only_keeps_the_mocks_a_file_glob_matches_and_deletes_nothing() {
+        let directory = assert_run(CASE, "only", &["--only", "Lib.compact"]);
+        assert!(
+            directory
+                .path()
+                .join(OUT)
+                .join("MockGone.compact")
+                .is_file()
+        );
+        assert_run(CASE, "only-none", &["--only", "Nope.compact"]);
     }
 
     #[test]
@@ -1071,7 +1322,8 @@ mod build {
     const CASE: &str = "toolchain";
 
     /// A stand-in for `compact`. It appends its arguments to `argv.txt` beside it, exits 3
-    /// when its input path contains `Fail`, and otherwise writes `<out>/contract/index.js`.
+    /// when its input path contains `Fail`, and otherwise prints a warning to stderr and
+    /// writes `<out>/contract/index.js`.
     struct Stub {
         directory: TempDir,
     }
@@ -1085,6 +1337,8 @@ mod build {
                  printf '%s\\n' \"$*\" >> '{}'\n\
                  for arg in \"$@\"; do input=\"$out\"; out=\"$arg\"; done\n\
                  case \"$input\" in *Fail*) echo \"stub: cannot compile $input\" >&2; exit 3 ;; esac\n\
+                 echo \"stub: warning: $input compiled with a warning\" >&2\n\
+                 echo \"Compiling 1 circuit\"\n\
                  mkdir -p \"$out/contract\"\n\
                  echo 'export {{}};' > \"$out/contract/index.js\"\n",
                 log.display()
@@ -1230,6 +1484,38 @@ mod build {
     }
 
     #[test]
+    fn arguments_after_the_separator_reach_every_compile_before_the_paths() {
+        let stub = Stub::new();
+        let bin = stub.bin();
+        assert_build(
+            "passthrough",
+            &[
+                "MockAlpha",
+                "--compact-bin",
+                &bin,
+                "--",
+                "--no-communications-commitment",
+                "--compact-path",
+                "vendor",
+            ],
+            &[],
+            &stub,
+        );
+    }
+
+    #[test]
+    fn only_builds_the_mocks_a_file_glob_matches() {
+        let stub = Stub::new();
+        let bin = stub.bin();
+        assert_build(
+            "only",
+            &["--only", "MockAlpha.compact", "--compact-bin", &bin],
+            &[],
+            &stub,
+        );
+    }
+
+    #[test]
     fn the_compact_bin_variable_names_the_executable() {
         let stub = Stub::new();
         let bin = stub.bin();
@@ -1354,13 +1640,20 @@ mod determinism {
     #[cfg(unix)]
     #[test]
     fn a_failed_write_prints_one_error_no_summary_and_leaves_no_temporary_file() {
+        use std::os::unix::fs::PermissionsExt;
+
         let directory = workspace("rebase");
-        std::os::unix::fs::symlink(
-            directory.path().join("nowhere"),
-            directory.path().join("src/far/test"),
-        )
-        .expect("a dangling link blocks the directory");
+        let locked = directory.path().join("src/far/test");
+        std::fs::create_dir_all(&locked).expect("the directory is created");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555))
+            .expect("the directory is locked");
+        // A process that ignores directory permissions cannot reach this message.
+        if std::fs::write(locked.join("probe"), "").is_ok() {
+            return;
+        }
         let outcome = run(directory.path(), &["generate"]);
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("the directory is unlocked");
         assert_eq!(outcome.code, 2);
         assert_eq!(outcome.stdout, "");
         let lines: Vec<&str> = outcome.stderr.lines().collect();

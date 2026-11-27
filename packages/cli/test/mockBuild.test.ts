@@ -8,17 +8,18 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CompactCompiler } from '@openzeppelin/compact-builder';
+import { CompactCompiler, FileDiscovery } from '@openzeppelin/compact-builder';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  builderExcludes,
   CompactTomlParseError,
   findCompactToml,
   hasMockTable,
-  MOCK_EXCLUDES,
   MockBuildError,
   type MockBuildHost,
   MockerNotInstalledError,
   mockBuildArgs,
+  mockExcludes,
   nodeHost,
   prepareCompile,
   resolveMocker,
@@ -30,6 +31,14 @@ spdx = "MIT"
 [[mock.rules]]
 modules = ["**"]
 `;
+
+/** The compiler excludes for the default `test_dir`. */
+const DEFAULT_EXCLUDES = [
+  '--exclude',
+  '*/test/artifacts/*',
+  '--exclude',
+  '*.fragment.compact',
+];
 
 interface Run {
   command: string;
@@ -230,7 +239,7 @@ describe('mockBuildArgs', () => {
     ]);
   });
 
-  it('forwards no other compiler argument', () => {
+  it('forwards --only and the compiler flags, and no other compiler argument', () => {
     const args = mockBuildArgs(
       options([
         '--only',
@@ -246,7 +255,184 @@ describe('mockBuildArgs', () => {
       CFG,
     );
 
-    expect(args).toEqual(['build', '--dir', 'src', '--config', CFG]);
+    expect(args).toEqual([
+      'build',
+      '--dir',
+      'src',
+      '--only',
+      'Mock*.compact',
+      '--config',
+      CFG,
+      '--',
+      '--verbose',
+      '--skip-zk-ish',
+    ]);
+  });
+
+  it("forwards each --only glob, as in the README's --only 'MockEcdsa.compact'", () => {
+    expect(
+      mockBuildArgs(
+        options(['--dir', 'crypto', '--only', 'MockEcdsa.compact']),
+        CFG,
+      ),
+    ).toEqual([
+      'build',
+      '--dir',
+      'src/crypto',
+      '--only',
+      'MockEcdsa.compact',
+      '--config',
+      CFG,
+    ]);
+    expect(
+      mockBuildArgs(options(['--only', 'A.compact', '--only', '*/b/*']), CFG),
+    ).toEqual([
+      'build',
+      '--dir',
+      'src',
+      '--only',
+      'A.compact',
+      '--only',
+      '*/b/*',
+      '--config',
+      CFG,
+    ]);
+  });
+
+  it('passes --compact-path and --no-communications-commitment after --', () => {
+    expect(
+      mockBuildArgs(
+        options([
+          '--skip-zk',
+          '--compact-path',
+          '/opt/compact/lib',
+          '--no-communications-commitment',
+        ]),
+        CFG,
+      ),
+    ).toEqual([
+      'build',
+      '--skip-zk',
+      '--dir',
+      'src',
+      '--config',
+      CFG,
+      '--',
+      '--compact-path',
+      '/opt/compact/lib',
+      '--no-communications-commitment',
+    ]);
+  });
+
+  it('passes --skip-zk once and never after --', () => {
+    expect(
+      mockBuildArgs(
+        options(['--skip-zk', '--verbose'], { SKIP_ZK: 'true' }),
+        CFG,
+      ),
+    ).toEqual([
+      'build',
+      '--skip-zk',
+      '--dir',
+      'src',
+      '--config',
+      CFG,
+      '--',
+      '--verbose',
+    ]);
+    expect(
+      mockBuildArgs(options(['--skip-zk'], { SKIP_ZK: 'true' }), CFG),
+    ).toEqual(['build', '--skip-zk', '--dir', 'src', '--config', CFG]);
+  });
+
+  it('emits no -- without other compiler flags', () => {
+    expect(mockBuildArgs(options([]), CFG)).toEqual([
+      'build',
+      '--dir',
+      'src',
+      '--config',
+      CFG,
+    ]);
+    expect(mockBuildArgs({ flags: '  ' }, CFG)).toEqual([
+      'build',
+      '--dir',
+      'src',
+      '--config',
+      CFG,
+    ]);
+  });
+});
+
+describe('mockExcludes', () => {
+  it('globs the artifacts directory under test_dir, and fragments', () => {
+    expect(mockExcludes(undefined)).toEqual([
+      '*/test/artifacts/*',
+      '*.fragment.compact',
+    ]);
+    expect(mockExcludes('{dir}/test')).toEqual([
+      '*/test/artifacts/*',
+      '*.fragment.compact',
+    ]);
+    expect(mockExcludes('{dir}/test/unit')).toEqual([
+      '*/test/unit/artifacts/*',
+      '*.fragment.compact',
+    ]);
+    expect(mockExcludes('{dir}/./test//unit/')).toEqual([
+      '*/test/unit/artifacts/*',
+      '*.fragment.compact',
+    ]);
+  });
+
+  it('falls back to the default for a test_dir compact-mock rejects', () => {
+    for (const testDir of [
+      'tests',
+      'test/unit',
+      '{dir}',
+      '{dir}/',
+      '{dir}/.',
+      '{dir}//test/unit',
+      '{dir}/../test',
+      '{dir}/test/../unit',
+      '{dir}/{module}',
+      '{dir}/test}',
+      '{dir}/test\\unit',
+      42,
+      ['{dir}/test/unit'],
+    ]) {
+      expect(mockExcludes(testDir)).toEqual([
+        '*/test/artifacts/*',
+        '*.fragment.compact',
+      ]);
+    }
+  });
+});
+
+describe('builderExcludes', () => {
+  it('uses the default test_dir without a compact.toml or a [mock] table', () => {
+    expect(builderExcludes(memoryHost({}))).toEqual([
+      '*/test/artifacts/*',
+      '*.fragment.compact',
+    ]);
+    expect(
+      builderExcludes(memoryHost({ '/repo/compact.toml': '[lint]\n' })),
+    ).toEqual(['*/test/artifacts/*', '*.fragment.compact']);
+  });
+
+  it('reads test_dir from the nearest [mock] table', () => {
+    const host = memoryHost({
+      '/repo/compact.toml': '[mock]\ntest_dir = "{dir}/test/unit"\n',
+    });
+
+    expect(builderExcludes(host)).toEqual([
+      '*/test/unit/artifacts/*',
+      '*.fragment.compact',
+    ]);
+  });
+
+  it('throws CompactTomlParseError for an invalid nearest compact.toml', () => {
+    expect(() =>
+      builderExcludes(memoryHost({ '/repo/compact.toml': '[mock\n' })),
+    ).toThrow(CompactTomlParseError);
   });
 });
 
@@ -316,7 +502,15 @@ describe('prepareCompile', () => {
     const host = withMock();
 
     const args = await prepareCompile(
-      ['+0.36.0', '--dir', 'access', '--skip-zk', '--only', 'A.compact'],
+      [
+        '+0.36.0',
+        '--dir',
+        'access',
+        '--skip-zk',
+        '--only',
+        'A.compact',
+        '--no-communications-commitment',
+      ],
       host,
     );
 
@@ -330,8 +524,12 @@ describe('prepareCompile', () => {
           '--skip-zk',
           '--dir',
           'src/access',
+          '--only',
+          'A.compact',
           '--config',
           '/repo/compact.toml',
+          '--',
+          '--no-communications-commitment',
         ],
         cwd: '/repo',
       },
@@ -343,8 +541,9 @@ describe('prepareCompile', () => {
       '--skip-zk',
       '--only',
       'A.compact',
+      '--no-communications-commitment',
       '--exclude',
-      '*/artifacts/*',
+      '*/test/artifacts/*',
       '--exclude',
       '*.fragment.compact',
     ]);
@@ -355,8 +554,21 @@ describe('prepareCompile', () => {
 
     expect(
       await prepareCompile(['--no-mocks', '--dir', 'access'], host),
-    ).toEqual(['--dir', 'access', ...MOCK_EXCLUDES]);
+    ).toEqual(['--dir', 'access', ...DEFAULT_EXCLUDES]);
     expect(host.runs).toEqual([]);
+  });
+
+  it('excludes the artifacts directory under [mock].test_dir', async () => {
+    const host = memoryHost({
+      '/repo/compact.toml': '[mock]\ntest_dir = "{dir}/test/unit"\n',
+    });
+
+    expect(await prepareCompile(['--no-mocks'], host)).toEqual([
+      '--exclude',
+      '*/test/unit/artifacts/*',
+      '--exclude',
+      '*.fragment.compact',
+    ]);
   });
 
   it('skips the build for a search directory that does not exist', async () => {
@@ -365,7 +577,7 @@ describe('prepareCompile', () => {
     expect(await prepareCompile(['--dir', 'missing'], host)).toEqual([
       '--dir',
       'missing',
-      ...MOCK_EXCLUDES,
+      ...DEFAULT_EXCLUDES,
     ]);
     expect(host.runs).toEqual([]);
   });
@@ -522,7 +734,15 @@ process.exit(${code});
     };
 
     const args = await prepareCompile(
-      ['--dir', 'access', '--skip-zk', '+0.36.0'],
+      [
+        '--dir',
+        'access',
+        '--skip-zk',
+        '+0.36.0',
+        '--only',
+        'MockEcdsa.compact',
+        '--no-communications-commitment',
+      ],
       host,
     );
 
@@ -533,13 +753,17 @@ process.exit(${code});
         '--skip-zk',
         '--dir',
         'src/access',
+        '--only',
+        'MockEcdsa.compact',
         '--config',
         join(dir, 'compact.toml'),
+        '--',
+        '--no-communications-commitment',
       ],
       cwd: dir,
     });
     expect(logs).toEqual(['[COMPILE] Building mocks (compact-mock)']);
-    expect(args.slice(-4)).toEqual(MOCK_EXCLUDES);
+    expect(args.slice(-4)).toEqual(DEFAULT_EXCLUDES);
   });
 
   it('reports the exit code of a failing COMPACT_MOCK_BINARY', async () => {
@@ -555,5 +779,66 @@ process.exit(${code});
     await expect(prepareCompile([], host)).rejects.toThrow(
       'Mock build failed (compact-mock exit 2)',
     );
+  });
+});
+
+describe('the compiler walk under the mock excludes', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'compact-cli-walk-'));
+    for (const file of [
+      'Top.compact',
+      'artifacts/Top.compact',
+      'lib/Inner.compact',
+      'lib/artifacts/Inner.compact',
+      'lib/test/MockHand.compact',
+      'lib/test/Inner.fragment.compact',
+      'lib/test/artifacts/MockInner.compact',
+      'lib/test/unit/artifacts/MockUnit.compact',
+      'test/artifacts/MockTop.compact',
+    ]) {
+      const path = join(dir, 'src', file);
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, '');
+    }
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** The files under `src` the compiler keeps after `prepareCompile` with `toml`. */
+  async function walk(toml: string): Promise<string[]> {
+    const args = await prepareCompile(
+      ['--no-mocks'],
+      memoryHost({ '/repo/compact.toml': toml }),
+    );
+    const { exclude } = CompactCompiler.parseArgs(args, {});
+    const src = join(dir, 'src');
+    return (await new FileDiscovery(src, exclude).getCompactFiles(src)).sort();
+  }
+
+  it('keeps sources under an artifacts directory outside test_dir', async () => {
+    expect(await walk('[mock]\n')).toEqual([
+      'Top.compact',
+      'artifacts/Top.compact',
+      'lib/Inner.compact',
+      'lib/artifacts/Inner.compact',
+      'lib/test/MockHand.compact',
+      'lib/test/unit/artifacts/MockUnit.compact',
+    ]);
+  });
+
+  it('drops only the artifacts directory under a custom test_dir', async () => {
+    expect(await walk('[mock]\ntest_dir = "{dir}/test/unit"\n')).toEqual([
+      'Top.compact',
+      'artifacts/Top.compact',
+      'lib/Inner.compact',
+      'lib/artifacts/Inner.compact',
+      'lib/test/MockHand.compact',
+      'lib/test/artifacts/MockInner.compact',
+      'test/artifacts/MockTop.compact',
+    ]);
   });
 });

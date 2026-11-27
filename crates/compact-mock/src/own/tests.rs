@@ -5,6 +5,7 @@ use super::{DirState, Produced, STAMP, Step, execute, inspect, parse_stamp, plan
 use crate::config::Paths;
 use crate::error::OutputError;
 use crate::output::Target;
+use crate::render::MARKER;
 
 fn names(list: &[&str]) -> BTreeSet<String> {
     list.iter().map(|name| (*name).to_owned()).collect()
@@ -13,6 +14,11 @@ fn names(list: &[&str]) -> BTreeSet<String> {
 fn stamp(dir: &Path, list: &[&str]) {
     std::fs::create_dir_all(dir).expect("dirs");
     std::fs::write(dir.join(STAMP), render_stamp(&names(list))).expect("written");
+}
+
+/// Writes a source that carries the generated header.
+fn generated(path: &Path) {
+    std::fs::write(path, format!("{MARKER} from a/A. Do not edit by hand.\n")).expect("written");
 }
 
 fn target(dir: &Path, name: &str) -> Target {
@@ -56,6 +62,8 @@ impl Case {
                 .collect()
         };
         Produced {
+            src: self.dir("src"),
+            test_tail: vec!["test".to_owned()],
             written: map(written),
             expansion: map(expansion),
             unsure: BTreeSet::new(),
@@ -128,14 +136,10 @@ fn only_listed_names_the_expansion_dropped_are_deleted() {
     let case = Case::new();
     let dir = case.dir("src/a/test/artifacts");
     stamp(&dir, &["MockKeep", "MockOld"]);
-    for file in [
-        "MockKeep.compact",
-        "MockOld.compact",
-        "keep.txt",
-        "MockStray.compact",
-    ] {
+    for file in ["MockKeep.compact", "keep.txt", "MockStray.compact"] {
         std::fs::write(dir.join(file), "x").expect("written");
     }
+    generated(&dir.join("MockOld.compact"));
     std::fs::create_dir_all(dir.join("MockOld/contract")).expect("dirs");
     let produced = case.produced(
         &[("src/a/test/artifacts", &["MockKeep"])],
@@ -205,7 +209,7 @@ fn a_name_filter_deletes_nothing_and_keeps_every_listed_name() {
 }
 
 #[test]
-fn a_symlinked_entry_is_removed_as_a_link_and_its_target_survives() {
+fn a_symlinked_stale_entry_is_kept_and_reported() {
     let case = Case::new();
     let dir = case.dir("src/a/test/artifacts");
     stamp(&dir, &["MockOld"]);
@@ -215,8 +219,12 @@ fn a_symlinked_entry_is_removed_as_a_link_and_its_target_survives() {
     std::os::unix::fs::symlink(&outside, dir.join("MockOld")).expect("linked");
     let produced = case.produced(&[], &[], Some("src"));
     let own = plan(&produced, &case.paths).expect("owned");
+    assert_eq!(
+        own.notes,
+        ["kept src/a/test/artifacts/MockOld: it is a symlink"]
+    );
     execute(&own, &[], &case.paths, &mut |_| Ok(())).expect("runs");
-    assert!(std::fs::symlink_metadata(dir.join("MockOld")).is_err());
+    assert!(std::fs::symlink_metadata(dir.join("MockOld")).is_ok());
     assert!(outside.join("keep.txt").exists());
 }
 
@@ -225,7 +233,7 @@ fn the_stamp_lists_every_new_name_before_any_source_is_written() {
     let case = Case::new();
     let dir = case.dir("src/a/test/artifacts");
     stamp(&dir, &["MockOld"]);
-    std::fs::write(dir.join("MockOld.compact"), "x").expect("written");
+    generated(&dir.join("MockOld.compact"));
     let produced = case.produced(
         &[("src/a/test/artifacts", &["MockNew"])],
         &[("src/a/test/artifacts", &["MockNew"])],
@@ -283,7 +291,7 @@ fn a_stamped_directory_left_with_only_its_stamp_is_removed() {
     let case = Case::new();
     let dir = case.dir("src/a/test/artifacts");
     stamp(&dir, &["MockOld"]);
-    std::fs::write(dir.join("MockOld.compact"), "x").expect("written");
+    generated(&dir.join("MockOld.compact"));
     let produced = case.produced(&[], &[], Some("src"));
     let own = plan(&produced, &case.paths).expect("owned");
     execute(&own, &[], &case.paths, &mut |_| Ok(())).expect("runs");

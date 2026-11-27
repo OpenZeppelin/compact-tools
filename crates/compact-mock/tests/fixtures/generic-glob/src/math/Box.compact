@@ -1,0 +1,12 @@
+pragma language_version >= 0.28.0;
+
+module Box {
+  import CompactStandardLibrary;
+
+  export circuit wrap<T>(x: T): T {
+    return x;
+  }
+
+  export circuit ping(): [] {
+  }
+}

@@ -60,7 +60,12 @@ pub fn resolve(
     let exclude = config.exclude_set(&source)?;
     let files = if paths.is_empty() {
         let include = config.include_set(&source)?;
-        discover::from_globs(&base, &include, &exclude)?
+        let files = discover::from_globs(&base, &include, &exclude)?;
+        if config.include == Config::default().include {
+            without_generated(files, &base, found.as_deref())
+        } else {
+            files
+        }
     } else {
         let paths = absolute_paths(paths, cwd);
         discover::from_paths(&paths, &base, &exclude)?
@@ -73,6 +78,33 @@ pub fn resolve(
         files,
         base,
     })
+}
+
+/// The default include minus what `compact-mock` writes or includes: fragments and every
+/// file under `<test_dir>/artifacts` (`[mock].test_dir`, default `{dir}/test`).
+fn without_generated(files: Vec<PathBuf>, base: &Path, config: Option<&Path>) -> Vec<PathBuf> {
+    let mut tail = config
+        .and_then(compact_mock::config::mock_test_tail)
+        .unwrap_or_else(|| vec!["test".to_owned()]);
+    tail.push("artifacts".to_owned());
+    files
+        .into_iter()
+        .filter(|file| {
+            let fragment = file
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(".fragment.compact"));
+            let segments: Vec<String> = file
+                .strip_prefix(base)
+                .unwrap_or(file)
+                .iter()
+                .map(|segment| segment.to_string_lossy().into_owned())
+                .collect();
+            !fragment
+                && !segments
+                    .windows(tail.len())
+                    .any(|window| window == tail.as_slice())
+        })
+        .collect()
 }
 
 /// Discovery matches the exclude globs against paths relative to the config's

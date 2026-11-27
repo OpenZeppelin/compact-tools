@@ -135,11 +135,23 @@ pub struct Scope<'a> {
     pub dir: Option<&'a Path>,
     /// Only these mocks are planned; empty plans every mock in scope.
     pub names: &'a [String],
+    /// compact-compiler file globs: only mocks whose module source or generated source one
+    /// matches are planned, and other modules leave the scope. Empty keeps every mock.
+    pub only: &'a [String],
 }
 
 impl Scope<'_> {
     fn covers(&self, file: &Path) -> bool {
         self.dir.is_none_or(|dir| file.starts_with(dir))
+    }
+
+    fn keeps(&self, sources: &[&Path], paths: &config::Paths) -> bool {
+        self.only.is_empty()
+            || sources.iter().any(|source| {
+                self.only
+                    .iter()
+                    .any(|glob| select::file_glob(glob, source, paths))
+            })
     }
 }
 
@@ -165,6 +177,8 @@ pub enum Status {
         plans: Vec<MockPlan>,
         circuits: Vec<SurfaceCircuit>,
         errors: Vec<Error>,
+        /// Lines that do not fail the run, as printed.
+        warnings: Vec<String>,
     },
     /// Failed before its mocks were known.
     Failed(Vec<Error>),
@@ -219,6 +233,7 @@ struct AuthPlan {
     file: PathBuf,
     call: String,
     slot: Option<SaltSlot>,
+    params: Vec<String>,
 }
 
 /// A resolved injector.
@@ -228,6 +243,7 @@ struct InjectPlan {
     call: String,
     ty: (FileId, String),
     scope: InjectScope,
+    params: Vec<String>,
 }
 
 /// Validated `[mock.auth]`, `[mock.inject]` and `caller_type`.
@@ -240,6 +256,10 @@ struct Context {
 /// Validates the config against the sources, expands every selected module, and plans
 /// the mocks `scope` selects.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "candidates, rule checks, then planning, in order"
+)]
 pub fn analyze(config: &Config, files: &mut Files, scope: Scope<'_>) -> Analysis {
     let mut analysis = Analysis::default();
     let context = match context(config, files) {
@@ -260,12 +280,13 @@ pub fn analyze(config: &Config, files: &mut Files, scope: Scope<'_>) -> Analysis
     analysis.notes.extend(
         select::unused_rules(config, &candidates, &src_shown)
             .iter()
+            .chain(&select::unused_excludes(config, &candidates))
             .map(ToString::to_string),
     );
 
     let mut expanded: Vec<(usize, Expanded)> = Vec::new();
     for candidate in &candidates {
-        let in_scope = scope.covers(&candidate.file);
+        let mut in_scope = scope.covers(&candidate.file);
         let status = match select::select(config, &candidate.module) {
             Selection::Excluded => Status::Excluded,
             Selection::Unmatched => Status::Unmatched,
@@ -290,11 +311,25 @@ pub fn analyze(config: &Config, files: &mut Files, scope: Scope<'_>) -> Analysis
                         plans: Vec::new(),
                         circuits,
                         errors,
+                        warnings: Vec::new(),
                     }
                 }
                 Err(errors) => Status::Failed(errors),
             },
         };
+        if !scope.only.is_empty() {
+            let artifacts = config.artifacts_dir(&candidate.module);
+            let mut sources: Vec<PathBuf> = vec![candidate.file.clone()];
+            if let Status::Mocks { names, .. } = &status {
+                sources.extend(
+                    names
+                        .iter()
+                        .map(|name| artifacts.join(format!("{name}.compact"))),
+                );
+            }
+            let sources: Vec<&Path> = sources.iter().map(PathBuf::as_path).collect();
+            in_scope = in_scope && scope.keeps(&sources, files.paths());
+        }
         analysis.modules.push(ModuleResult {
             module: candidate.module.clone(),
             file: candidate.file.clone(),
@@ -315,13 +350,21 @@ pub fn analyze(config: &Config, files: &mut Files, scope: Scope<'_>) -> Analysis
         }
         let mut plans = Vec::new();
         let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+        let source = config.module_file(&module.module);
+        let artifacts = config.artifacts_dir(&module.module);
         for spec in &module.mocks {
             if !scope.names.is_empty() && !scope.names.contains(&spec.name) {
+                continue;
+            }
+            let mock = artifacts.join(format!("{}.compact", spec.name));
+            if !scope.keeps(&[&source, &mock], files.paths()) {
                 continue;
             }
             let mut planner = Planner::new(config, files, &context, module, spec);
             let result = planner.plan();
             let mut found = std::mem::take(&mut planner.errors);
+            warnings.append(&mut planner.warnings);
             match result {
                 Ok(plan) if found.is_empty() => plans.push(plan),
                 Ok(_) => errors.append(&mut found),
@@ -334,11 +377,13 @@ pub fn analyze(config: &Config, files: &mut Files, scope: Scope<'_>) -> Analysis
         if let Status::Mocks {
             plans: slot,
             errors: existing,
+            warnings: lines,
             ..
         } = &mut analysis.modules[*index].status
         {
             *slot = plans;
             existing.append(&mut errors);
+            *lines = warnings;
         }
     }
     analysis
@@ -487,6 +532,7 @@ fn auth_plan(
         file,
         call: call.clone(),
         slot: spec.slot(),
+        params: spec.params.clone(),
     }))
 }
 
@@ -530,7 +576,21 @@ fn inject_plan(config: &Config, files: &mut Files, spec: &InjectSpec) -> Result<
         call: spec.call.clone(),
         ty,
         scope: spec.scope,
+        params: spec.params.clone(),
     })
+}
+
+/// Whether `file` holds a module that exports no circuit. `false` when it does not parse
+/// or holds no module.
+#[must_use]
+pub fn exports_no_circuit(files: &mut Files, file: &Path) -> bool {
+    let Ok(id) = files.require(file) else {
+        return false;
+    };
+    if files.get(id).module.is_none() {
+        return false;
+    }
+    surface(files, id).is_ok_and(|found| found.circuits.is_empty())
 }
 
 /// The file's only module, or the module-count error.
@@ -665,6 +725,9 @@ struct Expanded {
     file: FileId,
     surface: Surface,
     rules: Vec<usize>,
+    /// No applicable rule lists the module's exact path: a generic circuit without
+    /// `circuit_args` is skipped with a warning instead of failing the mock.
+    lenient: bool,
     mocks: Vec<MockSpec>,
     errors: Vec<Error>,
 }
@@ -767,6 +830,12 @@ fn expand(
     }
 
     let folded = config::fold(config, &rules);
+    let lenient = !rules
+        .iter()
+        .any(|&index| config.rules[index].names(&candidate.module));
+    if lenient && let Some(reason) = generic_gap(module, &surface, &folded) {
+        return Ok(Expansion::Skipped(reason));
+    }
     let stem = module_stem(&candidate.module);
     let mut errors: Vec<Error> = Vec::new();
     let has_caller = match &context.caller {
@@ -865,9 +934,57 @@ fn expand(
         file: id,
         surface,
         rules,
+        lenient,
         mocks,
         errors,
     }))
+}
+
+/// Why a module only a glob selects cannot be mocked as configured: it is generic and
+/// no instance gets `module_args`, or an instance's constructor would call a generic init
+/// circuit without `circuit_args`. Per-authenticator `init` tables are not consulted.
+fn generic_gap(
+    module: &crate::source::Module,
+    surface: &Surface,
+    folded: &Folded,
+) -> Option<SkipReason> {
+    let default = config::Instance::default();
+    let instances: Vec<&config::Instance> = match &folded.instances {
+        Some(instances) => instances.iter().collect(),
+        None => vec![&default],
+    };
+    let module_args = |instance: &config::Instance| {
+        instance
+            .module_args
+            .as_ref()
+            .unwrap_or(&folded.module_args)
+            .clone()
+    };
+    if !module.generics.is_empty()
+        && instances
+            .iter()
+            .all(|instance| module_args(instance).is_empty())
+    {
+        return Some(SkipReason::GenericModule);
+    }
+    let generic_init = instances.iter().any(|instance| {
+        let init = instance
+            .init
+            .as_ref()
+            .or(folded.settings.init.as_ref())
+            .unwrap_or(&Init::Auto);
+        let args = instance
+            .circuit_args
+            .as_ref()
+            .unwrap_or(&folded.circuit_args);
+        !matches!(init, Init::None)
+            && !args.contains_key(init.circuit())
+            && surface.circuits.iter().any(|circuit| {
+                matches!(circuit, Exposable::Own(own)
+                    if own.name == init.circuit() && !own.generics.is_empty())
+            })
+    });
+    generic_init.then_some(SkipReason::GenericInit)
 }
 
 /// Whether any exported circuit takes the caller type. Parameter types that do not
@@ -1165,6 +1282,18 @@ struct Assembly {
     /// Identities of wrappers whose name is not their circuit's: renamed, overload
     /// numbered or merged.
     renamed: BTreeSet<String>,
+    /// Each exposed circuit's parameters after injection, for `implements`.
+    signatures: BTreeMap<String, Signature>,
+}
+
+/// The parameters an exposed circuit keeps, as its declaring file writes them.
+struct Signature {
+    file: FileId,
+    types: Vec<String>,
+    /// As the mock spells them, for messages.
+    shown: Vec<String>,
+    /// Types under `circuit_args` are not compared.
+    generic: bool,
 }
 
 /// The authenticator call of one instance: not yet computed, failed (its salt error is
@@ -1185,6 +1314,8 @@ struct Planner<'a> {
     auth: Option<&'a AuthPlan>,
     injectors: Vec<&'a InjectPlan>,
     errors: Vec<Error>,
+    /// Lines that do not fail the run: circuits skipped under a glob.
+    warnings: Vec<String>,
     needs: Needs,
     current: usize,
     /// Per instance: the authenticator call once computed.
@@ -1222,6 +1353,7 @@ impl<'a> Planner<'a> {
             auth,
             injectors,
             errors: Vec::new(),
+            warnings: Vec::new(),
             needs: Needs::default(),
             current: 0,
             auth_exprs: vec![AuthExpr::Pending; spec.instances.len()],
@@ -1274,7 +1406,14 @@ impl<'a> Planner<'a> {
             });
         }
         for (index, circuit) in self.module.surface.circuits.iter().enumerate() {
-            if fragment_exports.iter().any(|name| name == circuit.name()) {
+            let init = fragment_constructor
+                && matches!(circuit, Exposable::Own(_))
+                && self
+                    .spec
+                    .instances
+                    .iter()
+                    .any(|inst| inst.init.circuit() == circuit.name());
+            if init || fragment_exports.iter().any(|name| name == circuit.name()) {
                 assembly.covered.insert(index);
             }
         }
@@ -1285,7 +1424,8 @@ impl<'a> Planner<'a> {
         let (interfaces, implements) = self.implements(&assembly, &fragment_exports)?;
         let (named, prefixed) = self.imports(&module, &assembly)?;
         let named = without_interfaces(named, &interfaces);
-        self.check_witnesses(&interfaces, &named, &prefixed);
+        let fragment = include.is_some().then(|| self.fragment_path());
+        self.check_witnesses(&interfaces, &named, &prefixed, fragment.as_deref());
         self.check_clashes(&assembly, &named);
 
         let constructor = assembly.has_constructor.then(|| Constructor {
@@ -1394,10 +1534,10 @@ impl<'a> Planner<'a> {
             if self.spec.merged {
                 let key: String = inst
                     .module_args
-                    .join(",")
-                    .chars()
-                    .filter(|ch| !ch.is_whitespace())
-                    .collect();
+                    .iter()
+                    .map(|arg| argument_key(arg))
+                    .collect::<Vec<_>>()
+                    .join(",");
                 if let Some((first, _)) = seen.iter().find(|(_, args)| *args == key) {
                     self.report(PlanError::SameArgs {
                         mock: self.mock(),
@@ -1449,7 +1589,6 @@ impl<'a> Planner<'a> {
                 module: self.module.module.clone(),
                 count: own_inits.len(),
                 circuit: init_circuit.clone(),
-                constructor: true,
             });
         }
 
@@ -1490,7 +1629,6 @@ impl<'a> Planner<'a> {
             if inst.exclude.iter().any(|name| name == circuit.name()) {
                 continue;
             }
-            out.covered.insert(index);
             let guarded = guard_all || guard_list.iter().any(|name| name == circuit.name());
             let disclosed = disclose.iter().any(|name| name == circuit.name());
             let signature = self.signature_key(circuit);
@@ -1515,6 +1653,7 @@ impl<'a> Planner<'a> {
                 Exposable::Listed { decl, .. } => (decl.file, self.files.circuit(decl)),
             };
             let Some(target) = target else {
+                out.covered.insert(index);
                 out.reexports.push(circuit.name().to_owned());
                 out.taken.push((
                     circuit.name().to_owned(),
@@ -1523,8 +1662,18 @@ impl<'a> Planner<'a> {
                 ));
                 continue;
             };
-            let inject = self.injections(declaring, &target, false)?;
             let generic = !target.generics.is_empty();
+            if generic && self.module.lenient && !inst.circuit_args.contains_key(circuit.name()) {
+                self.warnings.push(format!(
+                    "{}: skipped circuit {}: type parameters {} and no circuit_args",
+                    self.mock(),
+                    circuit.name(),
+                    generics_text(&target.generics)
+                ));
+                continue;
+            }
+            out.covered.insert(index);
+            let (inject, _) = self.injections(declaring, &target, false)?;
             let wraps = inject.iter().any(Option::is_some)
                 || generic
                 || disclosed
@@ -1544,6 +1693,17 @@ impl<'a> Planner<'a> {
             }
             let own = declaring == file;
             if !wraps {
+                let types: Vec<String> =
+                    target.params.iter().map(|param| param.ty.clone()).collect();
+                out.signatures.insert(
+                    circuit.name().to_owned(),
+                    Signature {
+                        file: declaring,
+                        shown: types.clone(),
+                        types,
+                        generic: false,
+                    },
+                );
                 out.reexports.push(circuit.name().to_owned());
                 out.taken.push((
                     circuit.name().to_owned(),
@@ -1604,6 +1764,21 @@ impl<'a> Planner<'a> {
                 format!("circuit {exposed_name}"),
                 identity,
             ));
+            out.signatures.insert(
+                exposed_name.clone(),
+                Signature {
+                    file: declaring,
+                    types: target
+                        .params
+                        .iter()
+                        .zip(&inject)
+                        .filter(|(_, injected)| injected.is_none())
+                        .map(|(param, _)| param.ty.clone())
+                        .collect(),
+                    shown: params.iter().map(|param| param.ty.clone()).collect(),
+                    generic,
+                },
+            );
             out.wrappers.push(Wrapper {
                 name: exposed_name,
                 pure: target.pure && !inject.iter().any(Option::is_some) && !guarded,
@@ -1647,7 +1822,25 @@ impl<'a> Planner<'a> {
     fn constructor(&mut self, init: &Circuit, out: &mut Assembly) -> Result<(), Error> {
         let file = self.module.file;
         let instance = self.inst();
-        let inject = self.injections(file, init, true)?;
+        let (inject, caller_injected) = self.injections(file, init, true)?;
+        // An unknown ledger field is reported once, as SaltLedger.
+        let salt = match &instance.salt {
+            Some(Salt::Ledger(field)) if self.module.surface.ledgers.contains(field) => {
+                Some(format!("ledger field {field}"))
+            }
+            Some(Salt::Expr(expr)) => Some(format!("expression {expr}")),
+            _ => None,
+        };
+        if let Some(salt) = salt
+            && caller_injected
+            && self.auth.is_some_and(|auth| auth.slot.is_some())
+        {
+            self.report(PlanError::SaltBeforeInit {
+                mock: self.mock(),
+                circuit: init.name.clone(),
+                salt,
+            });
+        }
         if !init.generics.is_empty() && !instance.circuit_args.contains_key(&init.name) {
             self.report(PlanError::GenericInitialize {
                 mock: self.mock(),
@@ -1756,23 +1949,31 @@ impl<'a> Planner<'a> {
     }
 
     /// Per parameter of `circuit` (declared in `file`): the expression the mock passes
-    /// instead, if any. `constructor` is set for the init circuit the constructor calls.
+    /// instead, if any, and whether a caller is among them. A parameter is injected when
+    /// its type and its name both match. `constructor` is set for the init circuit the
+    /// constructor calls.
     fn injections(
         &mut self,
         file: FileId,
         circuit: &Circuit,
         constructor: bool,
-    ) -> Result<Vec<Option<String>>, Error> {
+    ) -> Result<(Vec<Option<String>>, bool), Error> {
         let mut inject: Vec<Option<String>> = vec![None; circuit.params.len()];
-        if let (Some(_), Some(caller)) = (self.auth, self.caller) {
+        let mut caller_injected = false;
+        if let (Some(auth), Some(caller)) = (self.auth, self.caller) {
             let mut count = 0;
             for (position, param) in circuit.params.iter().enumerate() {
                 match self
                     .files
                     .caller_match(file, &circuit.generics, &param.ty, caller)?
                 {
-                    CallerMatch::Exact => {
+                    CallerMatch::Exact
+                        if param
+                            .name()
+                            .is_some_and(|name| auth.params.iter().any(|p| p == name)) =>
+                    {
                         count += 1;
+                        caller_injected = true;
                         if let Some(expr) = self.auth_expr() {
                             inject[position] = Some(expr);
                         }
@@ -1792,8 +1993,9 @@ impl<'a> Planner<'a> {
                         ty: param.ty.clone(),
                         caller: caller.1.clone(),
                     }),
-                    // Expansion already reported it.
-                    CallerMatch::Unresolved | CallerMatch::No => {}
+                    // Expansion already reported an unresolved type. A caller-typed
+                    // parameter under another name stays a circuit argument.
+                    CallerMatch::Exact | CallerMatch::Unresolved | CallerMatch::No => {}
                 }
             }
             if count > 1 {
@@ -1809,13 +2011,17 @@ impl<'a> Planner<'a> {
                 self.used_auth = true;
             }
         }
-        let caller_injected = inject.iter().any(Option::is_some);
+        let injected = inject.iter().any(Option::is_some);
         for (index, injector) in self.injectors.clone().into_iter().enumerate() {
-            if injector.scope == InjectScope::Caller && !caller_injected {
+            if injector.scope == InjectScope::Caller && !injected {
                 continue;
             }
             for (position, param) in circuit.params.iter().enumerate() {
-                if inject[position].is_some() {
+                if inject[position].is_some()
+                    || !param
+                        .name()
+                        .is_some_and(|name| injector.params.iter().any(|p| p == name))
+                {
                     continue;
                 }
                 let matched =
@@ -1827,7 +2033,7 @@ impl<'a> Planner<'a> {
                 }
             }
         }
-        Ok(inject)
+        Ok((inject, caller_injected))
     }
 
     /// The authenticator call for the current instance, with its salt slot filled. Salt
@@ -2326,13 +2532,38 @@ impl<'a> Planner<'a> {
                 continue;
             };
             for circuit in &contract.circuits {
-                if !exposed.contains(circuit.as_str()) {
+                if !exposed.contains(circuit.name.as_str()) {
                     let fragment = self.fragment_path();
                     self.report(PlanError::ImplementsMissing {
                         mock: self.mock(),
                         interface: entry.name.clone(),
-                        circuit: circuit.clone(),
+                        circuit: circuit.name.clone(),
                         fragment: self.files.paths().show(&fragment),
+                    });
+                    continue;
+                }
+                let (Some(expected), Some(signature)) =
+                    (&circuit.params, assembly.signatures.get(&circuit.name))
+                else {
+                    continue;
+                };
+                let differs = expected.len() != signature.types.len()
+                    || (!signature.generic
+                        && expected.iter().zip(&signature.types).any(|(want, have)| {
+                            collapse(want) != collapse(have)
+                                && self.canonical(id, want) != self.canonical(signature.file, have)
+                        }));
+                if differs {
+                    self.report(PlanError::ImplementsSignature {
+                        mock: self.mock(),
+                        circuit: circuit.name.clone(),
+                        params: format!(
+                            "{}) where {} declares ({}",
+                            signature.shown.join(", "),
+                            entry.name,
+                            expected.join(", ")
+                        ),
+                        interface: entry.name.clone(),
                     });
                 }
             }
@@ -2346,15 +2577,30 @@ impl<'a> Planner<'a> {
         Ok((imports, lines))
     }
 
-    /// Two witness declarations with one name, from two files the mock imports.
+    /// `ty` with every name that resolves in `file` replaced by its declaration, so two
+    /// spellings of one type compare equal.
+    fn canonical(&mut self, file: FileId, ty: &str) -> String {
+        let files = &mut *self.files;
+        rewrite(ty, |name| {
+            files.resolve(file, &[], name).ok().and_then(|resolved| {
+                resolved
+                    .decl()
+                    .map(|decl| format!("{}#{}", decl.file, decl.name))
+            })
+        })
+    }
+
+    /// Two witness declarations with one name, from two files the mock imports or
+    /// includes.
     fn check_witnesses(
         &mut self,
         interfaces: &[ImportLine],
         named: &[ImportLine],
         prefixed: &[ImportLine],
+        fragment: Option<&Path>,
     ) {
         let artifacts = self.artifacts();
-        let roots: Vec<PathBuf> = interfaces
+        let mut roots: Vec<PathBuf> = interfaces
             .iter()
             .chain(named)
             .chain(prefixed)
@@ -2366,6 +2612,7 @@ impl<'a> Planner<'a> {
                 }
             })
             .collect();
+        roots.extend(fragment.map(Path::to_owned));
         let found = self.files.witnesses(&roots);
         let mut first: BTreeMap<&str, FileId> = BTreeMap::new();
         let mut reported: BTreeSet<&str> = BTreeSet::new();
@@ -2520,6 +2767,22 @@ fn without_interfaces(named: Vec<ImportLine>, interfaces: &[ImportLine]) -> Vec<
             other => Some(other),
         })
         .collect()
+}
+
+/// A module argument as compactc keys an instance: a numeric literal by its value, any
+/// other argument by its text without whitespace.
+fn argument_key(arg: &str) -> String {
+    let text = arg.trim();
+    let (digits, radix) = match text.get(..2) {
+        Some("0x" | "0X") => (&text[2..], 16),
+        Some("0o" | "0O") => (&text[2..], 8),
+        Some("0b" | "0B") => (&text[2..], 2),
+        _ => (text, 10),
+    };
+    match u128::from_str_radix(digits, radix) {
+        Ok(value) if !digits.starts_with(['+', '-']) => value.to_string(),
+        _ => text.chars().filter(|ch| !ch.is_whitespace()).collect(),
+    }
 }
 
 /// Whether a return type is `[]`, however it is spaced.

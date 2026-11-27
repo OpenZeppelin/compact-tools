@@ -126,6 +126,7 @@ fn run_with(table: &str, extra: &[(&str, &str)], dir: Option<&str>, names: &[&st
         Scope {
             dir: dir.as_deref(),
             names: &names,
+            only: &[],
         },
     );
     Run {
@@ -338,7 +339,7 @@ fn a_ledger_or_expression_salt_replaces_the_whole_slot() {
         "{CALLER}{PRF}{}",
         rule(
             "\"door/Door\"",
-            "auth = [\"prf\"]\nsalt = { ledger = \"_salt\" }\n"
+            "auth = [\"prf\"]\ninit = \"none\"\nsalt = { ledger = \"_salt\" }\n"
         )
     ));
     assert!(
@@ -350,7 +351,7 @@ fn a_ledger_or_expression_salt_replaces_the_whole_slot() {
         "{CALLER}{PRF}{}",
         rule(
             "\"door/Door\"",
-            "auth = [\"prf\"]\nsalt = { expr = \"pad(32, \\\"x\\\")\" }\n"
+            "auth = [\"prf\"]\ninit = \"none\"\nsalt = { expr = \"pad(32, \\\"x\\\")\" }\n"
         )
     ));
     assert!(
@@ -940,7 +941,7 @@ const TRAP: (&str, &str) = (
 fn an_authenticated_mock_fails_closed_on_every_caller_it_cannot_inject() {
     let result = run_with(
         &format!(
-            "{CALLER}{PRF}{}",
+            "{CALLER}{PRF}params = [\"caller\", \"a\", \"b\"]\n{}",
             rule(
                 "\"trap/Trap\"",
                 "auth = [\"prf\"]\nmodule_args = [\"Caller\"]\ncircuit_args = { gen = [\"Maybe<Caller>\"] }\n"

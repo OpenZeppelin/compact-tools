@@ -76,10 +76,15 @@ When the nearest `compact.toml` at or above the working directory has a `[mock]`
 `compact-compiler` runs `compact-mock build` first, so a new module circuit reaches its
 mocks on the next compile.
 
-- The build gets only `+<version>`, `--skip-zk` (or `SKIP_ZK=true`) and the search
-  directory (`--src`, `--dir`), so `--dir access` builds only that directory's mocks.
-- The compiler's own walk then excludes `*/artifacts/*` and `*.fragment.compact`, so
-  generated mocks are not compiled twice and fragments are not compiled alone.
+- The build gets `+<version>`, `--skip-zk` (or `SKIP_ZK=true`), the search directory
+  (`--src`, `--dir`) and each `--only` glob. `--dir access` builds only that directory's
+  mocks, and `--only 'MockEcdsa.compact'` builds only that mock.
+- Every other compiler flag, such as `--compact-path` or
+  `--no-communications-commitment`, reaches each `compact compile` the build runs.
+- The compiler's own walk then excludes the artifacts directory under `[mock].test_dir`
+  (`*/test/artifacts/*` by default, `*/test/unit/artifacts/*` for `{dir}/test/unit`) and
+  `*.fragment.compact`, so generated mocks are not compiled twice and fragments are not
+  compiled alone.
 - `--no-mocks` skips the build. The two excludes still apply.
 - A failed build stops the run before compiling: `Mock build failed (compact-mock exit
   <code>)`.
@@ -87,7 +92,12 @@ mocks on the next compile.
   [`@openzeppelin/compact-mocker`](../mocker). Without either the run fails with an
   install hint.
 - A `compact.toml` that does not parse fails the run.
-- Without a `[mock]` table nothing changes. `compact-builder` never builds mocks.
+- Without a `[mock]` table nothing changes.
+
+`compact-builder` never builds mocks, and never compiles or ships generated mocks or
+fragments. It always applies the two excludes, with the default `test_dir` when the nearest
+`compact.toml` has no `[mock]` table, and fails on a `compact.toml` that does not parse.
+Hand-written `Mock*` files still compile and stay out of `dist/` by default.
 
 The `[mock]` keys are documented in the
 [`compact-mock` README](../../crates/compact-mock/README.md).

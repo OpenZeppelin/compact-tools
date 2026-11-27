@@ -472,7 +472,7 @@ const ROWS: &[Row] = &[
     row(
         "rules",
         &["generate", "--config", "init-overload.toml"],
-        "MockReset: calc/Reset exports 2 circuits named initialize, and overloads are not supported; set init = \"none\" and add initialize to exclude or write the mock by hand",
+        "MockReset: calc/Reset exports 2 circuits named initialize, so the constructor cannot pick one to call; set init = \"none\" to expose them as numbered circuits, or write the mock by hand",
     ),
     row(
         "rules",
@@ -723,7 +723,7 @@ fn a_rename_onto_an_imported_name_is_an_error() {
 
 #[cfg(unix)]
 #[test]
-fn a_write_under_a_dangling_link_is_reported() {
+fn a_dangling_link_above_an_artifacts_directory_is_refused() {
     let rows = [Row {
         case: Some("rebase"),
         setup: Some(|root| {
@@ -733,7 +733,7 @@ fn a_write_under_a_dangling_link_is_reported() {
         args: &["generate"],
         code: EXIT_ERROR,
         closed_stdout: false,
-        message: "cannot write src/far/test/artifacts/.compact-mock-stamp",
+        message: "src/far/test is a symlink; compact-mock never writes or deletes through one. Replace it with a directory",
     }];
     let found = failures(&rows);
     assert!(found.is_empty(), "{}", found.join("\n"));

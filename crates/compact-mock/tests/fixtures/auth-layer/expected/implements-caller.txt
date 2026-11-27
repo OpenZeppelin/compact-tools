@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockDoor: implements Opener, but its circuit open takes () where Opener declares (Badge); when an injected parameter is the difference, set implements per authenticator (caller.implements)

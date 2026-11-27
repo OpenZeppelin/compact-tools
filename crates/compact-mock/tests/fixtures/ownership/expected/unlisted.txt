@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: src/lib/test/artifacts/MockLib.compact exists, is not listed in .compact-mock-stamp and lacks the compact-mock header; compact-mock does not overwrite it. Move it away or delete it

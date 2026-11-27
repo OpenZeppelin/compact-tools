@@ -1,4 +1,4 @@
 exit: 2
 --- stdout
 --- stderr
-compact-mock: src/lib/test/artifacts exists and has no .compact-mock-stamp; compact-mock writes only into directories it owns. Move it away or empty it
+compact-mock: src/lib/test/artifacts is a symlink; compact-mock never writes or deletes through one. Replace it with a directory

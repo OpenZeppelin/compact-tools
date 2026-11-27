@@ -11,6 +11,7 @@ type = { name = "Blinding", module = "random/Blind" }
 call = "read()"
 
 [mock.inject.blinding_all]
+params = ["blinding"]
 module = "random/Blind"
 type = { name = "Blinding", module = "random/Blind" }
 call = "read()"

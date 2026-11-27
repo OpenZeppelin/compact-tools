@@ -49,36 +49,41 @@ compact-mock: 2 mocks, 0 written, 2 unchanged, 0 removed.
   takes the caller as a circuit argument.
 - Specs import `./artifacts/MockOwnable/contract/index.js` from the module's `test/`
   directory.
-- Widen `modules` to `["**"]` for every module under `src`. A module that needs generic
-  arguments, `disclose` or a fragment then needs its own rule, or a `[mock].exclude`
-  entry; the run names each one. See [compact-contracts](#compact-contracts).
+- Widen `modules` to `["**"]` for every module under `src`. Generic modules and circuits
+  without arguments are skipped with a note. A module that needs `disclose` or a fragment
+  then needs its own rule, or a `[mock].exclude` entry; the run names each one. See
+  [compact-contracts](#compact-contracts).
 - `compact-compiler` runs this build by default (see [Compiler default](#compiler-default)).
 
 ## Usage
 
 ```text
-compact-mock generate [NAME]... [--config <FILE>] [--dir <DIR>]
-compact-mock build [+<VERSION>] [NAME]... [--config <FILE>] [--dir <DIR>] [--skip-zk] [--compact-bin <PATH>]
+compact-mock generate [NAME]... [--config <FILE>] [--dir <DIR>] [--only <GLOB>]...
+compact-mock build [+<VERSION>] [NAME]... [--config <FILE>] [--dir <DIR>] [--only <GLOB>]... [--skip-zk] [--compact-bin <PATH>] [-- <ARGS>...]
 ```
 
 | Option | Effect |
 |---|---|
 | `NAME...` | Only these mocks. An unknown name is an error. Nothing is removed. |
 | `--config <FILE>` | The TOML file holding `[mock]`. Default: the nearest `compact.toml` upward. |
-| `--dir <DIR>` | Only modules under `DIR`; stale removal stays inside it. Errors of modules outside it are ignored; config errors are not. A `DIR` with no module is a successful run. |
+| `--dir <DIR>` | Only modules under `DIR`; stale removal stays inside it. Errors of modules outside it are ignored; config errors are not. A `DIR` with no module is a successful run. A `DIR` outside `src`, or one that reaches it through a symlink, prints a note and writes nothing. |
+| `--only <GLOB>` | Only mocks whose module source or generated source the glob matches, with `compact-compiler --only` syntax: `*` spans `/`, and a glob without `/` matches the file name. Repeatable. Nothing is removed. |
 | `+<VERSION>` | Passed to `compact compile`. At most one. |
 | `--skip-zk` | Passed to `compact compile`. `SKIP_ZK=true` does the same. |
 | `--compact-bin <PATH>` | The `compact` executable. Env `COMPACT_MOCK_COMPACT_BIN`; default `compact`. |
+| `-- <ARGS>...` | Passed to every `compact compile`, before the paths. |
 
-`build` generates first, then runs `compact compile [+V] [--skip-zk] <dir>/<Mock>.compact
-<dir>/<Mock>` per mock in expansion order and stops at the first failure.
+`build` generates first, then runs `compact compile [+V] [--skip-zk] [ARGS] <dir>/<Mock>.compact
+<dir>/<Mock>` per mock in expansion order and stops at the first failure. compactc's
+stderr streams through; its stdout is printed only when it fails.
 
 Output:
 
 - stdout: `wrote <path>`, `unchanged <path>`, `removed <path>`; `build` adds
   `compiled <dir>`. Paths are relative to the working directory when under it.
-- stderr: `compact-mock: skipped <module>: not a module` (or `no exported circuits`),
-  rules that apply to no module, the summary, and errors with `caused by:` lines.
+- stderr: `compact-mock: skipped <module>: <reason>` and other notes (a rule or exclude
+  pattern that matches nothing, a skipped generic circuit, a stale entry kept, a stamp
+  ignored), the summary, and errors with `caused by:` lines.
 
 ## Exit codes
 
@@ -98,7 +103,7 @@ module paths and globs to `src`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `src` | `"src"` | Module root. |
+| `src` | `"src"` | Module root, inside the config file's directory. |
 | `test_dir` | `"{dir}/test"` | Each module's test directory. Must start with `{dir}/`. Discovery skips every directory with this tail. |
 | `spdx` | none | SPDX line of every mock. |
 | `caller_type` | none | `{ name, module }`: the struct or `new type` every authenticator returns. |
@@ -114,6 +119,7 @@ Authenticators. A rule's `auth` list gives one mock per name.
 | `call` | Call template. Required. Its circuit must return `caller_type`. `{salt}` appears at most once, as `pad(<n>, "{salt}")` or `"{salt}"`, or not at all. |
 | `prefix` | Import prefix; default `<module name>_`. |
 | `suffix` | Goes into mock names; default `""`. |
+| `params` | Names of the caller-typed parameters the call replaces; default `["caller"]`. A caller-typed parameter under another name stays a circuit argument. |
 
 - Names match `[a-z][a-z0-9_]*` and are never a rule key.
 - An authenticator needs `[mock].caller_type`.
@@ -129,6 +135,7 @@ Injectors fill parameters of another nominal type, such as a `Blinding`.
 | `module`, `call`, `prefix` | As for an authenticator. `call` takes no placeholder and must return `type`. |
 | `type` | `{ name, module }`: a struct, enum or `new type`. A `new type` never matches its underlying type. |
 | `scope` | `"caller"` (default): only where an authenticator injected the caller in the same circuit. `"all"`: everywhere. |
+| `params` | Names of the `type` parameters the call replaces; default the table's name, e.g. `["blinding"]`. |
 
 A rule may not list two injectors for one type.
 
@@ -170,7 +177,12 @@ table takes no `salt`.
 - Per-authenticator tables apply next, in file order. Instance keys apply last.
 - A circuit or ledger field a rule names must exist in some module that gets mocks from
   it, so a module `[mock].exclude` removes does not count.
-- A rule that applies to no module prints a note and the run goes on.
+- A rule that applies to no module, and an `exclude` or `exclude_modules` pattern that
+  excludes nothing, print a note and the run goes on.
+- When no rule lists a module's exact path, globs only: a generic module without
+  `module_args`, or one whose constructor would call a generic init circuit without
+  `circuit_args`, is skipped with a note. A generic circuit without `circuit_args` is left
+  out of the mock with a note. A rule that lists the exact path turns both into errors.
 
 ### Naming
 
@@ -198,7 +210,9 @@ The salt fills the `{salt}` slot of an authenticator's `call`.
 | `{ expr = "<expression>" }` | Replaces the slot with the expression. No width check. |
 
 A rule `salt` is ignored where the call has no slot. A `<name>.salt` for an authenticator
-whose call has no slot is an error.
+whose call has no slot is an error. A `ledger` or `expr` salt is an error when the
+constructor passes an authenticated caller to the init circuit: the salt is not set until
+that circuit runs. Use a string salt or `init = "none"`.
 
 ### Constructor
 
@@ -225,7 +239,7 @@ The constructor consumes the init circuit: the mock does not expose it.
 - It has one constructor: shared parameters (same name and type), then one `Boolean` per
   flag.
 - Two instances with equal module arguments are an error: compactc would share one
-  instance.
+  instance. Numeric literals compare by value (`8` equals `0x8`).
 
 ## Generated mocks
 
@@ -238,16 +252,18 @@ The constructor consumes the init circuit: the mock does not expose it.
   names nothing. `contract implements <I>;` lines follow.
 - **Export list.** Types the signatures need (never aliases or contract types), then
   re-exported circuits, then prefixed pure circuits of merged groups, then ledger fields.
-- **Authenticated mocks** drop each caller-typed parameter and pass the authenticator
-  call. The `caller` mock keeps it and never imports the authenticator. Matching fails
-  closed: an unresolved parameter type, a type that contains the caller without being
-  it, or two caller parameters in one circuit are errors.
+- **Authenticated mocks** drop each caller-typed parameter that `params` names and pass
+  the authenticator call. The `caller` mock keeps it and never imports the authenticator.
+  Matching fails closed: an unresolved parameter type, a type that contains the caller
+  without being it, or two injected callers in one circuit are errors.
 - **Overloads.** The first declared keeps its name, the k-th becomes `<name><k>`, unless
   a `rename` key picks it by its parameter types.
-- **`implements`.** The mock must expose every circuit the interface declares. A missing
-  one is an error that names the fragment to add it to.
-- **Witness clash.** Two files the mock imports that declare one witness name are an
-  error naming both: compactc binds them to one witness function.
+- **`implements`.** The mock must expose every circuit the interface declares, with the
+  interface's parameter count and types after injection. A missing circuit is an error
+  that names the fragment to add it to. A mismatch is an error; set `implements` per
+  authenticator (`caller.implements`) when an injected caller is the difference.
+- **Witness clash.** Two files the mock imports or includes (its fragment) that declare
+  one witness name are an error naming both: compactc binds them to one witness function.
 - **Determinism.** No version or date in the output, so a tool upgrade alone changes no
   mock.
 
@@ -265,9 +281,18 @@ src/<dir>/test/
 - Each module directory gets its own `artifacts/`, holding only that directory's mocks.
 - The tool writes only into an artifacts directory it creates, an empty one, or one with
   the stamp. Anything else fails the run before the first write.
+- A stamp counts only in `<module dir>/<test_dir>/artifacts`. A stamp anywhere else is
+  ignored with a note.
+- A symlink between `src` and an artifacts directory, that directory included, is an
+  error. The tool never writes or deletes through one.
+- A file it would write that the stamp does not list and that lacks the generated header
+  is an error; it is never overwritten.
 - It deletes only `<N>.compact` and `<N>/` for a name the stamp lists that the full
-  expansion no longer produces. NAME arguments disable deletion. Symlinks are removed as
-  links. A directory left with only its stamp is removed.
+  expansion no longer produces, and only when the file starts with the generated header
+  and the directory holds only compiled output (`compiler`, `contract`, `keys`, `zkir`).
+  Anything else, a symlink included, is kept with a note. A name that differs only in
+  case from one the run produces is never deleted. NAME and `--only` arguments disable
+  deletion. A directory left with only its stamp is removed.
 - The stamp lists every new name before a source is written, so an interrupted run never
   leaves an unlisted file.
 - A run with any config, source or plan error writes nothing.
@@ -283,7 +308,9 @@ mock's last line, `include "../<Mock>.fragment";`.
 - The mock always imports the module under its prefix when it includes a fragment.
 - A fragment that declares a `constructor` needs a mock without one (`init = "none"`, or
   no init circuit).
-- A fragment's `export circuit` names count for `implements` and for `mock-coverage`.
+- A fragment's `export circuit` names count for `implements` and for `mock-coverage`. A
+  fragment constructor counts as covering the init circuit.
+- A fragment's `witness` declarations join the witness clash check.
 
 ## Compiler default
 
@@ -291,20 +318,26 @@ mock's last line, `include "../<Mock>.fragment";`.
 `compact-mock build` before its own compile when the nearest `compact.toml` has a `[mock]`
 table.
 
-- It passes its `+<version>`, `--skip-zk` and search directory (`--src`, `--dir`) on.
-- Its own walk excludes `*/artifacts/*` and `*.fragment.compact`.
+- It passes its `+<version>`, `--skip-zk`, search directory (`--src`, `--dir`) and each
+  `--only` on, and its other compiler flags after `--`.
+- Its own walk excludes `*/<test_dir>/artifacts/*` (`*/test/artifacts/*` by default) and
+  `*.fragment.compact`.
 - `--no-mocks` skips the build and keeps the excludes.
 - `COMPACT_MOCK_BINARY` names the binary; otherwise `@openzeppelin/compact-mocker` must
   be installed.
-- `compact-builder` never builds mocks.
+- `compact-builder` never builds mocks, and always excludes the same files from its
+  compile and its copy to `dist/`.
 
 ## Lint rule
 
 `compact-lint` reports `mock-coverage` (default `warn`) when `compact.toml` has a `[mock]`
 table:
 
-- a module under `src` that no rule matches and `[mock].exclude` does not list;
-- an exported circuit that none of its module's mocks exposes.
+- a module under `src` with an exported circuit that no rule matches and `[mock].exclude`
+  does not list;
+- a module a glob rule skips as generic;
+- an exported circuit that none of its module's mocks exposes;
+- a `[mock]` table that fails to load, as one finding on `compact.toml`.
 
 It plans with this crate and writes nothing. See
 [`crates/compact-lint`](../compact-lint/README.md#rules).
@@ -371,7 +404,8 @@ A wrapper or re-export that returns witness-derived data fails to compile with
 
 - A spec that names a mock's artifact by a path string in its body keeps that mock
   hand-written.
-- `implements` checks circuit names only. compactc checks signatures at `build`.
+- `implements` compares types by the declaration each name resolves to, and skips the
+  type check for a generic circuit. compactc checks the rest at `build`.
 - A plain `rename` key on an overloaded name renames the first overload only.
 - A merged group exports an overloaded pure circuit only through its wrappers.
 - An injector parameter that contains its type without being it is left as a parameter.

@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Gen<#N> {
+  import CompactStandardLibrary;
+
+  export circuit bump(x: Uint<N>): Uint<N> {
+    return x;
+  }
+}

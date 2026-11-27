@@ -3,9 +3,10 @@
 //! A library module does not compile on its own, so its constraints are measured through
 //! the mock contract that exports the same circuit names.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::config::{Config, ConfigError};
+use crate::config::{Config, ConfigError, DEFAULT_SOURCES};
 use crate::target::normalize;
 
 /// Where a file's measurements come from.
@@ -25,23 +26,43 @@ pub struct Resolver {
     own: globset::GlobSet,
     sources: Vec<String>,
     overrides: Vec<(PathBuf, PathBuf)>,
+    /// Module file to the sources `[mock]` generates for it, tried before the templates.
+    generated: BTreeMap<PathBuf, Vec<PathBuf>>,
 }
 
 impl Resolver {
+    /// With the default `sources` and a `[mock]` table in `mock_config`, a module's
+    /// generated mocks are tried first and the first template follows `[mock].test_dir`.
     /// # Errors
     /// Returns an error when a `constraints.self` pattern is not a valid glob.
-    pub fn new(config: &Config, base: &Path, cwd: &Path) -> Result<Self, ConfigError> {
+    pub fn new(
+        config: &Config,
+        base: &Path,
+        cwd: &Path,
+        mock_config: Option<&Path>,
+    ) -> Result<Self, ConfigError> {
+        let mut sources = config.constraints.sources.clone();
+        let mut generated = BTreeMap::new();
+        if let Some(path) = mock_config
+            && sources == DEFAULT_SOURCES
+        {
+            if let Some(tail) = compact_mock::config::mock_test_tail(path) {
+                sources[0] = format!("{{dir}}/{}/artifacts/Mock{{stem}}.compact", tail.join("/"));
+            }
+            generated = compact_mock::coverage::generated_sources(path, cwd).unwrap_or_default();
+        }
         Ok(Self {
             base: base.to_owned(),
             cwd: cwd.to_owned(),
             own: config.own_set(base)?,
-            sources: config.constraints.sources.clone(),
+            sources,
             overrides: config
                 .constraints
                 .overrides
                 .iter()
                 .map(|(file, source)| (base.join(file), base.join(source)))
                 .collect(),
+            generated,
         })
     }
 
@@ -62,7 +83,25 @@ impl Resolver {
             return Source::Found(file.to_owned());
         }
 
-        self.first_existing(self.candidates(file), &mut tried)
+        let generated: Vec<PathBuf> = self
+            .generated
+            .get(&absolute)
+            .into_iter()
+            .flatten()
+            .map(|path| self.shown(path))
+            .collect();
+        let mut seen = Vec::new();
+        let candidates = generated
+            .into_iter()
+            .chain(self.candidates(file))
+            .filter(|candidate| {
+                let fresh = !seen.contains(candidate);
+                if fresh {
+                    seen.push(candidate.clone());
+                }
+                fresh
+            });
+        self.first_existing(candidates, &mut tried)
     }
 
     /// The templates expanded for one file, in config order.
@@ -160,7 +199,7 @@ mod tests {
     }
 
     fn resolve(config: &Config, root: &Path, file: &str) -> Source {
-        Resolver::new(config, root, root)
+        Resolver::new(config, root, root, None)
             .expect("the globs compile")
             .resolve(Path::new(file))
     }

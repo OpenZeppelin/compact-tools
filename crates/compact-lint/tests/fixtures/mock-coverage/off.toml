@@ -21,8 +21,13 @@ mock-coverage = "off"
 exclude = ["c/*"]
 
 [[mock.rules]]
-modules = ["a/*", "c/*", "d/*", "p/*"]
+modules = ["a/*", "c/*", "d/*", "f/*", "g/*", "p/*"]
 
 [[mock.rules]]
 modules = ["a/Partial"]
 exclude = ["close"]
+
+[[mock.rules]]
+modules = ["f/Framed"]
+init = "none"
+exclude = ["initialize"]

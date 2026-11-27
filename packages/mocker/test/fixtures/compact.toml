@@ -9,6 +9,8 @@ exclude = ["auth/Keyed", "rand/*"]
 [mock.auth.prf]
 module = "auth/Pseudonym"
 call = 'authenticate(pad(32, "{salt}"))'
+# Claimed names its caller claimant.
+params = ["caller", "claimant"]
 
 [mock.auth.key]
 module = "auth/Keyed"

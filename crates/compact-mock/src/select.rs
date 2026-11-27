@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::config::{Config, FRAGMENT_SUFFIX};
+use crate::config::{Config, FRAGMENT_SUFFIX, Paths};
 use crate::error::{ConfigError, OutputError};
 
 /// One `.compact` file under `src`.
@@ -34,6 +34,11 @@ pub enum Selection {
 pub enum SkipReason {
     NotAModule,
     NoExportedCircuits,
+    /// Generic, without `module_args`, and every rule names it by a glob.
+    GenericModule,
+    /// Its init circuit is generic, without `circuit_args`, and every rule names it by a
+    /// glob.
+    GenericInit,
 }
 
 impl SkipReason {
@@ -42,7 +47,19 @@ impl SkipReason {
         match self {
             Self::NotAModule => "not a module",
             Self::NoExportedCircuits => "no exported circuits",
+            Self::GenericModule => {
+                "generic module without module_args; name it in a rule that sets module_args to mock it"
+            }
+            Self::GenericInit => {
+                "generic init circuit without circuit_args; name the module in a rule that sets them to mock it"
+            }
         }
+    }
+
+    /// Whether the skip hides a module a rule meant to mock, so coverage reports it.
+    #[must_use]
+    pub const fn is_gap(self) -> bool {
+        matches!(self, Self::GenericModule | Self::GenericInit)
     }
 }
 
@@ -85,8 +102,10 @@ fn walk(
                 walk(config, &path, segments, found)?;
             }
             segments.pop();
-        } else if name.ends_with(".compact") && !name.ends_with(FRAGMENT_SUFFIX) && path.is_file() {
-            let stem = name.trim_end_matches(".compact");
+        } else if let Some(stem) = name.strip_suffix(".compact")
+            && !name.ends_with(FRAGMENT_SUFFIX)
+            && path.is_file()
+        {
             let mut module = segments.clone();
             module.push(stem.to_owned());
             found.push(Candidate {
@@ -116,6 +135,95 @@ pub fn select(config: &Config, module: &str) -> Selection {
     } else {
         Selection::Selected(applicable)
     }
+}
+
+/// The exclude patterns that exclude nothing, as information lines: a `[mock].exclude`
+/// pattern no candidate matches, and an `exclude_modules` pattern no candidate of its
+/// rule's `modules` matches.
+#[must_use]
+pub fn unused_excludes(config: &Config, candidates: &[Candidate]) -> Vec<ConfigError> {
+    let mut found = Vec::new();
+    let used = |globs: &crate::config::Globs, keep: &dyn Fn(&str) -> bool| {
+        let mut used = vec![false; globs.patterns.len()];
+        for candidate in candidates
+            .iter()
+            .filter(|candidate| keep(&candidate.module))
+        {
+            for index in globs.matching(&candidate.module) {
+                used[index] = true;
+            }
+        }
+        used
+    };
+    for (index, used) in used(&config.exclude, &|_| true).into_iter().enumerate() {
+        if !used {
+            found.push(ConfigError::ExcludeUnused {
+                cfg: config.shown.clone(),
+                at: "[mock].exclude".to_owned(),
+                pattern: config.exclude.patterns[index].clone(),
+            });
+        }
+    }
+    for rule in &config.rules {
+        let selected = |module: &str| rule.modules.matches(module);
+        for (index, used) in used(&rule.exclude_modules, &selected)
+            .into_iter()
+            .enumerate()
+        {
+            if !used {
+                found.push(ConfigError::ExcludeUnused {
+                    cfg: config.shown.clone(),
+                    at: format!("[[mock.rules]] #{} exclude_modules", rule.number),
+                    pattern: rule.exclude_modules.patterns[index].clone(),
+                });
+            }
+        }
+    }
+    found
+}
+
+/// Whether a compact-compiler file glob matches `path`: `*` spans any characters, `/`
+/// included, and `?` one. A glob with `/` matches the path as printed, relative to the
+/// working directory; any other glob matches the file name.
+#[must_use]
+pub fn file_glob(glob: &str, path: &Path, paths: &Paths) -> bool {
+    let text = if glob.contains('/') {
+        paths.show(path)
+    } else {
+        path.file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    let pattern: Vec<char> = glob.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    wildcard(&pattern, &text)
+}
+
+/// `*` and `?` matching with one backtrack point, linear in practice.
+fn wildcard(pattern: &[char], text: &[char]) -> bool {
+    let (mut p, mut t) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while t < text.len() {
+        match pattern.get(p) {
+            Some('*') => {
+                star = Some((p, t));
+                p += 1;
+            }
+            Some(&ch) if ch == '?' || ch == text[t] => {
+                p += 1;
+                t += 1;
+            }
+            _ => match star {
+                Some((at, from)) => {
+                    p = at + 1;
+                    t = from + 1;
+                    star = Some((at, from + 1));
+                }
+                None => return false,
+            },
+        }
+    }
+    pattern[p..].iter().all(|ch| *ch == '*')
 }
 
 /// The rules that apply to no candidate `[mock].exclude` leaves, as information lines.

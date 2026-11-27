@@ -1,0 +1,17 @@
+[lint]
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.circuit]
+tags = ["@description"]
+
+[lint.rules]
+mock-coverage = "off"
+
+[mock]
+test_dir = "{dir}/test/unit"
+
+[[mock.rules]]
+modules = ["orphan/Orphan"]
+name = "Fake{module}"

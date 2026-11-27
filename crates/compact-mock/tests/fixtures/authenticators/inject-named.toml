@@ -1,0 +1,18 @@
+[mock]
+caller_type = { name = "Badge", module = "who/Who" }
+
+[mock.auth.prf]
+module = "auth/Prf"
+call = 'authenticate(pad(32, "{salt}"))'
+
+# Open names its parameter blinding, not mask.
+[mock.inject.mask]
+module = "random/Blind"
+type = { name = "Blinding", module = "random/Blind" }
+call = "read()"
+scope = "all"
+
+[[mock.rules]]
+modules = ["access/Open"]
+auth = ["prf", "caller"]
+inject = ["mask"]

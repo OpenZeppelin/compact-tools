@@ -375,6 +375,9 @@ describe('runCompiler CLI', () => {
         '  --no-mocks        Skip the compact-mock build that runs when compact.toml has a [mock] table',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
+        '                    The mock build also gets --only and the other compiler flags',
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
         '\nArtifact Output Structure:',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
@@ -578,7 +581,7 @@ describe('runCompiler CLI', () => {
         '--dir',
         'access',
         '--exclude',
-        '*/artifacts/*',
+        '*/test/artifacts/*',
         '--exclude',
         '*.fragment.compact',
       ]);
@@ -629,7 +632,7 @@ describe('runCompiler CLI', () => {
       expect(mockFromArgs).toHaveBeenCalledWith([
         '--skip-zk',
         '--exclude',
-        '*/artifacts/*',
+        '*/test/artifacts/*',
         '--exclude',
         '*.fragment.compact',
       ]);

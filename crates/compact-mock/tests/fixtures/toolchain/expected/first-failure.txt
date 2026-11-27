@@ -6,6 +6,7 @@ wrote src/lib/test/artifacts/MockZeta.compact
 compiled src/lib/test/artifacts/MockAlpha
 --- stderr
 compact-mock: 3 mocks, 3 written, 0 unchanged, 0 removed.
+stub: warning: src/lib/test/artifacts/MockAlpha.compact compiled with a warning
 stub: cannot compile src/lib/test/artifacts/MockFail.compact
 compact-mock: compact compile failed for src/lib/test/artifacts/MockFail.compact (exit 3)
 --- compact calls

@@ -515,17 +515,19 @@ impl Files {
             }
             seen.push(id);
             let source = self.get(id);
-            let Some(module) = source.module.as_ref() else {
-                continue;
-            };
-            for item in &module.items {
-                if let Item::Witness(witness) = item {
-                    found.push((id, witness.name.clone()));
+            // Top-level declarations are a fragment's own.
+            found.extend(source.witnesses.iter().map(|name| (id, name.clone())));
+            let mut imports: Vec<&crate::source::Import> = source.imports.iter().collect();
+            if let Some(module) = source.module.as_ref() {
+                for item in &module.items {
+                    if let Item::Witness(witness) = item {
+                        found.push((id, witness.name.clone()));
+                    }
                 }
+                imports.extend(&module.imports);
             }
-            let mut next: Vec<PathBuf> = module
-                .imports
-                .iter()
+            let mut next: Vec<PathBuf> = imports
+                .into_iter()
                 .filter_map(|import| self.import_file(id, import))
                 .collect();
             next.reverse();

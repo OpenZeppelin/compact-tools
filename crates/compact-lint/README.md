@@ -261,6 +261,8 @@ mock contract that exports the same circuit names. For each file, in order:
 2. `constraints.self`, globs for files that are contracts and compile themselves.
 3. `constraints.sources`, templates expanded and tried until one exists. `{dir}` is the
    file's directory, `{parent}` its parent, `{stem}` its name without the extension.
+   With the default templates and a `[mock]` table, the module's generated mocks come
+   first, in expansion order, and the first template uses `[mock].test_dir`.
 
 Each distinct source is compiled once per run, whatever the number of files it measures.
 
@@ -334,7 +336,7 @@ written.
 | `constraints-unmeasurable` | `fill-constraints` only: no measurement source resolves for the file. |
 | `parse` | The file holds a syntax defect; the first one is reported and the doc rules are skipped for that file. |
 | `format` | `compact format --check` reported the file. |
-| `mock-coverage` | `compact.toml` has a `[mock]` table, and a module under its `src` has no generated mock, or an exported circuit is exposed by none of its mocks. |
+| `mock-coverage` | `compact.toml` has a `[mock]` table, and a module under its `src` has no generated mock, or an exported circuit is exposed by none of its mocks, or the table fails to load. |
 
 Rule detail:
 
@@ -362,13 +364,14 @@ Rule detail:
 - **`mock-coverage`.** It runs once per `check`, after the doc rules, and only with a
   `[mock]` table in the config file in play. Rule matching and planning come from the
   `compact-mock` crate, so the rule sees what `compact-mock generate` would write; it
-  writes nothing. A module that no `[[mock.rules]]` glob matches is reported at its name,
-  unless `[mock].exclude` lists it. A circuit counts as covered when a mock re-exports or
-  wraps it (renamed included), the constructor calls it, or an included fragment exports
-  a circuit of that name; each overload counts on its own. A module whose mocks fail to
-  plan is reported with the first error. A `[mock]` table that fails to load fails the
-  run with exit 2 and its errors as causes. Files outside the run's file list get no
-  finding.
+  writes nothing. A module with an exported circuit that no `[[mock.rules]]` glob matches
+  is reported at its name, unless `[mock].exclude` lists it. A module a glob rule skips as
+  generic is reported at its name. A circuit counts as covered when a mock re-exports or
+  wraps it (renamed included), the constructor calls it, an included fragment exports a
+  circuit of that name, or an included fragment's constructor stands in for the init
+  circuit; each overload counts on its own. A module whose mocks fail to plan is reported
+  with the first error. A `[mock]` table that fails to load is one finding on the config
+  file, with the first error. Files outside the run's file list get no finding.
 - **`tag-order`.** The order is `kinds.<kind>.sections` where the kind has one, else
   `kinds.<kind>.tags`. Occurrences of tags no entry lists are ignored, and one doc comment
   yields one finding, at the first occurrence that breaks the order.
@@ -460,6 +463,8 @@ Defaults when no config file is found:
   `"all"` or `"none"` there.
 - `exclude` filters files found by walking a directory. A file named on the command
   line is always checked.
+- The default `include` skips `*.fragment.compact` files and everything under
+  `<test_dir>/artifacts/`, with `test_dir` from `[mock]` (default `{dir}/test`).
 - `tags.rename` maps a forbidden tag to the tag `fix` writes in its place. Every key
   must appear in `tags.forbid` and no value may, or the config is rejected. Both
   spellings are validated like every other tag. An unmapped forbidden tag is reported,
@@ -469,7 +474,9 @@ Defaults when no config file is found:
   open with a tag such as `@todo`, or the config is rejected.
 - `rules` takes one key per rule id, valued `"off"`, `"info"`, `"warn"` or `"error"`.
 - `constraints.compiler` is passed as `+<version>` to `compact compile`.
-- `constraints.sources` templates are tried in order; the first existing file wins.
+- `constraints.sources` templates are tried in order; the first existing file wins. Left
+  at the default with a `[mock]` table, they follow `[mock]` (see How a source is
+  resolved).
 - `constraints.self` marks files that compile themselves, so no mock is looked for.
 - `constraints.overrides` keys and values are paths relative to the config's directory,
   or to the current directory when the config came from `--config`.

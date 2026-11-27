@@ -128,7 +128,11 @@ export class CompactBuilder {
   public async build(): Promise<void> {
     // Run compact compilation as a prerequisite. CompactCompiler ignores
     // BuilderOnlyOptions because they aren't in its resolved shape.
-    const compiler = new CompactCompiler(this.options);
+    const { exclude, alwaysExclude = [] } = this.options;
+    const compiler = new CompactCompiler({
+      ...this.options,
+      exclude: [...(exclude ?? []), ...alwaysExclude],
+    });
     await compiler.compile();
 
     for (const [index, step] of this.steps.entries()) {
@@ -152,9 +156,11 @@ export class CompactBuilder {
     const only = this.options.only ?? [];
     // An explicit include list overrides the implicit Mock* default, which
     // would otherwise veto it and copy nothing.
-    const excludes = buildFindExcludes(
-      this.options.exclude ?? (only.length > 0 ? [] : DEFAULT_EXCLUDE_PATTERNS),
-    );
+    const excludes = buildFindExcludes([
+      ...(this.options.exclude ??
+        (only.length > 0 ? [] : DEFAULT_EXCLUDE_PATTERNS)),
+      ...(this.options.alwaysExclude ?? []),
+    ]);
     const includes = buildFindIncludes(only);
     const filters = [includes, excludes].filter(Boolean).join(' ');
     const steps: BuildStep[] = [];
