@@ -1,0 +1,31 @@
+// Fixture module for the compact-mock end-to-end tests.
+
+pragma language_version >= 0.28.0;
+
+module Shielded {
+  import CompactStandardLibrary;
+
+  import { Account, Caller } from "../identity/Id";
+  import { Blinding } from "../rand/Rand";
+
+  export ledger _salt: Bytes<32>;
+  export ledger _members: Set<Bytes<32>>;
+
+  export circuit initialize(salt: Bytes<32>): [] {
+    _salt = disclose(salt);
+  }
+
+  export pure circuit commitment(account: Account, blinding: Blinding): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>(
+      [persistentHash<Account>(account), blinding as Bytes<32>]
+    );
+  }
+
+  export circuit join(caller: Caller, blinding: Blinding): [] {
+    _members.insert(disclose(commitment(caller.account, blinding)));
+  }
+
+  export circuit isMember(caller: Caller, blinding: Blinding): Boolean {
+    return _members.member(disclose(commitment(caller.account, blinding)));
+  }
+}

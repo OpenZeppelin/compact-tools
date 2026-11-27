@@ -7,13 +7,17 @@ import {
 } from '@openzeppelin/compact-builder';
 import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
+import { MOCKER_PACKAGE, nodeHost, prepareCompile } from './mockBuild.ts';
 
 /** `compact-compiler` CLI shell — fail-fast, maps error types to user-facing messages via {@link handleError}. */
 async function runCompiler(): Promise<void> {
   const spinner = ora(chalk.blue('[COMPILE] Compact compiler started')).info();
 
   try {
-    const args = process.argv.slice(2);
+    const args = await prepareCompile(
+      process.argv.slice(2),
+      nodeHost((message) => spinner.info(chalk.blue(message))),
+    );
     const compiler = CompactCompiler.fromArgs(args);
     await compiler.compile();
   } catch (error) {
@@ -24,6 +28,26 @@ async function runCompiler(): Promise<void> {
 
 /** Dispatch by error name → spinner output + actionable hint. */
 function handleError(error: unknown, spinner: Ora): void {
+  if (error instanceof Error && error.name === 'CompactTomlParseError') {
+    spinner.fail(chalk.red(`[COMPILE] Error: ${error.message}`));
+    return;
+  }
+
+  if (error instanceof Error && error.name === 'MockerNotInstalledError') {
+    spinner.fail(chalk.red(`[COMPILE] Error: ${error.message}`));
+    spinner.info(
+      chalk.blue(
+        `[COMPILE] Install with: yarn add --dev ${MOCKER_PACKAGE} (or pass --no-mocks)`,
+      ),
+    );
+    return;
+  }
+
+  if (error instanceof Error && error.name === 'MockBuildError') {
+    spinner.fail(chalk.red(`[COMPILE] ${error.message}`));
+    return;
+  }
+
   // CompactCliNotFoundError
   if (error instanceof Error && error.name === 'CompactCliNotFoundError') {
     spinner.fail(chalk.red(`[COMPILE] Error: ${error.message}`));
@@ -152,6 +176,11 @@ function showUsageHelp(): void {
   );
   console.log(
     chalk.yellow('  +<version>        Pin the Compact toolchain version'),
+  );
+  console.log(
+    chalk.yellow(
+      '  --no-mocks        Skip the compact-mock build that runs when compact.toml has a [mock] table',
+    ),
   );
   console.log(chalk.yellow('\nArtifact Output Structure:'));
   console.log(chalk.yellow('  Default (flattened): <out>/<ContractName>/'));

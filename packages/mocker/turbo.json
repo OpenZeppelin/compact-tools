@@ -8,8 +8,9 @@
       "cache": true
     },
     "compile:fixtures": {
-      "inputs": ["test/fixtures/src/**", "test/setup.ts"],
-      "outputs": ["test/fixtures/artifacts/**"]
+      "cache": false,
+      "env": ["COMPACT_HOME", "COMPACTC_VERSION", "COMPACT_MOCK_BINARY"],
+      "outputs": []
     },
     "test": {
       "env": ["COMPACT_HOME", "COMPACTC_VERSION", "COMPACT_MOCK_BINARY"]

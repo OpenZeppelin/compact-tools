@@ -1,4 +1,13 @@
 import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
   CompactCliNotFoundError,
   CompactCompiler,
   CompilationError,
@@ -17,6 +26,7 @@ vi.mock('@openzeppelin/compact-builder', async () => {
     ...actual,
     CompactCompiler: {
       fromArgs: vi.fn(),
+      parseArgs: actual.CompactCompiler.parseArgs,
     },
     isPromisifiedChildProcessError: vi.fn(),
   };
@@ -362,6 +372,9 @@ describe('runCompiler CLI', () => {
         '  +<version>        Pin the Compact toolchain version',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
+        '  --no-mocks        Skip the compact-mock build that runs when compact.toml has a [mock] table',
+      );
+      expect(mockConsoleLog).toHaveBeenCalledWith(
         '\nArtifact Output Structure:',
       );
       expect(mockConsoleLog).toHaveBeenCalledWith(
@@ -521,6 +534,138 @@ describe('runCompiler CLI', () => {
       await import('../src/runCompiler.js');
 
       expect(mockFromArgs).toHaveBeenCalledWith([]);
+    });
+  });
+  describe('mock build', () => {
+    let repo: string;
+
+    beforeEach(() => {
+      repo = mkdtempSync(join(tmpdir(), 'compact-cli-run-'));
+      mkdirSync(join(repo, 'src', 'access'), { recursive: true });
+      vi.spyOn(process, 'cwd').mockReturnValue(repo);
+      mockCompile.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      vi.mocked(process.cwd).mockRestore();
+      vi.unstubAllEnvs();
+      rmSync(repo, { recursive: true, force: true });
+    });
+
+    /** Points COMPACT_MOCK_BINARY at a script that exits with `code`. */
+    function stubMocker(code: number): void {
+      const path = join(repo, 'compact-mock-stub');
+      writeFileSync(path, `#!${process.execPath}\nprocess.exit(${code});\n`);
+      chmodSync(path, 0o755);
+      vi.stubEnv('COMPACT_MOCK_BINARY', path);
+    }
+
+    const writeConfig = (toml: string) =>
+      writeFileSync(join(repo, 'compact.toml'), toml);
+
+    it('builds the mocks, then compiles with the generated sources excluded', async () => {
+      writeConfig('[mock]\n');
+      stubMocker(0);
+      process.argv = ['node', 'runCompiler.js', '--dir', 'access'];
+
+      await import('../src/runCompiler.js');
+      await vi.waitFor(() => expect(mockCompile).toHaveBeenCalled());
+
+      expect(mockSpinner.info).toHaveBeenCalledWith(
+        '[COMPILE] Building mocks (compact-mock)',
+      );
+      expect(mockFromArgs).toHaveBeenCalledWith([
+        '--dir',
+        'access',
+        '--exclude',
+        '*/artifacts/*',
+        '--exclude',
+        '*.fragment.compact',
+      ]);
+      expect(mockCompile).toHaveBeenCalled();
+      expect(mockExit).not.toHaveBeenCalled();
+    });
+
+    it('stops before compiling when the mock build fails', async () => {
+      writeConfig('[mock]\n');
+      stubMocker(2);
+
+      await import('../src/runCompiler.js');
+      await vi.waitFor(() => expect(mockExit).toHaveBeenCalled());
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith(
+        '[COMPILE] Mock build failed (compact-mock exit 2)',
+      );
+      expect(mockFromArgs).not.toHaveBeenCalled();
+      expect(mockCompile).not.toHaveBeenCalled();
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('prints the install hint when the mocker is not installed', async () => {
+      writeConfig('[mock]\n');
+      vi.stubEnv('COMPACT_MOCK_BINARY', '');
+
+      await import('../src/runCompiler.js');
+      await vi.waitFor(() => expect(mockExit).toHaveBeenCalled());
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith(
+        `[COMPILE] Error: ${join(repo, 'compact.toml')} has a [mock] table, but @openzeppelin/compact-mocker is not installed`,
+      );
+      expect(mockSpinner.info).toHaveBeenCalledWith(
+        '[COMPILE] Install with: yarn add --dev @openzeppelin/compact-mocker (or pass --no-mocks)',
+      );
+      expect(mockFromArgs).not.toHaveBeenCalled();
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('compiles without building mocks under --no-mocks', async () => {
+      writeConfig('[mock]\n');
+      vi.stubEnv('COMPACT_MOCK_BINARY', '');
+      process.argv = ['node', 'runCompiler.js', '--no-mocks', '--skip-zk'];
+
+      await import('../src/runCompiler.js');
+      await vi.waitFor(() => expect(mockCompile).toHaveBeenCalled());
+
+      expect(mockFromArgs).toHaveBeenCalledWith([
+        '--skip-zk',
+        '--exclude',
+        '*/artifacts/*',
+        '--exclude',
+        '*.fragment.compact',
+      ]);
+      expect(mockCompile).toHaveBeenCalled();
+      expect(mockExit).not.toHaveBeenCalled();
+    });
+
+    it('fails on a compact.toml it cannot parse', async () => {
+      writeConfig('[mock\n');
+
+      await import('../src/runCompiler.js');
+      await vi.waitFor(() => expect(mockExit).toHaveBeenCalled());
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\[COMPILE\] Error: cannot parse .*compact\.toml: /,
+        ),
+      );
+      expect(mockFromArgs).not.toHaveBeenCalled();
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('passes the arguments through unchanged without a [mock] table', async () => {
+      writeConfig('[lint]\n');
+      process.argv = [
+        'node',
+        'runCompiler.js',
+        '--no-mocks',
+        '--dir',
+        'access',
+      ];
+
+      await import('../src/runCompiler.js');
+      await vi.waitFor(() => expect(mockCompile).toHaveBeenCalled());
+
+      expect(mockFromArgs).toHaveBeenCalledWith(['--dir', 'access']);
     });
   });
 });

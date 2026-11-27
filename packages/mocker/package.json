@@ -40,6 +40,7 @@
   },
   "devDependencies": {
     "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@openzeppelin/compact-cli": "workspace:^",
     "@openzeppelin/compact-simulator": "workspace:^",
     "@tsconfig/node24": "^24.0.3",
     "@types/node": "26.1.2",

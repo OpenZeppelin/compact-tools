@@ -6,5 +6,5 @@
     "rootDir": "."
   },
   "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist", "test/fixtures/artifacts"]
+  "exclude": ["node_modules", "dist", "test/fixtures/**/artifacts"]
 }

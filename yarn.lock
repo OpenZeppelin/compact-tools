@@ -999,6 +999,7 @@ __metadata:
     ora: "npm:^9.4.1"
     pino: "npm:^10.3.1"
     pino-pretty: "npm:^13.0.0"
+    smol-toml: "npm:^1.7.1"
     typescript: "npm:^6.0.3"
     vite: "npm:^8.3.8"
     vitest: "npm:^5.1.1"
@@ -1075,6 +1076,7 @@ __metadata:
   resolution: "@openzeppelin/compact-mocker@workspace:packages/mocker"
   dependencies:
     "@midnight-ntwrk/compact-runtime": "npm:0.21.0"
+    "@openzeppelin/compact-cli": "workspace:^"
     "@openzeppelin/compact-launcher": "workspace:^"
     "@openzeppelin/compact-simulator": "workspace:^"
     "@tsconfig/node24": "npm:^24.0.3"

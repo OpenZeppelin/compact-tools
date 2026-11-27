@@ -7,8 +7,8 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     reporters: 'verbose',
     globalSetup: ['./test/setup.ts'],
-    // The drift cases spawn compact-mock and a node process.
-    testTimeout: 30_000,
+    // The command cases compile mocks and run compact-compiler on a temp copy.
+    testTimeout: 120_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],

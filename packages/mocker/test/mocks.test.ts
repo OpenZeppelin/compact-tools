@@ -1,65 +1,24 @@
-import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import {
   CompactTypeBytes,
   CompactTypeField,
   CompactTypeVector,
   persistentHash,
-  type WitnessContext,
 } from '@midnight-ntwrk/compact-runtime';
-import { createSimulator } from '@openzeppelin/compact-simulator';
 import { describe, expect, it } from 'vitest';
-import { packageDir } from '../src/launcher.ts';
 import { binaryUnderTest } from './binaryUnderTest.ts';
-import {
-  ledger as bagLedger,
-  Contract as MockBag,
-} from './fixtures/artifacts/MockBag/contract/index.js';
-import {
-  ledger as bagNoInitLedger,
-  Contract as MockBagNoInit,
-} from './fixtures/artifacts/MockBagNoInit/contract/index.js';
-import {
-  ledger as claimedLedger,
-  Contract as MockClaimed,
-} from './fixtures/artifacts/MockClaimed/contract/index.js';
-import {
-  ledger as claimedFlagLedger,
-  Contract as MockClaimedFlag,
-} from './fixtures/artifacts/MockClaimedFlag/contract/index.js';
-import {
-  ledger as hashLedger,
-  Contract as MockHash,
-} from './fixtures/artifacts/MockHash/contract/index.js';
-import {
-  type ContractAddress,
-  type Either,
-  Contract as MockOwned,
-  ledger as ownedLedger,
-} from './fixtures/artifacts/MockOwned/contract/index.js';
-import {
-  type Caller,
-  Contract as MockOwnedCaller,
-  ledger as ownedCallerLedger,
-} from './fixtures/artifacts/MockOwnedCaller/contract/index.js';
-import {
-  Contract as MockPseudonym,
-  ledger as pseudonymLedger,
-} from './fixtures/artifacts/MockPseudonym/contract/index.js';
+import type { Account, Caller } from './fixtureMocks.ts';
+import { FIXTURES } from './setup.ts';
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
-const CONFIG = join(FIXTURES, 'compact-mock.toml');
-const ARTIFACTS = join(FIXTURES, 'artifacts');
-const BIN = join(packageDir, 'src', 'compactMock.ts');
+const { skip } = binaryUnderTest(process.env, existsSync);
+const skipped = skip !== undefined;
+const title = (name: string) => (skipped ? `${name} (skipped: ${skip})` : name);
 
-const { binary, skip } = binaryUnderTest(process.env, existsSync);
-const skipReason = skip === undefined ? '' : ` (skipped: ${skip})`;
-
-type Account = Either<Uint8Array, ContractAddress>;
-type SecretState = { secretKey: Uint8Array };
-type NoState = Record<string, never>;
+// Typed as loaded: when skipped no test body runs, so nothing reads it.
+const fx = (
+  skipped ? {} : await import('./fixtureMocks.ts')
+) as typeof import('./fixtureMocks.ts');
 
 const ZERO = new Uint8Array(32);
 
@@ -74,186 +33,126 @@ function keyAccount(bytes: Uint8Array): Account {
   return { is_left: true, left: bytes, right: { bytes: ZERO } };
 }
 
-/** `Pseudonym.derive(secretKey, pad(32, salt))`, computed without the contract. */
-function pseudonym(secretKey: Uint8Array, salt: string): Account {
+/** `Pseudonym.derive(secretKey, salt)`, computed without the contract. */
+function pseudonym(secretKey: Uint8Array, salt: string | Uint8Array): Account {
   return keyAccount(
     persistentHash(new CompactTypeVector(2, new CompactTypeBytes(32)), [
       secretKey,
-      pad32(salt),
+      typeof salt === 'string' ? pad32(salt) : salt,
     ]),
   );
 }
 
+/** `Keyed.authenticateHere()`'s account: the key under the fixed salt `keyed`. */
+const keyed = (secretKey: Uint8Array) => pseudonym(secretKey, 'keyed');
+
+const caller = (account: Account): Caller => ({ account });
+
 const ALICE = pad32('alice secret key');
 const BOB = pad32('bob secret key');
-
-const pseudonymWitnesses = () => ({
-  wit_PseudonymSK({
-    privateState,
-  }: WitnessContext<unknown, SecretState>): [SecretState, Uint8Array] {
-    return [privateState, privateState.secretKey];
-  },
-});
-type PseudonymWitnesses = ReturnType<typeof pseudonymWitnesses>;
-
-const OwnedSimulator = createSimulator({
-  contractFactory: (witnesses: PseudonymWitnesses) =>
-    new MockOwned<SecretState>(witnesses),
-  defaultPrivateState: (): SecretState => ({ secretKey: ALICE }),
-  contractArgs: (initialOwner: Account, isInit: boolean) => [
-    initialOwner,
-    isInit,
-  ],
-  ledgerExtractor: (state) => ownedLedger(state),
-  witnessesFactory: () => pseudonymWitnesses(),
-  flatCircuits: true,
-});
-
-const OwnedCallerSimulator = createSimulator({
-  contractFactory: (witnesses: NoState) =>
-    new MockOwnedCaller<NoState>(witnesses),
-  defaultPrivateState: (): NoState => ({}),
-  contractArgs: (initialOwner: Account) => [initialOwner],
-  ledgerExtractor: (state) => ownedCallerLedger(state),
-  witnessesFactory: (): NoState => ({}),
-  flatCircuits: true,
-});
-
-const ClaimedSimulator = createSimulator({
-  contractFactory: (witnesses: PseudonymWitnesses) =>
-    new MockClaimed<SecretState>(witnesses),
-  defaultPrivateState: (): SecretState => ({ secretKey: ALICE }),
-  contractArgs: () => [],
-  ledgerExtractor: (state) => claimedLedger(state),
-  witnessesFactory: () => pseudonymWitnesses(),
-  flatCircuits: true,
-});
-
-const ClaimedFlagSimulator = createSimulator({
-  contractFactory: (witnesses: PseudonymWitnesses) =>
-    new MockClaimedFlag<SecretState>(witnesses),
-  defaultPrivateState: (): SecretState => ({ secretKey: ALICE }),
-  contractArgs: (isInit: boolean) => [isInit],
-  ledgerExtractor: (state) => claimedFlagLedger(state),
-  witnessesFactory: () => pseudonymWitnesses(),
-  flatCircuits: true,
-});
-
-const PseudonymSimulator = createSimulator({
-  contractFactory: (witnesses: PseudonymWitnesses) =>
-    new MockPseudonym<SecretState>(witnesses),
-  defaultPrivateState: (): SecretState => ({ secretKey: ALICE }),
-  contractArgs: () => [],
-  ledgerExtractor: (state) => pseudonymLedger(state),
-  witnessesFactory: () => pseudonymWitnesses(),
-  flatCircuits: true,
-});
-
-const HashSimulator = createSimulator({
-  contractFactory: (witnesses: NoState) => new MockHash<NoState>(witnesses),
-  defaultPrivateState: (): NoState => ({}),
-  contractArgs: (seed: bigint) => [seed],
-  ledgerExtractor: (state) => hashLedger(state),
-  witnessesFactory: (): NoState => ({}),
-  flatCircuits: true,
-});
-
-const BagSimulator = createSimulator({
-  contractFactory: (witnesses: NoState) => new MockBag<NoState>(witnesses),
-  defaultPrivateState: (): NoState => ({}),
-  contractArgs: (seed: bigint[]) => [seed],
-  ledgerExtractor: (state) => bagLedger(state),
-  witnessesFactory: (): NoState => ({}),
-  flatCircuits: true,
-});
-
-const BagNoInitSimulator = createSimulator({
-  contractFactory: (witnesses: NoState) =>
-    new MockBagNoInit<NoState>(witnesses),
-  defaultPrivateState: (): NoState => ({}),
-  contractArgs: () => [],
-  ledgerExtractor: (state) => bagNoInitLedger(state),
-  witnessesFactory: (): NoState => ({}),
-  flatCircuits: true,
-});
 
 const circuitNames = (contract: { circuits: object }): string[] =>
   Object.keys(contract.circuits).sort();
 
-describe('the committed fixture mocks', () => {
-  it.skipIf(skip !== undefined)(
-    `match what compact-mock generates from the fixture config${skipReason}`,
-    () => {
-      const run = spawnSync(
-        binary,
-        ['generate', '--check', '--config', CONFIG],
-        { encoding: 'utf8' },
-      );
+const artifactDir = (dir: string, mock: string) =>
+  join(FIXTURES, 'src', dir, 'test', 'artifacts', mock);
 
-      expect(run.stdout).toBe('');
-      expect(run.stderr).toContain('8 mocks up to date');
-      expect(run.status).toBe(0);
-    },
-  );
-
-  it.skipIf(skip !== undefined)(
-    `match through the compact-mock bin${skipReason}`,
-    () => {
-      const run = spawnSync(
-        process.execPath,
-        [BIN, 'generate', '--check', '--config', CONFIG],
-        {
-          encoding: 'utf8',
-          env: { ...process.env, COMPACT_MOCK_BINARY: binary },
-        },
-      );
-
-      expect(run.stdout).toBe('');
-      expect(run.status).toBe(0);
-    },
-  );
-
+describe.skipIf(skipped)(title('the fixture mocks'), () => {
   it('expose exactly the configured circuits', () => {
-    const witnesses = pseudonymWitnesses();
+    const pseudonymWitnesses = fx.pseudonymWitnesses();
+    const keyedWitnesses = fx.keyedWitnesses();
+    const shieldedWitnesses = fx.shieldedWitnesses();
+    const owned = ['assertOnlyOwner', 'owner', 'setPair', 'transferOwnership'];
 
-    expect(circuitNames(new MockOwned(witnesses))).toEqual([
-      'assertOnlyOwner',
-      'owner',
-      'setPair',
-      'transferOwnership',
+    expect(circuitNames(new fx.MockOwned(pseudonymWitnesses))).toEqual(owned);
+    expect(circuitNames(new fx.MockOwnedKeyed(keyedWitnesses))).toEqual(owned);
+    expect(circuitNames(new fx.MockOwnedCaller({}))).toEqual(owned);
+    expect(circuitNames(new fx.MockClaimed(pseudonymWitnesses))).toEqual([]);
+    expect(circuitNames(new fx.MockClaimedFlag(pseudonymWitnesses))).toEqual(
+      [],
+    );
+    expect(circuitNames(new fx.MockShielded(shieldedWitnesses))).toEqual([
+      'commitment',
+      'isMember',
+      'join',
     ]);
-    expect(circuitNames(new MockClaimed(witnesses))).toEqual([]);
-    expect(circuitNames(new MockClaimedFlag(witnesses))).toEqual([]);
-    expect(circuitNames(new MockOwnedCaller({}))).toEqual([
-      'assertOnlyOwner',
-      'owner',
-      'setPair',
-      'transferOwnership',
+    expect(circuitNames(new fx.MockShieldedCaller({}))).toEqual([
+      'commitment',
+      'isMember',
+      'join',
     ]);
-    expect(circuitNames(new MockPseudonym(witnesses))).toEqual([
+    expect(circuitNames(new fx.MockPseudonym(pseudonymWitnesses))).toEqual([
       'authenticate',
       'derive',
     ]);
-    expect(circuitNames(new MockHash({}))).toEqual([
+    expect(circuitNames(new fx.MockClicker({}))).toEqual([
+      'bump',
+      'reset',
+      'total',
+    ]);
+    expect(circuitNames(new fx.MockHash({}))).toEqual([
       'digest',
       'mix',
       'seeded',
       'square',
       'twice',
     ]);
-    expect(circuitNames(new MockBag({}))).toEqual(['capacity', 'first', 'put']);
-    expect(circuitNames(new MockBagNoInit({}))).toEqual([
+    expect(circuitNames(new fx.MockBag({}))).toEqual([
+      'capacity',
+      'first',
+      'put',
+    ]);
+    expect(circuitNames(new fx.MockBagNoInit({}))).toEqual([
       'capacity',
       'first',
       'initialize',
       'put',
     ]);
+    expect(circuitNames(new fx.MockBagPair({}))).toEqual([
+      'B2_capacity',
+      'B3_capacity',
+      'capacity2',
+      'capacity3',
+      'put2',
+      'put3',
+    ]);
+    expect(circuitNames(new fx.MockScale({}))).toEqual([
+      'mix',
+      'mixPair',
+      'scale',
+      'scale2',
+    ]);
+  });
+
+  it('are written beside their compiled output under each test/artifacts directory', () => {
+    expect(
+      readdirSync(join(FIXTURES, 'src', 'access', 'test', 'artifacts')).sort(),
+    ).toEqual([
+      '.compact-mock-stamp',
+      'MockClaimed',
+      'MockClaimed.compact',
+      'MockClaimedFlag',
+      'MockClaimedFlag.compact',
+      'MockOwned',
+      'MockOwned.compact',
+      'MockOwnedCaller',
+      'MockOwnedCaller.compact',
+      'MockOwnedKeyed',
+      'MockOwnedKeyed.compact',
+      'MockShielded',
+      'MockShielded.compact',
+      'MockShieldedCaller',
+      'MockShieldedCaller.compact',
+    ]);
+    expect(existsSync(join(FIXTURES, 'src', 'identity', 'test'))).toBe(false);
+    expect(existsSync(join(FIXTURES, 'src', 'presets', 'test'))).toBe(false);
+    expect(existsSync(join(FIXTURES, 'src', 'rand', 'test'))).toBe(false);
   });
 });
 
-describe('MockOwned', () => {
+describe.skipIf(skipped)(title('MockOwned'), () => {
   const create = (owner: Account, isInit: boolean, secretKey = ALICE) =>
-    OwnedSimulator.create([owner, isInit], { privateState: { secretKey } });
+    fx.OwnedSimulator.create([owner, isInit], { privateState: { secretKey } });
 
   it('passes an authenticated call for the secret behind the owner', async () => {
     const sim = await create(pseudonym(ALICE, 'MockOwned'), true);
@@ -304,7 +203,7 @@ describe('MockOwned', () => {
     expect((await sim.getPublicState()).Owned__initialized).toBe(false);
   });
 
-  it('exports the module ledger fields', async () => {
+  it('exports the module ledger fields under the module prefix', async () => {
     const sim = await create(pseudonym(ALICE, 'MockOwned'), true);
 
     expect(Object.keys(await sim.getPublicState()).sort()).toEqual([
@@ -316,12 +215,53 @@ describe('MockOwned', () => {
   });
 });
 
-describe('MockOwnedCaller', () => {
+describe.skipIf(skipped)(title('MockOwnedKeyed'), () => {
+  const create = (owner: Account, secretKey = ALICE) =>
+    fx.OwnedKeyedSimulator.create([owner], { privateState: { secretKey } });
+
+  it('passes a call authenticated by the authenticator that takes no salt', async () => {
+    const sim = await create(keyed(ALICE));
+
+    await expect(sim.assertOnlyOwner()).resolves.toEqual([]);
+  });
+
+  it('fails a call for another secret', async () => {
+    const sim = await create(keyed(ALICE), BOB);
+
+    await expect(sim.assertOnlyOwner()).rejects.toThrow(
+      'Owned: caller is not the owner',
+    );
+  });
+
+  it('ignores the mock-name salt', async () => {
+    const sim = await create(pseudonym(ALICE, 'MockOwnedKeyed'));
+
+    await expect(sim.assertOnlyOwner()).rejects.toThrow(
+      'Owned: caller is not the owner',
+    );
+  });
+
+  it('initializes in a plain constructor and needs only its own witness', async () => {
+    const sim = await create(keyed(ALICE));
+
+    expect(await sim.owner()).toEqual(keyed(ALICE));
+    expect(() => new fx.MockOwnedKeyed(fx.keyedWitnesses())).not.toThrow();
+    expect(
+      () =>
+        new fx.MockOwnedKeyed(
+          fx.pseudonymWitnesses() as unknown as ReturnType<
+            typeof fx.keyedWitnesses
+          >,
+        ),
+    ).toThrow('wit_KeyedSK');
+  });
+});
+
+describe.skipIf(skipped)(title('MockOwnedCaller'), () => {
   const owner = keyAccount(pad32('owner'));
-  const caller = (account: Account): Caller => ({ account });
 
   it('takes the caller as an argument', async () => {
-    const sim = await OwnedCallerSimulator.create([owner]);
+    const sim = await fx.OwnedCallerSimulator.create([owner]);
 
     await expect(sim.assertOnlyOwner(caller(owner))).resolves.toEqual([]);
     await expect(
@@ -330,31 +270,34 @@ describe('MockOwnedCaller', () => {
   });
 
   it('initializes in a plain constructor', async () => {
-    const sim = await OwnedCallerSimulator.create([owner]);
+    const sim = await fx.OwnedCallerSimulator.create([owner]);
 
     expect(await sim.owner()).toEqual(owner);
   });
 
   it('needs no authenticator witness', () => {
-    expect(() => new MockOwnedCaller({})).not.toThrow();
-    expect(() => new MockOwned({} as PseudonymWitnesses)).toThrow(
-      'wit_PseudonymSK',
-    );
+    expect(() => new fx.MockOwnedCaller({})).not.toThrow();
+    expect(
+      () =>
+        new fx.MockOwned(
+          {} as unknown as ReturnType<typeof fx.pseudonymWitnesses>,
+        ),
+    ).toThrow('wit_PseudonymSK');
   });
 
-  it('exports no ledger field with ledger = false', async () => {
-    const sim = await OwnedCallerSimulator.create([owner]);
+  it('exports no ledger field with caller.ledger = false', async () => {
+    const sim = await fx.OwnedCallerSimulator.create([owner]);
 
     expect(await sim.getPublicState()).toStrictEqual({});
   });
 });
 
-describe('MockClaimed', () => {
+describe.skipIf(skipped)(title('MockClaimed'), () => {
   it('stores the caller the constructor authenticates', async () => {
-    const alice = await ClaimedSimulator.create([], {
+    const alice = await fx.ClaimedSimulator.create([], {
       privateState: { secretKey: ALICE },
     });
-    const bob = await ClaimedSimulator.create([], {
+    const bob = await fx.ClaimedSimulator.create([], {
       privateState: { secretKey: BOB },
     });
 
@@ -364,15 +307,12 @@ describe('MockClaimed', () => {
     expect((await bob.getPublicState()).Claimed__claimant).toEqual(
       pseudonym(BOB, 'MockClaimed'),
     );
-    expect(pseudonym(BOB, 'MockClaimed')).not.toEqual(
-      pseudonym(ALICE, 'MockClaimed'),
-    );
   });
 });
 
-describe('MockClaimedFlag', () => {
+describe.skipIf(skipped)(title('MockClaimedFlag'), () => {
   const create = (isInit: boolean) =>
-    ClaimedFlagSimulator.create([isInit], {
+    fx.ClaimedFlagSimulator.create([isInit], {
       privateState: { secretKey: ALICE },
     });
 
@@ -395,9 +335,102 @@ describe('MockClaimedFlag', () => {
   });
 });
 
-describe('MockPseudonym', () => {
+describe.skipIf(skipped)(title('MockShielded'), () => {
+  const SALT = pad32('shielded instance salt');
+  const BLINDING = pad32('blinding one');
+  const OTHER_BLINDING = pad32('blinding two');
+
+  const create = (secretKey = ALICE, blinding = BLINDING) =>
+    fx.ShieldedSimulator.create([SALT], {
+      privateState: { secretKey, blinding },
+    });
+
+  it('authenticates under the salt its ledger field holds', async () => {
+    const sim = await create();
+
+    await sim.join();
+
+    const members = (await sim.getPublicState()).Shielded__members;
+    expect(
+      members.member(await sim.commitment(pseudonym(ALICE, SALT), BLINDING)),
+    ).toBe(true);
+    expect(
+      members.member(
+        await sim.commitment(pseudonym(ALICE, 'MockShielded'), BLINDING),
+      ),
+    ).toBe(false);
+  });
+
+  it('injects the blinding from the injector witness', async () => {
+    const sim = await create();
+
+    await sim.join();
+
+    expect(await sim.isMember()).toBe(true);
+    await sim.setPrivateState({ secretKey: ALICE, blinding: OTHER_BLINDING });
+    expect(await sim.isMember()).toBe(false);
+  });
+
+  it('fails membership for another secret', async () => {
+    const sim = await create();
+
+    await sim.join();
+    await sim.setPrivateState({ secretKey: BOB, blinding: BLINDING });
+
+    expect(await sim.isMember()).toBe(false);
+  });
+
+  it('keeps the blinding parameter of a circuit without a caller', async () => {
+    const sim = await create();
+    const account = keyAccount(pad32('anyone'));
+
+    expect(await sim.commitment(account, BLINDING)).not.toEqual(
+      await sim.commitment(account, OTHER_BLINDING),
+    );
+  });
+
+  it('exports only the listed ledger field', async () => {
+    const sim = await create();
+
+    expect(Object.keys(await sim.getPublicState())).toEqual([
+      'Shielded__members',
+    ]);
+  });
+});
+
+describe.skipIf(skipped)(title('MockShieldedCaller'), () => {
+  const SALT = pad32('shielded instance salt');
+  const account = keyAccount(pad32('member'));
+
+  it('takes the caller and the blinding as arguments', async () => {
+    const sim = await fx.ShieldedCallerSimulator.create([SALT]);
+
+    await sim.join(caller(account), pad32('blinding one'));
+
+    expect(await sim.isMember(caller(account), pad32('blinding one'))).toBe(
+      true,
+    );
+    expect(await sim.isMember(caller(account), pad32('blinding two'))).toBe(
+      false,
+    );
+  });
+
+  it('needs no authenticator or injector witness', () => {
+    expect(() => new fx.MockShieldedCaller({})).not.toThrow();
+    expect(
+      () =>
+        new fx.MockShielded(
+          {} as unknown as ReturnType<typeof fx.shieldedWitnesses>,
+        ),
+    ).toThrow(/wit_PseudonymSK|wit_RandBlinding/);
+  });
+});
+
+describe.skipIf(skipped)(title('MockPseudonym'), () => {
   it('returns the disclosed caller from authenticate', async () => {
-    const sim = await PseudonymSimulator.create();
+    const sim = await fx.PseudonymSimulator.create([], {
+      privateState: { secretKey: ALICE },
+    });
 
     expect(await sim.authenticate(pad32('salt'))).toEqual({
       account: pseudonym(ALICE, 'salt'),
@@ -405,7 +438,7 @@ describe('MockPseudonym', () => {
   });
 
   it('derives the account the spec computes', async () => {
-    const sim = await PseudonymSimulator.create();
+    const sim = await fx.PseudonymSimulator.create();
 
     expect(await sim.derive(BOB, pad32('MockOwned'))).toEqual(
       pseudonym(BOB, 'MockOwned'),
@@ -413,61 +446,81 @@ describe('MockPseudonym', () => {
   });
 });
 
-describe('MockHash', () => {
+describe.skipIf(skipped)(title('MockClicker'), () => {
+  it('implements the interface through re-exports and the fragment', async () => {
+    const sim = await fx.ClickerSimulator.create();
+
+    await sim.bump(5n);
+    await sim.bump(7n);
+    expect(await sim.total()).toBe(12n);
+
+    await sim.reset();
+    expect(await sim.total()).toBe(0n);
+  });
+
+  it('exports the ledger field under its plain name', async () => {
+    const sim = await fx.ClickerSimulator.create();
+
+    await sim.bump(3n);
+
+    expect(await sim.getPublicState()).toStrictEqual({ _count: 3n });
+  });
+});
+
+describe.skipIf(skipped)(title('MockHash'), () => {
   it('runs a renamed circuit under its new name', async () => {
-    const sim = await HashSimulator.create([0n]);
+    const sim = await fx.HashSimulator.create([0n]);
 
     expect(await sim.twice(21n)).toBe(42n);
   });
 
   it('runs a guarded circuit', async () => {
-    const sim = await HashSimulator.create([0n]);
+    const sim = await fx.HashSimulator.create([0n]);
 
     expect(await sim.square(5n)).toBe(25n);
   });
 
   it('runs a disclosed circuit under its name', async () => {
-    const sim = await HashSimulator.create([0n]);
+    const sim = await fx.HashSimulator.create([0n]);
 
     expect(await sim.mix(1n, 2n)).toBe(5n);
   });
 
   it('runs a re-exported pure circuit', async () => {
-    const sim = await HashSimulator.create([0n]);
+    const sim = await fx.HashSimulator.create([0n]);
 
     expect(await sim.digest(1n)).toEqual(persistentHash(CompactTypeField, 1n));
   });
 
   it('proves a guarded pure circuit and no re-exported, renamed or disclosed pure one', () => {
-    expect(readdirSync(join(ARTIFACTS, 'MockHash', 'zkir')).sort()).toEqual([
-      'seeded.zkir',
-      'square.zkir',
-    ]);
+    expect(
+      readdirSync(join(artifactDir('crypto', 'MockHash'), 'zkir')).sort(),
+    ).toEqual(['seeded.zkir', 'square.zkir']);
   });
 
   it('runs the constructor and circuit of its fragment', async () => {
-    const sim = await HashSimulator.create([10n]);
+    const sim = await fx.HashSimulator.create([10n]);
 
     expect(await sim.seeded(2n)).toBe(32n);
     expect(await sim.getPublicState()).toStrictEqual({ _seed: 10n });
   });
 });
 
-describe('MockBag', () => {
+describe.skipIf(skipped)(title('MockBag'), () => {
   it('passes the module argument to the module', async () => {
-    const sim = await BagSimulator.create([[0n, 0n]]);
+    const sim = await fx.BagSimulator.create([[0n, 0n]]);
 
     expect(await sim.capacity()).toBe(4n);
   });
 
   it('passes the circuit arguments to initialize in the constructor', async () => {
-    const sim = await BagSimulator.create([[3n, 4n]]);
+    const sim = await fx.BagSimulator.create([[3n, 4n]]);
 
     expect((await sim.getPublicState()).Bag__total).toBe(7n);
   });
 
   it('passes the circuit arguments to the wrappers', async () => {
-    const sim = await BagSimulator.create([[0n, 0n]]);
+    const sim = await fx.BagSimulator.create([[0n, 0n]]);
 
     await sim.put(5n);
 
@@ -478,7 +531,7 @@ describe('MockBag', () => {
   });
 
   it('rejects a put past the module argument', async () => {
-    const sim = await BagSimulator.create([[0n, 0n]]);
+    const sim = await fx.BagSimulator.create([[0n, 0n]]);
 
     for (let i = 0n; i < 4n; i++) {
       await sim.put(i);
@@ -488,14 +541,68 @@ describe('MockBag', () => {
   });
 });
 
-describe('MockBagNoInit', () => {
+describe.skipIf(skipped)(title('MockBagNoInit'), () => {
   it('keeps initialize as a circuit with init = "none"', async () => {
-    const sim = await BagNoInitSimulator.create();
+    const sim = await fx.BagNoInitSimulator.create();
     const before = (await sim.getPublicState()).Bag__total;
 
     await sim.initialize([3n, 4n]);
 
     expect(before).toBe(0n);
     expect((await sim.getPublicState()).Bag__total).toBe(7n);
+  });
+});
+
+describe.skipIf(skipped)(title('MockBagPair'), () => {
+  it('passes each instance its own module argument', async () => {
+    const sim = await fx.BagPairSimulator.create([[0n, 0n]]);
+
+    expect(await sim.capacity2()).toBe(2n);
+    expect(await sim.capacity3()).toBe(3n);
+  });
+
+  it('exports each instance pure circuit under its prefix', async () => {
+    const sim = await fx.BagPairSimulator.create([[0n, 0n]]);
+
+    expect(await sim.B2_capacity()).toBe(2n);
+    expect(await sim.B3_capacity()).toBe(3n);
+  });
+
+  it('initializes every instance from one shared constructor parameter', async () => {
+    const sim = await fx.BagPairSimulator.create([[3n, 4n]]);
+
+    const state = await sim.getPublicState();
+    expect(state.B2__total).toBe(7n);
+    expect(state.B3__total).toBe(7n);
+  });
+
+  it('keeps the state of the two instances apart', async () => {
+    const sim = await fx.BagPairSimulator.create([[0n, 0n]]);
+
+    await sim.put2(1n);
+    await sim.put2(2n);
+    await expect(sim.put2(3n)).rejects.toThrow('Bag: full');
+    await sim.put3(4n);
+
+    const state = await sim.getPublicState();
+    expect(state.B2__count).toBe(2n);
+    expect(state.B3__count).toBe(1n);
+    expect(state.B3__last).toEqual(persistentHash(CompactTypeField, 4n));
+  });
+});
+
+describe.skipIf(skipped)(title('MockScale'), () => {
+  it('keeps the name of the first overload and numbers the next one', async () => {
+    const sim = await fx.ScaleSimulator.create();
+
+    expect(await sim.scale(21n)).toBe(42n);
+    expect(await sim.scale2(6n, 7n)).toBe(42n);
+  });
+
+  it('renames one overload by its signature', async () => {
+    const sim = await fx.ScaleSimulator.create();
+
+    expect(await sim.mix(1n)).toBe(2n);
+    expect(await sim.mixPair(1n, 2n)).toBe(4n);
   });
 });

@@ -1,0 +1,15 @@
+// Fixture module for the compact-mock end-to-end tests: the injected Blinding.
+
+pragma language_version >= 0.28.0;
+
+module Rand {
+  import CompactStandardLibrary;
+
+  export new type Blinding = Bytes<32>;
+
+  witness wit_RandBlinding(): Bytes<32>;
+
+  export circuit read(): Blinding {
+    return wit_RandBlinding() as Blinding;
+  }
+}

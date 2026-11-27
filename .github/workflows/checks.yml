@@ -32,11 +32,9 @@ jobs:
       - name: Format & Lint
         run: yarn lint:ci
 
-      - name: Run type checks
-        run: yarn types
-
-      # The profiler's and the mocker's end-to-end tests fail under CI without
-      # these binaries.
+      # The mocker's fixture mocks are generated, not committed, so `yarn types`
+      # needs compact-mock. The profiler's and the mocker's end-to-end tests
+      # fail under CI without these binaries.
       - name: Install the pinned toolchain
         run: |
           rustup toolchain install 1.96 --profile minimal --component rustfmt --component clippy
@@ -44,6 +42,11 @@ jobs:
 
       - name: Build the Rust binaries
         run: cargo build -p compact-profile -p compact-mock
+
+      - name: Run type checks
+        run: yarn types
+        env:
+          COMPACT_MOCK_BINARY: ${{ github.workspace }}/target/debug/compact-mock
 
       - name: Run tests
         run: yarn test
