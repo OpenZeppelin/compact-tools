@@ -14,6 +14,11 @@ allowing you to simulate contract behavior locally without blockchain deployment
 > **Upgrading from 0.3.x?** Construction and every circuit call are now
 > asynchronous. See the [changelog](https://github.com/OpenZeppelin/compact-tools/blob/main/packages/simulator/CHANGELOG.md).
 
+> **Upgrading from 0.6.x?** `as()` applies to exactly one call on both
+> backends. On dry it used to stay in effect after the call, so a spec that
+> relied on that can fail. Call `as()` before each call that needs the caller,
+> or use `setPersistentCaller()`.
+
 ## Quick Start
 
 For a compiled contract module, [`defineSimulator`](#5-defining-a-simulator-from-the-artifact)

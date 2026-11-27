@@ -27,7 +27,7 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 ### Fixed
 
 - `as()`, `setPersistentCaller()` and `resetCaller()` return the instance type in the published declarations, so a call chained after them is type-checked. `SimulatorClass` and `SimulatorInstance` are declared interfaces (#248)
-- `as()` applies to one call only. A failed call spends it too, on both backends, and on dry a successful call no longer leaves the `as()` caller in the stored circuit context. The next call runs as the persistent or default caller (#248)
+- `as()` applies to one call only. A failed call spends it too, on both backends, and on dry a successful call no longer leaves the `as()` caller in the stored circuit context. The next call runs as the persistent or default caller. Before, on dry, the `as()` caller stayed in effect after the call, so a spec that relied on that can now fail. Call `as()` before each call that needs the caller, or use `setPersistentCaller()` (#248)
 
 ## 0.6.0 (2026-11-16)
 
