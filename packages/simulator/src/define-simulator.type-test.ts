@@ -251,6 +251,54 @@ defineSimulator(artifact, {
   privateState: [moduleState, authState],
 });
 
+// Only a required key counts as a supplied witness.
+declare const optionalAuth: <L>() => {
+  wit_secret?: (
+    context: WitnessContext<L, AuthState>,
+  ) => [AuthState, Uint8Array];
+};
+declare const indexedAuth: () => Record<string, never>;
+
+defineSimulator(artifact, {
+  // @ts-expect-error `wit_secret` is optional in the authenticator part.
+  witnesses: [moduleWitnesses, optionalAuth],
+  privateState: [moduleState, authState],
+});
+
+defineSimulator(artifact, {
+  // @ts-expect-error an index signature names no witness.
+  witnesses: [moduleWitnesses, indexedAuth],
+  privateState: [moduleState, authState],
+});
+
+// A private-state list must be a tuple too.
+const someStates: (typeof moduleState | typeof authState)[] = withAuth
+  ? [moduleState, authState]
+  : [moduleState];
+// @ts-expect-error a non-tuple private-state list may lack `authState` at run time.
+defineSimulator(artifact, {
+  witnesses: [moduleWitnesses, authWitnesses],
+  privateState: someStates,
+});
+
+defineSimulator(artifact, {
+  // @ts-expect-error the shorter private-state list lacks the authenticator's key.
+  witnesses: [moduleWitnesses, authWitnesses],
+  privateState: withAuth ? [moduleState, authState] : [moduleState],
+});
+
+// The compose helpers reject a spread non-tuple list and merge per position.
+// @ts-expect-error a spread non-tuple list.
+composeWitnesses(...someParts);
+// @ts-expect-error a spread non-tuple list.
+composePrivateState(...someStates);
+
+defineSimulator(artifact, {
+  // @ts-expect-error a position typed `A | B` surely supplies neither part.
+  witnesses: composeWitnesses(...onePart),
+  privateState: [moduleState, authState],
+});
+
 // @ts-expect-error a contract with witnesses needs `witnesses`.
 defineSimulator(artifact, { privateState: bundledState });
 

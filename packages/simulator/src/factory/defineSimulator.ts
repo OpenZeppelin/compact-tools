@@ -7,6 +7,7 @@ import {
   type PartFactory,
   type Parts,
   partsFactory,
+  type TupleOnly,
 } from './composeParts.js';
 import {
   type BackendDeps,
@@ -73,11 +74,23 @@ type ArtifactWitnessPart<A extends ContractArtifact, P> = {
 };
 
 /**
+ * The keys `R` surely has: its required keys. An index signature, or `any`,
+ * names none.
+ */
+type RequiredKeys<R> = string extends keyof R
+  ? never
+  : {
+      [K in keyof R]-?: Partial<Pick<R, K>> extends Pick<R, K> ? never : K;
+    }[keyof R];
+
+/**
  * The witness names a list of factories surely supplies: at each position, the
- * names every factory that position can hold returns.
+ * required names every factory that position can hold returns.
  */
 type ListedWitnessNames<L extends readonly PartFactory[]> = {
-  [K in keyof L]: [L[K]] extends [PartFactory<infer R>] ? keyof R : never;
+  [K in keyof L]: [L[K]] extends [PartFactory<infer R>]
+    ? RequiredKeys<R>
+    : never;
 }[number];
 
 /**
@@ -94,9 +107,8 @@ type MissingListedWitnesses<
     : never;
 
 /** The private state a definition's `privateState` yields. */
-export type DefinedPrivateState<PS> = PS extends readonly (infer F extends
-  PartFactory)[]
-  ? Composed<F>
+export type DefinedPrivateState<PS> = PS extends readonly PartFactory[]
+  ? Composed<PS>
   : PS extends PartFactory
     ? ReturnType<PS>
     : Record<string, never>;
@@ -151,7 +163,13 @@ type DefinitionCheck<A extends ContractArtifact, WS, PS> = NoInfer<
   (WitnessesFit<A, WS, DefinedPrivateState<PS>> extends true
     ? unknown
     : { witnesses: WitnessesFor<A, WS, DefinedPrivateState<PS>> }) &
-    ([PS] extends [Parts | undefined] ? unknown : { privateState: Parts })
+    ([PS] extends [Parts | undefined]
+      ? PS extends readonly unknown[]
+        ? number extends PS['length']
+          ? { privateState: TupleOnly<PS> }
+          : unknown
+        : unknown
+      : { privateState: Parts })
 >;
 
 /**
@@ -484,7 +502,7 @@ function defineMembers(
 export function defineSimulator<
   A extends ContractArtifact,
   const WS = undefined,
-  PS = undefined,
+  const PS = undefined,
   X = unknown,
   I extends readonly unknown[] = never,
   F = unknown,
@@ -501,7 +519,7 @@ export function defineSimulator<
 export function defineSimulator<
   A extends ContractArtifact,
   const WS = undefined,
-  PS = undefined,
+  const PS = undefined,
   X = unknown,
   I extends readonly unknown[] = never,
   F = unknown,
@@ -518,7 +536,7 @@ export function defineSimulator<
 export function defineSimulator<
   A extends ContractArtifact,
   const WS = undefined,
-  PS = undefined,
+  const PS = undefined,
   X = unknown,
 >(
   artifact: A,

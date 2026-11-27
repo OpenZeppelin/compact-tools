@@ -366,10 +366,11 @@ class TokenSimulator extends defineSimulator(MockToken, {
 // getPrivateState(): Promise<TokenPrivateState & AuthPrfPseudonymPrivateState>
 ```
 
-- Write the `witnesses` list as an array literal or a tuple. The type check
-  counts a witness as supplied only when a factory at a fixed position returns
-  it. A list typed `(A | B)[]` fails to compile, because it can lack a part at
-  run time.
+- Write each list of parts as an array literal or a tuple: `witnesses`,
+  `privateState`, and the arguments of `composeWitnesses` and
+  `composePrivateState`. A list typed `(A | B)[]` fails to compile, because it
+  can lack a part at run time. The type check counts a witness as supplied
+  only when the factory at a fixed position returns it as a required key.
 - Each witness receives the whole merged private state. A part's witness may
   return only its own part, typed on its own state
   (`[{ ...privateState, nonce }, value]`). The merged witness writes that part

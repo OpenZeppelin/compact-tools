@@ -7,18 +7,6 @@ export type PartFactory<T extends object = object> = () => T;
 export type Parts<F extends PartFactory = PartFactory> = F | readonly F[];
 
 /**
- * The merged result of a union of part factories: the intersection of their
- * results. A factory that returns a union keeps it.
- */
-export type Composed<F extends PartFactory> = (
-  F extends unknown
-    ? (result: ReturnType<F>) => void
-    : never
-) extends (result: infer I) => void
-  ? I
-  : never;
-
-/**
  * A part's witness as the merged set runs it: it reads its own part of the
  * private state `Q` and returns the whole of `Q`.
  */
@@ -31,18 +19,45 @@ export type ComposedWitness<M> = M extends (
     : M
   : M;
 
-/** The merged witness set of a union of witness part factories. */
-export type ComposedWitnesses<F extends PartFactory> = (
-  F extends unknown
-    ? (
-        result: {
-          [K in keyof ReturnType<F>]: ComposedWitness<ReturnType<F>[K]>;
-        },
-      ) => void
-    : never
-) extends (result: infer I) => void
+/**
+ * The intersection of a tuple's element types. An element that is a union
+ * stays a union.
+ */
+type IntersectPositions<T extends readonly unknown[]> = {
+  [K in keyof T]: (value: T[K]) => void;
+}[number] extends (value: infer I) => void
   ? I
   : never;
+
+/** A part's witness set, each witness as the merged set runs it. */
+type ComposedWitnessSet<R> = R extends unknown
+  ? { [K in keyof R]: ComposedWitness<R[K]> }
+  : never;
+
+/**
+ * The merged result of a tuple of part factories: across positions, the
+ * intersection of what each position returns. A position typed `A | B`
+ * contributes `ReturnType<A> | ReturnType<B>`.
+ */
+export type Composed<L extends readonly PartFactory[]> = IntersectPositions<{
+  [K in keyof L]: L[K] extends PartFactory<infer R> ? R : never;
+}>;
+
+/** The merged witness set of a tuple of witness part factories. */
+export type ComposedWitnesses<L extends readonly PartFactory[]> =
+  IntersectPositions<{
+    [K in keyof L]: L[K] extends PartFactory<infer R>
+      ? ComposedWitnessSet<R>
+      : never;
+  }>;
+
+/**
+ * Rejects a list whose length is not fixed, e.g. a spread `(A | B)[]`: it can
+ * lack a part at run time.
+ */
+export type TupleOnly<L extends readonly unknown[]> = number extends L['length']
+  ? { readonly notATuple: 'list the parts in an array literal or a tuple' }
+  : unknown;
 
 /** A factory merged from parts, which it keeps in order. */
 export type ComposedFactory<
@@ -139,8 +154,8 @@ function composeParts(
  * merged witness writes the returned part over the whole state.
  */
 export function composeWitnesses<const F extends readonly PartFactory[]>(
-  ...parts: F
-): ComposedFactory<ComposedWitnesses<F[number]> & object, F> {
+  ...parts: F & TupleOnly<F>
+): ComposedFactory<ComposedWitnesses<F> & object, F> {
   return composeParts('witness', parts) as never;
 }
 
@@ -149,8 +164,8 @@ export function composeWitnesses<const F extends readonly PartFactory[]>(
  * the same key. Each part returns a plain object.
  */
 export function composePrivateState<const F extends readonly PartFactory[]>(
-  ...parts: F
-): ComposedFactory<Composed<F[number]> & object, F> {
+  ...parts: F & TupleOnly<F>
+): ComposedFactory<Composed<F> & object, F> {
   return composeParts('private state key', parts) as never;
 }
 
