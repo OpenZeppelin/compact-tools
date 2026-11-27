@@ -258,10 +258,21 @@ declare const optionalAuth: <L>() => {
   ) => [AuthState, Uint8Array];
 };
 declare const indexedAuth: () => Record<string, never>;
+declare const undefinedAuth: <L>() => {
+  wit_secret:
+    | ((context: WitnessContext<L, AuthState>) => [AuthState, Uint8Array])
+    | undefined;
+};
 
 defineSimulator(artifact, {
   // @ts-expect-error `wit_secret` is optional in the authenticator part.
   witnesses: [moduleWitnesses, optionalAuth],
+  privateState: [moduleState, authState],
+});
+
+defineSimulator(artifact, {
+  // @ts-expect-error `wit_secret` can be `undefined` in the authenticator part.
+  witnesses: [moduleWitnesses, undefinedAuth],
   privateState: [moduleState, authState],
 });
 

@@ -74,13 +74,17 @@ type ArtifactWitnessPart<A extends ContractArtifact, P> = {
 };
 
 /**
- * The keys `R` surely has: its required keys. An index signature, or `any`,
- * names none.
+ * The keys `R` surely has a value for: its required keys whose value type
+ * excludes `undefined`. An index signature, or `any`, names none.
  */
 type RequiredKeys<R> = string extends keyof R
   ? never
   : {
-      [K in keyof R]-?: Partial<Pick<R, K>> extends Pick<R, K> ? never : K;
+      [K in keyof R]-?: Partial<Pick<R, K>> extends Pick<R, K>
+        ? never
+        : undefined extends R[K]
+          ? never
+          : K;
     }[keyof R];
 
 /**
