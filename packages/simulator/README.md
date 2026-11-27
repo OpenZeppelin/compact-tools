@@ -370,6 +370,11 @@ class TokenSimulator extends defineSimulator(MockToken, {
   return only its own part, typed on its own state
   (`[{ ...privateState, nonce }, value]`). The merged witness writes that part
   over the whole state, so the other parts' keys stay.
+- A witness part that names its private-state factory owns the keys that
+  factory returns, and an owned key its witness omits is deleted:
+  `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
+  To own an optional key, return it from the factory set to `undefined`
+  (`{ secretKey, nonce: undefined }`). A key the factory does not return stays.
 - A part may return a class instance. Its prototype methods are kept and called
   on it. A private-state part returns a plain object.
 - A witness name or private-state key that two parts define throws when the
@@ -548,8 +553,9 @@ const owner = await simulator.signers.eitherFor('OWNER');
 `as()` applies to the next call: a circuit method, a `circuits` call, or a
 function `extend` adds in place of a circuit method. That call spends it even if
 it fails. The call after it runs as the persistent caller, or the default one.
-A function in place of a circuit method spends it when it returns, so a circuit
-it calls after an `await` runs as the persistent or default caller.
+A function in place of a circuit method takes it when it starts and runs its
+first circuit call as that caller, also after an `await`. A call that starts
+while it is pending runs as the persistent or default caller.
 Other `extend` members behave like subclass methods and do not spend the
 caller, so in `sim.as('OWNER').transfer(sim.helper())` the `transfer` circuit
 runs as `OWNER`. A helper that makes several circuit calls spends the caller on

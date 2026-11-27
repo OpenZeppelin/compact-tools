@@ -116,8 +116,12 @@ export class DryBackend<P, L> implements Backend<P, L> {
     }
   }
 
-  consumeSingleCaller(): void {
+  consumeSingleCaller(): () => void {
+    const key = this.sim.callerOverride;
     this.sim.callerOverride = null;
+    return () => {
+      if (key !== null) this.sim.callerOverride = key;
+    };
   }
 
   /** Delegates to the wrapped simulator, which recreates the contract (dry supports this). */

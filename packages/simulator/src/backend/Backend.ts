@@ -97,10 +97,12 @@ export interface Backend<P, L> {
   setCaller(alias: string | null, mode: 'single' | 'persistent'): void;
 
   /**
-   * Clears the `'single'` caller, as a call does. For calls that never reach
-   * the backend, e.g. a synchronous member `extend` adds.
+   * Clears the `'single'` caller, as a call does, and returns a function that
+   * sets it again. With no `'single'` caller, the function does nothing. For a
+   * function `extend` adds in place of a circuit method, which takes the
+   * caller when it starts and hands it to its first circuit call.
    */
-  consumeSingleCaller(): void;
+  consumeSingleCaller(): () => void;
 
   /**
    * Replaces a single witness implementation.

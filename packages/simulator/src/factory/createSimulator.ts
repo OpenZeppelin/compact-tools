@@ -14,6 +14,7 @@ import type {
 } from '../types/index.js';
 import type { SimulatorOptions } from '../types/Options.js';
 import { createDrySimulator } from './createDrySimulator.js';
+import { releaseHeldCaller, startCall } from './replacementCaller.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
 /**
@@ -95,7 +96,8 @@ function buildSimulatorClass<
   ): Record<string, (...args: unknown[]) => Promise<unknown>> => {
     const proxy: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     for (const name of names) {
-      proxy[name] = (...args: unknown[]) => backend.call(kind, name, args);
+      proxy[name] = (...args: unknown[]) =>
+        startCall(backend, () => backend.call(kind, name, args));
     }
     return proxy;
   };
@@ -322,6 +324,7 @@ function buildSimulatorClass<
      * @returns This instance, for chaining (`sim.as('OWNER').transfer(...)`).
      */
     as(alias: string | null): this {
+      releaseHeldCaller(this._backend);
       this._backend.setCaller(alias, 'single');
       return this;
     }

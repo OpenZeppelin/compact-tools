@@ -177,6 +177,60 @@ describe('a witness part that names its private-state factory', () => {
   });
 });
 
+describe('an optional key a witness part may own', () => {
+  /** Declares `pending` set to `undefined`, so the part owns it. */
+  const DeclaringSecretState = {
+    generate: (): SecretState => ({ secret: 7n, pending: undefined }),
+  };
+  /** Does not return `pending`, so no part owns it. */
+  const LeanSecretState = {
+    generate: (): SecretState => ({ secret: 7n }),
+  };
+  const owning = (generate: () => SecretState) =>
+    defineSimulator(DefineArtifact, {
+      witnesses: [
+        CountWitnesses,
+        Object.assign(<L>() => SlicingWitnesses<L>(), {
+          privateState: generate,
+        }),
+      ],
+      privateState: [CountPrivateState.generate, generate],
+    });
+
+  it('is deleted when the factory returns it set to undefined', async () => {
+    const sim = await owning(DeclaringSecretState.generate).create(
+      OWNER,
+      VALUES,
+      ORIGIN,
+    );
+    await sim.setPrivateState({ count: 3n, secret: 7n, pending: 1n });
+
+    await sim.storeSecret();
+
+    expect(await sim.getPrivateState()).toStrictEqual({
+      count: 3n,
+      secret: 7n,
+    });
+  });
+
+  it('stays when the factory does not return it', async () => {
+    const sim = await owning(LeanSecretState.generate).create(
+      OWNER,
+      VALUES,
+      ORIGIN,
+    );
+    await sim.setPrivateState({ count: 3n, secret: 7n, pending: 1n });
+
+    await sim.storeSecret();
+
+    expect(await sim.getPrivateState()).toStrictEqual({
+      count: 3n,
+      secret: 7n,
+      pending: 1n,
+    });
+  });
+});
+
 describe('a witness part that names no private-state factory', () => {
   it('keeps a key its returned part omits', async () => {
     const sim = await UnownedSlice.create(OWNER, VALUES, ORIGIN);

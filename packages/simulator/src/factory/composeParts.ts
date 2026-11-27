@@ -188,10 +188,11 @@ function composeParts(
  *
  * A part's witness reads and returns its own part of the private state. The
  * merged witness writes the returned part over the whole state, so other
- * parts' keys stay. A part that names its private-state factory owns that
- * factory's keys: its witnesses return that whole state, and an optional owned
- * key they omit is deleted:
+ * parts' keys stay. A part that names its private-state factory owns the
+ * keys that factory returns: its witnesses return that whole state, and an
+ * owned key they omit is deleted:
  * `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
+ * To own an optional key, the factory returns it set to `undefined`.
  */
 export function composeWitnesses<const F extends readonly PartFactory[]>(
   ...parts: F
