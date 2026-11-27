@@ -93,6 +93,8 @@ async function _flatCalls(): Promise<void> {
   await sim.burn();
   // @ts-expect-error wrong argument type.
   await sim.mint('1');
+  // @ts-expect-error wrong argument type after `as()`.
+  await sim.as('OWNER').mint('1');
 
   void [minted, balance, hash, chained];
 }

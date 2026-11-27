@@ -78,6 +78,7 @@ export class DryBackend<P, L> implements Backend<P, L> {
       kind === 'pure' ? this.sim.circuits.pure : this.sim.circuits.impure;
     const fn = proxy[name];
     if (typeof fn !== 'function') {
+      this.consumeSingleCaller();
       throw new Error(`unknown ${kind} circuit "${name}"`);
     }
     return fn(...args);

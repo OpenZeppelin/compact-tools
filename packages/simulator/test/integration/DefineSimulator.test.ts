@@ -490,6 +490,22 @@ describe('defineSimulator', () => {
         );
       },
     );
+
+    it('rejects a field named like an extend member', async () => {
+      const Clash = defineSimulator(DefineArtifact, {
+        witnesses: () => DefineWitnesses(),
+        privateState: DefinePrivateState.generate,
+        extend: () => ({ wallet: () => 'extended' }),
+        prepare: () => ({
+          args: [OWNER, VALUES, ORIGIN] as const,
+          fields: { wallet: 1 },
+        }),
+      });
+
+      await expect(Clash.create()).rejects.toThrow(
+        'defineSimulator: "wallet" is defined by both `extend` and prepare `fields`',
+      );
+    });
   });
 
   describe('caller', () => {
@@ -549,6 +565,27 @@ describe('defineSimulator', () => {
         sim.signers.resolveDryKey('ALICE'),
         defaultCaller,
       ]);
+    });
+
+    it('keeps an as() caller set while an async circuit replacement is pending', async () => {
+      const Replaced = defineSimulator(FlatArtifact, {
+        witnesses: FlatWitnesses,
+        privateState: FlatPrivateState.generate,
+        extend: () => ({
+          bump: async (): Promise<[]> => {
+            await Promise.resolve();
+            return [];
+          },
+        }),
+      });
+      const sim = await Replaced.create();
+
+      const pending = sim.bump();
+      sim.as('BOB');
+      await pending;
+      await sim.recordCaller();
+
+      expect(await recorded(sim)).toBe(sim.signers.resolveDryKey('BOB'));
     });
   });
 
@@ -624,5 +661,33 @@ describe('composeWitnesses and composePrivateState', () => {
         () => ({ wit_a: () => 2 }),
       ),
     ).toThrow('witness "wit_a" is defined by both part 0 and part 1');
+  });
+
+  it('merge a symbol private-state key and reject one two parts define', () => {
+    const tag = Symbol('tag');
+    const merged = composePrivateState(
+      () => ({ [tag]: 1n }),
+      CountPrivateState.generate,
+    )();
+
+    expect(merged[tag]).toBe(1n);
+    expect(() =>
+      composePrivateState(
+        () => ({ [tag]: 1n }),
+        () => ({ [tag]: 2n }),
+      ),
+    ).toThrow(
+      'private state key "Symbol(tag)" is defined by both part 0 and part 1',
+    );
+  });
+
+  it('keep an own __proto__ private-state key as data', () => {
+    const merged = composePrivateState(
+      (): object => JSON.parse('{"__proto__": {"admin": true}}'),
+      CountPrivateState.generate,
+    )();
+
+    expect(Object.hasOwn(merged, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
   });
 });
