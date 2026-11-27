@@ -19,6 +19,7 @@ pub mod fill;
 pub mod fix;
 pub mod format;
 pub mod measure;
+pub mod mock_coverage;
 pub mod model;
 pub mod report;
 pub mod rules;

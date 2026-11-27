@@ -1,0 +1,6 @@
+pragma language_version >= 0.28.0;
+
+module Broken {
+  export circuit initialize(n: Field): [] { }
+  export circuit initialize(n: Field, m: Field): [] { }
+}

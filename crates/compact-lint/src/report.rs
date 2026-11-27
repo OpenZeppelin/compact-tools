@@ -21,12 +21,13 @@ impl RuleId {
     pub const CONSTRAINTS_UNMEASURABLE: Self = Self("constraints-unmeasurable");
     pub const PARSE: Self = Self("parse");
     pub const FORMAT: Self = Self("format");
+    pub const MOCK_COVERAGE: Self = Self("mock-coverage");
 
     /// A value `fill-constraints` wrote. It reports what changed, so it takes no level.
     pub const FILL: Self = Self("fill");
 
     /// Every rule a `[rules]` table can set a level for, in the order the README lists them.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::MISSING_DOC,
         Self::MISSING_TAG,
         Self::UNKNOWN_SECTION,
@@ -41,6 +42,7 @@ impl RuleId {
         Self::CONSTRAINTS_UNMEASURABLE,
         Self::PARSE,
         Self::FORMAT,
+        Self::MOCK_COVERAGE,
     ];
 
     #[must_use]

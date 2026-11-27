@@ -132,6 +132,7 @@ Defaults:
 | `unknown-section` | `warn` |
 | `doc-placeholder`, `constraints-placeholder` | `warn` |
 | `constraints-unmeasured`, `constraints-unmeasurable` | `warn` |
+| `mock-coverage` | `warn` |
 
 - `--strict` promotes `doc-placeholder` and `constraints-placeholder` to `error` for
   that run; a rule set to `off` stays off.
@@ -333,6 +334,7 @@ written.
 | `constraints-unmeasurable` | `fill-constraints` only: no measurement source resolves for the file. |
 | `parse` | The file holds a syntax defect; the first one is reported and the doc rules are skipped for that file. |
 | `format` | `compact format --check` reported the file. |
+| `mock-coverage` | `compact.toml` has a `[mock]` table, and a module under its `src` has no generated mock, or an exported circuit is exposed by none of its mocks. |
 
 Rule detail:
 
@@ -357,6 +359,16 @@ Rule detail:
   constraints rules read is left to them; any other constraints line is checked.
 - **`unknown-section`.** Gated per tag: a kind that lists no headed entry for `@description`
   never gets the rule on `@description`. It is not fixable.
+- **`mock-coverage`.** It runs once per `check`, after the doc rules, and only with a
+  `[mock]` table in the config file in play. Rule matching and planning come from the
+  `compact-mock` crate, so the rule sees what `compact-mock generate` would write; it
+  writes nothing. A module that no `[[mock.rules]]` glob matches is reported at its name,
+  unless `[mock].exclude` lists it. A circuit counts as covered when a mock re-exports or
+  wraps it (renamed included), the constructor calls it, or an included fragment exports
+  a circuit of that name; each overload counts on its own. A module whose mocks fail to
+  plan is reported with the first error. A `[mock]` table that fails to load fails the
+  run with exit 2 and its errors as causes. Files outside the run's file list get no
+  finding.
 - **`tag-order`.** The order is `kinds.<kind>.sections` where the kind has one, else
   `kinds.<kind>.tags`. Occurrences of tags no entry lists are ignored, and one doc comment
   yields one finding, at the first occurrence that breaks the order.
@@ -385,7 +397,7 @@ exclude = ["**/test/mocks/**", "**/archive/**"]
 [lint.constraints]
 tag = "@constraints"
 compiler = "0.34.0"
-sources = ["{dir}/test/mocks/Mock{stem}.compact", "{parent}/test/mocks/Mock{stem}.compact"]
+sources = ["{dir}/test/artifacts/Mock{stem}.compact", "{dir}/test/mocks/Mock{stem}.compact", "{parent}/test/mocks/Mock{stem}.compact"]
 self = ["**/presets/**"]
 
 [lint.constraints.overrides]
@@ -415,7 +427,7 @@ Defaults when no config file is found:
 | `exclude` | `[]` |
 | `constraints.tag` | `"@constraints"` |
 | `constraints.compiler` | none, so `compact` picks its default toolchain |
-| `constraints.sources` | `["{dir}/test/mocks/Mock{stem}.compact", "{parent}/test/mocks/Mock{stem}.compact"]` |
+| `constraints.sources` | `["{dir}/test/artifacts/Mock{stem}.compact", "{dir}/test/mocks/Mock{stem}.compact", "{parent}/test/mocks/Mock{stem}.compact"]` |
 | `constraints.self` | `[]` |
 | `constraints.overrides` | `{}` |
 | `tags.forbid` | `[]` |

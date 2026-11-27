@@ -18,6 +18,8 @@ pub enum TargetError {
 /// The config and the files it selects, shared by every subcommand.
 pub struct Target {
     pub config: Config,
+    /// The config file in play, given or found; `None` when the defaults apply.
+    pub config_path: Option<PathBuf>,
     pub files: Vec<PathBuf>,
     /// Directory the config's own relative paths and globs are anchored at.
     pub base: PathBuf,
@@ -34,17 +36,23 @@ pub fn resolve(
     config_path: Option<&Path>,
     cwd: &Path,
 ) -> Result<Target, TargetError> {
-    let (config, source, base) = match config_path {
-        Some(path) => (Config::load(path)?, path.to_owned(), cwd.to_owned()),
+    let (config, source, base, found) = match config_path {
+        Some(path) => (
+            Config::load(path)?,
+            path.to_owned(),
+            cwd.to_owned(),
+            Some(path.to_owned()),
+        ),
         None => match discover_config(cwd) {
             Some(path) => {
                 let base = path.parent().unwrap_or(cwd).to_owned();
-                (Config::load(&path)?, path, base)
+                (Config::load(&path)?, path.clone(), base, Some(path))
             }
             None => (
                 Config::default(),
                 PathBuf::from("<defaults>"),
                 cwd.to_owned(),
+                None,
             ),
         },
     };
@@ -61,6 +69,7 @@ pub fn resolve(
     let files = files.iter().map(|path| display_path(path, cwd)).collect();
     Ok(Target {
         config,
+        config_path: found,
         files,
         base,
     })

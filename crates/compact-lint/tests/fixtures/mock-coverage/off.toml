@@ -1,0 +1,28 @@
+[lint]
+include = ["src/**/*.compact"]
+exclude = ["**/test/**"]
+
+[lint.rules]
+missing-doc = "off"
+missing-tag = "off"
+unknown-section = "off"
+tag-order = "off"
+forbidden-tag = "off"
+module-name = "off"
+doc-placeholder = "off"
+missing-constraints = "off"
+constraints-format = "off"
+constraints-placeholder = "off"
+constraints-unmeasured = "off"
+constraints-unmeasurable = "off"
+mock-coverage = "off"
+
+[mock]
+exclude = ["c/*"]
+
+[[mock.rules]]
+modules = ["a/*", "c/*", "d/*", "p/*"]
+
+[[mock.rules]]
+modules = ["a/Partial"]
+exclude = ["close"]

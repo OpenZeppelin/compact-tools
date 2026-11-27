@@ -180,6 +180,27 @@ mod tests {
     }
 
     #[test]
+    fn a_generated_mock_wins_over_a_hand_written_one() {
+        let tree = tree();
+        let generated = tree
+            .path()
+            .join("src/access/test/artifacts/MockOwnable.compact");
+        std::fs::create_dir_all(generated.parent().expect("a parent")).expect("dirs");
+        std::fs::write(&generated, "").expect("written");
+
+        assert_eq!(
+            resolve(
+                &Config::default(),
+                tree.path(),
+                "src/access/Ownable.compact"
+            ),
+            Source::Found(PathBuf::from(
+                "src/access/test/artifacts/MockOwnable.compact"
+            ))
+        );
+    }
+
+    #[test]
     fn an_extension_measures_through_the_mock_in_its_parent() {
         let tree = tree();
 
@@ -247,6 +268,7 @@ mod tests {
         assert_eq!(
             resolve(&Config::default(), tree.path(), "src/orphan/Orphan.compact"),
             Source::Missing(vec![
+                PathBuf::from("src/orphan/test/artifacts/MockOrphan.compact"),
                 PathBuf::from("src/orphan/test/mocks/MockOrphan.compact"),
                 PathBuf::from("src/test/mocks/MockOrphan.compact"),
             ])
