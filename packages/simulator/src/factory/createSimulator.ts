@@ -1,3 +1,4 @@
+import type { StateValue } from '@midnight-ntwrk/compact-runtime';
 import type { Backend, BackendKind, CircuitKind } from '../backend/Backend.js';
 import { DryBackend, type SyncSimulator } from '../backend/DryBackend.js';
 import { PrivateStateMutator } from '../core/PrivateStateMutator.js';
@@ -76,7 +77,9 @@ function buildSimulatorClass<
   W,
   TContract extends IMinimalContract,
   TArgs extends readonly any[] = readonly any[],
->(config: SimulatorConfig<P, L, W, TContract, TArgs>) {
+>(
+  config: SimulatorConfig<P, L, W, TContract, TArgs>,
+): SimulatorClass<P, L, W, TContract, TArgs> {
   // Built once per factory; instances per `create()`. The in-memory primitive
   // is the whole dry path and the local JS artifact for pure-circuit eval.
   const DrySimClass = createDrySimulator<P, L, W, TContract, TArgs>(config);
@@ -193,7 +196,9 @@ function buildSimulatorClass<
     return { backend, signers, pureNames, impureNames };
   };
 
-  return class Simulator {
+  type Instance = SimulatorInstance<P, L, W, TContract, TArgs>;
+
+  return class Simulator implements Instance {
     /** The backend this instance resolved to at construction. */
     readonly backendKind: BackendKind;
 
@@ -260,9 +265,9 @@ function buildSimulatorClass<
     static async create(
       this: new (
         deps: BackendDeps<P, L>,
-      ) => Simulator,
+      ) => Instance,
       ...args: unknown[]
-    ): Promise<Simulator> {
+    ): Promise<Instance> {
       const [contractArgs, options] = args as [TArgs?, SimulatorOptions<P, W>?];
       // biome-ignore lint/complexity/noThisInStatic: keep the caller's `this` so a non-overriding subclass constructs its own type, not the base `Simulator` (the autofix rewrites `this`->`Simulator`, breaking that at runtime).
       return (this as unknown as typeof Simulator)._create(
@@ -288,10 +293,10 @@ function buildSimulatorClass<
     static async _create(
       this: new (
         deps: BackendDeps<P, L>,
-      ) => Simulator,
+      ) => Instance,
       contractArgs: TArgs = [] as unknown as TArgs,
       options: SimulatorOptions<P, W> = {},
-    ): Promise<Simulator> {
+    ): Promise<Instance> {
       const deps = await prepareBackend(contractArgs, options);
       return new this(deps);
     }
@@ -383,7 +388,7 @@ function buildSimulatorClass<
     }
 
     /** The raw contract state value. */
-    getContractState() {
+    getContractState(): Promise<StateValue> {
       return this._backend.getContractState();
     }
 
@@ -421,23 +426,90 @@ function buildSimulatorClass<
   };
 }
 
-/** The class {@link createSimulator} returns without `flatCircuits: true`. */
-export type SimulatorClass<
+/**
+ * The class {@link createSimulator} returns without `flatCircuits: true`.
+ * Declared, not inferred, so the emitted declarations keep every member type.
+ */
+export interface SimulatorClass<
   P,
   L,
   W,
   TContract extends IMinimalContract,
   TArgs extends readonly any[] = readonly any[],
-> = ReturnType<typeof buildSimulatorClass<P, L, W, TContract, TArgs>>;
+> {
+  new (deps: BackendDeps<P, L>): SimulatorInstance<P, L, W, TContract, TArgs>;
+  /**
+   * Deploys a fresh contract from `[contractArgs?, options?]`. Typed as the
+   * base instance; subclass `create` overrides narrow the return.
+   */
+  create(
+    this: new (
+      deps: BackendDeps<P, L>,
+    ) => SimulatorInstance<P, L, W, TContract, TArgs>,
+    ...args: unknown[]
+  ): Promise<SimulatorInstance<P, L, W, TContract, TArgs>>;
+  /** The typed construction path subclass `create` overrides call. */
+  _create(
+    this: new (
+      deps: BackendDeps<P, L>,
+    ) => SimulatorInstance<P, L, W, TContract, TArgs>,
+    contractArgs?: TArgs,
+    options?: SimulatorOptions<P, W>,
+  ): Promise<SimulatorInstance<P, L, W, TContract, TArgs>>;
+}
 
-/** An instance of {@link SimulatorClass}. */
-export type SimulatorInstance<
+/**
+ * An instance of {@link SimulatorClass}. The caller methods return `this`, so
+ * a call chained after `as()` keeps the instance type.
+ */
+export interface SimulatorInstance<
   P,
   L,
   W,
   TContract extends IMinimalContract,
+  // biome-ignore lint/correctness/noUnusedVariables: kept so the instance and class types take the same arguments.
   TArgs extends readonly any[] = readonly any[],
-> = InstanceType<SimulatorClass<P, L, W, TContract, TArgs>>;
+> {
+  /** The backend this instance resolved to at construction. */
+  readonly backendKind: BackendKind;
+  /** Internal. */
+  readonly _backend: Backend<P, L>;
+  /** Internal. */
+  readonly _signers: Signers;
+  /** Internal. Serializes private-state read-modify-write. */
+  readonly _mutator: PrivateStateMutator<P>;
+  /** Async circuit proxies; every call returns a promise. */
+  readonly circuits: {
+    pure: AsyncCircuits<ExtractPureCircuits<TContract>, P>;
+    impure: AsyncCircuits<ExtractImpureCircuits<TContract>, P>;
+  };
+  /** The alias resolver for circuit-arg keys (`signers.eitherFor('OWNER')`). */
+  readonly signers: Signers;
+  /** The deployed contract's address. */
+  readonly contractAddress: string;
+  /** Sets the caller for the next call only, then reverts. */
+  as(alias: string | null): this;
+  /** Sets a persistent caller for all subsequent calls until changed. */
+  setPersistentCaller(alias: string | null): this;
+  /** Clears the persistent caller. */
+  resetCaller(): this;
+  /** The public ledger state, via the shared extractor. */
+  getPublicState(): Promise<L>;
+  /** The private state. */
+  getPrivateState(): Promise<P>;
+  /** Replaces the whole private state. */
+  setPrivateState(privateState: P): Promise<void>;
+  /** Merges a patch onto the private state, or maps it with a function. */
+  updatePrivateState(updater: Partial<P> | ((prev: P) => P)): Promise<P>;
+  /** The raw contract state value. */
+  getContractState(): Promise<StateValue>;
+  /** The current witness set. Setting it replaces the whole set. */
+  witnesses: W;
+  /** Overrides a single witness. Dry recreates the contract; live throws. */
+  overrideWitness<K extends keyof W>(key: K, fn: W[K]): void;
+  /** Replaces the whole witness set. Dry recreates the contract; live throws. */
+  setWitnesses(witnesses: W): void;
+}
 
 /**
  * Names that never become flat methods: the `Object.prototype` members, which
