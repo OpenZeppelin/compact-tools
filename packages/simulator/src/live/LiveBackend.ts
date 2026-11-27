@@ -74,39 +74,34 @@ export class LiveBackend<P, L> implements Backend<P, L> {
    * Pure circuits evaluate locally on the JS artifact (no tx); impure circuits
    * submit a tx via the per-alias handle and the result is normalized from
    * `FinalizedCallTxData.private.result` to the bare `R` dry returns.
+   *
+   * The call spends the single-use caller when it starts, so a call started
+   * while this one is pending runs as the persistent or default caller.
    */
   async call(
     kind: CircuitKind,
     name: string,
     args: unknown[],
   ): Promise<unknown> {
+    const alias = this.takeAlias();
     if (kind === 'pure') {
-      try {
-        const fn = this.pureSim.circuits.pure[name];
-        if (typeof fn !== 'function') {
-          throw new Error(`unknown pure circuit "${name}"`);
-        }
-        return fn(...args);
-      } finally {
-        this.consumeSingleCaller();
+      const fn = this.pureSim.circuits.pure[name];
+      if (typeof fn !== 'function') {
+        throw new Error(`unknown pure circuit "${name}"`);
       }
+      return fn(...args);
     }
 
-    const alias = this.activeAlias();
-    try {
-      const handle = await this.ctx.handleFor(alias);
-      const txFn = handle.callTx[name];
-      if (typeof txFn !== 'function') {
-        throw new Error(`unknown impure circuit "${name}"`);
-      }
-      // Unwrap callTx's { public, private: { result } } to the bare R.
-      // The assert message inside any rejection is preserved verbatim —
-      // we await directly and never catch/rewrite it.
-      const finalized = await txFn(...args);
-      return finalized.private.result;
-    } finally {
-      this.consumeSingleCaller();
+    const handle = await this.ctx.handleFor(alias);
+    const txFn = handle.callTx[name];
+    if (typeof txFn !== 'function') {
+      throw new Error(`unknown impure circuit "${name}"`);
     }
+    // Unwrap callTx's { public, private: { result } } to the bare R.
+    // The assert message inside any rejection is preserved verbatim —
+    // we await directly and never catch/rewrite it.
+    const finalized = await txFn(...args);
+    return finalized.private.result;
   }
 
   /** Same extractor as dry, applied to indexer-sourced state. */
@@ -167,12 +162,14 @@ export class LiveBackend<P, L> implements Backend<P, L> {
     return this.pureSim.witnesses;
   }
 
-  /** The alias active for the next call: single-shot takes priority over persistent. */
-  private activeAlias(): string | null {
-    return this.hasSingle ? this.singleAlias : this.persistentAlias;
+  /** The alias for a call that starts now; spends the single-shot caller. */
+  private takeAlias(): string | null {
+    const alias = this.hasSingle ? this.singleAlias : this.persistentAlias;
+    this.consumeSingleCaller();
+    return alias;
   }
 
-  /** Clears the single-shot caller after a call, reverting to persistent/default. */
+  /** Clears the single-shot caller, reverting to persistent/default. */
   consumeSingleCaller(): void {
     if (this.hasSingle) {
       this.hasSingle = false;

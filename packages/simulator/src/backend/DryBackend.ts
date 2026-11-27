@@ -102,8 +102,8 @@ export class DryBackend<P, L> implements Backend<P, L> {
 
   /**
    * Resolves the alias to a deterministic key and applies it to the wrapped
-   * simulator's override fields. `'single'` uses `callerOverride` (the existing
-   * proxy auto-resets it after one call); `'persistent'` uses
+   * simulator's override fields. `'single'` uses `callerOverride` (the proxy
+   * clears it when the next call starts); `'persistent'` uses
    * `persistentCallerOverride`.
    */
   setCaller(alias: string | null, mode: 'single' | 'persistent'): void {

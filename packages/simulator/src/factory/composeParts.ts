@@ -73,8 +73,26 @@ function witnessKeys(value: object): string[] {
 const isRecord = (value: unknown): value is Record<PropertyKey, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** Wraps a part's witness so the slice it returns is written over the whole state. */
-function mergingWitness(part: object, key: string): unknown {
+/**
+ * The private-state keys a witness part owns: those of the state its optional
+ * `privateState` factory returns. None when it declares no factory.
+ */
+function ownedKeys(part: PartFactory): string[] {
+  const factory = (part as { privateState?: unknown }).privateState;
+  if (typeof factory !== 'function') return [];
+  const state: unknown = factory();
+  return isRecord(state) ? Object.keys(state) : [];
+}
+
+/**
+ * Wraps a part's witness so the state it returns is written over the whole
+ * state. An owned key the returned state omits is deleted.
+ */
+function mergingWitness(
+  part: object,
+  key: string,
+  owned: readonly string[],
+): unknown {
   const witness = (part as Record<string, unknown>)[key];
   if (typeof witness !== 'function') return witness;
   return (context: WitnessContext<unknown, unknown>, ...args: unknown[]) => {
@@ -83,10 +101,12 @@ function mergingWitness(part: object, key: string): unknown {
       unknown,
     ];
     const current = context.privateState;
-    return [
-      isRecord(current) && isRecord(next) ? { ...current, ...next } : next,
-      value,
-    ];
+    if (!isRecord(current) || !isRecord(next)) return [next, value];
+    const merged: Record<PropertyKey, unknown> = { ...current, ...next };
+    for (const ownedKey of owned) {
+      if (!Object.hasOwn(next, ownedKey)) delete merged[ownedKey];
+    }
+    return [merged, value];
   };
 }
 
@@ -99,6 +119,7 @@ function mergeParts(
   const owners = new Map<string, number>();
   parts.forEach((part, index) => {
     const value = part();
+    const owned = kind === 'witness' ? ownedKeys(part) : [];
     const keys = kind === 'witness' ? witnessKeys(value) : Object.keys(value);
     for (const key of keys) {
       const owner = owners.get(key);
@@ -110,7 +131,7 @@ function mergeParts(
       owners.set(key, index);
       merged[key] =
         kind === 'witness'
-          ? mergingWitness(value, key)
+          ? mergingWitness(value, key, owned)
           : (value as Record<string, unknown>)[key];
     }
   });
@@ -136,7 +157,10 @@ function composeParts(
  * authenticator's. Throws here if two parts define the same witness.
  *
  * A part's witness reads and returns its own part of the private state. The
- * merged witness writes the returned part over the whole state.
+ * merged witness writes the returned part over the whole state, so other
+ * parts' keys stay. A part that names its private-state factory owns that
+ * factory's keys, and an owned key its witness omits is deleted:
+ * `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
  */
 export function composeWitnesses<const F extends readonly PartFactory[]>(
   ...parts: F
