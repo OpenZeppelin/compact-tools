@@ -254,7 +254,9 @@ export interface SimulatorDefinition<A extends ContractArtifact, WS, PS, X> {
   privateState?: PS;
   /**
    * Adds members to every instance, e.g. a `privateState` helper bag. They
-   * replace circuit methods of the same name.
+   * replace circuit methods of the same name. A function that replaces a
+   * circuit spends the `as()` caller like the circuit; other members leave it
+   * to the next circuit call, like subclass methods.
    */
   extend?: (
     sim: DefinedSimulatorInstance<
@@ -364,12 +366,12 @@ function consumingCaller(
 
 /**
  * Defines each own member of `members` on `target`, like a class field.
- * Accessors stay accessors; `wrap` maps function values.
+ * Accessors stay accessors; `wrap` maps data values by key.
  */
 function defineMembers(
   target: object,
   members: object,
-  wrap: (value: unknown) => unknown = (value) => value,
+  wrap: (key: PropertyKey, value: unknown) => unknown = (_key, value) => value,
 ): void {
   const descriptors = Object.getOwnPropertyDescriptors(members);
   for (const key of Reflect.ownKeys(descriptors)) {
@@ -383,7 +385,7 @@ function defineMembers(
             configurable: true,
             enumerable: true,
             writable: true,
-            value: wrap(value),
+            value: wrap(key, value),
           },
     );
   }
@@ -506,9 +508,12 @@ export function defineSimulator(
       if (!extend) return;
       const members = extend(this as never) as object;
       assertNotReserved('extend', members);
+      // A member that replaces a circuit spends the `as()` caller like the
+      // circuit. Other members behave like subclass methods.
+      const circuitNames = new Set([...deps.pureNames, ...deps.impureNames]);
       const consume = () => deps.backend.consumeSingleCaller();
-      defineMembers(this, members, (value) =>
-        typeof value === 'function'
+      defineMembers(this, members, (key, value) =>
+        typeof value === 'function' && circuitNames.has(key as string)
           ? consumingCaller(value as (...args: unknown[]) => unknown, consume)
           : value,
       );

@@ -541,11 +541,12 @@ const owner = await simulator.signers.eitherFor('OWNER');
 ```
 
 `as()` applies to the next call: a circuit method, a `circuits` call, or a
-top-level function `extend` added (not one inside a helper bag). That call
-spends it even if it fails. The call after it runs as the persistent caller, or
-the default one. Arguments run first, so in
-`sim.as('OWNER').transfer(sim.helper())` the `extend` member `helper` spends
-the caller and `transfer` runs as the default caller.
+function `extend` adds in place of a circuit method. That call spends it even if
+it fails. The call after it runs as the persistent caller, or the default one.
+Other `extend` members behave like subclass methods and do not spend the
+caller, so in `sim.as('OWNER').transfer(sim.helper())` the `transfer` circuit
+runs as `OWNER`. A helper that makes several circuit calls spends the caller on
+its first call. To run all of them as one caller, use `setPersistentCaller()`.
 
 > `ownPublicKey()` is a witness value and MUST NOT be used as an authentication
 > mechanism. These helpers exist for circuits that take the caller as an input
