@@ -296,15 +296,41 @@ type PositionalDefinition<
   (DeclaresWitnesses<A> extends true ? { witnesses: object } : unknown);
 
 /**
- * What `prepare` must return besides {@link PreparedCreate}: the witnesses,
- * when the contract declares witnesses and the definition sets none.
+ * The definition of a class with `prepare`. For a contract with witnesses,
+ * `Source` names what supplies them: the definition's `witnesses`, set to an
+ * object, or the `options` that `prepare` returns.
  */
-type PreparedWitnesses<A extends ContractArtifact, WS, W> =
-  DeclaresWitnesses<A> extends true
-    ? [WS] extends [undefined]
-      ? { options: { witnesses: W } }
-      : unknown
-    : unknown;
+type PreparedDefinition<
+  A extends ContractArtifact,
+  WS,
+  PS,
+  X,
+  I extends readonly unknown[],
+  F,
+  Source extends 'definition' | 'prepare',
+> = SimulatorDefinition<A, WS, PS, X> &
+  DefinitionCheck<A, WS, PS> &
+  (Source extends 'definition' ? { witnesses: object } : unknown) & {
+    /**
+     * Replaces the positional form: maps `create`'s arguments to the
+     * constructor arguments, the options, and fields for the new instance.
+     */
+    prepare: (...input: I) => PreparedCreate<
+      A,
+      DefinedPrivateState<PS>,
+      DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
+      F
+    > &
+      (Source extends 'prepare'
+        ? DeclaresWitnesses<A> extends true
+          ? {
+              options: {
+                witnesses: DefinedWitnesses<A, WS, DefinedPrivateState<PS>>;
+              };
+            }
+          : unknown
+        : unknown);
+  };
 
 type AnyDefinition = SimulatorDefinition<
   ContractArtifact,
@@ -447,26 +473,24 @@ export function defineSimulator<
   F = unknown,
 >(
   artifact: A,
-  definition: SimulatorDefinition<A, WS, PS, X> &
-    DefinitionCheck<A, WS, PS> & {
-      /**
-       * Replaces the positional form: maps `create`'s arguments to the
-       * constructor arguments, the options, and fields for the new instance.
-       */
-      prepare: (
-        ...input: I
-      ) => PreparedCreate<
-        A,
-        DefinedPrivateState<PS>,
-        DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
-        F
-      > &
-        PreparedWitnesses<
-          A,
-          WS,
-          DefinedWitnesses<A, WS, DefinedPrivateState<PS>>
-        >;
-    },
+  definition: PreparedDefinition<A, WS, PS, X, I, F, 'definition'>,
+): PreparedSimulatorClass<
+  A,
+  DefinedPrivateState<PS>,
+  DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
+  X & F,
+  I
+>;
+export function defineSimulator<
+  A extends ContractArtifact,
+  WS = undefined,
+  PS = undefined,
+  X = unknown,
+  I extends readonly unknown[] = never,
+  F = unknown,
+>(
+  artifact: A,
+  definition: PreparedDefinition<A, WS, PS, X, I, F, 'prepare'>,
 ): PreparedSimulatorClass<
   A,
   DefinedPrivateState<PS>,

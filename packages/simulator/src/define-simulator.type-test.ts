@@ -341,6 +341,28 @@ defineSimulator(artifact, {
   }),
 });
 
+declare const maybeWitnesses: typeof bundledWitnesses | undefined;
+
+// @ts-expect-error the definition's witnesses can be `undefined`.
+defineSimulator(artifact, {
+  witnesses: maybeWitnesses,
+  privateState: bundledState,
+  prepare: () => ({ args: [new Uint8Array(32), [1n] as bigint[]] as const }),
+});
+
+// The prepared options supply them instead.
+defineSimulator(artifact, {
+  witnesses: maybeWitnesses,
+  privateState: bundledState,
+  prepare: () => ({
+    args: [new Uint8Array(32), [1n] as bigint[]] as const,
+    options: { witnesses: bundledWitnesses() },
+  }),
+});
+
+// @ts-expect-error a positional definition's witnesses cannot be `undefined`.
+defineSimulator(artifact, { witnesses: maybeWitnesses });
+
 // Helpers written outside the spec, as a witnesses file writes them.
 const stateHelpers = (sim: PrivateStateAccess<ModuleState>) => ({
   privateState: {
