@@ -20,6 +20,9 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 - A definition's `extend` adds members to every instance, replacing circuit methods of the same name, and `prepare` maps `create`'s own arguments to the constructor arguments, the options and instance fields. Neither takes a base member name, an `Object.prototype` name or `then`, and accessors stay accessors. A function `extend` adds in place of a circuit method spends the `as()` caller like the circuit. Other `extend` members do not spend it, like subclass methods. A class with `prepare` has no `_create` (#248)
 - A function `extend` adds in place of a circuit method takes the `as()` caller when it starts and runs its first circuit call as that caller, also after an `await`. A call that starts while it is pending runs as the persistent or default caller, and an `as()` set while it is pending applies to the next call (#248)
 - A `prepare` field named like an `extend` member throws at `create` (#248)
+- A function in `prepare` `fields` that replaces a circuit method takes the `as()` caller like one `extend` adds (#248)
+- A circuit named `toJSON` gets no instance method and no static, so `JSON.stringify` does not call it. It stays reachable through `circuits` (#248)
+- A merged witness writes the state it returns over the whole state only when both are plain objects. A class instance it returns replaces the state as it is (#248)
 - Type exports `ArtifactContract`, `ArtifactLedger`, `ArtifactWitnesses`, `Composed`, `ComposedFactory`, `ComposedWitness`, `ComposedWitnesses`, `ConstructorArgs`, `ContractArtifact`, `DefinedPrivateState`, `DefinedSimulatorClass`, `DefinedSimulatorInstance`, `DefinedWitnesses`, `PartFactory`, `Parts`, `PositionalInput`, `PreparedCreate`, `PreparedSimulatorClass`, `PrivateStateAccess`, `PureCircuitStatics`, `ReservedFlatName`, `ReservedStaticName`, `SimulatorDefinition` and `SimulatorInstance` (#248)
 
 ### Changed
@@ -31,6 +34,9 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 - `as()`, `setPersistentCaller()` and `resetCaller()` return the instance type in the published declarations, so a call chained after them is type-checked. `SimulatorClass` and `SimulatorInstance` are declared interfaces (#248)
 - `as()` applies to one call only. A failed call spends it too, on both backends, and on dry a successful call no longer leaves the `as()` caller in the stored circuit context. The next call runs as the persistent or default caller. Before, on dry, the `as()` caller stayed in effect after the call, so a spec that relied on that can now fail. Call `as()` before each call that needs the caller, or use `setPersistentCaller()` (#248)
 - On dry, a call to an unknown circuit name spends the `as()` caller before it throws, as on live (#248)
+- On dry, `as(null)` runs the next call as the default caller while a persistent caller is set, as on live. `AbstractSimulator.hasCallerOverride` records a single caller set to `null` (#248)
+- On dry, impure calls that overlap run one at a time in the order they start, so each builds on the state the previous one committed instead of overwriting it. Each runs as the caller it took when it started, and a failed call does not hold up the next (#248)
+- On dry, a call as another caller keeps its Zswap local state (coin inputs and outputs) under that caller's coin public key, and the next call as that caller continues from it. The default caller's Zswap local state stays as it was (#248)
 
 ## 0.6.0 (2026-11-16)
 

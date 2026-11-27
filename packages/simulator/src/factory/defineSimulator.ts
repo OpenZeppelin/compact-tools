@@ -165,7 +165,7 @@ type DefinitionCheck<A extends ContractArtifact, WS, PS> = NoInfer<
 
 /**
  * Static names a pure circuit never takes: function and `Object.prototype`
- * members, `create`, `_create`, and `then`.
+ * members, `create`, `_create`, `then` and `toJSON`.
  */
 export type ReservedStaticName =
   | keyof CallableFunction
@@ -262,7 +262,11 @@ export interface PreparedCreate<A extends ContractArtifact, P, W, F> {
   /** The contract's constructor arguments. */
   args: Readonly<ConstructorArgs<A>>;
   options?: SimulatorOptions<P, W>;
-  /** Own fields set on the new instance, e.g. a wallet the witnesses read. */
+  /**
+   * Own fields set on the new instance, e.g. a wallet the witnesses read. A
+   * function that replaces a circuit method takes the `as()` caller like an
+   * `extend` one.
+   */
   fields?: F;
 }
 
@@ -439,6 +443,20 @@ function holdingCaller(
 }
 
 /**
+ * Maps a member to {@link holdingCaller} when it is a function named like one
+ * of `circuitNames`. Other members behave like subclass methods.
+ */
+const replacingCircuits =
+  (
+    circuitNames: readonly string[],
+    backend: BackendDeps<unknown, unknown>['backend'],
+  ) =>
+  (key: PropertyKey, value: unknown): unknown =>
+    typeof value === 'function' && circuitNames.includes(key as string)
+      ? holdingCaller(value as (...args: unknown[]) => unknown, backend)
+      : value;
+
+/**
  * Defines each own member of `members` on `target`, like a class field.
  * Accessors stay accessors; `wrap` maps data values by key.
  */
@@ -607,16 +625,13 @@ export function defineSimulator(
       const members = extend(this as never) as object;
       assertNotReserved('extend', members);
       extendKeys.set(this, Reflect.ownKeys(members));
-      // A member that replaces a circuit takes the `as()` caller like the
-      // circuit. Other members behave like subclass methods.
-      const circuitNames = new Set([...deps.pureNames, ...deps.impureNames]);
-      defineMembers(this, members, (key, value) =>
-        typeof value === 'function' && circuitNames.has(key as string)
-          ? holdingCaller(
-              value as (...args: unknown[]) => unknown,
-              deps.backend,
-            )
-          : value,
+      defineMembers(
+        this,
+        members,
+        replacingCircuits(
+          [...deps.pureNames, ...deps.impureNames],
+          deps.backend,
+        ),
       );
     }
 
@@ -638,7 +653,20 @@ export function defineSimulator(
             );
           }
         }
-        defineMembers(sim, fields);
+        const { circuits, _backend } = sim as SimulatorInstance<
+          unknown,
+          unknown,
+          unknown,
+          IMinimalContract
+        >;
+        defineMembers(
+          sim,
+          fields,
+          replacingCircuits(
+            [...Object.keys(circuits.pure), ...Object.keys(circuits.impure)],
+            _backend,
+          ),
+        );
       }
       return sim;
     }
@@ -658,7 +686,9 @@ export function defineSimulator(
   }
 
   for (const [name, circuit] of Object.entries(artifact.pureCircuits ?? {})) {
-    if (name in DefinedSimulator || name === 'then') continue;
+    if (name in DefinedSimulator || name === 'then' || name === 'toJSON') {
+      continue;
+    }
     Object.defineProperty(DefinedSimulator, name, {
       configurable: true,
       writable: true,

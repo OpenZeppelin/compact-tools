@@ -199,6 +199,28 @@ describe('defineSimulator', () => {
       );
       expect(await sim.circuits.pure.then()).toBe(3n);
     });
+
+    it('gives a pure circuit named toJSON no static, so JSON.stringify does not call it', () => {
+      let calls = 0;
+      const Stub = defineSimulator(
+        {
+          Contract: class {},
+          ledger: () => ({}),
+          pureCircuits: {
+            toJSON: () => {
+              calls += 1;
+              return 'called';
+            },
+          },
+        } as unknown as ContractArtifact,
+        { arity: 0 },
+      );
+
+      JSON.stringify(Stub);
+
+      expect(Object.hasOwn(Stub, 'toJSON')).toBe(false);
+      expect(calls).toBe(0);
+    });
   });
 
   describe('witnesses and private state from parts', () => {
@@ -254,6 +276,38 @@ describe('defineSimulator', () => {
       const sim = await Prototype.create(OWNER, VALUES, ORIGIN);
 
       expect(await sim.storeSecret()).toBe(107n);
+    });
+
+    it('keeps a class-instance private state a witness returns', async () => {
+      class WalletState {
+        readonly nonce: bigint;
+
+        constructor(nonce: bigint) {
+          this.nonce = nonce;
+        }
+
+        nextNonce(): WalletState {
+          return new WalletState(this.nonce + 1n);
+        }
+      }
+      const WalletWitnesses = () => ({
+        wit_value: ({
+          privateState,
+        }: WitnessContext<unknown, WalletState>): [WalletState, bigint] => {
+          const next = privateState.nextNonce();
+          return [next, next.nonce];
+        },
+      });
+      const Wallet = defineSimulator(FlatArtifact, {
+        witnesses: [WalletWitnesses],
+        privateState: () => new WalletState(0n),
+      });
+      const sim = await Wallet.create();
+
+      await sim.setFromWitness();
+      await sim.setFromWitness();
+
+      expect((await sim.getPublicState())._last).toBe(2n);
     });
 
     it('keeps the single-factory form', async () => {
@@ -530,6 +584,22 @@ describe('defineSimulator', () => {
       expect(await recorded(sim)).toBe(defaultCaller);
     });
 
+    it('lets a prepare field that replaces a circuit consume the as() caller', async () => {
+      const Prepared = defineSimulator(FlatArtifact, {
+        witnesses: FlatWitnesses,
+        privateState: FlatPrivateState.generate,
+        prepare: () => ({ args: [] as const, fields: { bump: (): [] => [] } }),
+      });
+      const sim = await Prepared.create();
+      await sim.recordCaller();
+      const defaultCaller = await recorded(sim);
+
+      sim.as('ALICE').bump();
+      await sim.recordCaller();
+
+      expect(await recorded(sim)).toBe(defaultCaller);
+    });
+
     it('keeps the as() caller through an extend helper in argument position', async () => {
       const Helper = defineSimulator(FlatArtifact, {
         witnesses: FlatWitnesses,
@@ -611,6 +681,17 @@ describe('defineSimulator', () => {
         await sim.as('ALICE').recordCaller();
 
         expect(await recorded(sim)).toBe(sim.signers.resolveDryKey('ALICE'));
+      });
+
+      it('runs its circuit as the default caller after as(null), with a persistent caller set', async () => {
+        const sim = await Guarded.create();
+        await sim.circuits.impure.recordCaller();
+        const defaultCaller = await recorded(sim);
+        sim.setPersistentCaller('OWNER');
+
+        await sim.as(null).recordCaller();
+
+        expect(await recorded(sim)).toBe(defaultCaller);
       });
 
       it('runs only its first circuit as the as() caller', async () => {

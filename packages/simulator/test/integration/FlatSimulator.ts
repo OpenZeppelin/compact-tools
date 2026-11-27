@@ -32,6 +32,19 @@ const config: SimulatorConfig<
 /** The base class with typed flat methods, used without a subclass. */
 export const FlatBase = createSimulator({ ...config, flatCircuits: true });
 
+/** An untyped base class with an impure circuit named `toJSON` that bumps. */
+export const ToJSONBase = createSimulator({
+  ...config,
+  contractFactory: (witnesses) => {
+    const contract = new FlatContract<FlatPrivateState>(witnesses);
+    const { bump } = contract.impureCircuits;
+    Object.assign(contract.impureCircuits, {
+      toJSON: (context: Parameters<typeof bump>[0]) => bump(context),
+    });
+    return contract;
+  },
+});
+
 /** A typed flat subclass whose `labelled` field replaces the circuit's method. */
 export class FlatSimulator extends FlatBase {
   static async create(options: FlatOptions = {}): Promise<FlatSimulator> {

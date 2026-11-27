@@ -20,6 +20,7 @@ import type { Backend, BackendKind, CircuitKind } from './Backend.js';
 export interface SyncSimulator<P, L> {
   readonly contractAddress: string;
   callerOverride: CoinPublicKey | null;
+  hasCallerOverride?: boolean;
   persistentCallerOverride: CoinPublicKey | null;
   readonly circuits: {
     pure: Record<string, (...args: unknown[]) => unknown>;
@@ -103,9 +104,10 @@ export class DryBackend<P, L> implements Backend<P, L> {
 
   /**
    * Resolves the alias to a deterministic key and applies it to the wrapped
-   * simulator's override fields. `'single'` uses `callerOverride` (the proxy
-   * clears it when the next call starts); `'persistent'` uses
-   * `persistentCallerOverride`.
+   * simulator's override fields. `'single'` uses `callerOverride` and
+   * `hasCallerOverride`, so `null` selects the default caller over the
+   * persistent one (the proxy clears both when the next call starts);
+   * `'persistent'` uses `persistentCallerOverride`.
    */
   setCaller(alias: string | null, mode: 'single' | 'persistent'): void {
     const key = alias === null ? null : this.signers.resolveDryKey(alias);
@@ -113,14 +115,19 @@ export class DryBackend<P, L> implements Backend<P, L> {
       this.sim.persistentCallerOverride = key;
     } else {
       this.sim.callerOverride = key;
+      this.sim.hasCallerOverride = true;
     }
   }
 
   consumeSingleCaller(): () => void {
     const key = this.sim.callerOverride;
+    const set = this.sim.hasCallerOverride === true || key !== null;
     this.sim.callerOverride = null;
+    this.sim.hasCallerOverride = false;
     return () => {
-      if (key !== null) this.sim.callerOverride = key;
+      if (!set) return;
+      this.sim.callerOverride = key;
+      this.sim.hasCallerOverride = true;
     };
   }
 

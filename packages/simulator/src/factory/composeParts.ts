@@ -73,6 +73,15 @@ function witnessKeys(value: object): string[] {
 const isRecord = (value: unknown): value is Record<PropertyKey, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** An object whose prototype is `Object.prototype` or `null`. */
+const isPlainObject = (
+  value: unknown,
+): value is Record<PropertyKey, unknown> => {
+  if (typeof value !== 'object' || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
 /** Own enumerable keys, symbols included. */
 const ownEnumerableKeys = (value: object): PropertyKey[] =>
   Reflect.ownKeys(value).filter((key) =>
@@ -104,7 +113,8 @@ function ownedKeys(part: PartFactory): PropertyKey[] {
 
 /**
  * Wraps a part's witness so the state it returns is written over the whole
- * state. An owned key the returned state omits is deleted.
+ * state. An owned key the returned state omits is deleted. Unless both states
+ * are plain objects, the returned state is kept as it is.
  */
 function mergingWitness(
   part: object,
@@ -119,7 +129,7 @@ function mergingWitness(
       unknown,
     ];
     const current = context.privateState;
-    if (!isRecord(current) || !isRecord(next)) return [next, value];
+    if (!isPlainObject(current) || !isPlainObject(next)) return [next, value];
     const merged: Record<PropertyKey, unknown> = { ...current, ...next };
     for (const ownedKey of owned) {
       if (!Object.hasOwn(next, ownedKey)) delete merged[ownedKey];

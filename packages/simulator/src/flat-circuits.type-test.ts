@@ -24,6 +24,7 @@ type Impure = {
   balance: (ctx: Ctx) => Res<bigint>;
   getPublicState: (ctx: Ctx) => Res<bigint>;
   then: (ctx: Ctx) => Res<[]>;
+  toJSON: (ctx: Ctx) => Res<[]>;
 };
 
 type Pure = {
@@ -138,7 +139,11 @@ async function _reservedNames(): Promise<void> {
   // @ts-expect-error a `then` method would make the instance thenable.
   await sim.then();
 
-  void [ledger, shadowed, circuit, text, pureToString];
+  // @ts-expect-error `JSON.stringify` would call a `toJSON` method.
+  await sim.toJSON();
+  const toJSON: [] = await sim.circuits.impure.toJSON();
+
+  void [ledger, shadowed, circuit, text, pureToString, toJSON];
 }
 
 // Every `Object.prototype` name is reserved, so the flat type omits it.
