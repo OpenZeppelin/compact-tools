@@ -143,9 +143,31 @@ async function _reservedNames(): Promise<void> {
 declare const objectKey: keyof typeof Object.prototype;
 const _objectKeysReserved: ReservedFlatName = objectKey;
 
+// A subclass method named like a circuit clashes with the inherited property (TS2425).
+class FlatMethodOverride extends FlatBase {
+  // @ts-expect-error a method cannot replace the `balance` property.
+  public balance(): Promise<bigint> {
+    return Promise.resolve(42n);
+  }
+}
+
+// The literal widens to `boolean`, so the untyped overload is picked.
+const WidenedBase = createSimulator({
+  ...config,
+  flatCircuits: true as boolean,
+});
+
+async function _widenedFlag(): Promise<void> {
+  const sim = await WidenedBase.create([1, 'x']);
+  // @ts-expect-error no circuit methods on the untyped overload (TS2339).
+  await sim.mint(1n);
+}
+
 void _flatCalls;
 void _noOverride;
 void _explicitTypeArgs;
 void _plainUntyped;
 void _reservedNames;
 void _objectKeysReserved;
+void FlatMethodOverride;
+void _widenedFlag;
