@@ -27,6 +27,16 @@ export circuit recordCaller(): [] {
   _caller = disclose(ownPublicKey());
 }
 
+// Mints a coin to the caller, so the call has a Zswap output.
+export circuit mintToCaller(nonce: Bytes<32>): [] {
+  mintShieldedToken(
+    pad(32, "flat"),
+    1,
+    disclose(nonce),
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(ownPublicKey()))
+  );
+}
+
 // Named like simulator members. Each touches the ledger, so it stays impure.
 export circuit getPublicState(): Uint<64> {
   return _count.read();

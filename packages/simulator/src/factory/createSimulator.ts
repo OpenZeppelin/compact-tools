@@ -14,6 +14,7 @@ import type {
 } from '../types/index.js';
 import type { SimulatorOptions } from '../types/Options.js';
 import { createDrySimulator } from './createDrySimulator.js';
+import { releaseHeldCaller, startCall } from './replacementCaller.js';
 import type { SimulatorConfig } from './SimulatorConfig.js';
 
 /**
@@ -45,8 +46,8 @@ type CircuitProxies = Record<
 /**
  * Gives `sim` one non-enumerable own method per circuit, which reads
  * `sim.circuits[kind][name]` on every call. A name `sim` already has (base and
- * subclass members, `Object.prototype`) is skipped, and so is `then`, which
- * would make `sim` thenable.
+ * subclass members, `Object.prototype`) is skipped, and so are `then`, which
+ * would make `sim` thenable, and `toJSON`, which `JSON.stringify` would call.
  */
 function installFlatCircuits(
   sim: { readonly circuits: object },
@@ -58,7 +59,7 @@ function installFlatCircuits(
   ] as const;
   for (const [kind, names] of groups) {
     for (const name of names) {
-      if (name in sim || name === 'then') continue;
+      if (name in sim || name === 'then' || name === 'toJSON') continue;
       Object.defineProperty(sim, name, {
         // A subclass field of the same name redefines it after `super()`.
         configurable: true,
@@ -95,7 +96,8 @@ function buildSimulatorClass<
   ): Record<string, (...args: unknown[]) => Promise<unknown>> => {
     const proxy: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     for (const name of names) {
-      proxy[name] = (...args: unknown[]) => backend.call(kind, name, args);
+      proxy[name] = (...args: unknown[]) =>
+        startCall(backend, () => backend.call(kind, name, args));
     }
     return proxy;
   };
@@ -322,6 +324,7 @@ function buildSimulatorClass<
      * @returns This instance, for chaining (`sim.as('OWNER').transfer(...)`).
      */
     as(alias: string | null): this {
+      releaseHeldCaller(this._backend);
       this._backend.setCaller(alias, 'single');
       return this;
     }
@@ -513,7 +516,8 @@ export interface SimulatorInstance<
 
 /**
  * Names that never become flat methods: the `Object.prototype` members, which
- * every instance already has, and `then`, which would make an instance thenable.
+ * every instance already has, `then`, which would make an instance thenable,
+ * and `toJSON`, which `JSON.stringify` would call.
  */
 export const RESERVED_FLAT_NAMES = [
   'constructor',
@@ -529,6 +533,7 @@ export const RESERVED_FLAT_NAMES = [
   '__lookupGetter__',
   '__lookupSetter__',
   'then',
+  'toJSON',
 ] as const;
 
 export type ReservedFlatName = (typeof RESERVED_FLAT_NAMES)[number];
@@ -612,8 +617,8 @@ export function createSimulator<
  * both backends with uniform `await`.
  *
  * Each instance also has one method per circuit, named after it. A name the
- * instance already has, or `then`, is skipped. `flatCircuits: true` in the
- * config types the methods.
+ * instance already has, `then` or `toJSON` is skipped. `flatCircuits: true` in
+ * the config types the methods.
  *
  * The live adapter is reached only through a runtime dynamic import: a static
  * `import { createSimulator }` never pulls midnight-js into the

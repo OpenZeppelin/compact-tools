@@ -169,11 +169,18 @@ export class LiveBackend<P, L> implements Backend<P, L> {
     return alias;
   }
 
-  /** Clears the single-shot caller, reverting to persistent/default. */
-  consumeSingleCaller(): void {
-    if (this.hasSingle) {
-      this.hasSingle = false;
-      this.singleAlias = null;
-    }
+  /**
+   * Clears the single-shot caller, reverting to persistent/default, and
+   * returns a function that sets it again.
+   */
+  consumeSingleCaller(): () => void {
+    if (!this.hasSingle) return () => {};
+    const alias = this.singleAlias;
+    this.hasSingle = false;
+    this.singleAlias = null;
+    return () => {
+      this.singleAlias = alias;
+      this.hasSingle = true;
+    };
   }
 }

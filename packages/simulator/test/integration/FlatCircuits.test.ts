@@ -5,6 +5,7 @@ import {
   FlatBase,
   FlatSimulator,
   type FlatWitnessSet,
+  ToJSONBase,
   UntypedFlatSimulator,
 } from './FlatSimulator.js';
 
@@ -12,6 +13,7 @@ const IMPURE = [
   'bump',
   'setFromWitness',
   'recordCaller',
+  'mintToCaller',
   'getPublicState',
   'signers',
   'then',
@@ -23,6 +25,7 @@ const INSTALLED = [
   'bump',
   'setFromWitness',
   'recordCaller',
+  'mintToCaller',
   'labelled',
   'described',
   'add',
@@ -244,6 +247,28 @@ describe.skipIf(isLiveBackend())('flat circuit methods', () => {
 
       await sim.circuits.impure.then();
 
+      expect((await sim.getPublicState())._count).toBe(1n);
+    });
+  });
+
+  describe('toJSON', () => {
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+    it('is not installed, so JSON.stringify does not call the circuit, which circuits reaches', async () => {
+      const sim = await ToJSONBase.create();
+      const impure = sim.circuits.impure as unknown as Record<
+        string,
+        () => Promise<[]>
+      >;
+
+      // The replacer drops every key, so only a `toJSON` call has an effect.
+      JSON.stringify(sim, (key, value) => (key === '' ? value : undefined));
+      await settle();
+      const afterStringify = (await sim.getPublicState())._count;
+      await impure.toJSON();
+
+      expect('toJSON' in sim).toBe(false);
+      expect(afterStringify).toBe(0n);
       expect((await sim.getPublicState())._count).toBe(1n);
     });
   });

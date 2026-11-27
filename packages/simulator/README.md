@@ -252,8 +252,9 @@ Which circuits get a method:
 - A name the instance already has when the base constructor runs is skipped: base
   members (`getPublicState`, `signers`, `as`), subclass methods and accessors, and
   `Object.prototype` names (`toString`, `constructor`).
-- `then` is never installed. It would make the instance thenable, so
-  `await create()` would call it.
+- `then` and `toJSON` are never installed. `then` would make the instance
+  thenable, so `await create()` would call it, and `JSON.stringify` would call
+  `toJSON`.
 - A skipped circuit stays reachable through `sim.circuits.impure` or
   `sim.circuits.pure`.
 - A subclass field of the same name replaces the method after `super()`.
@@ -261,7 +262,8 @@ Which circuits get a method:
 
 Typing with `flatCircuits: true`:
 
-- Base member names, `Object.prototype` names and `then` keep their own type, or none.
+- Base member names, `Object.prototype` names, `then` and `toJSON` keep their own
+  type, or none.
 - A subclass method named like a circuit fails with TS2425. Override it with a field
   instead, with a type compatible with the circuit's:
   `public readonly getValue = async (): Promise<bigint> => 42n;`. Or leave that class
@@ -311,7 +313,7 @@ The class reads from the artifact:
   it, with the private state the definition yields (see the table below).
 - `pureCircuits`: each pure circuit is also a synchronous static method
   (`OwnableSimulator.hash(x)`). A name the class already has (`name`, `length`,
-  `create`, `Object.prototype` names) or `then` is skipped.
+  `create`, `Object.prototype` names), `then` or `toJSON` is skipped.
 
 Every circuit is an async instance method, as with `flatCircuits: true`.
 
@@ -370,8 +372,16 @@ class TokenSimulator extends defineSimulator(MockToken, {
   return only its own part, typed on its own state
   (`[{ ...privateState, nonce }, value]`). The merged witness writes that part
   over the whole state, so the other parts' keys stay.
+- A witness part that names its private-state factory owns the keys that
+  factory returns, and an owned key its witness omits is deleted:
+  `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
+  To own an optional key, return it from the factory set to `undefined`
+  (`{ secretKey, nonce: undefined }`). A key the factory does not return stays.
 - A part may return a class instance. Its prototype methods are kept and called
   on it. A private-state part returns a plain object.
+- The merged witness writes the state a witness returns over the whole state
+  only when both are plain objects. Otherwise, e.g. for a class instance, the
+  returned state replaces the whole state as it is.
 - A witness name or private-state key that two parts define throws when the
   definition runs, also if `prepare` or `create` supplies the witnesses or the
   private state:
@@ -546,10 +556,12 @@ const owner = await simulator.signers.eitherFor('OWNER');
 ```
 
 `as()` applies to the next call: a circuit method, a `circuits` call, or a
-function `extend` adds in place of a circuit method. That call spends it even if
-it fails. The call after it runs as the persistent caller, or the default one.
-A function in place of a circuit method spends it when it returns, so a circuit
-it calls after an `await` runs as the persistent or default caller.
+function `extend` or `prepare` `fields` adds in place of a circuit method. That
+call spends it even if it fails. The call after it runs as the persistent
+caller, or the default one.
+A function in place of a circuit method takes it when it starts and runs its
+first circuit call as that caller, also after an `await`. A call that starts
+while it is pending runs as the persistent or default caller.
 Other `extend` members behave like subclass methods and do not spend the
 caller, so in `sim.as('OWNER').transfer(sim.helper())` the `transfer` circuit
 runs as `OWNER`. A helper that makes several circuit calls spends the caller on
