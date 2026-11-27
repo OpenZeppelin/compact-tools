@@ -15,6 +15,7 @@ import {
   SIMULATOR_FIELDS,
   type SimulatorInstance,
 } from './createSimulator.js';
+import { runReplacement } from './replacementCaller.js';
 
 /**
  * The exports of a compiled contract module (`contract/index.js`) that
@@ -425,20 +426,15 @@ function splitPositional(
 }
 
 /**
- * Calls `fn`, then clears a caller `as()` set and the call did not use. It
- * clears when `fn` returns, so a promise that settles later never clears a
- * caller set after the call.
+ * Wraps a function that replaces a circuit: it takes the `as()` caller when
+ * it starts and runs its first circuit call as that caller.
  */
-function consumingCaller(
+function holdingCaller(
   fn: (...args: unknown[]) => unknown,
-  consume: () => void,
+  backend: BackendDeps<unknown, unknown>['backend'],
 ): (...args: unknown[]) => unknown {
   return function (this: unknown, ...args: unknown[]) {
-    try {
-      return fn.apply(this, args);
-    } finally {
-      consume();
-    }
+    return runReplacement(backend, () => fn.apply(this, args));
   };
 }
 
@@ -611,13 +607,15 @@ export function defineSimulator(
       const members = extend(this as never) as object;
       assertNotReserved('extend', members);
       extendKeys.set(this, Reflect.ownKeys(members));
-      // A member that replaces a circuit spends the `as()` caller like the
+      // A member that replaces a circuit takes the `as()` caller like the
       // circuit. Other members behave like subclass methods.
       const circuitNames = new Set([...deps.pureNames, ...deps.impureNames]);
-      const consume = () => deps.backend.consumeSingleCaller();
       defineMembers(this, members, (key, value) =>
         typeof value === 'function' && circuitNames.has(key as string)
-          ? consumingCaller(value as (...args: unknown[]) => unknown, consume)
+          ? holdingCaller(
+              value as (...args: unknown[]) => unknown,
+              deps.backend,
+            )
           : value,
       );
     }

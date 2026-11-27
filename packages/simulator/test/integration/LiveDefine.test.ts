@@ -124,6 +124,35 @@ describe('defined simulators on the live backend', () => {
     expect(world.calls.map(({ alias }) => alias)).toEqual(['ALICE', null]);
   });
 
+  it('runs the circuit of an async replacement that awaits first as the as() caller', async () => {
+    const Guarded = defineSimulator(DefineArtifact, {
+      witnesses: [CountWitnesses, SecretWitnesses],
+      privateState: [CountPrivateState.generate, SecretPrivateState.generate],
+      extend: (sim) => ({
+        storeSecret: async (): Promise<bigint> => {
+          await sim.getPrivateState();
+          return sim.circuits.impure.storeSecret();
+        },
+      }),
+    });
+    const world = makeWorld(DefinePrivateState.generate());
+    const sim = await Guarded.create(OWNER, VALUES, ORIGIN, {
+      backend: 'live',
+      live: world.ctx,
+    });
+
+    const first = sim.as('ALICE').storeSecret();
+    const second = sim.storeCount();
+    await Promise.all([first, second]);
+    await sim.storeCount();
+
+    expect(world.calls).toEqual([
+      { alias: null, name: 'storeCount', args: [] },
+      { alias: 'ALICE', name: 'storeSecret', args: [] },
+      { alias: null, name: 'storeCount', args: [] },
+    ]);
+  });
+
   it('drops the as() caller after a failed call', async () => {
     const world = makeWorld(DefinePrivateState.generate(), undefined, {
       storeSecret: new Error('rejected'),

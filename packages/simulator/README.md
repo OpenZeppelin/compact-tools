@@ -548,8 +548,9 @@ const owner = await simulator.signers.eitherFor('OWNER');
 `as()` applies to the next call: a circuit method, a `circuits` call, or a
 function `extend` adds in place of a circuit method. That call spends it even if
 it fails. The call after it runs as the persistent caller, or the default one.
-A function in place of a circuit method spends it when it returns, so a circuit
-it calls after an `await` runs as the persistent or default caller.
+A function in place of a circuit method takes it when it starts and runs its
+first circuit call as that caller, also after an `await`. A call that starts
+while it is pending runs as the persistent or default caller.
 Other `extend` members behave like subclass methods and do not spend the
 caller, so in `sim.as('OWNER').transfer(sim.helper())` the `transfer` circuit
 runs as `OWNER`. A helper that makes several circuit calls spends the caller on
