@@ -26,7 +26,7 @@ module = "crypto/authentication/AuthPrfPseudonym"
 call = 'authenticate(pad(32, "{salt}"))'
 
 [[mock.rules]]
-modules = ["**"]
+modules = ["access/Ownable"]
 auth = ["prf", "caller"]
 ```
 
@@ -38,11 +38,21 @@ compact-mock: 2 mocks, 2 written, 0 unchanged, 0 removed.
 compiled src/access/test/artifacts/MockOwnable
 compiled src/access/test/artifacts/MockOwnableCaller
 compact-mock: 2 mocks compiled.
+
+$ compact-mock generate
+unchanged src/access/test/artifacts/MockOwnable.compact
+unchanged src/access/test/artifacts/MockOwnableCaller.compact
+compact-mock: 2 mocks, 0 written, 2 unchanged, 0 removed.
 ```
 
-Specs import `./artifacts/MockOwnable/contract/index.js` from the module's `test/`
-directory. `compact-compiler` runs this build by default when `compact.toml` has a
-`[mock]` table (see [`packages/cli`](../../packages/cli)).
+- `MockOwnable` authenticates the caller with `AuthPrfPseudonym`. `MockOwnableCaller`
+  takes the caller as a circuit argument.
+- Specs import `./artifacts/MockOwnable/contract/index.js` from the module's `test/`
+  directory.
+- Widen `modules` to `["**"]` for every module under `src`. A module that needs generic
+  arguments, `disclose` or a fragment then needs its own rule, or a `[mock].exclude`
+  entry; the run names each one. See [compact-contracts](#compact-contracts).
+- `compact-compiler` runs this build by default (see [Compiler default](#compiler-default)).
 
 ## Usage
 
@@ -76,13 +86,13 @@ Output:
 |---|---|---|
 | 0 | success, zero mocks included | every mock compiled |
 | 1 | never | `compact compile` failed; its output is printed |
-| 2 | usage, config, source, plan, ownership or IO error; nothing written | the same, or `compact` could not start |
+| 2 | usage, config, source, plan, ownership or IO error; nothing written | the same errors, nothing written; or `compact` could not start, after the sources were written |
 
 ## Config
 
 `compact-mock` reads only `[mock]` and the tables under it; they reject unknown keys.
-Paths are relative to the config file, module paths and globs to `src`. The full
-compact-contracts table is in [`examples/compact.toml`](examples/compact.toml).
+Every other table of `compact.toml` is ignored. Paths are relative to the config file,
+module paths and globs to `src`.
 
 ### `[mock]`
 
@@ -96,15 +106,19 @@ compact-contracts table is in [`examples/compact.toml`](examples/compact.toml).
 
 ### `[mock.auth.<name>]`
 
+Authenticators. A rule's `auth` list gives one mock per name.
+
 | Key | Meaning |
 |---|---|
-| `module` | Authenticator module. |
-| `call` | Call template. Its circuit must return `caller_type`. `{salt}` appears at most once, as `pad(<n>, "{salt}")` or `"{salt}"`, or not at all. |
+| `module` | Authenticator module. Required. |
+| `call` | Call template. Required. Its circuit must return `caller_type`. `{salt}` appears at most once, as `pad(<n>, "{salt}")` or `"{salt}"`, or not at all. |
 | `prefix` | Import prefix; default `<module name>_`. |
 | `suffix` | Goes into mock names; default `""`. |
 
-The built-in `caller` keeps the caller a circuit argument; its table may set `suffix`
-only (default `"Caller"`).
+- Names match `[a-z][a-z0-9_]*` and are never a rule key.
+- An authenticator needs `[mock].caller_type`.
+- The built-in `caller` keeps the caller a circuit argument. Its table may set `suffix`
+  only (default `"Caller"`).
 
 ### `[mock.inject.<name>]`
 
@@ -112,37 +126,106 @@ Injectors fill parameters of another nominal type, such as a `Blinding`.
 
 | Key | Meaning |
 |---|---|
-| `module`, `call`, `prefix` | As for an authenticator. `call` takes no placeholder. |
+| `module`, `call`, `prefix` | As for an authenticator. `call` takes no placeholder and must return `type`. |
 | `type` | `{ name, module }`: a struct, enum or `new type`. A `new type` never matches its underlying type. |
 | `scope` | `"caller"` (default): only where an authenticator injected the caller in the same circuit. `"all"`: everywhere. |
 
+A rule may not list two injectors for one type.
+
 ### `[[mock.rules]]`
 
-A module gets mocks when a rule's `modules` glob matches it, its `exclude_modules` does
-not, and `[mock].exclude` does not. `*` stays in one path segment, `**` crosses them.
+A rule applies to a module when a `modules` glob matches it and no `exclude_modules`
+glob does. A module gets mocks when some rule applies and `[mock].exclude` does not match
+it. `*` stays in one path segment, `**` crosses them.
 
 | Key | Meaning |
 |---|---|
+| `modules` | Module globs. Required. |
+| `exclude_modules` | Module globs this rule skips. |
 | `auth` | Authenticators, one mock each; default `["caller"]`. Ignored for a module with no caller parameter. |
 | `inject` | Injectors this rule uses. |
-| `name` | Template: `{module}`, `{instance}`, `{suffix}`, `{dir}`. Default `Mock{module}{instance}{suffix}`. |
+| `name` | Name template. See [Naming](#naming). |
 | `prefix` | Module import prefix; default `<module name>_`. |
-| `salt` | String (inside the slot's literal), `{ ledger = "<field>" }` or `{ expr = "<expression>" }`. Default: the mock's name. |
-| `init` | `"auto"` (default), `"none"`, `"plain"`, or `{ flag, circuit }`. The init circuit defaults to `initialize`. |
-| `module_args`, `circuit_args` | Generic arguments. |
-| `exclude`, `disclose`, `guard`, `rename` | Per circuit. A `rename` key `name(T1, T2)` picks one overload. |
-| `ledger` | `true`, `false`, or a field list. |
-| `ledger_names` | `"prefixed"` (`<P><field>`) or `"plain"` (imported and exported bare). |
-| `include` | `true` (the conventional fragment when it exists), `false`, or a file under `test_dir`. |
+| `salt` | See [Salts](#salts). |
+| `init` | See [Constructor](#constructor). |
+| `module_args`, `circuit_args` | Generic arguments: a list, and a table of lists keyed by circuit. |
+| `exclude`, `disclose`, `rename` | Per circuit. A `rename` key `name(T1, T2)` picks one overload. |
+| `guard` | `true` for every exposed circuit, or a list of circuits. |
+| `ledger` | `true` (default), `false`, or a list of exported fields. |
+| `ledger_names` | `"prefixed"` (`<P><field>`) or `"plain"` (imported and exported bare). `"plain"` does not combine with a merged group. |
+| `include` | `true` (the conventional fragment when it exists), `false`, or a `.fragment.compact` file under `test_dir`. |
 | `implements` | Interfaces: `[{ name, module }]`. |
-| `instances` | `{ suffix, group?, prefix?, module_args?, circuit_args?, init?, salt?, exclude?, rename? }`. |
-| `merge` | All instances in one mock. |
-| `<auth name>` | Per-authenticator overrides, e.g. `prf.init = { flag = "isInit" }`. |
+| `instances` | See [Instances](#instances-and-merge). |
+| `merge` | All instances in one mock. Needs `instances`. |
+| `<auth name>` | A per-authenticator table, e.g. `prf.init = { flag = "isInit" }`. |
 
-Precedence: rules apply in file order and a later rule replaces only the keys it sets.
-Lists and tables replace whole. Per-authenticator tables apply next, instance keys last.
-A circuit or ledger field a rule names must exist in some module the rule applies to; a
-rule that applies to no module prints a note.
+A per-authenticator table sets only `inject`, `salt`, `init`, `exclude`, `disclose`,
+`guard`, `rename`, `ledger`, `ledger_names`, `include` and `implements`. The `caller`
+table takes no `salt`.
+
+### Precedence
+
+- Rules apply in file order. A later rule replaces only the keys it sets.
+- Lists and tables replace whole; they never merge.
+- Per-authenticator tables apply next, in file order. Instance keys apply last.
+- A circuit or ledger field a rule names must exist in some module that gets mocks from
+  it, so a module `[mock].exclude` removes does not count.
+- A rule that applies to no module prints a note and the run goes on.
+
+### Naming
+
+Default template: `Mock{module}{instance}{suffix}`.
+
+| Placeholder | Value |
+|---|---|
+| `{module}` | The module's file name, e.g. `Ownable`. |
+| `{instance}` | The instance `suffix`; the `group` name for a group; empty for `merge = true`. |
+| `{suffix}` | The authenticator's `suffix`. |
+| `{dir}` | The module's directory, each segment capitalized: `crypto/authentication` gives `CryptoAuthentication`. |
+
+Two mocks with one name, ignoring case, are an error that suggests `{dir}` or
+`{instance}`.
+
+### Salts
+
+The salt fills the `{salt}` slot of an authenticator's `call`.
+
+| Value | Effect |
+|---|---|
+| none | The mock's name, inside the slot's literal. |
+| `"<text>"` | The text, inside the slot's literal. Checked against the `pad(<n>, ...)` width. |
+| `{ ledger = "<field>" }` | Replaces the slot with the module's exported ledger field. |
+| `{ expr = "<expression>" }` | Replaces the slot with the expression. No width check. |
+
+A rule `salt` is ignored where the call has no slot. A `<name>.salt` for an authenticator
+whose call has no slot is an error.
+
+### Constructor
+
+| `init` | Constructor |
+|---|---|
+| `"auto"` (default) | Calls the init circuit with its parameters when the module exports it. |
+| `"plain"` | As `"auto"`, but some module the rule applies to must export the init circuit. |
+| `"none"` | None. The init circuit is exposed like any other. |
+| `{ flag, circuit }` | `flag` adds a `Boolean` parameter that gates the call. `circuit` names the init circuit; default `initialize`. |
+
+The constructor consumes the init circuit: the mock does not expose it.
+
+### Instances and merge
+
+`instances` is a list of tables with `suffix` (required) and optional `group`, `prefix`,
+`module_args`, `circuit_args`, `init`, `salt`, `exclude` and `rename`.
+
+- Each instance without a `group` is its own mock.
+- Instances with one `group` share one mock. `merge = true` puts every instance in one.
+- A merged mock imports the module once per instance. The prefix defaults to
+  `<module name><suffix>_`.
+- It wraps every circuit as `<circuit><suffix>` and exports pure circuits as
+  `<P><circuit>`.
+- It has one constructor: shared parameters (same name and type), then one `Boolean` per
+  flag.
+- Two instances with equal module arguments are an error: compactc would share one
+  instance.
 
 ## Generated mocks
 
@@ -161,10 +244,8 @@ rule that applies to no module prints a note.
   it, or two caller parameters in one circuit are errors.
 - **Overloads.** The first declared keeps its name, the k-th becomes `<name><k>`, unless
   a `rename` key picks it by its parameter types.
-- **Instances.** Each stand-alone instance is its own mock. A merged group imports the
-  module once per instance, wraps every circuit as `<circuit><suffix>`, exports pure
-  circuits as `<P><circuit>`, and has one constructor: shared parameters, then one
-  `Boolean` per flag. Two instances with equal module arguments are an error.
+- **`implements`.** The mock must expose every circuit the interface declares. A missing
+  one is an error that names the fragment to add it to.
 - **Witness clash.** Two files the mock imports that declare one witness name are an
   error naming both: compactc binds them to one witness function.
 - **Determinism.** No version or date in the output, so a tool upgrade alone changes no
@@ -181,6 +262,7 @@ src/<dir>/test/
     └── MockX/                build
 ```
 
+- Each module directory gets its own `artifacts/`, holding only that directory's mocks.
 - The tool writes only into an artifacts directory it creates, an empty one, or one with
   the stamp. Anything else fails the run before the first write.
 - It deletes only `<N>.compact` and `<N>/` for a name the stamp lists that the full
@@ -188,6 +270,7 @@ src/<dir>/test/
   links. A directory left with only its stamp is removed.
 - The stamp lists every new name before a source is written, so an interrupted run never
   leaves an unlisted file.
+- A run with any config, source or plan error writes nothing.
 
 ## Fragments
 
@@ -202,29 +285,98 @@ mock's last line, `include "../<Mock>.fragment";`.
   no init circuit).
 - A fragment's `export circuit` names count for `implements` and for `mock-coverage`.
 
-## Fixing a `disclose` error from compactc
+## Compiler default
 
-A wrapper or re-export that returns witness-derived data fails to compile with
-`potential witness-value disclosure must be declared`. Add the circuit named after
-`exported circuit` to `disclose` and build again.
+`compact-compiler` from [`@openzeppelin/compact-cli`](../../packages/cli) runs
+`compact-mock build` before its own compile when the nearest `compact.toml` has a `[mock]`
+table.
 
-## Migrating compact-contracts mocks
+- It passes its `+<version>`, `--skip-zk` and search directory (`--src`, `--dir`) on.
+- Its own walk excludes `*/artifacts/*` and `*.fragment.compact`.
+- `--no-mocks` skips the build and keeps the excludes.
+- `COMPACT_MOCK_BINARY` names the binary; otherwise `@openzeppelin/compact-mocker` must
+  be installed.
+- `compact-builder` never builds mocks.
 
-1. Append the `[mock]` table to the root `compact.toml`, starting from
-   [`examples/compact.toml`](examples/compact.toml).
+## Lint rule
+
+`compact-lint` reports `mock-coverage` (default `warn`) when `compact.toml` has a `[mock]`
+table:
+
+- a module under `src` that no rule matches and `[mock].exclude` does not list;
+- an exported circuit that none of its module's mocks exposes.
+
+It plans with this crate and writes nothing. See
+[`crates/compact-lint`](../compact-lint/README.md#rules).
+
+## compact-contracts
+
+[`examples/compact.toml`](examples/compact.toml) is the table that generates the
+compact-contracts unit mocks. A trimmed excerpt:
+
+```toml
+[mock]
+src = "contracts/src"
+spdx = "MIT"
+caller_type = { name = "Caller", module = "identifier/Identifier" }
+exclude = ["archive/**", "crypto/prf/*"]  # ... trimmed
+
+[mock.auth.prf]
+module = "crypto/authentication/AuthPrfPseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[mock.inject.blinding]
+module = "crypto/randomness/RandBlinding"
+type = { name = "Blinding", module = "crypto/randomness/RandBlinding" }
+call = "read()"
+
+[[mock.rules]]
+modules = ["**"]
+auth = ["prf", "caller"]
+
+[[mock.rules]]
+modules = ["access/ShieldedAccessControl"]
+salt = { ledger = "_instanceSalt" }
+inject = ["blinding"]
+
+[[mock.rules]]
+modules = ["math/UintN"]
+merge = true
+guard = true
+instances = [
+  { suffix = "0", prefix = "U0_", module_args = ["0"] },
+  # ... trimmed
+  { suffix = "248", prefix = "U248_", module_args = ["248"] },
+]
+
+# ... more rules
+```
+
+Migrating:
+
+1. Append the `[mock]` table to the root `compact.toml`, starting from the example.
 2. Delete each hand-written mock a rule replaces, and move what it has beyond forwards
    into a fragment.
 3. Point artifact imports at `test/artifacts/<Mock>/contract/index.js`.
 4. Run the unit specs unchanged. Fix differences in the config: `ledger = false` where
    a spec pins an empty public ledger, `rename`, `disclose`, an override table.
 
+## Fixing a `disclose` error from compactc
+
+A wrapper or re-export that returns witness-derived data fails to compile with
+`potential witness-value disclosure must be declared`. Add the circuit named after
+`exported circuit` to `disclose` and build again.
+
 ## Limits
 
 - A spec that names a mock's artifact by a path string in its body keeps that mock
   hand-written.
-- `implements` signatures are checked by compactc at `build`, not by the tool.
+- `implements` checks circuit names only. compactc checks signatures at `build`.
+- A plain `rename` key on an overloaded name renames the first overload only.
+- A merged group exports an overloaded pure circuit only through its wrappers.
 - An injector parameter that contains its type without being it is left as a parameter.
 - An overloaded init circuit the constructor calls is an error.
+- `build` compiles every selected mock on each run; there is no cache.
 
 ## Tests
 

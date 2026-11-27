@@ -8,6 +8,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `check` reports `mock-coverage` (default `warn`) when `compact.toml` has a `[mock]` table: a module under its `src` that no `[[mock.rules]]` glob matches and `[mock].exclude` does not list, and an exported circuit that none of its generated mocks exposes. A `[mock]` table that does not load exits 2 (#247)
+
+### Changed
+
+- `constraints.sources` defaults to `{dir}/test/artifacts/Mock{stem}.compact` first, where `compact-mock` writes a generated mock, then the two `test/mocks` templates (#247)
+
 ## 0.2.0 (2026-11-26)
 
 ### Added

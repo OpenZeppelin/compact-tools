@@ -9,6 +9,15 @@ Releases before this file see the `compact-cli/v*` tags.
 
 ## Unreleased
 
+### Added
+
+- `compact-compiler` runs `compact-mock build` before compiling when the nearest `compact.toml` has a `[mock]` table, passing on `+<version>`, `--skip-zk` and the search directory. Its own walk then excludes `*/artifacts/*` and `*.fragment.compact`. It needs `@openzeppelin/compact-mocker` or `COMPACT_MOCK_BINARY`, and a failed mock build stops the compile (#247)
+- `compact-compiler --no-mocks` skips the mock build (#247)
+
+### Changed
+
+- `compact-compiler` fails when the nearest `compact.toml` does not parse (#247)
+
 ## 0.3.1 (2026-11-19)
 
 ### Changed

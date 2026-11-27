@@ -274,7 +274,7 @@ it:
 ```json
 {
   "generatedAt": "2026-09-15T08:38:49.000Z",
-  "source": "contracts/src/access/test/mocks/MockOwnable.compact",
+  "source": "contracts/src/access/test/artifacts/MockOwnable.compact",
   "circuits": [{ "name": "owner", "k": 7, "rows": 74 }]
 }
 ```
@@ -392,7 +392,7 @@ Rule detail:
 ```toml
 [lint]
 include = ["contracts/src/**/*.compact"]
-exclude = ["**/test/mocks/**", "**/archive/**"]
+exclude = ["**/test/mocks/**", "**/test/artifacts/**", "**/archive/**"]
 
 [lint.constraints]
 tag = "@constraints"
@@ -433,7 +433,7 @@ Defaults when no config file is found:
 | `tags.forbid` | `[]` |
 | `tags.rename` | `{}` |
 | `fix.placeholder` | `"TODO"` |
-| `rules.<rule>` | `"error"`, except the four listed under Diagnostic levels |
+| `rules.<rule>` | `"error"`, except the `warn` rules listed under Diagnostic levels |
 | `kinds.<kind>.docs` | `"exported"` |
 | `kinds.<kind>.tags` | `[]` |
 | `kinds.<kind>.sections` | `[]` |

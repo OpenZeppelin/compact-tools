@@ -12,12 +12,17 @@ yarn add --dev @openzeppelin/compact-mocker
 ```
 
 ```bash
-npx @openzeppelin/compact-mocker generate
 yarn compact-mock generate
-yarn compact-mock generate --check
+yarn compact-mock build +0.36.0 --skip-zk
 ```
 
-The command, its flags, exit codes and `compact-mock.toml` are documented in the
+- Rules live in the `[mock]` table of `compact.toml`.
+- `generate` writes each mock to its module's `test/artifacts/` directory, which git
+  ignores. `build` also compiles it there.
+- `compact-compiler` from [`@openzeppelin/compact-cli`](../cli) runs `build` before its
+  own compile when `[mock]` exists, so this package is the dependency it needs.
+
+The commands, the `[mock]` keys, ownership and exit codes are documented in the
 [crate README](../../crates/compact-mock/README.md).
 
 ## Where the binary comes from
