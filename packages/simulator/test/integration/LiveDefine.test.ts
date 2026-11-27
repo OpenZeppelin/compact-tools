@@ -80,7 +80,9 @@ class DefineSimulator extends defineSimulator(DefineArtifact, {
 
 /** The contract state a fresh deploy leaves, read from a dry instance. */
 const deployedState = async (): Promise<StateValue> =>
-  (await DefineSimulator.create(OWNER, VALUES, ORIGIN)).getContractState();
+  (
+    await DefineSimulator.create(OWNER, VALUES, ORIGIN, { backend: 'dry' })
+  ).getContractState();
 
 describe('defined simulators on the live backend', () => {
   afterEach(() => clearLiveBackend());

@@ -80,6 +80,26 @@ type MissingWitnesses<
   ? never
   : Exclude<keyof ContractWitnesses<A>, keyof W>;
 
+/**
+ * Witnesses of a part that names its private-state factory and that return
+ * less than that factory's whole state. A composed part is checked by its parts.
+ */
+type PartialOwnedWitnesses<F> = F extends {
+  readonly parts: readonly (infer G)[];
+}
+  ? PartialOwnedWitnesses<G>
+  : F extends PartFactory & { privateState: () => infer S }
+    ? {
+        [K in keyof ReturnType<F>]: ReturnType<F>[K] extends (
+          ...args: any[]
+        ) => [infer O, unknown]
+          ? [O] extends [S]
+            ? never
+            : K
+          : never;
+      }[keyof ReturnType<F>]
+    : never;
+
 /** The private state a definition's `privateState` yields. */
 export type DefinedPrivateState<PS> = PS extends readonly (infer F extends
   PartFactory)[]
@@ -107,7 +127,10 @@ type WitnessesFor<
   ? readonly PartFactory<ArtifactWitnessPart<A, P>>[] &
       ([MissingWitnesses<A, Composed<F>>] extends [never]
         ? unknown
-        : { readonly missingWitnesses: MissingWitnesses<A, Composed<F>> })
+        : { readonly missingWitnesses: MissingWitnesses<A, Composed<F>> }) &
+      ([PartialOwnedWitnesses<F>] extends [never]
+        ? unknown
+        : { readonly partialOwnedState: PartialOwnedWitnesses<F> })
   : PartFactory<ArtifactWitnesses<A, P>>;
 
 /** Whether a definition's `witnesses` fit the contract and `P`. */
@@ -115,7 +138,9 @@ type WitnessesFit<A extends ContractArtifact, WS, P> = [WS] extends [undefined]
   ? true
   : WS extends readonly (infer F extends PartFactory)[]
     ? [ReturnType<F>] extends [ArtifactWitnessPart<A, P>]
-      ? [MissingWitnesses<A, Composed<F>>] extends [never]
+      ? [MissingWitnesses<A, Composed<F>> | PartialOwnedWitnesses<F>] extends [
+          never,
+        ]
         ? true
         : false
       : false
@@ -282,6 +307,12 @@ type DeclaresWitnesses<A extends ContractArtifact> =
       ? false
       : true;
 
+/** Fails a call without a definition for a contract with witnesses. */
+type WithoutDefinition<A extends ContractArtifact> =
+  DeclaresWitnesses<A> extends true
+    ? { readonly 'a contract with witnesses needs a definition': never }
+    : unknown;
+
 /**
  * The definition of a class without `prepare`. A contract with witnesses needs
  * one, with `witnesses` set.
@@ -393,24 +424,21 @@ function splitPositional(
   );
 }
 
-/** Calls `fn`, then clears a caller `as()` set and the call did not use. */
+/**
+ * Calls `fn`, then clears a caller `as()` set and the call did not use. It
+ * clears when `fn` returns, so a promise that settles later never clears a
+ * caller set after the call.
+ */
 function consumingCaller(
   fn: (...args: unknown[]) => unknown,
   consume: () => void,
 ): (...args: unknown[]) => unknown {
   return function (this: unknown, ...args: unknown[]) {
-    let result: unknown;
     try {
-      result = fn.apply(this, args);
-    } catch (error) {
+      return fn.apply(this, args);
+    } finally {
       consume();
-      throw error;
     }
-    if (typeof (result as PromiseLike<unknown> | null)?.then === 'function') {
-      return Promise.resolve(result).finally(consume);
-    }
-    consume();
-    return result;
   };
 }
 
@@ -505,9 +533,27 @@ export function defineSimulator<
   X = unknown,
 >(
   artifact: A,
-  ...definition: DeclaresWitnesses<A> extends true
-    ? [definition: PositionalDefinition<A, WS, PS, X>]
-    : [definition?: PositionalDefinition<A, WS, PS, X>]
+  definition: PositionalDefinition<A, WS, PS, X>,
+): DefinedSimulatorClass<
+  A,
+  DefinedPrivateState<PS>,
+  DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
+  X,
+  PositionalInput<
+    A,
+    DefinedPrivateState<PS>,
+    DefinedWitnesses<A, WS, DefinedPrivateState<PS>>
+  >
+>;
+// Without a definition. Kept apart from the overload above: a conditional rest
+// there infers a generic `extend` helper's type parameters as `unknown`.
+export function defineSimulator<
+  A extends ContractArtifact,
+  WS = undefined,
+  PS = undefined,
+  X = unknown,
+>(
+  artifact: A & WithoutDefinition<A>,
 ): DefinedSimulatorClass<
   A,
   DefinedPrivateState<PS>,
@@ -555,12 +601,16 @@ export function defineSimulator(
     }
   };
 
+  // The names `extend` gave each instance, which `fields` cannot redefine.
+  const extendKeys = new WeakMap<object, readonly PropertyKey[]>();
+
   class DefinedSimulator extends Base {
     constructor(deps: BackendDeps<unknown, unknown>) {
       super(deps);
       if (!extend) return;
       const members = extend(this as never) as object;
       assertNotReserved('extend', members);
+      extendKeys.set(this, Reflect.ownKeys(members));
       // A member that replaces a circuit spends the `as()` caller like the
       // circuit. Other members behave like subclass methods.
       const circuitNames = new Set([...deps.pureNames, ...deps.impureNames]);
@@ -582,7 +632,16 @@ export function defineSimulator(
       if (fields) assertNotReserved('prepare `fields`', fields);
       // biome-ignore lint/complexity/noThisInStatic: keep the caller's `this` so a subclass constructs its own type.
       const sim = await Base._create.call(this, args, options);
-      if (fields) defineMembers(sim, fields);
+      if (fields) {
+        for (const key of Reflect.ownKeys(fields)) {
+          if (extendKeys.get(sim)?.includes(key)) {
+            throw new Error(
+              `defineSimulator: "${String(key)}" is defined by both \`extend\` and prepare \`fields\``,
+            );
+          }
+        }
+        defineMembers(sim, fields);
+      }
       return sim;
     }
   }

@@ -1,6 +1,6 @@
 import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 import { describe, expect, it } from 'vitest';
-import { defineSimulator } from '../../src/index.js';
+import { composeWitnesses, defineSimulator } from '../../src/index.js';
 import * as DefineArtifact from '../fixtures/artifacts/Define/contract/index.js';
 import {
   CountPrivateState,
@@ -41,8 +41,9 @@ const SpreadingWitnesses = <L>() => ({
 const EmptyingWitnesses = <L>() => ({
   wit_secret({
     privateState,
-  }: WitnessContext<L, SecretState>): [Partial<SecretState>, bigint] {
-    return [{}, privateState.secret];
+  }: WitnessContext<L, SecretState>): [SecretState, bigint] {
+    // Cast: the part check rejects an owning witness that drops `secret`.
+    return [{} as SecretState, privateState.secret];
   },
 });
 
@@ -83,6 +84,18 @@ class UnownedSlice extends defineSimulator(DefineArtifact, {
   privateState: stateParts,
 }) {}
 
+class NestedSlice extends defineSimulator(DefineArtifact, {
+  witnesses: [
+    CountWitnesses,
+    composeWitnesses(
+      Object.assign(<L>() => SlicingWitnesses<L>(), {
+        privateState: SecretState.generate,
+      }),
+    ),
+  ],
+  privateState: stateParts,
+}) {}
+
 describe('a witness part that names its private-state factory', () => {
   it('deletes an owned key its returned part omits and keeps the other parts', async () => {
     const sim = await OwnedSlice.create(OWNER, VALUES, ORIGIN);
@@ -111,6 +124,56 @@ describe('a witness part that names its private-state factory', () => {
     await sim.storeSecret();
 
     expect(await sim.getPrivateState()).toStrictEqual({ count: 3n });
+  });
+
+  it('deletes an owned key inside a composeWitnesses part', async () => {
+    const sim = await NestedSlice.create(OWNER, VALUES, ORIGIN);
+
+    await sim.storeSecret();
+
+    expect(await sim.getPrivateState()).toStrictEqual({
+      count: 3n,
+      secret: 7n,
+    });
+  });
+
+  it('deletes an owned symbol key its returned part omits', () => {
+    const nonce = Symbol('nonce');
+    type NonceState = { secret: bigint; [nonce]?: bigint };
+    const witnesses = composeWitnesses(
+      Object.assign(
+        <L>() => ({
+          wit_secret({
+            privateState,
+          }: WitnessContext<L, NonceState>): [NonceState, bigint] {
+            return [{ secret: privateState.secret }, privateState.secret];
+          },
+        }),
+        { privateState: (): NonceState => ({ secret: 7n, [nonce]: 1n }) },
+      ),
+    )();
+    const context = {
+      privateState: { count: 3n, secret: 7n, [nonce]: 1n },
+    } as unknown as WitnessContext<unknown, NonceState>;
+
+    const [next] = witnesses.wit_secret(context);
+
+    expect(next).toStrictEqual({ count: 3n, secret: 7n });
+  });
+
+  it('rejects a witness a listed part and a composeWitnesses part both define', () => {
+    expect(() =>
+      defineSimulator(DefineArtifact, {
+        witnesses: [
+          CountWitnesses,
+          SlicingWitnesses,
+          composeWitnesses(SpreadingWitnesses),
+        ],
+        privateState: stateParts,
+      }),
+    ).toThrow(
+      'witness "wit_secret" is defined by both part 1 ("SlicingWitnesses") and part 2 ("SpreadingWitnesses")',
+    );
   });
 });
 

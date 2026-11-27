@@ -127,6 +127,8 @@ async function _circuits(): Promise<void> {
   await sim.burn();
   // @ts-expect-error wrong argument type.
   await sim.mint('1');
+  // @ts-expect-error wrong argument type after `as()`.
+  await sim.as('OWNER').mint('1');
 
   void [minted, hashed, chained, ledger];
 }
@@ -204,6 +206,47 @@ defineSimulator(artifact, {
   privateState: [moduleState],
 });
 
+// A part that names its private-state factory owns its keys: its witnesses
+// return that whole state, and only an optional key may be left out.
+
+type PendingAuthState = AuthState & { pending?: bigint };
+declare const pendingAuthState: () => PendingAuthState;
+declare const partialAuthWitnesses: <L>() => {
+  wit_secret(
+    context: WitnessContext<L, PendingAuthState>,
+  ): [Partial<PendingAuthState>, Uint8Array];
+};
+declare const slicedAuthWitnesses: <L>() => {
+  wit_secret(
+    context: WitnessContext<L, PendingAuthState>,
+  ): [AuthState, Uint8Array];
+};
+const owning = <W extends object>(witnesses: W) =>
+  Object.assign(witnesses, { privateState: pendingAuthState });
+
+defineSimulator(artifact, {
+  // @ts-expect-error an owning part's witness returns part of its state.
+  witnesses: [moduleWitnesses, owning(partialAuthWitnesses)],
+  privateState: [moduleState, pendingAuthState],
+});
+
+defineSimulator(artifact, {
+  // @ts-expect-error the same, inside a `composeWitnesses` part.
+  witnesses: [moduleWitnesses, composeWitnesses(owning(partialAuthWitnesses))],
+  privateState: [moduleState, pendingAuthState],
+});
+
+defineSimulator(artifact, {
+  witnesses: [moduleWitnesses, owning(slicedAuthWitnesses)],
+  privateState: [moduleState, pendingAuthState],
+});
+
+// A part that names no factory may return part of the state.
+defineSimulator(artifact, {
+  witnesses: [moduleWitnesses, partialAuthWitnesses],
+  privateState: [moduleState, pendingAuthState],
+});
+
 // @ts-expect-error a contract with witnesses needs `witnesses`.
 defineSimulator(artifact, { privateState: bundledState });
 
@@ -266,6 +309,8 @@ async function _extend(): Promise<void> {
 
   // @ts-expect-error `extend` typed the bag.
   await sim.privateState.injectSecret(1n);
+  // @ts-expect-error wrong argument type after `as()`.
+  sim.as('OWNER').hash('1');
 
   void [injected, hashed, chained];
 }
@@ -377,6 +422,16 @@ const ledgerHelpers = <L extends { counter: bigint }>(
   counter: async (): Promise<bigint> => (await sim.getPublicState()).counter,
 });
 
+// Generic over a circuit argument: `C` is inferred from `sim` and returned.
+const mintHelpers = <C>(
+  sim: PrivateStateAccess<BundledState> & { mint(amount: C): Promise<[]> },
+) => ({
+  mintTwice: async (amount: C): Promise<void> => {
+    await sim.mint(amount);
+    await sim.mint(amount);
+  },
+});
+
 const prepareOwner = (owner: Uint8Array = new Uint8Array(32)) => ({
   args: [owner, [1n] as bigint[]] as const,
   fields: { tag: 'prepared' as const },
@@ -393,15 +448,25 @@ const GenericHelpers = defineSimulator(stateless, {
   extend: ledgerHelpers,
 });
 
+const GenericArgument = defineSimulator(artifact, {
+  witnesses: bundledWitnesses,
+  privateState: bundledState,
+  extend: mintHelpers,
+});
+
 async function _outOfLine(): Promise<void> {
   const sim = await OutOfLine.create();
   const bumped: ModuleState = await sim.privateState.bump(1n);
   const tag: 'prepared' = sim.tag;
   const generic = await GenericHelpers.create(new Uint8Array(32), [1n]);
   const counter: bigint = await generic.counter();
+  const minter = await GenericArgument.create(new Uint8Array(32), [1n]);
+  await minter.mintTwice(1n);
 
   // @ts-expect-error a helper typed for another private state.
   defineSimulator(stateless, { privateState: authState, extend: stateHelpers });
+  // @ts-expect-error `C` is the circuit's argument type.
+  await minter.mintTwice('1');
 
   void [bumped, tag, counter];
 }

@@ -73,15 +73,33 @@ function witnessKeys(value: object): string[] {
 const isRecord = (value: unknown): value is Record<PropertyKey, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** Own enumerable keys, symbols included. */
+const ownEnumerableKeys = (value: object): PropertyKey[] =>
+  Reflect.ownKeys(value).filter((key) =>
+    Object.prototype.propertyIsEnumerable.call(value, key),
+  );
+
+/** The factories {@link composeWitnesses} returned. */
+const composedWitnesses = new WeakSet<PartFactory>();
+
+/** Replaces each {@link composeWitnesses} factory with its parts. */
+function flattenWitnesses(parts: readonly PartFactory[]): PartFactory[] {
+  return parts.flatMap((part) =>
+    composedWitnesses.has(part)
+      ? flattenWitnesses((part as ComposedFactory<object, PartFactory[]>).parts)
+      : [part],
+  );
+}
+
 /**
  * The private-state keys a witness part owns: those of the state its optional
  * `privateState` factory returns. None when it declares no factory.
  */
-function ownedKeys(part: PartFactory): string[] {
+function ownedKeys(part: PartFactory): PropertyKey[] {
   const factory = (part as { privateState?: unknown }).privateState;
   if (typeof factory !== 'function') return [];
   const state: unknown = factory();
-  return isRecord(state) ? Object.keys(state) : [];
+  return isRecord(state) ? ownEnumerableKeys(state) : [];
 }
 
 /**
@@ -90,10 +108,10 @@ function ownedKeys(part: PartFactory): string[] {
  */
 function mergingWitness(
   part: object,
-  key: string,
-  owned: readonly string[],
+  key: PropertyKey,
+  owned: readonly PropertyKey[],
 ): unknown {
-  const witness = (part as Record<string, unknown>)[key];
+  const witness = (part as Record<PropertyKey, unknown>)[key];
   if (typeof witness !== 'function') return witness;
   return (context: WitnessContext<unknown, unknown>, ...args: unknown[]) => {
     const [next, value] = witness.call(part, context, ...args) as [
@@ -110,29 +128,38 @@ function mergingWitness(
   };
 }
 
-/** Calls every part and merges the results. A key two parts define throws. */
+/**
+ * Calls every part and merges the results. A key two parts define throws.
+ * Each key is an own data property, so a `__proto__` key stays a key.
+ */
 function mergeParts(
   kind: PartKind,
   parts: readonly PartFactory[],
-): Record<string, unknown> {
-  const merged: Record<string, unknown> = {};
-  const owners = new Map<string, number>();
+): Record<PropertyKey, unknown> {
+  const merged: Record<PropertyKey, unknown> = {};
+  const owners = new Map<PropertyKey, number>();
   parts.forEach((part, index) => {
     const value = part();
     const owned = kind === 'witness' ? ownedKeys(part) : [];
-    const keys = kind === 'witness' ? witnessKeys(value) : Object.keys(value);
+    const keys =
+      kind === 'witness' ? witnessKeys(value) : ownEnumerableKeys(value);
     for (const key of keys) {
       const owner = owners.get(key);
       if (owner !== undefined) {
         throw new Error(
-          `${kind} "${key}" is defined by both ${label(parts[owner], owner)} and ${label(part, index)}`,
+          `${kind} "${String(key)}" is defined by both ${label(parts[owner], owner)} and ${label(part, index)}`,
         );
       }
       owners.set(key, index);
-      merged[key] =
-        kind === 'witness'
-          ? mergingWitness(value, key, owned)
-          : (value as Record<string, unknown>)[key];
+      Object.defineProperty(merged, key, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value:
+          kind === 'witness'
+            ? mergingWitness(value, key, owned)
+            : (value as Record<PropertyKey, unknown>)[key],
+      });
     }
   });
   return merged;
@@ -140,15 +167,18 @@ function mergeParts(
 
 /**
  * Builds the merged factory. Two or more parts are called once here, so a
- * clash throws where the parts are declared.
+ * clash throws where the parts are declared. A {@link composeWitnesses}
+ * factory among witness parts is merged as its parts, so each witness is
+ * wrapped once.
  */
 function composeParts(
   kind: PartKind,
   parts: readonly PartFactory[],
 ): ComposedFactory<object, readonly PartFactory[]> {
   const list = Object.freeze([...parts]);
-  if (list.length > 1) mergeParts(kind, list);
-  const factory = () => mergeParts(kind, list);
+  const merged = kind === 'witness' ? flattenWitnesses(list) : list;
+  if (merged.length > 1) mergeParts(kind, merged);
+  const factory = () => mergeParts(kind, merged);
   return Object.defineProperty(factory, 'parts', { value: list }) as never;
 }
 
@@ -159,13 +189,16 @@ function composeParts(
  * A part's witness reads and returns its own part of the private state. The
  * merged witness writes the returned part over the whole state, so other
  * parts' keys stay. A part that names its private-state factory owns that
- * factory's keys, and an owned key its witness omits is deleted:
+ * factory's keys: its witnesses return that whole state, and an optional owned
+ * key they omit is deleted:
  * `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
  */
 export function composeWitnesses<const F extends readonly PartFactory[]>(
   ...parts: F
 ): ComposedFactory<ComposedWitnesses<F[number]> & object, F> {
-  return composeParts('witness', parts) as never;
+  const factory = composeParts('witness', parts);
+  composedWitnesses.add(factory);
+  return factory as never;
 }
 
 /**

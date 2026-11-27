@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RESERVED_FLAT_NAMES } from '../../src/factory/createSimulator.js';
+import { isLiveBackend } from '../../src/index.js';
 import {
   FlatBase,
   FlatSimulator,
@@ -33,7 +34,8 @@ const witnessValue =
 
 const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
-describe('flat circuit methods', () => {
+// Dry only: `create` gets no LiveContext here, as no live backend is registered.
+describe.skipIf(isLiveBackend())('flat circuit methods', () => {
   describe('install set', () => {
     it('gives every circuit an own method except base members, Object.prototype names and then', async () => {
       const sim = await FlatBase.create();
