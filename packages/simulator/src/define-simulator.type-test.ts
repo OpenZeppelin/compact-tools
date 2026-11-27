@@ -326,6 +326,21 @@ defineSimulator(artifact, {
   }),
 });
 
+defineSimulator(artifact, {
+  privateState: bundledState,
+  // @ts-expect-error neither the definition nor `prepare` supplies the witnesses.
+  prepare: () => ({ args: [new Uint8Array(32), [1n] as bigint[]] as const }),
+});
+
+defineSimulator(artifact, {
+  privateState: bundledState,
+  prepare: () => ({
+    args: [new Uint8Array(32), [1n] as bigint[]] as const,
+    // @ts-expect-error the prepared options leave the witnesses out.
+    options: { privateState: bundledState() },
+  }),
+});
+
 // Helpers written outside the spec, as a witnesses file writes them.
 const stateHelpers = (sim: PrivateStateAccess<ModuleState>) => ({
   privateState: {

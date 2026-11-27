@@ -328,7 +328,7 @@ Definition fields, all optional:
 | `witnesses` | no witnesses | Witness factory, or a list of factories merged into one. Required when the contract declares witnesses, unless `prepare` supplies them. |
 | `privateState` | `{}` | Factory for the initial private state, or a list merged into one. |
 | `extend` | none | `(sim) => members`. Added to every instance: helper bags, wrappers, sync versions of circuits. A member replaces the circuit method of the same name. Getters stay getters. |
-| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. The class has no `_create`. |
+| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. Without definition `witnesses`, a contract with witnesses needs `options.witnesses`. The class has no `_create`. |
 | `artifactName` | none | The `artifacts/<name>/` directory the live backend deploys. |
 | `arity` | read from the artifact | The constructor's argument count. |
 

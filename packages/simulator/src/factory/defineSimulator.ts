@@ -295,6 +295,17 @@ type PositionalDefinition<
   DefinitionCheck<A, WS, PS> &
   (DeclaresWitnesses<A> extends true ? { witnesses: object } : unknown);
 
+/**
+ * What `prepare` must return besides {@link PreparedCreate}: the witnesses,
+ * when the contract declares witnesses and the definition sets none.
+ */
+type PreparedWitnesses<A extends ContractArtifact, WS, W> =
+  DeclaresWitnesses<A> extends true
+    ? [WS] extends [undefined]
+      ? { options: { witnesses: W } }
+      : unknown
+    : unknown;
+
 type AnyDefinition = SimulatorDefinition<
   ContractArtifact,
   Parts | undefined,
@@ -449,7 +460,12 @@ export function defineSimulator<
         DefinedPrivateState<PS>,
         DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
         F
-      >;
+      > &
+        PreparedWitnesses<
+          A,
+          WS,
+          DefinedWitnesses<A, WS, DefinedPrivateState<PS>>
+        >;
     },
 ): PreparedSimulatorClass<
   A,
