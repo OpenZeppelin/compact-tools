@@ -1,3 +1,4 @@
+import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 import type { IMinimalContract } from '../types/Contract.js';
 import type { FlatCircuits } from '../types/index.js';
 import type { SimulatorOptions } from '../types/Options.js';
@@ -11,6 +12,7 @@ import {
   type BackendDeps,
   createSimulator,
   type ReservedFlatName,
+  SIMULATOR_FIELDS,
   type SimulatorInstance,
 } from './createSimulator.js';
 
@@ -42,6 +44,98 @@ export type ConstructorArgs<A extends ContractArtifact> =
   }
     ? R
     : never;
+
+type ContractWitnesses<A extends ContractArtifact> = ConstructorParameters<
+  A['Contract']
+>[0];
+
+/**
+ * The witness set an artifact's contract takes, with the private state `P`.
+ * Each witness reads `P` and returns the whole of it.
+ */
+export type ArtifactWitnesses<A extends ContractArtifact, P> = {
+  [K in keyof ContractWitnesses<A>]: ContractWitnesses<A>[K] extends (
+    context: WitnessContext<infer L, any>,
+    ...args: infer Args
+  ) => [any, infer R]
+    ? (context: WitnessContext<L, P>, ...args: Args) => [P, R]
+    : ContractWitnesses<A>[K];
+};
+
+/** What one part of a merged witness set may define: it returns its own slice of `P`. */
+type ArtifactWitnessPart<A extends ContractArtifact, P> = {
+  [K in keyof ContractWitnesses<A>]?: ContractWitnesses<A>[K] extends (
+    context: WitnessContext<infer L, any>,
+    ...args: infer Args
+  ) => [any, infer R]
+    ? (context: WitnessContext<L, P>, ...args: Args) => [Partial<P>, R]
+    : ContractWitnesses<A>[K];
+};
+
+/** Witness names the contract declares that `W` lacks. */
+type MissingWitnesses<
+  A extends ContractArtifact,
+  W,
+> = string extends keyof ContractWitnesses<A>
+  ? never
+  : Exclude<keyof ContractWitnesses<A>, keyof W>;
+
+/** The private state a definition's `privateState` yields. */
+export type DefinedPrivateState<PS> = PS extends readonly (infer F extends
+  PartFactory)[]
+  ? Composed<F>
+  : PS extends PartFactory
+    ? ReturnType<PS>
+    : Record<string, never>;
+
+/**
+ * The witness type of a defined simulator: a single factory's own type,
+ * otherwise the contract's witness set with private state `P`.
+ */
+export type DefinedWitnesses<
+  A extends ContractArtifact,
+  WS,
+  P,
+> = WS extends PartFactory ? ReturnType<WS> : ArtifactWitnesses<A, P>;
+
+/** What a definition's `witnesses` must be for the contract and `P`. */
+type WitnessesFor<
+  A extends ContractArtifact,
+  WS,
+  P,
+> = WS extends readonly (infer F extends PartFactory)[]
+  ? readonly PartFactory<ArtifactWitnessPart<A, P>>[] &
+      ([MissingWitnesses<A, Composed<F>>] extends [never]
+        ? unknown
+        : { readonly missingWitnesses: MissingWitnesses<A, Composed<F>> })
+  : PartFactory<ArtifactWitnesses<A, P>>;
+
+/** Whether a definition's `witnesses` fit the contract and `P`. */
+type WitnessesFit<A extends ContractArtifact, WS, P> = [WS] extends [undefined]
+  ? true
+  : WS extends readonly (infer F extends PartFactory)[]
+    ? [ReturnType<F>] extends [ArtifactWitnessPart<A, P>]
+      ? [MissingWitnesses<A, Composed<F>>] extends [never]
+        ? true
+        : false
+      : false
+    : WS extends PartFactory
+      ? [ReturnType<WS>] extends [ArtifactWitnesses<A, P>]
+        ? true
+        : false
+      : false;
+
+/**
+ * Checks a definition against the contract: on a mismatch, `witnesses` must
+ * have the type the contract expects, which names the mismatch. Deferred, so
+ * it never steers inference.
+ */
+type DefinitionCheck<A extends ContractArtifact, WS, PS> = NoInfer<
+  (WitnessesFit<A, WS, DefinedPrivateState<PS>> extends true
+    ? unknown
+    : { witnesses: WitnessesFor<A, WS, DefinedPrivateState<PS>> }) &
+    ([PS] extends [Parts | undefined] ? unknown : { privateState: Parts })
+>;
 
 /**
  * Static names a pure circuit never takes: function and `Object.prototype`
@@ -102,10 +196,10 @@ export type PrivateStateAccess<P> = Pick<
 /** `create`'s positional form: the constructor arguments, then optional options. */
 export type PositionalInput<A extends ContractArtifact, P, W> =
   | ConstructorArgs<A>
-  | [...ConstructorArgs<A>, SimulatorOptions<P, W>];
+  | [...ConstructorArgs<A>, SimulatorOptions<P, W> | undefined];
 
-/** The class {@link defineSimulator} returns. Extend it to name the type. */
-export type DefinedSimulatorClass<
+/** The class a definition with `prepare` returns. Extend it to name the type. */
+export type PreparedSimulatorClass<
   A extends ContractArtifact,
   P,
   W,
@@ -117,15 +211,25 @@ export type DefinedSimulatorClass<
     this: T,
     ...input: I
   ): Promise<InstanceType<T>>;
+} & (new (
+    deps: BackendDeps<P, ArtifactLedger<A>>,
+  ) => DefinedSimulatorInstance<A, P, W, X>);
+
+/** The class {@link defineSimulator} returns. Extend it to name the type. */
+export type DefinedSimulatorClass<
+  A extends ContractArtifact,
+  P,
+  W,
+  X,
+  I extends readonly unknown[],
+> = PreparedSimulatorClass<A, P, W, X, I> & {
   /** The tuple form `createSimulator` classes use. */
   _create<T extends abstract new (...args: any) => any>(
     this: T,
     contractArgs?: ConstructorArgs<A>,
     options?: SimulatorOptions<P, W>,
   ): Promise<InstanceType<T>>;
-} & (new (
-    deps: BackendDeps<P, ArtifactLedger<A>>,
-  ) => DefinedSimulatorInstance<A, P, W, X>);
+};
 
 /** What `prepare` returns for one `create` call. */
 export interface PreparedCreate<A extends ContractArtifact, P, W, F> {
@@ -137,27 +241,28 @@ export interface PreparedCreate<A extends ContractArtifact, P, W, F> {
 }
 
 /** The settings {@link defineSimulator} takes besides the artifact. */
-export interface SimulatorDefinition<
-  A extends ContractArtifact,
-  WF extends PartFactory,
-  PF extends PartFactory,
-  X,
-> {
+export interface SimulatorDefinition<A extends ContractArtifact, WS, PS, X> {
   /**
    * Witness factory, or a list of factories merged into one (module and
-   * authenticator parts). Defaults to no witnesses.
+   * authenticator parts). Checked against the contract's witnesses.
    */
-  witnesses?: Parts<WF>;
+  witnesses?: WS;
   /**
    * Factory for the private state an instance starts with, or a list of
    * factories merged into one. Defaults to `{}`.
    */
-  privateState?: Parts<PF>;
+  privateState?: PS;
   /**
    * Adds members to every instance, e.g. a `privateState` helper bag. They
    * replace circuit methods of the same name.
    */
-  extend?: (sim: DefinedSimulatorInstance<A, Composed<PF>, Composed<WF>>) => X;
+  extend?: (
+    sim: DefinedSimulatorInstance<
+      A,
+      DefinedPrivateState<PS>,
+      DefinedWitnesses<A, WS, DefinedPrivateState<PS>>
+    >,
+  ) => X;
   /** The `artifacts/<name>/` directory the live backend deploys. Dry ignores it. */
   artifactName?: string;
   /**
@@ -167,10 +272,18 @@ export interface SimulatorDefinition<
   arity?: number;
 }
 
+/** Requires `witnesses` when the contract declares witnesses. */
+type WitnessesRequired<A extends ContractArtifact> =
+  string extends keyof ContractWitnesses<A>
+    ? unknown
+    : [keyof ContractWitnesses<A>] extends [never]
+      ? unknown
+      : { witnesses: unknown };
+
 type AnyDefinition = SimulatorDefinition<
   ContractArtifact,
-  PartFactory,
-  PartFactory,
+  Parts | undefined,
+  Parts | undefined,
   object
 > & {
   prepare?: (...input: unknown[]) => {
@@ -204,31 +317,75 @@ function readArity(contract: ContractArtifact['Contract']): number {
   return Number(match[2]) - 1;
 }
 
+/** A plain object or `undefined`, e.g. not a bigint, an array or a byte array. */
+const isOptions = (value: unknown): value is object | undefined =>
+  value === undefined ||
+  Object.prototype.toString.call(value) === '[object Object]';
+
 function splitPositional(
   input: unknown[],
   arity: number,
 ): { args: unknown[]; options?: object; fields?: object } {
   if (input.length === arity) return { args: input };
   if (input.length === arity + 1) {
-    return {
-      args: input.slice(0, arity),
-      options: (input[arity] ?? {}) as object,
-    };
+    const options = input[arity];
+    if (!isOptions(options)) {
+      throw new Error(
+        `create: argument ${arity + 1} must be an options object, received ${Object.prototype.toString.call(options).slice(8, -1)}`,
+      );
+    }
+    return { args: input.slice(0, arity), options };
   }
   throw new Error(
     `create: expected ${arity} constructor argument(s) and an optional options object, received ${input.length} argument(s)`,
   );
 }
 
-/** Defines each own key of `members` on `target`, like a class field. */
-function defineMembers(target: object, members: object): void {
-  for (const key of Reflect.ownKeys(members)) {
-    Object.defineProperty(target, key, {
-      configurable: true,
-      enumerable: true,
-      writable: true,
-      value: (members as Record<PropertyKey, unknown>)[key],
-    });
+/** Calls `fn`, then clears a caller `as()` set and the call did not use. */
+function consumingCaller(
+  fn: (...args: unknown[]) => unknown,
+  consume: () => void,
+): (...args: unknown[]) => unknown {
+  return function (this: unknown, ...args: unknown[]) {
+    let result: unknown;
+    try {
+      result = fn.apply(this, args);
+    } catch (error) {
+      consume();
+      throw error;
+    }
+    if (typeof (result as PromiseLike<unknown> | null)?.then === 'function') {
+      return Promise.resolve(result).finally(consume);
+    }
+    consume();
+    return result;
+  };
+}
+
+/**
+ * Defines each own member of `members` on `target`, like a class field.
+ * Accessors stay accessors; `wrap` maps function values.
+ */
+function defineMembers(
+  target: object,
+  members: object,
+  wrap: (value: unknown) => unknown = (value) => value,
+): void {
+  const descriptors = Object.getOwnPropertyDescriptors(members);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const { value, get, set, enumerable } = descriptors[key as string];
+    Object.defineProperty(
+      target,
+      key,
+      get || set
+        ? { configurable: true, enumerable, get, set }
+        : {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: wrap(value),
+          },
+    );
   }
 }
 
@@ -240,6 +397,8 @@ function defineMembers(target: object, members: object): void {
  * - Every pure circuit is also a synchronous static method.
  * - `create(...constructorArgs, options?)` takes the contract's constructor
  *   arguments positionally. With `prepare`, it takes `prepare`'s parameters.
+ * - `witnesses` are checked against the contract's witnesses, with the private
+ *   state `privateState` yields.
  * - The live backend sees a full `SimulatorConfig`: identity `contractArgs`,
  *   the witness and private-state factories, `artifactName`.
  *
@@ -255,35 +414,55 @@ function defineMembers(target: object, members: object): void {
  */
 export function defineSimulator<
   A extends ContractArtifact,
-  WF extends PartFactory = () => object,
-  PF extends PartFactory = () => Record<string, never>,
+  WS = undefined,
+  PS = undefined,
   X = unknown,
   I extends readonly unknown[] = never,
   F = unknown,
 >(
   artifact: A,
-  definition: SimulatorDefinition<A, WF, PF, X> & {
-    /**
-     * Replaces the positional form: maps `create`'s arguments to the
-     * constructor arguments, the options, and fields for the new instance.
-     */
-    prepare: (...input: I) => PreparedCreate<A, Composed<PF>, Composed<WF>, F>;
-  },
-): DefinedSimulatorClass<A, Composed<PF>, Composed<WF>, X & F, I>;
+  definition: SimulatorDefinition<A, WS, PS, X> &
+    DefinitionCheck<A, WS, PS> & {
+      /**
+       * Replaces the positional form: maps `create`'s arguments to the
+       * constructor arguments, the options, and fields for the new instance.
+       */
+      prepare: (
+        ...input: I
+      ) => PreparedCreate<
+        A,
+        DefinedPrivateState<PS>,
+        DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
+        F
+      >;
+    },
+): PreparedSimulatorClass<
+  A,
+  DefinedPrivateState<PS>,
+  DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
+  X & F,
+  I
+>;
 export function defineSimulator<
   A extends ContractArtifact,
-  WF extends PartFactory = () => object,
-  PF extends PartFactory = () => Record<string, never>,
+  WS = undefined,
+  PS = undefined,
   X = unknown,
 >(
   artifact: A,
-  definition?: SimulatorDefinition<A, WF, PF, X>,
+  definition?: SimulatorDefinition<A, WS, PS, X> &
+    DefinitionCheck<A, WS, PS> &
+    WitnessesRequired<A>,
 ): DefinedSimulatorClass<
   A,
-  Composed<PF>,
-  Composed<WF>,
+  DefinedPrivateState<PS>,
+  DefinedWitnesses<A, WS, DefinedPrivateState<PS>>,
   X,
-  PositionalInput<A, Composed<PF>, Composed<WF>>
+  PositionalInput<
+    A,
+    DefinedPrivateState<PS>,
+    DefinedWitnesses<A, WS, DefinedPrivateState<PS>>
+  >
 >;
 export function defineSimulator(
   artifact: ContractArtifact,
@@ -307,10 +486,32 @@ export function defineSimulator(
     flatCircuits: true,
   }) as unknown as AnySimulatorClass;
 
+  const assertNotReserved = (source: string, members: object): void => {
+    for (const key of Reflect.ownKeys(members)) {
+      if (
+        key === 'then' ||
+        key in Base.prototype ||
+        (SIMULATOR_FIELDS as readonly PropertyKey[]).includes(key)
+      ) {
+        throw new Error(
+          `defineSimulator: ${source} cannot define "${String(key)}", a simulator member name`,
+        );
+      }
+    }
+  };
+
   class DefinedSimulator extends Base {
     constructor(deps: BackendDeps<unknown, unknown>) {
       super(deps);
-      if (extend) defineMembers(this, extend(this as never) as object);
+      if (!extend) return;
+      const members = extend(this as never) as object;
+      assertNotReserved('extend', members);
+      const consume = () => deps.backend.consumeSingleCaller();
+      defineMembers(this, members, (value) =>
+        typeof value === 'function'
+          ? consumingCaller(value as (...args: unknown[]) => unknown, consume)
+          : value,
+      );
     }
 
     static async create(
@@ -320,11 +521,25 @@ export function defineSimulator(
       const { args, options, fields } = prepare
         ? prepare(...input)
         : splitPositional(input, arity);
+      if (fields) assertNotReserved('prepare `fields`', fields);
       // biome-ignore lint/complexity/noThisInStatic: keep the caller's `this` so a subclass constructs its own type.
-      const sim = await this._create(args, options);
-      if (fields) Object.assign(sim, fields);
+      const sim = await Base._create.call(this, args, options);
+      if (fields) defineMembers(sim, fields);
       return sim;
     }
+  }
+
+  if (prepare) {
+    Object.defineProperty(DefinedSimulator, '_create', {
+      configurable: true,
+      writable: true,
+      value: () =>
+        Promise.reject(
+          new Error(
+            'defineSimulator: a simulator defined with `prepare` has no `_create`; call `create`',
+          ),
+        ),
+    });
   }
 
   for (const [name, circuit] of Object.entries(artifact.pureCircuits ?? {})) {

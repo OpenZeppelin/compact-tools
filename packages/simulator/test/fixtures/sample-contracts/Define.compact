@@ -49,3 +49,7 @@ export pure circuit name(): Field {
 export pure circuit create(): Field {
   return 2 as Field;
 }
+
+export pure circuit then(): Field {
+  return 3 as Field;
+}

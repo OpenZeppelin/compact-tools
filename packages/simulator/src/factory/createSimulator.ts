@@ -461,6 +461,15 @@ export const RESERVED_FLAT_NAMES = [
 
 export type ReservedFlatName = (typeof RESERVED_FLAT_NAMES)[number];
 
+/** The own fields the constructor sets on every simulator instance. */
+export const SIMULATOR_FIELDS = [
+  'backendKind',
+  '_backend',
+  '_signers',
+  '_mutator',
+  'circuits',
+] as const;
+
 /**
  * A simulator instance plus one method per circuit, except circuits named like
  * a base member or a {@link ReservedFlatName}. Those stay reachable through

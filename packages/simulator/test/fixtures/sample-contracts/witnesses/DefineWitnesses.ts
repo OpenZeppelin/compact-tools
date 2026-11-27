@@ -16,6 +16,15 @@ export const CountWitnesses = <L>() => ({
   },
 });
 
+/** Module witnesses that return their own part, counted up. */
+export const CountingWitnesses = <L>() => ({
+  wit_count({
+    privateState,
+  }: WitnessContext<L, CountPrivateState>): [CountPrivateState, bigint] {
+    return [{ count: privateState.count + 1n }, privateState.count];
+  },
+});
+
 /** An authenticator's part of the private state. */
 export type SecretPrivateState = { secret: bigint };
 
@@ -32,8 +41,23 @@ export const SecretWitnesses = <L>() => ({
   },
 });
 
-/** Both parts in one factory, as a hand-written module factory bundles them. */
+/** Both parts of the private state. */
+export type DefinePrivateState = CountPrivateState & SecretPrivateState;
+
+export const DefinePrivateState = {
+  generate: (): DefinePrivateState => ({ count: 3n, secret: 7n }),
+};
+
+/** Both witnesses in one factory over the whole state, as a module file bundles them. */
 export const DefineWitnesses = <L>() => ({
-  ...CountWitnesses<L>(),
-  ...SecretWitnesses<L>(),
+  wit_count({
+    privateState,
+  }: WitnessContext<L, DefinePrivateState>): [DefinePrivateState, bigint] {
+    return [privateState, privateState.count];
+  },
+  wit_secret({
+    privateState,
+  }: WitnessContext<L, DefinePrivateState>): [DefinePrivateState, bigint] {
+    return [privateState, privateState.secret];
+  },
 });

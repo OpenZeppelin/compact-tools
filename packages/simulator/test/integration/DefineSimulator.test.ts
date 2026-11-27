@@ -1,10 +1,12 @@
 import type { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SIMULATOR_FIELDS } from '../../src/factory/createSimulator.js';
 import {
   type ContractArtifact,
   clearLiveBackend,
   composePrivateState,
   composeWitnesses,
+  createSimulator,
   defineSimulator,
   type LiveBackendRequest,
   registerLiveBackend,
@@ -12,8 +14,10 @@ import {
 import * as DefineArtifact from '../fixtures/artifacts/Define/contract/index.js';
 import * as FlatArtifact from '../fixtures/artifacts/Flat/contract/index.js';
 import {
+  CountingWitnesses,
   CountPrivateState,
   CountWitnesses,
+  DefinePrivateState,
   DefineWitnesses,
   SecretPrivateState,
   SecretWitnesses,
@@ -26,6 +30,11 @@ import {
 const OWNER = new Uint8Array(32).fill(1);
 const VALUES = [4n, 5n];
 const ORIGIN = { x: 1n, y: 2n };
+
+const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
+
+/** Declared, so the array's type keeps both parts instead of the wider one. */
+type ClashingParts = (typeof DefineWitnesses | typeof SecretWitnesses)[];
 
 /** Module and authenticator parts, merged by the definition. */
 class DefineSimulator extends defineSimulator(DefineArtifact, {
@@ -72,6 +81,17 @@ describe('defineSimulator', () => {
       expect((await sim.getPublicState())._last).toBe(9n);
     });
 
+    it('takes undefined in the options slot', async () => {
+      const sim = await DefineSimulator.create(
+        OWNER,
+        VALUES,
+        ORIGIN,
+        undefined,
+      );
+
+      expect(await sim.storeSecret()).toBe(7n);
+    });
+
     it('rejects any other argument count', async () => {
       // @ts-expect-error one constructor argument missing.
       await expect(DefineSimulator.create(OWNER, VALUES)).rejects.toThrow(
@@ -81,6 +101,21 @@ describe('defineSimulator', () => {
         // @ts-expect-error one argument past the options.
         DefineSimulator.create(OWNER, VALUES, ORIGIN, {}, {}),
       ).rejects.toThrow('received 5 argument(s)');
+    });
+
+    it('rejects a value in the options slot that is not an options object', async () => {
+      await expect(
+        // @ts-expect-error a bigint is not options.
+        DefineSimulator.create(OWNER, VALUES, ORIGIN, 5n),
+      ).rejects.toThrow(
+        'create: argument 4 must be an options object, received BigInt',
+      );
+      await expect(
+        // @ts-expect-error a byte array is not options.
+        DefineSimulator.create(OWNER, VALUES, ORIGIN, OWNER),
+      ).rejects.toThrow(
+        'argument 4 must be an options object, received Uint8Array',
+      );
     });
 
     it('resolves to an instance of the calling class', async () => {
@@ -123,6 +158,7 @@ describe('defineSimulator', () => {
     it('splits the arguments at an explicit arity', async () => {
       const TwoArgs = defineSimulator(DefineArtifact, {
         witnesses: () => DefineWitnesses(),
+        privateState: DefinePrivateState.generate,
         arity: 2,
       });
 
@@ -153,6 +189,16 @@ describe('defineSimulator', () => {
       expect(await sim.circuits.pure.name()).toBe(1n);
       expect(await sim.circuits.pure.create()).toBe(2n);
     });
+
+    it('gives a pure circuit named then no static, so the class is not thenable', async () => {
+      const sim = await DefineSimulator.create(OWNER, VALUES, ORIGIN);
+
+      expect(Object.hasOwn(DefineSimulator, 'then')).toBe(false);
+      await expect(Promise.resolve(DefineSimulator)).resolves.toBe(
+        DefineSimulator,
+      );
+      expect(await sim.circuits.pure.then()).toBe(3n);
+    });
   });
 
   describe('witnesses and private state from parts', () => {
@@ -176,6 +222,40 @@ describe('defineSimulator', () => {
       expect(await sim.getPrivateState()).toEqual({ count: 3n, secret: 8n });
     });
 
+    it('writes the part a witness returns over the whole private state', async () => {
+      const Counting = defineSimulator(DefineArtifact, {
+        witnesses: [CountingWitnesses, SecretWitnesses],
+        privateState: [CountPrivateState.generate, SecretPrivateState.generate],
+      });
+      const sim = await Counting.create(OWNER, VALUES, ORIGIN);
+
+      expect(await sim.storeCount()).toBe(3n);
+      expect(await sim.getPrivateState()).toEqual({ count: 4n, secret: 7n });
+      expect(await sim.storeSecret()).toBe(7n);
+    });
+
+    it('keeps the prototype members of a part, called on the part', async () => {
+      class SecretWitnessSet {
+        readonly offset = 100n;
+
+        wit_secret({
+          privateState,
+        }: WitnessContext<unknown, SecretPrivateState>): [
+          SecretPrivateState,
+          bigint,
+        ] {
+          return [privateState, privateState.secret + this.offset];
+        }
+      }
+      const Prototype = defineSimulator(DefineArtifact, {
+        witnesses: [CountWitnesses, () => new SecretWitnessSet()],
+        privateState: [CountPrivateState.generate, SecretPrivateState.generate],
+      });
+      const sim = await Prototype.create(OWNER, VALUES, ORIGIN);
+
+      expect(await sim.storeSecret()).toBe(107n);
+    });
+
     it('keeps the single-factory form', async () => {
       const sim = await BundledSimulator.create(OWNER, VALUES, ORIGIN);
 
@@ -183,28 +263,75 @@ describe('defineSimulator', () => {
       expect(await sim.storeSecret()).toBe(70n);
     });
 
-    it('rejects a witness two parts define', async () => {
-      const Clash = defineSimulator(DefineArtifact, {
-        witnesses: [DefineWitnesses, SecretWitnesses],
-      });
-
-      await expect(Clash.create(OWNER, VALUES, ORIGIN)).rejects.toThrow(
-        'witness "wit_secret" is defined by both "DefineWitnesses" and "SecretWitnesses"',
+    it('rejects a witness two parts define, at definition', () => {
+      expect(() =>
+        defineSimulator(DefineArtifact, {
+          witnesses: [DefineWitnesses, SecretWitnesses] as ClashingParts,
+          privateState: DefinePrivateState.generate,
+        }),
+      ).toThrow(
+        'witness "wit_secret" is defined by both part 0 ("DefineWitnesses") and part 1 ("SecretWitnesses")',
       );
     });
 
-    it('rejects a private-state key two parts define', async () => {
-      const Clash = defineSimulator(DefineArtifact, {
-        witnesses: () => DefineWitnesses(),
-        privateState: [
-          SecretPrivateState.generate,
-          () => ({ secret: 1n, count: 0n }),
-        ],
-      });
+    it('rejects a clash also when prepare supplies the witnesses and private state', () => {
+      expect(() =>
+        defineSimulator(DefineArtifact, {
+          witnesses: [DefineWitnesses, SecretWitnesses] as ClashingParts,
+          privateState: DefinePrivateState.generate,
+          prepare: () => ({
+            args: [OWNER, VALUES, ORIGIN] as const,
+            options: {
+              witnesses: DefineWitnesses(),
+              privateState: DefinePrivateState.generate(),
+            },
+          }),
+        }),
+      ).toThrow('witness "wit_secret" is defined by both');
+    });
 
-      await expect(Clash.create(OWNER, VALUES, ORIGIN)).rejects.toThrow(
-        'private state key "secret" is defined by both "generate" and part 1',
+    it('names two parts with the same function name by position', () => {
+      const Other = { generate: (): SecretPrivateState => ({ secret: 1n }) };
+
+      expect(() =>
+        defineSimulator(DefineArtifact, {
+          witnesses: () => DefineWitnesses(),
+          privateState: [
+            CountPrivateState.generate,
+            SecretPrivateState.generate,
+            Other.generate,
+          ],
+        }),
+      ).toThrow(
+        'private state key "secret" is defined by both part 1 ("generate") and part 2 ("generate")',
       );
+    });
+  });
+
+  describe('witness typing', () => {
+    it('checks the witnesses against the compiled contract at compile time only', () => {
+      // Each definition below fails `tsc`; at runtime it only builds a class.
+      expect(() => [
+        defineSimulator(DefineArtifact, {
+          // @ts-expect-error `wit_secret` is missing.
+          witnesses: CountWitnesses,
+          privateState: CountPrivateState.generate,
+        }),
+        defineSimulator(DefineArtifact, {
+          // @ts-expect-error the witnesses read keys the private state lacks.
+          witnesses: () => DefineWitnesses(),
+          privateState: CountPrivateState.generate,
+        }),
+        defineSimulator(DefineArtifact, {
+          // @ts-expect-error the authenticator part is missing.
+          witnesses: [CountWitnesses],
+          privateState: [CountPrivateState.generate],
+        }),
+        // @ts-expect-error a contract with witnesses needs `witnesses`.
+        defineSimulator(DefineArtifact, {
+          privateState: DefinePrivateState.generate,
+        }),
+      ]).not.toThrow();
     });
   });
 
@@ -233,6 +360,48 @@ describe('defineSimulator', () => {
 
       expect(sim.double(5n)).toBe(10n);
       expect(await sim.circuits.pure.double(5n)).toBe(10n);
+    });
+
+    it('keeps a getter a getter', async () => {
+      let reads = 0;
+      const Getter = defineSimulator(DefineArtifact, {
+        witnesses: () => DefineWitnesses(),
+        privateState: DefinePrivateState.generate,
+        extend: () => ({
+          get reads(): number {
+            reads += 1;
+            return reads;
+          },
+        }),
+      });
+      const sim = await Getter.create(OWNER, VALUES, ORIGIN);
+
+      expect([sim.reads, sim.reads]).toEqual([1, 2]);
+    });
+
+    it.each([
+      'getPrivateState',
+      'circuits',
+      '_backend',
+      'signers',
+      'then',
+      'toString',
+    ])('rejects a member named %s', async (name) => {
+      const Shadow = defineSimulator(DefineArtifact, {
+        witnesses: () => DefineWitnesses(),
+        privateState: DefinePrivateState.generate,
+        extend: () => ({ [name]: () => 'shadowed' }),
+      });
+
+      await expect(Shadow.create(OWNER, VALUES, ORIGIN)).rejects.toThrow(
+        `defineSimulator: extend cannot define "${name}", a simulator member name`,
+      );
+    });
+
+    it('lists the own fields every instance has', async () => {
+      const sim = await DefineSimulator.create(OWNER, VALUES, ORIGIN);
+
+      expect(Object.keys(sim).sort()).toEqual([...SIMULATOR_FIELDS].sort());
     });
   });
 
@@ -276,6 +445,95 @@ describe('defineSimulator', () => {
 
       expect(await sim.storeSecret()).toBe(5n);
     });
+
+    it('has no tuple form', async () => {
+      // @ts-expect-error a class with `prepare` has no `_create`.
+      await expect(Prepared._create([OWNER, VALUES, ORIGIN])).rejects.toThrow(
+        'defineSimulator: a simulator defined with `prepare` has no `_create`; call `create`',
+      );
+    });
+
+    it('keeps a fields getter a getter', async () => {
+      let reads = 0;
+      const Getter = defineSimulator(DefineArtifact, {
+        witnesses: () => DefineWitnesses(),
+        privateState: DefinePrivateState.generate,
+        prepare: () => ({
+          args: [OWNER, VALUES, ORIGIN] as const,
+          fields: {
+            get reads(): number {
+              reads += 1;
+              return reads;
+            },
+          },
+        }),
+      });
+      const sim = await Getter.create();
+
+      expect([sim.reads, sim.reads]).toEqual([1, 2]);
+    });
+
+    it.each(['signers', 'witnesses', 'circuits', 'then'])(
+      'rejects a field named %s',
+      async (name) => {
+        const Shadow = defineSimulator(DefineArtifact, {
+          witnesses: () => DefineWitnesses(),
+          privateState: DefinePrivateState.generate,
+          prepare: () => ({
+            args: [OWNER, VALUES, ORIGIN] as const,
+            fields: { [name]: 1 },
+          }),
+        });
+
+        await expect(Shadow.create()).rejects.toThrow(
+          `defineSimulator: prepare \`fields\` cannot define "${name}", a simulator member name`,
+        );
+      },
+    );
+  });
+
+  describe('caller', () => {
+    const recorded = async (sim: {
+      getPublicState(): Promise<{ _caller: { bytes: Uint8Array } }>;
+    }): Promise<string> => hex((await sim.getPublicState())._caller.bytes);
+
+    const Pure = defineSimulator(FlatArtifact, {
+      witnesses: FlatWitnesses,
+      privateState: FlatPrivateState.generate,
+      extend: () => ({ add: FlatArtifact.pureCircuits.add }),
+    });
+
+    it('lets a synchronous extend member consume the as() caller', async () => {
+      const sim = await Pure.create();
+      await sim.recordCaller();
+      const defaultCaller = await recorded(sim);
+
+      expect(sim.as('ALICE').add(1n, 2n)).toBe(3n);
+      await sim.recordCaller();
+
+      expect(await recorded(sim)).toBe(defaultCaller);
+    });
+
+    it('lets an asynchronous extend member consume the as() caller when it settles', async () => {
+      const Async = defineSimulator(FlatArtifact, {
+        witnesses: FlatWitnesses,
+        privateState: FlatPrivateState.generate,
+        extend: (sim) => ({
+          recordTwice: async (): Promise<void> => {
+            await sim.recordCaller();
+            await sim.recordCaller();
+          },
+        }),
+      });
+      const sim = await Async.create();
+      await sim.recordCaller();
+      const defaultCaller = await recorded(sim);
+
+      await sim.as('ALICE').recordTwice();
+      await sim.recordCaller();
+
+      expect(await recorded(sim)).toBe(defaultCaller);
+    });
   });
 
   describe('live backend', () => {
@@ -311,25 +569,44 @@ describe('defineSimulator', () => {
 });
 
 describe('composeWitnesses and composePrivateState', () => {
-  it('merge factories for createSimulator', () => {
-    const witnesses = composeWitnesses(CountWitnesses, SecretWitnesses)();
-    const privateState = composePrivateState(
-      CountPrivateState.generate,
-      SecretPrivateState.generate,
-    )();
+  it('merge per-part factories for createSimulator', async () => {
+    type State = CountPrivateState & SecretPrivateState;
+    const Composed = createSimulator<
+      State,
+      DefineArtifact.Ledger,
+      DefineArtifact.Witnesses<State>,
+      DefineArtifact.Contract<State>,
+      [Uint8Array, bigint[], DefineArtifact.Point]
+    >({
+      contractFactory: (witnesses) =>
+        new DefineArtifact.Contract<State>(witnesses),
+      defaultPrivateState: composePrivateState(
+        CountPrivateState.generate,
+        SecretPrivateState.generate,
+      ),
+      contractArgs: (owner, values, origin) => [owner, values, origin],
+      ledgerExtractor: (state) => DefineArtifact.ledger(state),
+      witnessesFactory: composeWitnesses(CountingWitnesses, SecretWitnesses),
+    });
+    const sim = await Composed.create([OWNER, VALUES, ORIGIN]);
 
-    expect(Object.keys(witnesses).sort()).toEqual(['wit_count', 'wit_secret']);
-    expect(privateState).toEqual({ count: 3n, secret: 7n });
+    expect(await sim.circuits.impure.storeCount()).toBe(3n);
+    expect(await sim.circuits.impure.storeSecret()).toBe(7n);
+    expect(await sim.getPrivateState()).toEqual({ count: 4n, secret: 7n });
   });
 
-  it('names an anonymous part by its position', () => {
-    const merged = composeWitnesses(
-      () => ({ wit_a: () => 1 }),
-      () => ({ wit_a: () => 2 }),
-    );
+  it('keep the parts in order', () => {
+    const merged = composeWitnesses(CountWitnesses, SecretWitnesses);
 
-    expect(merged).toThrow(
-      'witness "wit_a" is defined by both part 0 and part 1',
-    );
+    expect(merged.parts).toEqual([CountWitnesses, SecretWitnesses]);
+  });
+
+  it('names an anonymous part by its position, when composed', () => {
+    expect(() =>
+      composeWitnesses(
+        () => ({ wit_a: () => 1 }),
+        () => ({ wit_a: () => 2 }),
+      ),
+    ).toThrow('witness "wit_a" is defined by both part 0 and part 1');
   });
 });

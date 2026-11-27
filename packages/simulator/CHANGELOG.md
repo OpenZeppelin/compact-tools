@@ -14,10 +14,19 @@ Releases before `0.4.0` predate this file; see the `compact-simulator/v*` tags.
 - Each `createSimulator` instance has one async method per circuit, named after it, that calls the circuit through `circuits`. A name the instance already has (a base member, a subclass method, an `Object.prototype` member) keeps its own, and `then` is never installed (#PR_NUMBER)
 - `flatCircuits: true` in the config types those methods on the returned class, so a subclass needs no forwarding methods. Without it the class type is unchanged (#PR_NUMBER)
 - Type exports `FlatCircuits`, `FlatSimulatorClass`, `FlatSimulatorInstance` and `SimulatorClass` (#PR_NUMBER)
-- `defineSimulator(artifact, definition?)` builds a simulator class from a compiled contract module, with no config generics, `create` override or forwarding methods. Every circuit is an async method, every pure circuit also a synchronous static method, and `create(...constructorArgs, options?)` takes the constructor arguments positionally, with the arity read from the compiled contract (#PR_NUMBER)
-- A definition's `witnesses` and `privateState` take a list of factories, merged into one, e.g. a module's and its authenticator's. A witness or private-state key two parts define throws at `create`. `composeWitnesses` and `composePrivateState` return the merged factory for `createSimulator` (#PR_NUMBER)
-- A definition's `extend` adds members to every instance, replacing circuit methods of the same name, and `prepare` maps `create`'s own arguments to the constructor arguments, the options and instance fields (#PR_NUMBER)
-- Type exports `ArtifactContract`, `ArtifactLedger`, `Composed`, `ConstructorArgs`, `ContractArtifact`, `DefinedSimulatorClass`, `DefinedSimulatorInstance`, `PartFactory`, `Parts`, `PositionalInput`, `PreparedCreate`, `PrivateStateAccess`, `PureCircuitStatics`, `ReservedFlatName`, `ReservedStaticName`, `SimulatorDefinition` and `SimulatorInstance` (#PR_NUMBER)
+- `defineSimulator(artifact, definition?)` builds a simulator class from a compiled contract module, with no config generics, `create` override or forwarding methods. Every circuit is an async method, every pure circuit also a synchronous static method, and `create(...constructorArgs, options?)` takes the constructor arguments positionally, with the arity read from the compiled contract. The options slot takes an options object or `undefined` only (#PR_NUMBER)
+- A definition's witnesses are checked against the contract's `Witnesses<P>`, with the private state `P` the definition yields: a missing witness, a wrong value type or a private-state mismatch fails to compile. A contract with witnesses needs `witnesses`, unless `prepare` supplies them (#PR_NUMBER)
+- A definition's `witnesses` and `privateState` take a list of factories, merged into one, e.g. a module's and its authenticator's. A part's witness may return only its own part of the private state; the merged witness writes it over the whole state. A part may be a class instance. A witness or private-state key two parts define throws when the definition runs. `composeWitnesses` and `composePrivateState` return the merged factory, with its `parts`, and type-check as a contract's `Witnesses<P>` in `createSimulator` (#PR_NUMBER)
+- A definition's `extend` adds members to every instance, replacing circuit methods of the same name, and `prepare` maps `create`'s own arguments to the constructor arguments, the options and instance fields. Neither takes a base member name, an `Object.prototype` name or `then`, and accessors stay accessors. A function `extend` adds spends the `as()` caller like a circuit call. A class with `prepare` has no `_create` (#PR_NUMBER)
+- Type exports `ArtifactContract`, `ArtifactLedger`, `ArtifactWitnesses`, `Composed`, `ComposedFactory`, `ComposedWitness`, `ComposedWitnesses`, `ConstructorArgs`, `ContractArtifact`, `DefinedPrivateState`, `DefinedSimulatorClass`, `DefinedSimulatorInstance`, `DefinedWitnesses`, `PartFactory`, `Parts`, `PositionalInput`, `PreparedCreate`, `PreparedSimulatorClass`, `PrivateStateAccess`, `PureCircuitStatics`, `ReservedFlatName`, `ReservedStaticName`, `SimulatorDefinition` and `SimulatorInstance` (#PR_NUMBER)
+
+### Changed
+
+- `Backend` has `consumeSingleCaller()`, which clears the `as()` caller for a call that does not reach the backend. `DryBackend` and `LiveBackend` implement it (#PR_NUMBER)
+
+### Fixed
+
+- `as()` applies to one call only. A failed call spends it too, on both backends, and on dry a successful call no longer leaves the `as()` caller in the stored circuit context. The next call runs as the persistent or default caller (#PR_NUMBER)
 
 ## 0.6.0 (2026-11-16)
 

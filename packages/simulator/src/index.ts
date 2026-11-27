@@ -16,6 +16,9 @@ export { PrivateStateMutator } from './core/PrivateStateMutator.js';
 // import), so exporting them from the main barrel keeps the wall up.
 export type {
   Composed,
+  ComposedFactory,
+  ComposedWitness,
+  ComposedWitnesses,
   PartFactory,
   Parts,
 } from './factory/composeParts.js';
@@ -35,12 +38,16 @@ export { createSimulator } from './factory/createSimulator.js';
 export type {
   ArtifactContract,
   ArtifactLedger,
+  ArtifactWitnesses,
   ConstructorArgs,
   ContractArtifact,
+  DefinedPrivateState,
   DefinedSimulatorClass,
   DefinedSimulatorInstance,
+  DefinedWitnesses,
   PositionalInput,
   PreparedCreate,
+  PreparedSimulatorClass,
   PrivateStateAccess,
   PureCircuitStatics,
   ReservedStaticName,

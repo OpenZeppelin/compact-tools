@@ -136,9 +136,7 @@ export function createDrySimulator<
         this._impureCircuitProxy = this.createImpureCircuitProxy(
           this.contract.impureCircuits as ExtractImpureCircuits<TContract>,
           () => this.getCallerContext(),
-          (ctx) => {
-            this.circuitContext = ctx;
-          },
+          (ctx) => this.commitCallContext(ctx),
         );
       }
       return this._impureCircuitProxy;

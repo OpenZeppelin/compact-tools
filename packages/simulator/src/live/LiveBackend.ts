@@ -81,27 +81,32 @@ export class LiveBackend<P, L> implements Backend<P, L> {
     args: unknown[],
   ): Promise<unknown> {
     if (kind === 'pure') {
-      const fn = this.pureSim.circuits.pure[name];
-      if (typeof fn !== 'function') {
-        throw new Error(`unknown pure circuit "${name}"`);
+      try {
+        const fn = this.pureSim.circuits.pure[name];
+        if (typeof fn !== 'function') {
+          throw new Error(`unknown pure circuit "${name}"`);
+        }
+        return fn(...args);
+      } finally {
+        this.consumeSingleCaller();
       }
-      const result = fn(...args);
-      this.consumeSingle();
-      return result;
     }
 
     const alias = this.activeAlias();
-    const handle = await this.ctx.handleFor(alias);
-    const txFn = handle.callTx[name];
-    if (typeof txFn !== 'function') {
-      throw new Error(`unknown impure circuit "${name}"`);
+    try {
+      const handle = await this.ctx.handleFor(alias);
+      const txFn = handle.callTx[name];
+      if (typeof txFn !== 'function') {
+        throw new Error(`unknown impure circuit "${name}"`);
+      }
+      // Unwrap callTx's { public, private: { result } } to the bare R.
+      // The assert message inside any rejection is preserved verbatim —
+      // we await directly and never catch/rewrite it.
+      const finalized = await txFn(...args);
+      return finalized.private.result;
+    } finally {
+      this.consumeSingleCaller();
     }
-    // Unwrap callTx's { public, private: { result } } to the bare R.
-    // The assert message inside any rejection is preserved verbatim —
-    // we await directly and never catch/rewrite it.
-    const finalized = await txFn(...args);
-    this.consumeSingle();
-    return finalized.private.result;
   }
 
   /** Same extractor as dry, applied to indexer-sourced state. */
@@ -168,7 +173,7 @@ export class LiveBackend<P, L> implements Backend<P, L> {
   }
 
   /** Clears the single-shot caller after a call, reverting to persistent/default. */
-  private consumeSingle(): void {
+  consumeSingleCaller(): void {
     if (this.hasSingle) {
       this.hasSingle = false;
       this.singleAlias = null;

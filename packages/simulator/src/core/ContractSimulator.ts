@@ -6,6 +6,9 @@ import {
 import { AbstractSimulator } from './AbstractSimulator.js';
 import type { CircuitContextManager } from './CircuitContextManager.js';
 
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((byte, index) => byte === b[index]);
+
 /**
  * Enhanced base class for simulating Compact contract behavior with state management.
  *
@@ -57,6 +60,31 @@ export abstract class ContractSimulator<P, L> extends AbstractSimulator<P, L> {
     const ctx = copyCircuitContext(baseCtx) as CircuitContext<P>;
     ctx.callContext.currentZswapLocalState = emptyZswapLocalState(activeCaller);
     return ctx;
+  }
+
+  /**
+   * Stores the context an impure call returned. A call made with a caller
+   * override keeps its coins but not its caller: the stored context keeps the
+   * default caller's coin public key.
+   *
+   * @param ctx - The context the circuit returned.
+   */
+  public commitCallContext(ctx: CircuitContext<P>): void {
+    const base = this.circuitContext.callContext.currentZswapLocalState;
+    const next = ctx.callContext.currentZswapLocalState;
+    if (
+      base &&
+      next &&
+      !sameBytes(base.coinPublicKey.bytes, next.coinPublicKey.bytes)
+    ) {
+      const restored = { ...next, coinPublicKey: base.coinPublicKey };
+      ctx.callContext.currentZswapLocalState = restored;
+      const address = ctx.callContext.contractAddress;
+      if (ctx.zswapLocalStates?.[address] === next) {
+        ctx.zswapLocalStates[address] = restored;
+      }
+    }
+    this.circuitContext = ctx;
   }
 
   /**

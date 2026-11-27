@@ -299,7 +299,11 @@ The class reads from the artifact:
 - `Contract` and `ledger`: the contract factory and the ledger extractor.
 - The constructor arity, from the compiled `initialState`, which checks its
   argument count first. When it cannot be read, `defineSimulator` throws; pass
-  `arity` instead.
+  `arity` instead. Code rewritten before it loads, e.g. by an istanbul-style
+  coverage instrumenter or a minifier, no longer matches: pass `arity` there too.
+  V8 coverage leaves the code as compiled.
+- The contract's witness type. The definition's witnesses are checked against
+  it, with the private state the definition yields (see the table below).
 - `pureCircuits`: each pure circuit is also a synchronous static method
   (`OwnableSimulator.hash(x)`). A name the class already has (`name`, `length`,
   `create`, `Object.prototype` names) or `then` is skipped.
@@ -308,20 +312,36 @@ Every circuit is an async instance method, as with `flatCircuits: true`.
 
 `create` takes the constructor arguments positionally, then an optional options
 object: `create(owner, true)` or `create(owner, true, { privateState })`. Any
-other argument count throws. The count alone decides, so a struct as the last
-constructor argument is never read as options. It resolves to the calling class.
-The tuple form `_create([owner, true], options)` still works.
+other argument count throws, and so does a value in the options slot that is
+not an options object or `undefined` (`create(owner, true, 5n)`). The count
+alone decides, so a struct as the last constructor argument is never read as
+options. It resolves to the calling class. The tuple form
+`_create([owner, true], options)` still works, except on a class with `prepare`.
+
+A subclass cannot override `create` with its own signature: TypeScript rejects
+it (TS2417). Write the signature as `prepare` instead.
 
 Definition fields, all optional:
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `witnesses` | no witnesses | Witness factory, or a list of factories merged into one. |
+| `witnesses` | no witnesses | Witness factory, or a list of factories merged into one. Required when the contract declares witnesses, unless `prepare` supplies them. |
 | `privateState` | `{}` | Factory for the initial private state, or a list merged into one. |
-| `extend` | none | `(sim) => members`. Added to every instance: helper bags, wrappers, sync versions of circuits. A member replaces the circuit method of the same name. |
-| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. |
+| `extend` | none | `(sim) => members`. Added to every instance: helper bags, wrappers, sync versions of circuits. A member replaces the circuit method of the same name. Getters stay getters. |
+| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. The class has no `_create`. |
 | `artifactName` | none | The `artifacts/<name>/` directory the live backend deploys. |
 | `arity` | read from the artifact | The constructor's argument count. |
+
+The witnesses must match the contract's `Witnesses<P>`, where `P` is the private
+state the definition yields. A missing witness, a wrong value type, or a witness
+that reads a private state the factories do not make fails to compile. The
+witnesses `prepare` or `create` passes in options are checked the same way.
+With a list of parts, `sim.witnesses` and the options take the contract's
+`Witnesses<P>` type; a single factory keeps its own type.
+
+`extend` and `fields` cannot take a name the simulator itself uses: a base
+member (`getPrivateState`, `circuits`, `signers`, `witnesses`, ...), an
+`Object.prototype` name, or `then`. Such a name throws at `create`.
 
 The live backend receives a full `SimulatorConfig`: identity `contractArgs`,
 the witness and private-state factories (merged), and `artifactName`.
@@ -341,14 +361,25 @@ class TokenSimulator extends defineSimulator(MockToken, {
 // getPrivateState(): Promise<TokenPrivateState & AuthPrfPseudonymPrivateState>
 ```
 
-- Each witness receives the whole merged private state and must return it whole.
-  Update it with a spread: `[{ ...privateState, nonce }, value]`.
-- A witness name or private-state key that two parts define throws at `create`:
-  `witness "wit_AuthPrfPseudonymSK" is defined by both "TokenWitnesses" and "AuthPrfPseudonymWitnesses"`.
+- Each witness receives the whole merged private state. A part's witness may
+  return only its own part, typed on its own state
+  (`[{ ...privateState, nonce }, value]`). The merged witness writes that part
+  over the whole state, so the other parts' keys stay.
+- A part may return a class instance. Its prototype methods are kept and called
+  on it. A private-state part returns a plain object.
+- A witness name or private-state key that two parts define throws when the
+  definition runs, also if `prepare` or `create` supplies the witnesses or the
+  private state:
+  `witness "wit_AuthPrfPseudonymSK" is defined by both part 0 ("TokenWitnesses") and part 1 ("AuthPrfPseudonymWitnesses")`.
   A bundled module factory that already includes the authenticator's witness
-  clashes this way; list the module's own part instead.
+  clashes this way; list the module's own part instead. Each part is called
+  once there to read its names.
+- Witnesses passed in `options`, by `prepare` or by `create`, are used as they
+  are: each returns the whole state.
 - `composeWitnesses(...parts)` and `composePrivateState(...parts)` return the
-  merged factory, for `createSimulator` or a `prepare` function.
+  merged factory, with its `parts`, for `createSimulator` or a `prepare`
+  function. Merged witnesses fit the contract's `Witnesses<P>`, so
+  `contractFactory: (w) => new Contract<P>(w)` compiles with per-part types.
 
 #### Members that are not circuits
 
@@ -508,6 +539,13 @@ simulator.resetCaller();
 // Resolve an alias for use as a circuit argument
 const owner = await simulator.signers.eitherFor('OWNER');
 ```
+
+`as()` applies to the next call: a circuit method, a `circuits` call, or a
+top-level function `extend` added (not one inside a helper bag). That call
+spends it even if it fails. The call after it runs as the persistent caller, or
+the default one. Arguments run first, so in
+`sim.as('OWNER').transfer(sim.helper())` the `extend` member `helper` spends
+the caller and `transfer` runs as the default caller.
 
 > `ownPublicKey()` is a witness value and MUST NOT be used as an authentication
 > mechanism. These helpers exist for circuits that take the caller as an input
