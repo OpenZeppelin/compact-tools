@@ -15,12 +15,45 @@ export { PrivateStateMutator } from './core/PrivateStateMutator.js';
 // values, but their static graph is midnight-js-free (type-only + dynamic
 // import), so exporting them from the main barrel keeps the wall up.
 export type {
+  Composed,
+  ComposedFactory,
+  ComposedWitness,
+  ComposedWitnesses,
+  PartFactory,
+  Parts,
+} from './factory/composeParts.js';
+export {
+  composePrivateState,
+  composeWitnesses,
+} from './factory/composeParts.js';
+export type {
   BackendDeps,
   FlatSimulatorClass,
   FlatSimulatorInstance,
+  ReservedFlatName,
   SimulatorClass,
+  SimulatorInstance,
 } from './factory/createSimulator.js';
 export { createSimulator } from './factory/createSimulator.js';
+export type {
+  ArtifactContract,
+  ArtifactLedger,
+  ArtifactWitnesses,
+  ConstructorArgs,
+  ContractArtifact,
+  DefinedPrivateState,
+  DefinedSimulatorClass,
+  DefinedSimulatorInstance,
+  DefinedWitnesses,
+  PositionalInput,
+  PreparedCreate,
+  PreparedSimulatorClass,
+  PrivateStateAccess,
+  PureCircuitStatics,
+  ReservedStaticName,
+  SimulatorDefinition,
+} from './factory/defineSimulator.js';
+export { defineSimulator } from './factory/defineSimulator.js';
 export type { SimulatorConfig } from './factory/SimulatorConfig.js';
 export type {
   CreateLiveContextOptions,

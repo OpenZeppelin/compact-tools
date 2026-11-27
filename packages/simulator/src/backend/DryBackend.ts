@@ -115,6 +115,10 @@ export class DryBackend<P, L> implements Backend<P, L> {
     }
   }
 
+  consumeSingleCaller(): void {
+    this.sim.callerOverride = null;
+  }
+
   /** Delegates to the wrapped simulator, which recreates the contract (dry supports this). */
   overrideWitness(key: PropertyKey, fn: unknown): void {
     this.sim.overrideWitness(key, fn);

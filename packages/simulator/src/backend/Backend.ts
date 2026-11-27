@@ -97,6 +97,12 @@ export interface Backend<P, L> {
   setCaller(alias: string | null, mode: 'single' | 'persistent'): void;
 
   /**
+   * Clears the `'single'` caller, as a call does. For calls that never reach
+   * the backend, e.g. a synchronous member `extend` adds.
+   */
+  consumeSingleCaller(): void;
+
+  /**
    * Replaces a single witness implementation.
    *
    * Dry recreates the contract with the new witness; the live adapter throws

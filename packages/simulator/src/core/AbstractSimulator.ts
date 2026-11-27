@@ -137,12 +137,14 @@ export abstract class AbstractSimulator<P, L>
             ctx: CircuitContext<P>,
             ...args: unknown[]
           ) => { result: unknown } | Promise<{ result: unknown }>;
-          // 0.18 circuits are async; `await` also tolerates the older sync shape.
-          const { result } = await fn(context(), ...args);
-
-          // Auto-reset single-use caller override
-          this.callerOverride = null;
-          return result;
+          try {
+            // 0.18 circuits are async; `await` also tolerates the older sync shape.
+            const { result } = await fn(context(), ...args);
+            return result;
+          } finally {
+            // The single-use caller applies to this call only, even a failed one.
+            this.callerOverride = null;
+          }
         };
       },
     }) as ContextlessCircuits<Circuits, P>;
@@ -183,13 +185,15 @@ export abstract class AbstractSimulator<P, L>
             | { result: unknown; context: CircuitContext<P> }
             | Promise<{ result: unknown; context: CircuitContext<P> }>;
 
-          // 0.18 circuits are async; `await` also tolerates the older sync shape.
-          const { result, context: newCtx } = await fn(context(), ...args);
-          updateContext(newCtx);
-
-          // Auto-reset single-use caller override
-          this.callerOverride = null;
-          return result;
+          try {
+            // 0.18 circuits are async; `await` also tolerates the older sync shape.
+            const { result, context: newCtx } = await fn(context(), ...args);
+            updateContext(newCtx);
+            return result;
+          } finally {
+            // The single-use caller applies to this call only, even a failed one.
+            this.callerOverride = null;
+          }
         };
       },
     }) as ContextlessCircuits<Circuits, P>;

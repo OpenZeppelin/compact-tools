@@ -430,12 +430,13 @@ export type SimulatorClass<
   TArgs extends readonly any[] = readonly any[],
 > = ReturnType<typeof buildSimulatorClass<P, L, W, TContract, TArgs>>;
 
-type SimulatorInstance<
+/** An instance of {@link SimulatorClass}. */
+export type SimulatorInstance<
   P,
   L,
   W,
   TContract extends IMinimalContract,
-  TArgs extends readonly any[],
+  TArgs extends readonly any[] = readonly any[],
 > = InstanceType<SimulatorClass<P, L, W, TContract, TArgs>>;
 
 /**
@@ -459,6 +460,15 @@ export const RESERVED_FLAT_NAMES = [
 ] as const;
 
 export type ReservedFlatName = (typeof RESERVED_FLAT_NAMES)[number];
+
+/** The own fields the constructor sets on every simulator instance. */
+export const SIMULATOR_FIELDS = [
+  'backendKind',
+  '_backend',
+  '_signers',
+  '_mutator',
+  'circuits',
+] as const;
 
 /**
  * A simulator instance plus one method per circuit, except circuits named like

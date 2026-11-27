@@ -29,6 +29,7 @@ const CONTRACT_FILES: readonly string[] = [
   'SampleZOwnable.compact',
   'Ecdsa.compact',
   'Flat.compact',
+  'Define.compact',
 ];
 
 // Pin the compiler to the toolchain matching this package's compact-runtime.
