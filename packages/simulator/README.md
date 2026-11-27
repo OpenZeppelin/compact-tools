@@ -370,6 +370,11 @@ class TokenSimulator extends defineSimulator(MockToken, {
   return only its own part, typed on its own state
   (`[{ ...privateState, nonce }, value]`). The merged witness writes that part
   over the whole state, so the other parts' keys stay.
+- A witness part that names its private-state factory owns the keys that
+  factory returns, and an owned key its witness omits is deleted:
+  `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
+  To own an optional key, return it from the factory set to `undefined`
+  (`{ secretKey, nonce: undefined }`). A key the factory does not return stays.
 - A part may return a class instance. Its prototype methods are kept and called
   on it. A private-state part returns a plain object.
 - A witness name or private-state key that two parts define throws when the

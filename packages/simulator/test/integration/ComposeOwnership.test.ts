@@ -177,59 +177,48 @@ describe('a witness part that names its private-state factory', () => {
   });
 });
 
-describe('an optional owned key its private-state factory does not return', () => {
-  /** Makes `secret` only; `pending` is optional and starts unset. */
+describe('an optional key a witness part may own', () => {
+  /** Declares `pending` set to `undefined`, so the part owns it. */
+  const DeclaringSecretState = {
+    generate: (): SecretState => ({ secret: 7n, pending: undefined }),
+  };
+  /** Does not return `pending`, so no part owns it. */
   const LeanSecretState = {
     generate: (): SecretState => ({ secret: 7n }),
   };
-  const owningSlice = Object.assign(<L>() => SlicingWitnesses<L>(), {
-    privateState: LeanSecretState.generate,
-  });
-  const leanParts = [CountPrivateState.generate, LeanSecretState.generate];
-
-  it('is deleted when the owning witness omits it', async () => {
-    const Lean = defineSimulator(DefineArtifact, {
-      witnesses: [CountWitnesses, owningSlice],
-      privateState: leanParts,
-    });
-    const sim = await Lean.create(OWNER, VALUES, ORIGIN);
-    await sim.setPrivateState({ count: 3n, secret: 7n, pending: 1n });
-
-    await sim.storeSecret();
-
-    expect(await sim.getPrivateState()).toStrictEqual({
-      count: 3n,
-      secret: 7n,
-    });
-  });
-
-  it('is deleted through a composeWitnesses factory too', async () => {
-    const Lean = defineSimulator(DefineArtifact, {
-      witnesses: composeWitnesses(CountWitnesses, owningSlice),
-      privateState: leanParts,
-    });
-    const sim = await Lean.create(OWNER, VALUES, ORIGIN);
-    await sim.setPrivateState({ count: 3n, secret: 7n, pending: 1n });
-
-    await sim.storeSecret();
-
-    expect(await sim.getPrivateState()).toStrictEqual({
-      count: 3n,
-      secret: 7n,
-    });
-  });
-
-  it('is kept when two witness parts name a private-state factory', async () => {
-    const Shared = defineSimulator(DefineArtifact, {
+  const owning = (generate: () => SecretState) =>
+    defineSimulator(DefineArtifact, {
       witnesses: [
-        Object.assign(<L>() => CountWitnesses<L>(), {
-          privateState: CountPrivateState.generate,
+        CountWitnesses,
+        Object.assign(<L>() => SlicingWitnesses<L>(), {
+          privateState: generate,
         }),
-        owningSlice,
       ],
-      privateState: leanParts,
+      privateState: [CountPrivateState.generate, generate],
     });
-    const sim = await Shared.create(OWNER, VALUES, ORIGIN);
+
+  it('is deleted when the factory returns it set to undefined', async () => {
+    const sim = await owning(DeclaringSecretState.generate).create(
+      OWNER,
+      VALUES,
+      ORIGIN,
+    );
+    await sim.setPrivateState({ count: 3n, secret: 7n, pending: 1n });
+
+    await sim.storeSecret();
+
+    expect(await sim.getPrivateState()).toStrictEqual({
+      count: 3n,
+      secret: 7n,
+    });
+  });
+
+  it('stays when the factory does not return it', async () => {
+    const sim = await owning(LeanSecretState.generate).create(
+      OWNER,
+      VALUES,
+      ORIGIN,
+    );
     await sim.setPrivateState({ count: 3n, secret: 7n, pending: 1n });
 
     await sim.storeSecret();

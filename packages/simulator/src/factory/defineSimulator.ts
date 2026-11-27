@@ -578,11 +578,7 @@ export function defineSimulator(
     ),
     contractArgs: (...args: unknown[]) => args,
     ledgerExtractor: (state) => artifact.ledger(state),
-    witnessesFactory: partsFactory(
-      'witness',
-      definition.witnesses,
-      definition.privateState,
-    ),
+    witnessesFactory: partsFactory('witness', definition.witnesses),
     artifactName: definition.artifactName,
     flatCircuits: true,
   }) as unknown as AnySimulatorClass;

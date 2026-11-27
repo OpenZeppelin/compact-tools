@@ -91,50 +91,26 @@ function flattenWitnesses(parts: readonly PartFactory[]): PartFactory[] {
   );
 }
 
-/** A witness part's optional `privateState` factory. */
-const stateFactory = (part: PartFactory): PartFactory | undefined => {
+/**
+ * The private-state keys a witness part owns: those of the state its optional
+ * `privateState` factory returns. None when it declares no factory.
+ */
+function ownedKeys(part: PartFactory): PropertyKey[] {
   const factory = (part as { privateState?: unknown }).privateState;
-  return typeof factory === 'function' ? (factory as PartFactory) : undefined;
-};
-
-/** The keys of the state a factory returns. */
-const stateKeys = (factory: PartFactory): PropertyKey[] => {
+  if (typeof factory !== 'function') return [];
   const state: unknown = factory();
   return isRecord(state) ? ownEnumerableKeys(state) : [];
-};
-
-/** Whether a witness part owns a private-state key, so it may delete it. */
-type Owns = (key: PropertyKey) => boolean;
-
-/**
- * The ownership rule for each witness part. A part that names its
- * private-state factory owns that factory's keys. With the definition's
- * private-state parts known, the only such part also owns every key no
- * private-state part returns, e.g. an optional key its factory omits.
- */
-function ownership(
-  parts: readonly PartFactory[],
-  stateParts: readonly PartFactory[] | undefined,
-): Owns[] {
-  const owners = parts.filter((part) => stateFactory(part) !== undefined);
-  const declared =
-    stateParts && owners.length === 1
-      ? new Set(stateParts.flatMap(stateKeys))
-      : undefined;
-  return parts.map((part) => {
-    const factory = stateFactory(part);
-    if (!factory) return () => false;
-    const own = new Set(stateKeys(factory));
-    return (key) =>
-      own.has(key) || (declared !== undefined && !declared.has(key));
-  });
 }
 
 /**
  * Wraps a part's witness so the state it returns is written over the whole
  * state. An owned key the returned state omits is deleted.
  */
-function mergingWitness(part: object, key: PropertyKey, owns: Owns): unknown {
+function mergingWitness(
+  part: object,
+  key: PropertyKey,
+  owned: readonly PropertyKey[],
+): unknown {
   const witness = (part as Record<PropertyKey, unknown>)[key];
   if (typeof witness !== 'function') return witness;
   return (context: WitnessContext<unknown, unknown>, ...args: unknown[]) => {
@@ -145,10 +121,8 @@ function mergingWitness(part: object, key: PropertyKey, owns: Owns): unknown {
     const current = context.privateState;
     if (!isRecord(current) || !isRecord(next)) return [next, value];
     const merged: Record<PropertyKey, unknown> = { ...current, ...next };
-    for (const stateKey of ownEnumerableKeys(current)) {
-      if (!Object.hasOwn(next, stateKey) && owns(stateKey)) {
-        delete merged[stateKey];
-      }
+    for (const ownedKey of owned) {
+      if (!Object.hasOwn(next, ownedKey)) delete merged[ownedKey];
     }
     return [merged, value];
   };
@@ -161,13 +135,12 @@ function mergingWitness(part: object, key: PropertyKey, owns: Owns): unknown {
 function mergeParts(
   kind: PartKind,
   parts: readonly PartFactory[],
-  stateParts?: readonly PartFactory[],
 ): Record<PropertyKey, unknown> {
   const merged: Record<PropertyKey, unknown> = {};
   const owners = new Map<PropertyKey, number>();
-  const owns = kind === 'witness' ? ownership(parts, stateParts) : [];
   parts.forEach((part, index) => {
     const value = part();
+    const owned = kind === 'witness' ? ownedKeys(part) : [];
     const keys =
       kind === 'witness' ? witnessKeys(value) : ownEnumerableKeys(value);
     for (const key of keys) {
@@ -184,7 +157,7 @@ function mergeParts(
         writable: true,
         value:
           kind === 'witness'
-            ? mergingWitness(value, key, owns[index])
+            ? mergingWitness(value, key, owned)
             : (value as Record<PropertyKey, unknown>)[key],
       });
     }
@@ -201,12 +174,11 @@ function mergeParts(
 function composeParts(
   kind: PartKind,
   parts: readonly PartFactory[],
-  stateParts?: readonly PartFactory[],
 ): ComposedFactory<object, readonly PartFactory[]> {
   const list = Object.freeze([...parts]);
   const merged = kind === 'witness' ? flattenWitnesses(list) : list;
-  if (merged.length > 1) mergeParts(kind, merged, stateParts);
-  const factory = () => mergeParts(kind, merged, stateParts);
+  if (merged.length > 1) mergeParts(kind, merged);
+  const factory = () => mergeParts(kind, merged);
   return Object.defineProperty(factory, 'parts', { value: list }) as never;
 }
 
@@ -216,12 +188,11 @@ function composeParts(
  *
  * A part's witness reads and returns its own part of the private state. The
  * merged witness writes the returned part over the whole state, so other
- * parts' keys stay. A part that names its private-state factory owns that
- * factory's keys: its witnesses return that whole state, and an owned key they
- * omit is deleted:
+ * parts' keys stay. A part that names its private-state factory owns the
+ * keys that factory returns: its witnesses return that whole state, and an
+ * owned key they omit is deleted:
  * `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
- * In a definition where it is the only such part, it also owns every key no
- * `privateState` part returns, e.g. an optional key its factory leaves out.
+ * To own an optional key, the factory returns it set to `undefined`.
  */
 export function composeWitnesses<const F extends readonly PartFactory[]>(
   ...parts: F
@@ -241,27 +212,12 @@ export function composePrivateState<const F extends readonly PartFactory[]>(
   return composeParts('private state key', parts) as never;
 }
 
-/**
- * Normalizes {@link Parts} to one factory; `undefined` yields `{}`. Witness
- * parts take the definition's private-state parts, which decide the keys a
- * witness part owns.
- */
+/** Normalizes {@link Parts} to one factory; `undefined` yields `{}`. */
 export function partsFactory(
   kind: PartKind,
   parts: Parts | undefined,
-  stateParts?: Parts,
 ): PartFactory {
   if (parts === undefined) return () => ({});
-  const states =
-    stateParts === undefined
-      ? undefined
-      : typeof stateParts === 'function'
-        ? [stateParts]
-        : stateParts;
-  if (typeof parts === 'function') {
-    return kind === 'witness' && states && composedWitnesses.has(parts)
-      ? composeParts(kind, [parts], states)
-      : parts;
-  }
-  return composeParts(kind, parts, kind === 'witness' ? states : undefined);
+  if (typeof parts === 'function') return parts;
+  return composeParts(kind, parts);
 }
