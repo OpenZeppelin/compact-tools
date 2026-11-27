@@ -1,0 +1,18 @@
+pragma language_version >= 0.28.0;
+
+module Shielded {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+  import { Blinding } from "../random/Blind";
+
+  export ledger _members: Set<Bytes<32>>;
+
+  export circuit grantRole(caller: Badge, blinding: Blinding, role: Bytes<32>, nonce: Bytes<32>): [] {
+    _members.insert(disclose(computeAccountCommitment(role, blinding)));
+  }
+
+  export pure circuit computeAccountCommitment(account: Bytes<32>, blinding: Blinding): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([account, blinding as Bytes<32>]);
+  }
+}

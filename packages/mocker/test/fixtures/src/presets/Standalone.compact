@@ -1,0 +1,11 @@
+// Fixture contract for the compact-mock end-to-end tests: a top-level contract, not a module.
+
+pragma language_version >= 0.28.0;
+
+import CompactStandardLibrary;
+
+export ledger hits: Counter;
+
+export circuit hit(): [] {
+  hits.increment(1);
+}

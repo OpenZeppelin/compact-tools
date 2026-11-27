@@ -50,9 +50,9 @@ release notes agree.
    - Creates a git tag.
    - Publishes the package to npm under the channel's dist-tag.
 7. Once published, go to "Releases" and create a GitHub release using the
-   generated tag. Mark beta tags as prereleases. `compact-linter` and
-   `compact-profiler` are the exceptions: the workflow creates their releases
-   itself (see below).
+   generated tag. Mark beta tags as prereleases. `compact-linter`,
+   `compact-profiler` and `compact-mocker` are the exceptions: the workflow
+   creates their releases itself (see below).
 
 ## Graduating a beta to stable
 
@@ -84,8 +84,8 @@ breaking change. After that, only `prerelease` moves the counter. Running
 ## First-release order
 
 `compact-cli` depends on `compact-builder` and `compact-deployer`.
-`compact-linter` and `compact-profiler` depend on `compact-launcher`. The other
-published packages have no internal dependencies:
+`compact-linter`, `compact-profiler` and `compact-mocker` depend on
+`compact-launcher`. The other published packages have no internal dependencies:
 
 ```text
 compact-cli (bin wrapper)
@@ -97,6 +97,8 @@ compact-launcher (library that downloads, verifies and caches the Rust binaries)
 compact-linter (bin wrapper around the compact-lint crate)
   └─ depends on compact-launcher
 compact-profiler (bin wrapper around the compact-profile crate, and a library)
+  └─ depends on compact-launcher
+compact-mocker (bin wrapper around the compact-mock crate)
   └─ depends on compact-launcher
 compact-simulator (library)
 ```
@@ -111,7 +113,8 @@ each dependent finds its deps already on npm:
 4. `compact-launcher` (no internal deps)
 5. `compact-linter` (depends on `compact-launcher`)
 6. `compact-profiler` (depends on `compact-launcher`)
-7. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
+7. `compact-mocker` (depends on `compact-launcher`)
+8. `compact-cli` (depends on `compact-builder` and `compact-deployer`; pull
    `main` first so both bump commits are present locally before triggering)
 
 The publish workflow enforces this order: it stops before building or tagging
@@ -119,11 +122,12 @@ anything when a `workspace:` dependency is not on npm at the version in the
 checkout.
 
 After the first release, each package versions on its own: a release of one
-re-publishes none of the others. `compact-linter` and `compact-profiler` take
-`compact-launcher` at `^<version>`, so a launcher patch reaches their fresh
-installs with no release of theirs. A launcher minor (on 0.x) or major reaches
-a published bin only when that bin is re-released. Each bin ships its own
-`checksums.txt`, so the digests it checks downloads against never float.
+re-publishes none of the others. `compact-linter`, `compact-profiler` and
+`compact-mocker` take `compact-launcher` at `^<version>`, so a launcher patch
+reaches their fresh installs with no release of theirs. A launcher minor (on
+0.x) or major reaches a published bin only when that bin is re-released. Each
+bin ships its own `checksums.txt`, so the digests it checks downloads against
+never float.
 
 A package's first publish authenticates with the `NPM_TOKEN` secret from the
 `compact-npm-prod` environment, since a Trusted Publisher can only be
@@ -133,15 +137,16 @@ version on its own.
 
 ## Rust-binary packages
 
-`compact-linter` and `compact-profiler` are bin wrappers around a Rust crate, so
-each release carries native binaries as well as an npm package. Both resolve the
-binary through `compact-launcher`, which has no crate and releases like the other
-TypeScript packages.
+`compact-linter`, `compact-profiler` and `compact-mocker` are bin wrappers around
+a Rust crate, so each release carries native binaries as well as an npm package.
+All three resolve the binary through `compact-launcher`, which has no crate and
+releases like the other TypeScript packages.
 
 | Package | Directory | Crate | Binary and asset prefix |
 | --- | --- | --- | --- |
 | `compact-linter` | `packages/linter` | `crates/compact-lint` | `compact-lint` |
 | `compact-profiler` | `packages/profiler` | `crates/compact-profile` | `compact-profile` |
+| `compact-mocker` | `packages/mocker` | `crates/compact-mock` | `compact-mock` |
 
 - The version lives in two files: the package's `package.json` and the crate's
   `Cargo.toml`. The release workflow bumps the package, mirrors the value into the
@@ -174,6 +179,7 @@ TypeScript packages.
   package's directory, falling back to the tag name. A `beta` dist-tag marks the
   release a prerelease.
 - Each package's first publish takes the `NPM_TOKEN` path above. Right after it, add
-  the package (`@openzeppelin/compact-linter`, `@openzeppelin/compact-profiler`) as a
-  Trusted Publisher on npmjs.org, naming this repo and
+  the package (`@openzeppelin/compact-linter`, `@openzeppelin/compact-profiler`,
+  `@openzeppelin/compact-mocker`) as a Trusted Publisher on npmjs.org, naming this
+  repo and
   `.github/workflows/release-publish.yml`.

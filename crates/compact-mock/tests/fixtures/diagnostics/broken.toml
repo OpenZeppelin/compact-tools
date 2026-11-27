@@ -1,0 +1,2 @@
+[[mock.rules]]
+modules = ["bad/Broken"]

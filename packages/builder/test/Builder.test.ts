@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompactBuilder } from '../src/Builder.js';
+import { CompactCompiler } from '../src/Compiler.js';
+
+const ALWAYS = ['*/test/artifacts/*', '*.fragment.compact'];
 
 describe('CompactBuilder.parseArgs', () => {
   it('returns defaults for empty input', () => {
@@ -262,6 +265,47 @@ describe('CompactBuilder step pipeline', () => {
     expect(copyStep?.cmd).not.toContain('! -name');
   });
 
+  it('keeps the default Mock* exclude beside alwaysExclude', () => {
+    const builder = new CompactBuilder({ alwaysExclude: ALWAYS });
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files');
+
+    expect(copyStep?.cmd).toContain(
+      "! -name 'Mock*' ! -name '*.mock.compact' ! -path '*/test/artifacts/*' ! -name '*.fragment.compact'",
+    );
+  });
+
+  it('keeps alwaysExclude under an include list', () => {
+    const builder = new CompactBuilder({
+      only: ['Mock*'],
+      alwaysExclude: ALWAYS,
+    });
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files');
+
+    expect(copyStep?.cmd).toContain(
+      "\\( -name 'Mock*' \\) ! -path '*/test/artifacts/*' ! -name '*.fragment.compact'",
+    );
+    expect(copyStep?.cmd).not.toContain("! -name 'Mock*'");
+  });
+
+  it('appends alwaysExclude to an explicit exclude in the hierarchical copy step', () => {
+    const builder = new CompactBuilder({
+      hierarchical: true,
+      exclude: ['*/archive/*'],
+      alwaysExclude: ALWAYS,
+    });
+    const copyStep = builder
+      .getSteps()
+      .find((s) => s.msg === 'Copying .compact files (preserving structure)');
+
+    expect(copyStep?.cmd).toContain(
+      "! -path '*/archive/*' ! -path '*/test/artifacts/*' ! -name '*.fragment.compact'",
+    );
+  });
+
   it('shell-quotes srcDir into find paths', () => {
     const builder = new CompactBuilder({ srcDir: 'my src' });
     const copyStep = builder
@@ -287,5 +331,44 @@ describe('CompactBuilder step pipeline', () => {
       'Copying .compact files (preserving structure)',
       'Copying additional files to dist',
     ]);
+  });
+});
+
+describe('CompactBuilder.build', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The `exclude` the compiler of `builder.build()` runs with. Stops the build there. */
+  async function compilerExclude(
+    builder: CompactBuilder,
+  ): Promise<readonly string[] | undefined> {
+    let exclude: readonly string[] | undefined;
+    vi.spyOn(CompactCompiler.prototype, 'compile').mockImplementation(
+      async function (this: CompactCompiler) {
+        exclude = this.testOptions.exclude;
+        throw new Error('stop after compile');
+      },
+    );
+    await expect(builder.build()).rejects.toThrow('stop after compile');
+    return exclude;
+  }
+
+  it('compiles with alwaysExclude and without the default Mock* exclude', async () => {
+    expect(
+      await compilerExclude(new CompactBuilder({ alwaysExclude: ALWAYS })),
+    ).toEqual(ALWAYS);
+  });
+
+  it('compiles with alwaysExclude after an explicit exclude', async () => {
+    expect(
+      await compilerExclude(
+        new CompactBuilder({
+          exclude: ['*/archive/*'],
+          only: ['Mock*'],
+          alwaysExclude: ALWAYS,
+        }),
+      ),
+    ).toEqual(['*/archive/*', ...ALWAYS]);
   });
 });

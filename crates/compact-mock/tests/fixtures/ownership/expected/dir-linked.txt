@@ -1,0 +1,4 @@
+exit: 0
+--- stdout
+--- stderr
+compact-mock: --dir link/lib reaches [mock].src src only through a symlink; pass a path under src. Nothing written

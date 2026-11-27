@@ -1,0 +1,23 @@
+pragma language_version >= 0.28.0;
+
+module Multisig<#t> {
+  import CompactStandardLibrary;
+
+  export ledger _signers: Set<Bytes<32>>;
+  export ledger _instanceSalt: Bytes<32>;
+
+  export circuit initialize<#n>(instanceSalt: Bytes<32>, signerCommitments: Vector<n, Bytes<32>>): [] {
+    _instanceSalt = disclose(instanceSalt);
+    for (const commitment of signerCommitments) {
+      _signers.insert(disclose(commitment));
+    }
+  }
+
+  export circuit assertApprovals(approvals: Uint<64>): [] {
+    assert(disclose(approvals) >= t, "Multisig: too few approvals");
+  }
+
+  export pure circuit threshold(): Uint<64> {
+    return t;
+  }
+}

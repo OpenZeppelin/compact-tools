@@ -1,0 +1,5 @@
+// Hand-written fragment that MockClicker.compact includes: the interface's reset.
+
+export circuit reset(): [] {
+  Clicker__clear();
+}

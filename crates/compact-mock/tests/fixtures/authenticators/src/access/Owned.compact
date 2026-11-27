@@ -1,0 +1,22 @@
+pragma language_version >= 0.28.0;
+
+module Owned {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export ledger _owner: Bytes<32>;
+
+  export circuit initialize(owner: Badge): [] {
+    _owner = disclose(owner.key);
+  }
+
+  export circuit transfer(caller: Badge, to: Bytes<32>): [] {
+    assert(disclose(caller.key) == _owner, "Owned: caller is not the owner");
+    _owner = disclose(to);
+  }
+
+  export circuit owner(): Bytes<32> {
+    return _owner;
+  }
+}

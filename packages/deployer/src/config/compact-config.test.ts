@@ -1,9 +1,11 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import { describe, expect, it } from 'vitest';
 import { ConfigError } from '../errors.ts';
 import { CompactConfig } from './compact-config.ts';
+import { configSchema } from './schema.ts';
 
 const MIN_VALID = `
 [profile]
@@ -54,6 +56,46 @@ tags = ["@module", "@description"]
     expect(config.defaultNetwork).toBe('local');
     expect(config.network('local').network_id).toBe('undeployed');
     expect(config.contract('Token').artifact).toBe('src/artifacts/Token/Token');
+  });
+
+  it('ignores the [mock] table that compact-mock owns', async () => {
+    const toml = `${MIN_VALID}
+[mock]
+src = "contracts/src"
+spdx = "MIT"
+caller_type = { name = "Caller", module = "identifier/Identifier" }
+exclude = ["archive/**"]
+
+[mock.auth.prf]
+module = "crypto/authentication/AuthPrfPseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[mock.inject.blinding]
+module = "crypto/randomness/RandBlinding"
+type = { name = "Blinding", module = "crypto/randomness/RandBlinding" }
+call = "read()"
+
+[[mock.rules]]
+modules = ["**"]
+auth = ["prf", "caller"]
+prf.init = { flag = "isInit" }
+
+[[mock.rules]]
+modules = ["math/UintN"]
+merge = true
+instances = [
+  { suffix = "0", prefix = "U0_", module_args = ["0"] },
+  { suffix = "1", prefix = "U1_", module_args = ["1"] },
+]
+`;
+    const dir = tmpRepo(toml);
+
+    const config = await CompactConfig.load(undefined, dir);
+
+    expect(config.defaultNetwork).toBe('local');
+    expect(config.listContracts()).toEqual(['Token']);
+    expect(config.contract('Token').artifact).toBe('src/artifacts/Token/Token');
+    expect(configSchema.parse(parseToml(toml))).not.toHaveProperty('mock');
   });
 
   it('should throw with the available set when a lookup misses', async () => {

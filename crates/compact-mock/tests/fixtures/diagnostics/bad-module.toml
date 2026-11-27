@@ -1,0 +1,5 @@
+[mock]
+caller_type = { name = "Badge", module = "ok/Ok.compact" }
+
+[[mock.rules]]
+modules = ["ok/Ok"]

@@ -1,0 +1,15 @@
+pragma language_version >= 0.28.0;
+
+module Dial {
+  import CompactStandardLibrary;
+
+  export circuit turn(by: Uint<8>): [] {
+  }
+
+  export circuit turn(by: Uint<8>, twice: Boolean): [] {
+  }
+
+  export circuit spin(_invocations: Field): Field {
+    return _invocations;
+  }
+}

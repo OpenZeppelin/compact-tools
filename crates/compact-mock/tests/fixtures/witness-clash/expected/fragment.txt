@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockSolo: witness secret is declared by both src/lib/Solo.compact and src/lib/test/MockSolo.fragment.compact; compactc binds both to one witness function. Remove one import or write the mock by hand

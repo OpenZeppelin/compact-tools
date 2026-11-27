@@ -1,0 +1,3 @@
+[[mock.rules]]
+modules = ["reg/Registry"]
+guard = ["pass"]

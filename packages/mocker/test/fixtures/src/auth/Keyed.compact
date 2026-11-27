@@ -1,0 +1,19 @@
+// Fixture module for the compact-mock end-to-end tests: an authenticator that takes no salt.
+
+pragma language_version >= 0.28.0;
+
+module Keyed {
+  import CompactStandardLibrary;
+
+  import { Account, Caller } from "../identity/Id";
+
+  witness wit_KeyedSK(): Bytes<32>;
+
+  export circuit authenticateHere(): Caller {
+    return Caller {
+      account: left<Bytes<32>, ContractAddress>(
+        persistentHash<Vector<2, Bytes<32>>>([wit_KeyedSK(), pad(32, "keyed")])
+      )
+    };
+  }
+}

@@ -1,0 +1,23 @@
+// Fixture module for the compact-mock end-to-end tests.
+
+pragma language_version >= 0.28.0;
+
+module Hash {
+  import CompactStandardLibrary;
+
+  export pure circuit digest(x: Field): Bytes<32> {
+    return persistentHash<Field>(x);
+  }
+
+  export pure circuit double(x: Field): Field {
+    return x + x;
+  }
+
+  export pure circuit square(x: Field): Field {
+    return x * x;
+  }
+
+  export pure circuit mix(a: Field, b: Field): Field {
+    return a + a + a + b;
+  }
+}

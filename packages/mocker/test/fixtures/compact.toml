@@ -1,0 +1,84 @@
+# The mocks the end-to-end tests compile and simulate. `compact-mock build` writes them to
+# src/<dir>/test/artifacts/, which git ignores.
+[mock]
+spdx = "MIT"
+caller_type = { name = "Caller", module = "identity/Id" }
+# Authenticator and injector modules return witness data; they have no mock.
+exclude = ["auth/Keyed", "rand/*"]
+
+[mock.auth.prf]
+module = "auth/Pseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+# Claimed names its caller claimant.
+params = ["caller", "claimant"]
+
+[mock.auth.key]
+module = "auth/Keyed"
+call = "authenticateHere()"
+suffix = "Keyed"
+
+[mock.inject.blinding]
+module = "rand/Rand"
+type = { name = "Blinding", module = "rand/Rand" }
+call = "read()"
+
+# Every module: an injected-caller mock and a *Caller mock where a circuit takes a Caller,
+# one mock otherwise. identity/Id (no circuit) and presets/Standalone (no module) are skipped.
+[[mock.rules]]
+modules = ["**"]
+auth = ["prf", "caller"]
+
+[[mock.rules]]
+modules = ["access/Owned"]
+auth = ["prf", "key", "caller"]
+exclude = ["_setOwner"]
+prf.init = { flag = "isInit" }
+caller.ledger = false
+
+# initialize takes the caller, so the constructor authenticates it: plainly in MockClaimed,
+# under an isInit flag in MockClaimedFlag.
+[[mock.rules]]
+modules = ["access/Claimed"]
+auth = ["prf"]
+instances = [{ suffix = "" }, { suffix = "Flag", init = { flag = "isInit" } }]
+
+# The salt is the module's own ledger field. join and isMember get the caller and the
+# blinding injected; commitment takes no caller, so it keeps its blinding.
+[[mock.rules]]
+modules = ["access/Shielded"]
+salt = { ledger = "_salt" }
+inject = ["blinding"]
+ledger = ["_members"]
+
+[[mock.rules]]
+modules = ["auth/Pseudonym"]
+disclose = ["authenticate"]
+
+[[mock.rules]]
+modules = ["count/Clicker"]
+implements = [{ name = "Tally", module = "iface/Counting" }]
+exclude = ["_clear"]
+ledger_names = "plain"
+
+[[mock.rules]]
+modules = ["crypto/Hash"]
+disclose = ["mix"]
+guard = ["square"]
+rename = { double = "twice" }
+
+# MockBag and MockBagNoInit stand alone; the 2 and 3 instances merge into MockBagPair.
+[[mock.rules]]
+modules = ["generic/Bag"]
+module_args = ["4"]
+circuit_args = { initialize = ["2"], put = ["Field"], first = ["3"] }
+instances = [
+  { suffix = "" },
+  { suffix = "NoInit", init = "none" },
+  { suffix = "2", group = "Pair", prefix = "B2_", module_args = ["2"], exclude = ["first"] },
+  { suffix = "3", group = "Pair", prefix = "B3_", module_args = ["3"], exclude = ["first"] },
+]
+
+# scale keeps its name and the second overload becomes scale2; mix's second is renamed.
+[[mock.rules]]
+modules = ["math/Scale"]
+rename = { "mix(Field, Field)" = "mixPair" }

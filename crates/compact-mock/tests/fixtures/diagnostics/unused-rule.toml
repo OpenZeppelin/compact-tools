@@ -1,0 +1,5 @@
+[[mock.rules]]
+modules = ["ok/Ok"]
+
+[[mock.rules]]
+modules = ["nope/*"]

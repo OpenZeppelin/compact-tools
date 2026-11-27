@@ -1,0 +1,13 @@
+// Fixture module for the compact-mock end-to-end tests: an interface and no circuit.
+
+pragma language_version >= 0.28.0;
+
+module Counting {
+  import CompactStandardLibrary;
+
+  export contract Tally {
+    circuit bump(n: Uint<16>): [];
+    circuit total(): Uint<64>;
+    circuit reset(): [];
+  }
+}

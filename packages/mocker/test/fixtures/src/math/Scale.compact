@@ -1,0 +1,23 @@
+// Fixture module for the compact-mock end-to-end tests: overloaded circuits.
+
+pragma language_version >= 0.28.0;
+
+module Scale {
+  import CompactStandardLibrary;
+
+  export pure circuit scale(x: Field): Field {
+    return x + x;
+  }
+
+  export pure circuit scale(x: Field, k: Field): Field {
+    return x * k;
+  }
+
+  export pure circuit mix(x: Field): Field {
+    return x + 1;
+  }
+
+  export pure circuit mix(x: Field, y: Field): Field {
+    return x + y + 1;
+  }
+}

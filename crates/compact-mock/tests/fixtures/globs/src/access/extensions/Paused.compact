@@ -1,0 +1,17 @@
+pragma language_version >= 0.28.0;
+
+module Paused {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../../who/Who";
+
+  export ledger _paused: Boolean;
+
+  export circuit pause(caller: Badge): [] {
+    _paused = true;
+  }
+
+  export circuit isPaused(): Boolean {
+    return _paused;
+  }
+}

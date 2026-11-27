@@ -1,0 +1,8 @@
+[mock]
+caller_type = { name = "Badge", module = "ok/Ok" }
+
+[mock.auth.gate]
+module = "ok/Ok"
+
+[[mock.rules]]
+modules = ["ok/Ok"]

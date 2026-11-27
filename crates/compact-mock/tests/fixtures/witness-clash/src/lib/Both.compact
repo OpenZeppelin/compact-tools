@@ -1,0 +1,12 @@
+pragma language_version >= 0.28.0;
+
+module Both {
+  import CompactStandardLibrary;
+
+  import "./Left" prefix Left_;
+  import "./Right" prefix Right_;
+
+  export circuit both(): Bytes<32> {
+    return Left_left();
+  }
+}

@@ -1,0 +1,12 @@
+pragma language_version >= 0.28.0;
+
+module Diamond {
+  import CompactStandardLibrary;
+
+  import "./Left" prefix Left_;
+  import "./Mid" prefix Mid_;
+
+  export circuit diamond(): Bytes<32> {
+    return Mid_mid();
+  }
+}

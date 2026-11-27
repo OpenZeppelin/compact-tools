@@ -1,0 +1,7 @@
+[mock]
+spdx = """
+MIT
+"""
+
+[[mock.rules]]
+modules = ["ok/Ok"]

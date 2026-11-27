@@ -1,0 +1,5 @@
+[mock]
+spdx = "MIT"
+
+[[mock.rules]]
+modules = ["access/Ownable"]

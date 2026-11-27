@@ -1,0 +1,14 @@
+[[mock.rules]]
+modules = ["math/UintN"]
+guard = ["store"]
+
+[[mock.rules.instances]]
+suffix = "8"
+module_args = ["8"]
+
+[[mock.rules.instances]]
+suffix = "64"
+prefix = "Wide_"
+module_args = ["64"]
+exclude = ["width"]
+rename = { store = "put" }

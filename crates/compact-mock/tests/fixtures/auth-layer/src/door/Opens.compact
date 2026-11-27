@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Opens {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export contract Opener {
+    circuit open(caller: Badge): [];
+  }
+}

@@ -1,0 +1,15 @@
+pragma language_version >= 0.28.0;
+
+module Switch {
+  import CompactStandardLibrary;
+
+  export ledger _on: Boolean;
+
+  export circuit initialize(): [] {
+    _on = true;
+  }
+
+  export circuit flip(): [] {
+    _on = !_on;
+  }
+}

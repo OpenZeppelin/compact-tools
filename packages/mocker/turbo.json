@@ -1,0 +1,19 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "outputs": ["dist/**"],
+      "inputs": ["src/**/*.ts", "tsconfig.json"],
+      "cache": true
+    },
+    "compile:fixtures": {
+      "cache": false,
+      "env": ["COMPACT_HOME", "COMPACTC_VERSION", "COMPACT_MOCK_BINARY"],
+      "outputs": []
+    },
+    "test": {
+      "env": ["COMPACT_HOME", "COMPACTC_VERSION", "COMPACT_MOCK_BINARY"]
+    }
+  }
+}

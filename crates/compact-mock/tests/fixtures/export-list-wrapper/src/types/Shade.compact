@@ -1,0 +1,7 @@
+pragma language_version >= 0.28.0;
+
+module Shade {
+  import CompactStandardLibrary;
+
+  export enum Tint { light, dark }
+}

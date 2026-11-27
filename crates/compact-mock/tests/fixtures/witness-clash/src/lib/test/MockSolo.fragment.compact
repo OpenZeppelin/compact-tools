@@ -1,0 +1,5 @@
+witness secret(): Field;
+
+export circuit peek(): Field {
+  return secret();
+}

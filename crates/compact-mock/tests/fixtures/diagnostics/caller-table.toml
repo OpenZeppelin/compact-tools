@@ -1,0 +1,5 @@
+[mock.auth.caller]
+module = "ok/Ok"
+
+[[mock.rules]]
+modules = ["ok/Ok"]

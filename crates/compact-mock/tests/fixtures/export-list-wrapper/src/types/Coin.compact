@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Coin {
+  import CompactStandardLibrary;
+
+  export struct Coin {
+    value: Uint<64>;
+  }
+}

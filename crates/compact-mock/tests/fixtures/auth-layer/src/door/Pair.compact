@@ -1,0 +1,16 @@
+pragma language_version >= 0.28.0;
+
+module Pair {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export circuit initialize(keeper: Badge, heir: Badge): [] {
+  }
+
+  export circuit swap(caller: Badge, target: Badge): [] {
+  }
+
+  export circuit wave(caller: Badge): [] {
+  }
+}

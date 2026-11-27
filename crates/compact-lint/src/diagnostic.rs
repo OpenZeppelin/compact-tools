@@ -217,7 +217,9 @@ impl Diagnostic {
 #[must_use]
 pub fn display_name(rule: RuleId) -> String {
     match rule {
-        RuleId::PARSE | RuleId::FORMAT | RuleId::FILL => rule.as_str().to_owned(),
+        RuleId::PARSE | RuleId::FORMAT | RuleId::FILL | RuleId::MOCK_COVERAGE => {
+            rule.as_str().to_owned()
+        }
         _ => format!("lint/{rule}"),
     }
 }

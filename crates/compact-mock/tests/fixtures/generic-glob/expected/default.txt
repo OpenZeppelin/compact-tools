@@ -1,0 +1,8 @@
+exit: 0
+--- stdout
+wrote src/math/test/artifacts/MockBox.compact
+--- stderr
+compact-mock: MockBox: skipped circuit wrap: type parameters <T> and no circuit_args
+compact-mock: skipped math/Gen: generic module without module_args; name it in a rule that sets module_args to mock it
+compact-mock: skipped math/Seed: generic init circuit without circuit_args; name the module in a rule that sets them to mock it
+compact-mock: 1 mock, 1 written, 0 unchanged, 0 removed.

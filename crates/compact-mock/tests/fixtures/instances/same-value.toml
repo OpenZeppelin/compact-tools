@@ -1,0 +1,9 @@
+[[mock.rules]]
+modules = ["math/UintN"]
+merge = true
+instances = [
+  { suffix = "8", prefix = "U8_", module_args = ["8"] },
+  { suffix = "Hex", prefix = "Hex_", module_args = ["0x8"] },
+  { suffix = "Bin", prefix = "Bin_", module_args = ["0b1001"] },
+  { suffix = "Nine", prefix = "Nine_", module_args = [" 9 "] },
+]

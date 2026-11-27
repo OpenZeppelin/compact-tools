@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockDial: guarded circuit spin has a parameter named _invocations, which hides the guard counter; leave spin unguarded

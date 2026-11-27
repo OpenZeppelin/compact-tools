@@ -1,0 +1,7 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockPick: circuit_args.choose has 2 arguments; choose takes 1
+compact-mock: MockPick: circuit_args.hold: hold has no type parameters
+compact-mock: MockPick: circuit keep has type parameters <#k>; set circuit_args.keep or add it to exclude
+compact-mock: 3 errors; nothing written.

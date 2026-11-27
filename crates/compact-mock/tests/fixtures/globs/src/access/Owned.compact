@@ -1,0 +1,17 @@
+pragma language_version >= 0.28.0;
+
+module Owned {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export ledger _opener: Bytes<32>;
+
+  export circuit open(caller: Badge): [] {
+    _opener = disclose(caller.key);
+  }
+
+  export circuit opener(): Bytes<32> {
+    return _opener;
+  }
+}

@@ -1,0 +1,25 @@
+pragma language_version >= 0.28.0;
+
+module Count {
+  import CompactStandardLibrary;
+
+  import { Tally } from "../iface/Iface";
+
+  export ledger _value: Counter;
+
+  export circuit get(): Uint<64> {
+    return _value.read();
+  }
+
+  export circuit bump(by: Uint<16>): [] {
+    _value.increment(disclose(by));
+  }
+
+  export circuit clear(): [] {
+    _value.resetToDefault();
+  }
+
+  export circuit readOther(other: Tally): Uint<64> {
+    return disclose(other).get();
+  }
+}

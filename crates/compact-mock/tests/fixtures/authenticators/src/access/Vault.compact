@@ -1,0 +1,18 @@
+pragma language_version >= 0.28.0;
+
+module Vault {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export ledger _instanceSalt: Bytes<32>;
+  export ledger _keeper: Bytes<32>;
+
+  export circuit initialize(salt: Bytes<32>): [] {
+    _instanceSalt = disclose(salt);
+  }
+
+  export circuit claim(caller: Badge): [] {
+    _keeper = disclose(caller.key);
+  }
+}

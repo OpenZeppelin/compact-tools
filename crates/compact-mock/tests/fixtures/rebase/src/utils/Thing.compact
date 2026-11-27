@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Thing {
+  import CompactStandardLibrary;
+
+  export struct Thing {
+    value: Field;
+  }
+}

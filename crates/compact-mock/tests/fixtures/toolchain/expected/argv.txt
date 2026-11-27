@@ -1,0 +1,10 @@
+exit: 0
+--- stdout
+wrote src/lib/test/artifacts/MockAlpha.compact
+compiled src/lib/test/artifacts/MockAlpha
+--- stderr
+compact-mock: 1 mock, 1 written, 0 unchanged, 0 removed.
+stub: warning: src/lib/test/artifacts/MockAlpha.compact compiled with a warning
+compact-mock: 1 mock compiled.
+--- compact calls
+compile +0.36.0 --skip-zk src/lib/test/artifacts/MockAlpha.compact src/lib/test/artifacts/MockAlpha

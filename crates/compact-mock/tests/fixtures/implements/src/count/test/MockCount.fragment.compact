@@ -1,0 +1,3 @@
+export circuit reset(): [] {
+  Count_clear();
+}

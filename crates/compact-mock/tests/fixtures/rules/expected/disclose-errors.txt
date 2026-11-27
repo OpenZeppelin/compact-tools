@@ -1,0 +1,7 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: config disclose-errors.toml: [[mock.rules]] #1: disclose names nope, which no module the rule applies to exports
+compact-mock: MockCalc: disclose names reset, which returns []
+compact-mock: MockSum: disclose names clear, which returns []
+compact-mock: 3 errors; nothing written.

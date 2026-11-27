@@ -1,0 +1,3 @@
+[[mock.rules]]
+modules = ["bad/Pattern"]
+init = "plain"

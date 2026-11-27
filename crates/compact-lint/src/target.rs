@@ -18,6 +18,8 @@ pub enum TargetError {
 /// The config and the files it selects, shared by every subcommand.
 pub struct Target {
     pub config: Config,
+    /// The config file in play, given or found; `None` when the defaults apply.
+    pub config_path: Option<PathBuf>,
     pub files: Vec<PathBuf>,
     /// Directory the config's own relative paths and globs are anchored at.
     pub base: PathBuf,
@@ -34,17 +36,23 @@ pub fn resolve(
     config_path: Option<&Path>,
     cwd: &Path,
 ) -> Result<Target, TargetError> {
-    let (config, source, base) = match config_path {
-        Some(path) => (Config::load(path)?, path.to_owned(), cwd.to_owned()),
+    let (config, source, base, found) = match config_path {
+        Some(path) => (
+            Config::load(path)?,
+            path.to_owned(),
+            cwd.to_owned(),
+            Some(path.to_owned()),
+        ),
         None => match discover_config(cwd) {
             Some(path) => {
                 let base = path.parent().unwrap_or(cwd).to_owned();
-                (Config::load(&path)?, path, base)
+                (Config::load(&path)?, path.clone(), base, Some(path))
             }
             None => (
                 Config::default(),
                 PathBuf::from("<defaults>"),
                 cwd.to_owned(),
+                None,
             ),
         },
     };
@@ -52,7 +60,12 @@ pub fn resolve(
     let exclude = config.exclude_set(&source)?;
     let files = if paths.is_empty() {
         let include = config.include_set(&source)?;
-        discover::from_globs(&base, &include, &exclude)?
+        let files = discover::from_globs(&base, &include, &exclude)?;
+        if config.include == Config::default().include {
+            without_generated(files, &base, found.as_deref())
+        } else {
+            files
+        }
     } else {
         let paths = absolute_paths(paths, cwd);
         discover::from_paths(&paths, &base, &exclude)?
@@ -61,9 +74,37 @@ pub fn resolve(
     let files = files.iter().map(|path| display_path(path, cwd)).collect();
     Ok(Target {
         config,
+        config_path: found,
         files,
         base,
     })
+}
+
+/// The default include minus what `compact-mock` writes or includes: fragments and every
+/// file under `<test_dir>/artifacts` (`[mock].test_dir`, default `{dir}/test`).
+fn without_generated(files: Vec<PathBuf>, base: &Path, config: Option<&Path>) -> Vec<PathBuf> {
+    let mut tail = config
+        .and_then(compact_mock::config::mock_test_tail)
+        .unwrap_or_else(|| vec!["test".to_owned()]);
+    tail.push("artifacts".to_owned());
+    files
+        .into_iter()
+        .filter(|file| {
+            let fragment = file
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(".fragment.compact"));
+            let segments: Vec<String> = file
+                .strip_prefix(base)
+                .unwrap_or(file)
+                .iter()
+                .map(|segment| segment.to_string_lossy().into_owned())
+                .collect();
+            !fragment
+                && !segments
+                    .windows(tail.len())
+                    .any(|window| window == tail.as_slice())
+        })
+        .collect()
 }
 
 /// Discovery matches the exclude globs against paths relative to the config's

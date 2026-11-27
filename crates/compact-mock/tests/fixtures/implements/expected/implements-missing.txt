@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockCount: implements Tally, but exposes no circuit reset; add it to src/count/test/MockCount.fragment.compact

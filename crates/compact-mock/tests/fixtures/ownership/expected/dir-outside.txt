@@ -1,0 +1,4 @@
+exit: 0
+--- stdout
+--- stderr
+compact-mock: --dir elsewhere is outside [mock].src src; nothing written

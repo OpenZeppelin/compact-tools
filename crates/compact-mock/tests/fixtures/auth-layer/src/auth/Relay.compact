@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Relay {
+  import CompactStandardLibrary;
+
+  import { authenticate } from "./Gate";
+
+  export { authenticate };
+}

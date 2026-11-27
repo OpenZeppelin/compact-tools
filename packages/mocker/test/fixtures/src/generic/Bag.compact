@@ -1,0 +1,31 @@
+// Fixture module for the compact-mock end-to-end tests.
+
+pragma language_version >= 0.28.0;
+
+module Bag<#n> {
+  import CompactStandardLibrary;
+
+  export ledger _total: Field;
+  export ledger _count: Counter;
+  export ledger _last: Bytes<32>;
+
+  export circuit initialize<#m>(seed: Vector<m, Field>): [] {
+    for (const item of seed) {
+      _total = disclose(_total + item);
+    }
+  }
+
+  export pure circuit capacity(): Uint<64> {
+    return n;
+  }
+
+  export circuit put<T>(item: T): [] {
+    assert(_count.read() < n, "Bag: full");
+    _count.increment(1);
+    _last = disclose(persistentHash<T>(item));
+  }
+
+  export pure circuit first<#k>(items: Vector<k, Field>): Field {
+    return items[0];
+  }
+}

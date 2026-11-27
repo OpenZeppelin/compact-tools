@@ -7,7 +7,7 @@
 
 [lint]
 include = ["contracts/src/**/*.compact"]
-exclude = ["**/test/mocks/**", "**/archive/**"]
+exclude = ["**/test/mocks/**", "**/test/artifacts/**", "**/archive/**"]
 
 # `@constraints` is the default; set `tag` to point the rule at another annotation.
 [lint.constraints]
@@ -41,6 +41,7 @@ rename = { "@return" = "@returns" }
 # constraints-unmeasurable = "warn"
 # parse = "error"
 # format = "error"
+# mock-coverage = "warn"
 
 # The module header template. `tags` is what every header must carry, `sections` is every
 # allowed section in template order, and a required entry also appears in `sections`. Both

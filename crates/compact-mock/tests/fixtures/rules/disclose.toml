@@ -1,0 +1,3 @@
+[[mock.rules]]
+modules = ["calc/Calc"]
+disclose = ["double", "total"]

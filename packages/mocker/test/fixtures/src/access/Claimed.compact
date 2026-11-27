@@ -1,0 +1,15 @@
+// Fixture module for the compact-mock end-to-end tests.
+
+pragma language_version >= 0.28.0;
+
+module Claimed {
+  import CompactStandardLibrary;
+
+  import { Account, Caller } from "../identity/Id";
+
+  export ledger _claimant: Account;
+
+  export circuit initialize(claimant: Caller): [] {
+    _claimant = disclose(claimant.account);
+  }
+}

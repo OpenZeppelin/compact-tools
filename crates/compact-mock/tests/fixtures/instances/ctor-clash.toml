@@ -1,0 +1,7 @@
+[[mock.rules]]
+modules = ["multisig/Multisig"]
+merge = true
+instances = [
+  { suffix = "2", module_args = ["2"], circuit_args = { initialize = ["3"] } },
+  { suffix = "3", module_args = ["3"], circuit_args = { initialize = ["2"] } },
+]

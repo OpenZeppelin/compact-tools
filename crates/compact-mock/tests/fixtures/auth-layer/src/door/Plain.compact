@@ -1,0 +1,10 @@
+pragma language_version >= 0.28.0;
+
+module Plain {
+  import CompactStandardLibrary;
+
+  import "../who/Who";
+
+  export circuit enter(caller: Badge, code: Uint<16>): [] {
+  }
+}

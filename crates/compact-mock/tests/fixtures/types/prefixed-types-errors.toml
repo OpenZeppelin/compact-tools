@@ -1,0 +1,6 @@
+[[mock.rules]]
+modules = ["shape/Shape"]
+instances = [
+  { suffix = "Hidden", rename = { sketch = "draft" } },
+  { suffix = "Type", rename = { measure = "Point" } },
+]

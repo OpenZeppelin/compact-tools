@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Turnstile {
+  import CompactStandardLibrary;
+
+  import { Ticket } from "../auth/Pass";
+  import "../auth/Pass" prefix Pass_;
+
+  export circuit enter(caller: Ticket, receipt: Pass_Receipt): [] {
+  }
+}

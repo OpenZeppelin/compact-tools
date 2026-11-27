@@ -13,6 +13,7 @@ on:
           - compact-deployer
           - compact-launcher
           - compact-linter
+          - compact-mocker
           - compact-profiler
           - compact-simulator
       version_bump:
@@ -96,6 +97,7 @@ jobs:
           compact-deployer   deployer
           compact-launcher   launcher
           compact-linter     linter     crates/compact-lint     compact-lint     compact-lint
+          compact-mocker     mocker     crates/compact-mock     compact-mock     compact-mock
           compact-profiler   profiler   crates/compact-profile  compact-profile  compact-profile
           compact-simulator  simulator
           '
@@ -123,8 +125,8 @@ jobs:
           rustup toolchain install "$CHANNEL" --profile minimal
           rustup show active-toolchain
 
-      # The profiler's end-to-end tests run target/release/compact-profile and
-      # fail under CI without it.
+      # The profiler's and the mocker's end-to-end tests run their crate's
+      # target/release binary and fail under CI without it.
       - name: Build the crate's release binary
         if: steps.pkg.outputs.crate_dir != ''
         env:

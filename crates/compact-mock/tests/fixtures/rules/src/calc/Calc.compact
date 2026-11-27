@@ -1,0 +1,28 @@
+pragma language_version >= 0.28.0;
+
+module Calc {
+  import CompactStandardLibrary;
+
+  export ledger _total: Uint<64>;
+  ledger _calls: Counter;
+
+  export circuit initialize(start: Uint<64>): [] {
+    _total = disclose(start);
+  }
+
+  export pure circuit double(x: Field): Field {
+    return x + x;
+  }
+
+  export circuit total(): Uint<64> {
+    return _total;
+  }
+
+  export circuit reset(): [] {
+    _calls.increment(1);
+    _total = 0;
+  }
+
+  circuit helper(): [] {
+  }
+}

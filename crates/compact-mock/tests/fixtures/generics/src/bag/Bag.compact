@@ -1,0 +1,25 @@
+pragma language_version >= 0.28.0;
+
+module Bag<#n, T> {
+  import CompactStandardLibrary;
+
+  export ledger _items: Map<Uint<64>, T>;
+
+  export circuit initialize<#k>(seed: Vector<k, T>): [] {
+    for (const item of seed) {
+      _items.insert(0, disclose(item));
+    }
+  }
+
+  export circuit put(slot: Uint<64>, item: T): [] {
+    _items.insert(disclose(slot), disclose(item));
+  }
+
+  export circuit get(slot: Uint<64>): Maybe<T> {
+    return none<T>();
+  }
+
+  export pure circuit width(): Uint<64> {
+    return n;
+  }
+}

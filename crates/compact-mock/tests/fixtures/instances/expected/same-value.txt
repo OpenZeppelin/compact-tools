@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockUintN: instances 8 and Hex pass the same module arguments <0x8>; compactc would share one instance of math/UintN
+compact-mock: MockUintN: instances Bin and Nine pass the same module arguments < 9 >; compactc would share one instance of math/UintN
+compact-mock: 2 errors; nothing written.

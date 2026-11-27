@@ -1,0 +1,13 @@
+pragma language_version >= 0.28.0;
+
+module Ecdsa {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  witness signerKey(): Bytes<32>;
+
+  export circuit authenticateForThisContract(): Badge {
+    return Badge { key: persistentHash<Vector<2, Bytes<32>>>([pad(32, "ecdsa"), signerKey()]) };
+  }
+}

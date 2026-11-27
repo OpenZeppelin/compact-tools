@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockSealedLedger: the constructor authenticates the caller it passes to initialize under salt ledger field _salt, which is not set before initialize runs; use a string salt or set init = "none"
+compact-mock: MockSealedExpr: the constructor authenticates the caller it passes to initialize under salt expression Sealed__salt, which is not set before initialize runs; use a string salt or set init = "none"
+compact-mock: 2 errors; nothing written.

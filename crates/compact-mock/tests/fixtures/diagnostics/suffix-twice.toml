@@ -1,0 +1,3 @@
+[[mock.rules]]
+modules = ["ok/Ok"]
+instances = [{ suffix = "A" }, { suffix = "A" }]

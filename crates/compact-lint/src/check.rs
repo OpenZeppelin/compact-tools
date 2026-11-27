@@ -11,6 +11,7 @@ use crate::diagnostic::{Badge, Diagnostic, FixPreview, Level};
 use crate::edit::{apply, newline_of};
 use crate::fix;
 use crate::format::{self, FormatError};
+use crate::mock_coverage;
 use crate::report::RuleId;
 use crate::rules::{LintError, Linter};
 use crate::target::{self, TargetError};
@@ -104,6 +105,12 @@ pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outco
         previewing,
         format!("{preview_count} previews"),
     );
+
+    let coverage_level = target.config.rules.get(RuleId::MOCK_COVERAGE);
+    let phase = Phase::start("mock coverage");
+    let found = mock_coverage::check(&target, coverage_level, cwd);
+    phase.stop(timings, format!("{} findings", found.len()));
+    diagnostics.extend(found);
 
     let format_level = target.config.rules.get(RuleId::FORMAT);
     if options.no_format || format_level == Level::Off {

@@ -1,0 +1,7 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockCalcFragment: fragment src/calc/test/MockCalcFragment.fragment.compact declares a constructor; set init = "none"
+compact-mock: src/calc/test/Broken.fragment.compact:4:1: parse error
+compact-mock: MockSwitch: fragment src/calc/test/MockSwitch.fragment.compact does not exist
+compact-mock: 3 errors; nothing written.

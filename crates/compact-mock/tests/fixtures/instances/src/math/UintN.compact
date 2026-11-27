@@ -1,0 +1,19 @@
+pragma language_version >= 0.28.0;
+
+module UintN<#n> {
+  import CompactStandardLibrary;
+
+  export ledger _last: Field;
+
+  export pure circuit width(): Uint<64> {
+    return n;
+  }
+
+  export pure circuit wrappingAdd(a: Field, b: Field): Field {
+    return a + b;
+  }
+
+  export circuit store(v: Field): [] {
+    _last = disclose(v);
+  }
+}

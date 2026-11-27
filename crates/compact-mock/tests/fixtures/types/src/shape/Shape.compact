@@ -1,0 +1,40 @@
+pragma language_version >= 0.28.0;
+
+module Shape {
+  import CompactStandardLibrary;
+
+  import { Point } from "../geo/Point";
+  import "../geo/Color" prefix Color_;
+  import "../geo/Missing" prefix Missing_;
+
+  export struct Box {
+    corner: Point;
+    side: Uint<32>;
+  }
+
+  export enum Kind { square, round }
+
+  struct Draft {
+    side: Uint<32>;
+  }
+
+  export type Side = Uint<32>;
+
+  export ledger _last: Box;
+
+  export circuit make(corner: Point, color: Color_Rgb, kind: Kind): Box {
+    return Box { corner: corner, side: 1 };
+  }
+
+  export circuit measure(box: Box): Side {
+    return box.side;
+  }
+
+  export circuit owner(): Maybe<ContractAddress> {
+    return none<ContractAddress>();
+  }
+
+  export circuit sketch(): Draft {
+    return Draft { side: 0 };
+  }
+}

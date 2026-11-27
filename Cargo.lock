@@ -445,6 +445,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "compact-mock",
  "compact-tree-sitter",
  "globset",
  "portable-pty",
@@ -456,6 +457,21 @@ dependencies = [
  "toml",
  "tree-sitter",
  "walkdir",
+]
+
+[[package]]
+name = "compact-mock"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "clap",
+ "compact-tree-sitter",
+ "globset",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml",
+ "tree-sitter",
 ]
 
 [[package]]

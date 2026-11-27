@@ -1,0 +1,8 @@
+pragma language_version >= 0.28.0;
+
+module Fail {
+  import CompactStandardLibrary;
+
+  export circuit fail(): [] {
+  }
+}

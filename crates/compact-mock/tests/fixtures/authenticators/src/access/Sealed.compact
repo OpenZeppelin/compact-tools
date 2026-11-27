@@ -1,0 +1,15 @@
+pragma language_version >= 0.28.0;
+
+module Sealed {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export ledger _salt: Bytes<32>;
+  export ledger _owner: Bytes<32>;
+
+  export circuit initialize(caller: Badge, salt: Bytes<32>): [] {
+    _salt = disclose(salt);
+    _owner = disclose(caller.key);
+  }
+}

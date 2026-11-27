@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Solo {
+  import CompactStandardLibrary;
+
+  witness secret(): Field;
+
+  export circuit go(): Field {
+    return secret();
+  }
+}

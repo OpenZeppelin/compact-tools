@@ -1,0 +1,22 @@
+pragma language_version >= 0.28.0;
+
+module Curve {
+  import CompactStandardLibrary;
+
+  import { Spot } from "../geo/Alias";
+
+  export type Pair = Either<Field, Uint<8>>;
+
+  export circuit mix(
+    p: JubjubPoint,
+    q: Secp256k1Point,
+    d: MerkleTreeDigest,
+    s: Secp256k1EcdsaSignature,
+    m: Maybe<Field>,
+    k: ZswapCoinPublicKey,
+    at: Spot,
+    pair: Pair
+  ): CurvePoint {
+    return default<CurvePoint>;
+  }
+}
