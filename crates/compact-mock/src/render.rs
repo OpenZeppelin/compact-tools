@@ -291,6 +291,7 @@ mod tests {
                 }],
                 ret: "Field".to_owned(),
                 guard: true,
+                injected: 0,
                 disclose: true,
                 call: Call {
                     callee: "M_hash".to_owned(),
@@ -413,6 +414,7 @@ mod tests {
             ],
             ret: "Either<ZswapCoinPublicKey, ContractAddress>".to_owned(),
             guard: false,
+            injected: 0,
             disclose: false,
             call: Call {
                 callee: "T_transfer".to_owned(),

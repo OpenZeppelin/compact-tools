@@ -14,7 +14,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `constraints.sources` defaults to `{dir}/test/artifacts/Mock{stem}.compact` first, where `compact-mock` writes a generated mock, then the two `test/mocks` templates. With a `[mock]` table, a module's generated mocks are tried first and the first template follows `[mock].test_dir` (#247)
+- `constraints.sources` defaults to `{dir}/test/artifacts/Mock{stem}.compact` first, where `compact-mock` writes a generated mock, then the two `test/mocks` templates. With a `[mock]` table, a module's generated mocks are tried first, led by the one that passes the most circuits through with no injected call or guard, then by the fewest injected calls, and the first template follows `[mock].test_dir` (#247)
 - The default `include` skips `*.fragment.compact` files and generated mocks under `[mock].test_dir` (#247)
 
 ## 0.2.0 (2026-11-26)

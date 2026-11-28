@@ -26,7 +26,8 @@ pub struct Resolver {
     own: globset::GlobSet,
     sources: Vec<String>,
     overrides: Vec<(PathBuf, PathBuf)>,
-    /// Module file to the sources `[mock]` generates for it, tried before the templates.
+    /// Module file to the sources `[mock]` generates for it, in the order
+    /// `generated_sources` ranks them, tried before the templates.
     generated: BTreeMap<PathBuf, Vec<PathBuf>>,
 }
 

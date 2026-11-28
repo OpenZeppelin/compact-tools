@@ -1,0 +1,16 @@
+pragma language_version >= 0.28.0;
+
+/**
+ * @module Owned
+ * @description Test fixture.
+ */
+module Owned {
+  import { Caller } from "../identity/Id";
+
+  /**
+   * @description Transfers ownership.
+   *
+   * @constraints k=?, rows=?
+   */
+  export circuit transferOwnership(caller: Caller): [] { }
+}

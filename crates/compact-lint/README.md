@@ -262,7 +262,12 @@ mock contract that exports the same circuit names. For each file, in order:
 3. `constraints.sources`, templates expanded and tried until one exists. `{dir}` is the
    file's directory, `{parent}` its parent, `{stem}` its name without the extension.
    With the default templates and a `[mock]` table, the module's generated mocks come
-   first, in expansion order, and the first template uses `[mock].test_dir`.
+   first, and the first template uses `[mock].test_dir`. Among the generated mocks, the
+   one that re-exports the most circuits, or wraps them with no injected argument and no
+   guard, comes first, then the one with the fewest injected arguments, so a `*Caller`
+   mock measures before one that authenticates. A
+   circuit every mock wraps that way is measured with the wrapper's cost; to measure it
+   alone, point `constraints.overrides` at a mock that re-exports it.
 
 Each distinct source is compiled once per run, whatever the number of files it measures.
 

@@ -257,6 +257,16 @@ fn with_a_mock_table_the_generated_mock_is_tried_first_under_its_test_dir() {
 }
 
 #[test]
+fn a_module_measures_through_its_generated_mock_with_no_injected_call() {
+    let directory = work("mock-auth");
+    let (_, stdout) = code_and_stdout(&fill(directory.path(), &["--dry-run"]));
+    assert!(
+        stdout.contains("Set @constraints to k=9, rows=467"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn an_unmeasured_circuit_fails_the_run_only_at_error_level_or_with_error_on_warnings() {
     let directory = work("basic");
     let root = directory.path();

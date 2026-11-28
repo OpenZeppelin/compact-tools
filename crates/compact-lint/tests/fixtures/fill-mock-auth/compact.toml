@@ -1,0 +1,21 @@
+[lint]
+
+[lint.kinds.module]
+tags = ["@module", "@description"]
+
+[lint.kinds.circuit]
+tags = ["@description"]
+
+[lint.rules]
+mock-coverage = "off"
+
+[mock]
+caller_type = { name = "Caller", module = "identity/Id" }
+
+[mock.auth.prf]
+module = "auth/Pseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["access/*"]
+auth = ["prf", "caller"]

@@ -116,6 +116,8 @@ pub struct Wrapper {
     pub params: Vec<Param>,
     pub ret: String,
     pub guard: bool,
+    /// How many of the circuit's parameters an authenticator or injector call fills.
+    pub injected: usize,
     pub disclose: bool,
     pub call: Call,
 }
@@ -1785,6 +1787,7 @@ impl<'a> Planner<'a> {
                 params,
                 ret,
                 guard: guarded,
+                injected: inject.iter().filter(|slot| slot.is_some()).count(),
                 disclose: disclosed,
                 call: Call {
                     callee: format!(

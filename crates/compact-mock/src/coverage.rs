@@ -1,12 +1,13 @@
 //! Which modules and circuits the generated mocks cover, for `compact-lint`'s
 //! `mock-coverage` rule. Plans every mock in memory and writes nothing.
 
+use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::config::{self, Paths};
 use crate::error::Error;
-use crate::plan::{self, Scope, Status};
+use crate::plan::{self, MockPlan, Scope, Status, SurfaceCircuit};
 use crate::scope::Files;
 use crate::select::SkipReason;
 use crate::source::Position;
@@ -123,8 +124,8 @@ pub fn coverage(config: &Path, cwd: &Path) -> Result<Option<Vec<ModuleCoverage>>
     Ok(Some(found))
 }
 
-/// Per module file, the generated sources of its mocks in expansion order. `None` when the
-/// config has no `[mock]` table or it fails to load.
+/// Per module file, the generated sources of its mocks, in [`rank`] order. Ties keep
+/// expansion order. `None` when the config has no `[mock]` table or it fails to load.
 #[must_use]
 pub fn generated_sources(config: &Path, cwd: &Path) -> Option<BTreeMap<PathBuf, Vec<PathBuf>>> {
     let paths = Paths {
@@ -140,17 +141,56 @@ pub fn generated_sources(config: &Path, cwd: &Path) -> Option<BTreeMap<PathBuf, 
     let mut found = BTreeMap::new();
     for module in analysis.modules {
         if let Status::Mocks {
-            names, artifacts, ..
+            names,
+            artifacts,
+            plans,
+            circuits,
+            ..
         } = module.status
         {
-            let sources = names
+            let mut ranked: Vec<(Rank, &String)> = names
                 .iter()
-                .map(|name| artifacts.join(format!("{name}.compact")))
+                .map(|name| {
+                    let plan = plans.iter().find(|plan| &plan.name == name);
+                    (rank(plan, &circuits), name)
+                })
+                .collect();
+            ranked.sort_by_key(|(rank, _)| *rank);
+            let sources = ranked
+                .into_iter()
+                .map(|(_, name)| artifacts.join(format!("{name}.compact")))
                 .collect();
             found.insert(module.file, sources);
         }
     }
     Some(found)
+}
+
+/// Unplanned last, then most circuits exposed as written, then fewest injected arguments.
+type Rank = (bool, Reverse<usize>, usize);
+
+/// Where a mock sorts among its module's generated sources. `plan` is `None` when the mock
+/// failed to plan.
+fn rank(plan: Option<&MockPlan>, circuits: &[SurfaceCircuit]) -> Rank {
+    plan.map_or((true, Reverse(0), 0), |plan| {
+        let injected = plan.wrappers.iter().map(|wrapper| wrapper.injected).sum();
+        (false, Reverse(exposed_as_written(plan, circuits)), injected)
+    })
+}
+
+/// How many of the module's circuits `plan` exposes as written: re-exported, or wrapped
+/// under their own name with no injected argument and no guard, so the mock's measurement
+/// is the circuit's.
+fn exposed_as_written(plan: &MockPlan, circuits: &[SurfaceCircuit]) -> usize {
+    circuits
+        .iter()
+        .filter(|circuit| {
+            plan.exports.contains(&circuit.name)
+                || plan.wrappers.iter().any(|wrapper| {
+                    wrapper.name == circuit.name && wrapper.injected == 0 && !wrapper.guard
+                })
+        })
+        .count()
 }
 
 /// Where the file's module name is written, when it parses and holds a module.
@@ -161,7 +201,7 @@ fn module_position(files: &mut Files, file: &Path) -> Option<Position> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CoverageStatus, Uncovered, coverage};
+    use super::{CoverageStatus, Uncovered, coverage, generated_sources};
     use crate::select::SkipReason;
 
     const MODULE: &str = "pragma language_version >= 0.28.0;\nmodule Gate {\n  export circuit initialize(n: Field): [] { }\n  export circuit open(): [] { }\n  export circuit close(): [] { }\n  export circuit spin(x: Field): [] { }\n  export circuit spin(x: Field, y: Field): [] { }\n}\n";
@@ -291,6 +331,57 @@ mod tests {
                     ],
                 }
             )]
+        );
+    }
+
+    /// The generated sources of `a/Owned`, by file name, under a rule with `rest` appended.
+    fn owned_sources(rest: &str) -> Vec<String> {
+        let directory = tree(
+            &format!(
+                "[mock]\ncaller_type = {{ name = \"Caller\", module = \"who/Who\" }}\n[mock.auth.prf]\nmodule = \"auth/Prf\"\ncall = 'authenticate(pad(32, \"{{salt}}\"))'\n[[mock.rules]]\nmodules = [\"a/*\"]\nauth = [\"prf\", \"caller\"]\n{rest}"
+            ),
+            &[
+                (
+                    "src/who/Who.compact",
+                    "pragma language_version >= 0.28.0;\nmodule Who {\n  export struct Caller { id: Bytes<32> }\n}\n",
+                ),
+                (
+                    "src/auth/Prf.compact",
+                    "pragma language_version >= 0.28.0;\nmodule Prf {\n  import { Caller } from \"../who/Who\";\n  witness secret(): Bytes<32>;\n  export circuit authenticate(salt: Bytes<32>): Caller { return Caller { secret() }; }\n}\n",
+                ),
+                (
+                    "src/a/Owned.compact",
+                    "pragma language_version >= 0.28.0;\nmodule Owned {\n  import { Caller } from \"../who/Who\";\n  export circuit owner(): Field { return 0; }\n  export circuit transfer(caller: Caller): [] { }\n}\n",
+                ),
+            ],
+        );
+        let found = generated_sources(&directory.path().join("compact.toml"), directory.path())
+            .expect("has [mock]");
+        found
+            .values()
+            .flatten()
+            .map(|path| {
+                path.file_name()
+                    .expect("a file")
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_mock_with_no_injected_call_is_the_first_generated_source() {
+        assert_eq!(
+            owned_sources(""),
+            ["MockOwnedCaller.compact", "MockOwned.compact"]
+        );
+    }
+
+    #[test]
+    fn a_guard_on_every_mock_leaves_the_fewest_injected_calls_first() {
+        assert_eq!(
+            owned_sources("guard = [\"transfer\"]\n"),
+            ["MockOwnedCaller.compact", "MockOwned.compact"]
         );
     }
 
