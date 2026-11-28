@@ -1,0 +1,12 @@
+pragma language_version >= 0.28.0;
+
+module Porch {
+  import CompactStandardLibrary;
+
+  import { open } from "./Door";
+
+  export { open };
+
+  export circuit wait(): [] {
+  }
+}

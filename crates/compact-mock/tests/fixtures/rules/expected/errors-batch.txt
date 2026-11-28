@@ -1,0 +1,9 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: config errors-batch.toml: [[mock.rules]] #1: init = "plain", but no module the rule applies to exports initialize
+compact-mock: config errors-batch.toml: [[mock.rules]] #2: exclude names nope, which no module the rule applies to exports
+compact-mock: MockCalc: disclose names reset, which returns []
+compact-mock: MockCalc: fragment src/calc/test/Missing.fragment.compact does not exist
+compact-mock: MockDial: guarded circuit spin has a parameter named _invocations, which hides the guard counter; leave spin unguarded
+compact-mock: 5 errors; nothing written.

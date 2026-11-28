@@ -1,0 +1,12 @@
+{
+  // Typecheck-only project for `dist-test/`, run by `yarn types` after the
+  // build. Its files import the package by name, so they compile against the
+  // emitted declarations in `dist`, not against `src`.
+  "extends": "@tsconfig/node24/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["dist-test/**/*"]
+}

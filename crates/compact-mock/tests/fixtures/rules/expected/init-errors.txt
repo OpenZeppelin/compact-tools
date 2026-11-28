@@ -1,0 +1,7 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: config init-errors.toml: [[mock.rules]] #1: init = "plain", but no module the rule applies to exports initialize
+compact-mock: config init-errors.toml: [[mock.rules]] #2: init = { flag = "ready" }, but no module the rule applies to exports initialize
+compact-mock: MockCalc: init flag start clashes with a constructor parameter
+compact-mock: 3 errors; nothing written.

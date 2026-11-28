@@ -1,0 +1,4 @@
+exit: 0
+--- stdout
+--- stderr
+compact-mock: 0 mocks, 0 written, 0 unchanged, 0 removed.

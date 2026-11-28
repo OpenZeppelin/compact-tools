@@ -1,0 +1,6 @@
+[mock.auth.prf]
+module = "auth/Prf"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["access/Owned"]

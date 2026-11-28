@@ -63,10 +63,11 @@ vendor/
 target/
 .toolkit-cache/
 
-# Written by the release workflow, published inside the compact-linter and
-# compact-profiler packages.
+# Written by the release workflow, published inside the compact-linter,
+# compact-profiler and compact-mocker packages.
 packages/linter/checksums.txt
 packages/profiler/checksums.txt
+packages/mocker/checksums.txt
 
 coverage
 **/reports

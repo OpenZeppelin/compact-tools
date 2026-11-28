@@ -1,0 +1,10 @@
+[mock]
+caller_type = { name = "Badge", module = "who/Who" }
+
+[mock.auth.gate]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["door/Pair"]
+auth = ["gate", "caller"]

@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Pseudonym {
+  import { Caller } from "../identity/Id";
+
+  witness secret(): Bytes<32>;
+
+  export circuit authenticate(salt: Bytes<32>): Caller {
+    return Caller { secret() };
+  }
+}

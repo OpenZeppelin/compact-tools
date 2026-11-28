@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockLost: parameter caller of enter has type Ghost, which does not resolve; with caller_type set, every parameter type must resolve
+compact-mock: MockLost: parameter guide of wander has type Stranger, which does not resolve; with caller_type set, every parameter type must resolve
+compact-mock: 2 errors; nothing written.

@@ -1,0 +1,13 @@
+pragma language_version >= 0.28.0;
+
+module Factory {
+  import CompactStandardLibrary;
+
+  export struct Pin {
+    x: Field;
+  }
+
+  export circuit makePin(): Pin {
+    return Pin { x: 0 };
+  }
+}

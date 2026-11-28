@@ -8,6 +8,67 @@ import type {
   IContractSimulator,
 } from '../types/index.js';
 
+/** The caller fields of a simulator, as a call takes them. */
+interface CallerFields {
+  callerOverride: CoinPublicKey | null;
+  hasCallerOverride: boolean;
+  persistentCallerOverride: CoinPublicKey | null;
+}
+
+const callerFields = (sim: CallerFields): CallerFields => ({
+  callerOverride: sim.callerOverride,
+  hasCallerOverride: sim.hasCallerOverride,
+  persistentCallerOverride: sim.persistentCallerOverride,
+});
+
+/**
+ * Takes the caller for a call that starts now and spends the single-use
+ * caller. A call started while this one is pending runs as the persistent or
+ * default caller.
+ */
+function takeCaller(sim: CallerFields): CallerFields {
+  const taken = callerFields(sim);
+  taken.hasCallerOverride ||= taken.callerOverride !== null;
+  sim.callerOverride = null;
+  sim.hasCallerOverride = false;
+  return taken;
+}
+
+/** Builds a call's context as the caller it took when it started. */
+function buildContext<P>(
+  sim: CallerFields,
+  caller: CallerFields,
+  context: () => CircuitContext<P>,
+): CircuitContext<P> {
+  const current = callerFields(sim);
+  Object.assign(sim, caller);
+  try {
+    return context();
+  } finally {
+    Object.assign(sim, current);
+  }
+}
+
+/** The last impure call each simulator started, settled once it commits or fails. */
+const impureCalls = new WeakMap<object, Promise<void>>();
+
+/**
+ * Runs `call` after the impure call `sim` started before it has committed or
+ * failed, or at once when none is pending. A circuit that awaited another
+ * circuit of `sim` would wait on itself; witnesses run synchronously, so none
+ * can.
+ */
+function enqueue<T>(sim: object, call: () => Promise<T>): Promise<T> {
+  const previous = impureCalls.get(sim);
+  const result = previous ? previous.then(call) : call();
+  const release = (): void => {
+    if (impureCalls.get(sim) === settled) impureCalls.delete(sim);
+  };
+  const settled = result.then(release, release);
+  impureCalls.set(sim, settled);
+  return result;
+}
+
 /**
  * Abstract base class for simulating contract behavior.
  *
@@ -18,10 +79,17 @@ export abstract class AbstractSimulator<P, L>
   implements IContractSimulator<P, L>
 {
   /**
-   * Single-use caller override (cleared after each circuit call).
+   * Single-use caller override (cleared when the next circuit call starts).
    * Set via `as(caller)` for one-time caller context switching.
    */
   public callerOverride: CoinPublicKey | null = null;
+
+  /**
+   * Whether the single-use caller is set, also to `null` (the default caller),
+   * which takes precedence over the persistent caller. A non-null
+   * `callerOverride` is set without it.
+   */
+  public hasCallerOverride = false;
 
   /**
    * Persistent caller override (until explicitly cleared).
@@ -83,6 +151,7 @@ export abstract class AbstractSimulator<P, L>
    */
   public resetCaller(): this {
     this.callerOverride = null;
+    this.hasCallerOverride = false;
     this.persistentCallerOverride = null;
     return this;
   }
@@ -137,11 +206,9 @@ export abstract class AbstractSimulator<P, L>
             ctx: CircuitContext<P>,
             ...args: unknown[]
           ) => { result: unknown } | Promise<{ result: unknown }>;
+          const ctx = buildContext(this, takeCaller(this), context);
           // 0.18 circuits are async; `await` also tolerates the older sync shape.
-          const { result } = await fn(context(), ...args);
-
-          // Auto-reset single-use caller override
-          this.callerOverride = null;
+          const { result } = await fn(ctx, ...args);
           return result;
         };
       },
@@ -151,6 +218,9 @@ export abstract class AbstractSimulator<P, L>
   /**
    * Creates a proxy wrapper around impure circuits.
    * Impure circuits can modify contract state, so the circuit context is updated accordingly.
+   * Calls run one at a time in the order they start; each takes its caller
+   * when it starts and its context when the previous call has committed or
+   * failed.
    *
    * @param circuits - The impure circuit functions to wrap
    * @param context - Function that provides the current circuit context
@@ -175,7 +245,7 @@ export abstract class AbstractSimulator<P, L>
         const original = Reflect.get(target, prop, receiver);
         if (typeof original !== 'function') return original;
 
-        return async (...args: unknown[]) => {
+        return (...args: unknown[]) => {
           const fn = original as (
             ctx: CircuitContext<P>,
             ...args: unknown[]
@@ -183,13 +253,14 @@ export abstract class AbstractSimulator<P, L>
             | { result: unknown; context: CircuitContext<P> }
             | Promise<{ result: unknown; context: CircuitContext<P> }>;
 
-          // 0.18 circuits are async; `await` also tolerates the older sync shape.
-          const { result, context: newCtx } = await fn(context(), ...args);
-          updateContext(newCtx);
-
-          // Auto-reset single-use caller override
-          this.callerOverride = null;
-          return result;
+          const caller = takeCaller(this);
+          return enqueue(this, async () => {
+            const ctx = buildContext(this, caller, context);
+            // 0.18 circuits are async; `await` also tolerates the older sync shape.
+            const { result, context: newCtx } = await fn(ctx, ...args);
+            updateContext(newCtx);
+            return result;
+          });
         };
       },
     }) as ContextlessCircuits<Circuits, P>;

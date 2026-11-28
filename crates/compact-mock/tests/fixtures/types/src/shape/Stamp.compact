@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Stamp {
+  import CompactStandardLibrary;
+
+  import { Pin, makePin } from "../geo/Factory";
+
+  export circuit stamp(): Pin {
+    return makePin();
+  }
+}

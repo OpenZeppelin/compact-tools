@@ -39,6 +39,12 @@ withdraw 14 8192 true"
   MockUtilities.compact)
     table="hash 9 310 true"
     ;;
+  MockOwned.compact)
+    table="transferOwnership 13 4083 true"
+    ;;
+  MockOwnedCaller.compact)
+    table="transferOwnership 9 467 true"
+    ;;
   MockBroken.compact)
     echo "Compiling 1 circuits:"
     echo "Exception in thread \"main\" java.lang.RuntimeException"

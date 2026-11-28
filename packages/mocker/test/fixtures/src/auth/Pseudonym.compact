@@ -1,0 +1,21 @@
+// Fixture module for the compact-mock end-to-end tests.
+
+pragma language_version >= 0.28.0;
+
+module Pseudonym {
+  import CompactStandardLibrary;
+
+  import { Account, Caller } from "../identity/Id";
+
+  witness wit_PseudonymSK(): Bytes<32>;
+
+  export pure circuit derive(secretKey: Bytes<32>, salt: Bytes<32>): Account {
+    return left<Bytes<32>, ContractAddress>(
+      persistentHash<Vector<2, Bytes<32>>>([secretKey, salt])
+    );
+  }
+
+  export circuit authenticate(salt: Bytes<32>): Caller {
+    return Caller { account: derive(wit_PseudonymSK(), salt) };
+  }
+}

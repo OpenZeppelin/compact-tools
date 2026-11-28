@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: src/lib/test/artifacts is a symlink; compact-mock never writes or deletes through one. Replace it with a directory

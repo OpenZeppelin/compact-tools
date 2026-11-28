@@ -1,0 +1,7 @@
+constructor(start: Uint<64>) {
+  Calc_initialize(start);
+}
+
+export circuit bump(): [] {
+  Calc_reset();
+}

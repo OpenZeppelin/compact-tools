@@ -1,0 +1,6 @@
+exit: 0
+--- stdout
+wrote src/math/test/artifacts/MockUintN8.compact
+wrote src/math/test/artifacts/MockUintN64.compact
+--- stderr
+compact-mock: 2 mocks, 2 written, 0 unchanged, 0 removed.

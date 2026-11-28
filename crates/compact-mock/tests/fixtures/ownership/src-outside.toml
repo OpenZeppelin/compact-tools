@@ -1,0 +1,5 @@
+[mock]
+src = "../outside"
+
+[[mock.rules]]
+modules = ["lib/Lib"]

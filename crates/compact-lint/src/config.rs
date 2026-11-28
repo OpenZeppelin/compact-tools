@@ -170,8 +170,9 @@ impl KindsConfig {
 /// Where `fill-constraints` looks for the contract that measures a file, tried in order.
 ///
 /// `{dir}` is the file's directory, `{parent}` its parent, `{stem}` its name without
-/// the extension.
-pub const DEFAULT_SOURCES: [&str; 2] = [
+/// the extension. The first is where `compact-mock` writes with its default `test_dir`.
+pub const DEFAULT_SOURCES: [&str; 3] = [
+    "{dir}/test/artifacts/Mock{stem}.compact",
     "{dir}/test/mocks/Mock{stem}.compact",
     "{parent}/test/mocks/Mock{stem}.compact",
 ];
@@ -243,6 +244,8 @@ pub struct RulesConfig {
     pub constraints_unmeasurable: Level,
     pub parse: Level,
     pub format: Level,
+    #[serde(rename = "mock-coverage")]
+    pub mock_coverage: Level,
 }
 
 impl Default for RulesConfig {
@@ -265,6 +268,7 @@ impl Default for RulesConfig {
             constraints_unmeasurable: Level::Warn,
             parse: Level::Error,
             format: Level::Error,
+            mock_coverage: Level::Warn,
         }
     }
 }
@@ -287,6 +291,7 @@ impl RulesConfig {
             RuleId::CONSTRAINTS_UNMEASURABLE => self.constraints_unmeasurable,
             RuleId::PARSE => self.parse,
             RuleId::FORMAT => self.format,
+            RuleId::MOCK_COVERAGE => self.mock_coverage,
             // `fill` reports what changed, so it is not configurable.
             _ => Level::Info,
         }

@@ -1,0 +1,15 @@
+pragma language_version >= 0.28.0;
+
+module Inner {
+  import CompactStandardLibrary;
+
+  import { Coin } from "../types/Coin";
+  import "../types/Shade" prefix Shade_;
+
+  export ledger _minted: Counter;
+
+  export circuit mint(coin: Coin, tint: Shade_Tint): Coin {
+    _minted.increment(1);
+    return disclose(coin);
+  }
+}

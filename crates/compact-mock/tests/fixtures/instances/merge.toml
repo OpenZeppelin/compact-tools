@@ -1,0 +1,29 @@
+[[mock.rules]]
+modules = ["math/UintN"]
+merge = true
+guard = true
+instances = [
+  { suffix = "0", prefix = "U0_", module_args = ["0"] },
+  { suffix = "8", prefix = "U8_", module_args = ["8"] },
+  { suffix = "64", prefix = "U64_", module_args = ["64"] },
+]
+
+[[mock.rules]]
+modules = ["multisig/Multisig"]
+
+[[mock.rules.instances]]
+suffix = "2"
+group = "2To3And3To3"
+prefix = "Two_"
+module_args = ["2"]
+circuit_args = { initialize = ["3"] }
+rename = { assertApprovals = "assertApprovals2Approvals" }
+
+[[mock.rules.instances]]
+suffix = "3"
+group = "2To3And3To3"
+prefix = "Three_"
+module_args = ["3"]
+circuit_args = { initialize = ["3"] }
+init = { flag = "initializeThree" }
+rename = { assertApprovals = "assertApprovals3Approvals" }

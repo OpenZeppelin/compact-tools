@@ -1,0 +1,21 @@
+// Fixture module for the compact-mock end-to-end tests: its mock implements Counting.Tally.
+
+pragma language_version >= 0.28.0;
+
+module Clicker {
+  import CompactStandardLibrary;
+
+  export ledger _count: Uint<64>;
+
+  export circuit bump(n: Uint<16>): [] {
+    _count = disclose((_count + n) as Uint<64>);
+  }
+
+  export circuit total(): Uint<64> {
+    return _count;
+  }
+
+  export circuit _clear(): [] {
+    _count = 0;
+  }
+}

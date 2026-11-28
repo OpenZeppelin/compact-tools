@@ -107,7 +107,12 @@ struct Work {
 pub fn run(options: &Options, cwd: &Path, timings: &mut Timings) -> Result<Outcome, FillError> {
     let walk = Phase::start("config and walk");
     let target = target::resolve(&options.paths, options.config_path.as_deref(), cwd)?;
-    let resolver = Resolver::new(&target.config, &target.base, cwd)?;
+    let resolver = Resolver::new(
+        &target.config,
+        &target.base,
+        cwd,
+        target.config_path.as_deref(),
+    )?;
     walk.stop(timings, format!("{} files matched", target.files.len()));
     let tag = target.config.constraints.tag.clone();
 

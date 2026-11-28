@@ -1,0 +1,8 @@
+exit: 2
+--- stdout
+wrote src/lib/test/artifacts/MockAlpha.compact
+--- stderr
+compact-mock: 1 mock, 1 written, 0 unchanged, 0 removed.
+compact-mock: cannot run ./no/compact; install the Compact toolchain or pass --compact-bin
+  caused by: No such file or directory (os error 2)
+--- compact calls

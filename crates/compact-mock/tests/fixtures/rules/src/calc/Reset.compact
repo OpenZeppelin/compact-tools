@@ -1,0 +1,19 @@
+pragma language_version >= 0.28.0;
+
+module Reset {
+  import CompactStandardLibrary;
+
+  export ledger _start: Uint<8>;
+
+  export circuit initialize(start: Uint<8>): [] {
+    _start = disclose(start);
+  }
+
+  export circuit initialize(start: Uint<8>, twice: Boolean): [] {
+    _start = disclose(start);
+  }
+
+  export circuit start(): Uint<8> {
+    return _start;
+  }
+}

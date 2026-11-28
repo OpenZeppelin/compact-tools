@@ -1,0 +1,8 @@
+pragma language_version >= 0.28.0;
+
+module Lib {
+  import CompactStandardLibrary;
+
+  export circuit ping(): [] {
+  }
+}

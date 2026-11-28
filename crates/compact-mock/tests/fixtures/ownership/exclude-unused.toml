@@ -1,0 +1,6 @@
+[mock]
+exclude = ["lib/Nope"]
+
+[[mock.rules]]
+modules = ["lib/*"]
+exclude_modules = ["lib/Other"]

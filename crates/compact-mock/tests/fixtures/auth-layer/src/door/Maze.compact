@@ -1,0 +1,10 @@
+pragma language_version >= 0.28.0;
+
+module Maze {
+  import CompactStandardLibrary;
+
+  import "../hub/Echo";
+
+  export circuit enter(caller: Badge): [] {
+  }
+}

@@ -1,0 +1,16 @@
+[[mock.rules]]
+modules = ["calc/Sum"]
+init = "plain"
+
+[[mock.rules]]
+modules = ["calc/Calc"]
+exclude = ["nope"]
+disclose = ["reset"]
+
+[[mock.rules]]
+modules = ["calc/Calc"]
+include = "Missing.fragment.compact"
+
+[[mock.rules]]
+modules = ["calc/Dial"]
+guard = ["spin"]

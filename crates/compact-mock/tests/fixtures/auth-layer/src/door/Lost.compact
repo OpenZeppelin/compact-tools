@@ -1,0 +1,14 @@
+pragma language_version >= 0.28.0;
+
+module Lost {
+  import CompactStandardLibrary;
+
+  import { Ghost } from "../gone/Gone";
+  import "../gone/Nowhere";
+
+  export circuit enter(caller: Ghost): [] {
+  }
+
+  export circuit wander(guide: Stranger): [] {
+  }
+}

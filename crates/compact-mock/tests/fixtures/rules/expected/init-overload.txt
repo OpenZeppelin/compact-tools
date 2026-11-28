@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockReset: calc/Reset exports 2 circuits named initialize, so the constructor cannot pick one to call; set init = "none" to expose them as numbered circuits, or write the mock by hand

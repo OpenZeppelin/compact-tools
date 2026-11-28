@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Mid {
+  import CompactStandardLibrary;
+
+  import "./Left" prefix Left_;
+
+  export circuit mid(): Bytes<32> {
+    return Left_left();
+  }
+}

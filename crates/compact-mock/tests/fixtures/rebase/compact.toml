@@ -1,0 +1,2 @@
+[[mock.rules]]
+modules = ["Root", "a/b/Deep", "near/Near", "far/Far"]

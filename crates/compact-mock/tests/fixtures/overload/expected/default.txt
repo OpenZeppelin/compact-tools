@@ -1,0 +1,6 @@
+exit: 0
+--- stdout
+wrote src/dial/test/artifacts/MockDial.compact
+wrote src/dial/test/artifacts/MockDialRenamed.compact
+--- stderr
+compact-mock: 2 mocks, 2 written, 0 unchanged, 0 removed.

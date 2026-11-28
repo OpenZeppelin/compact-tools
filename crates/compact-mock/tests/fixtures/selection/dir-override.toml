@@ -1,0 +1,3 @@
+[[mock.rules]]
+modules = ["**"]
+name = "Mock{dir}{module}{instance}{suffix}"

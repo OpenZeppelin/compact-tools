@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockBag: module_args has 1 arguments; bag/Bag takes 2
+compact-mock: MockBag: circuit initialize has type parameters <#k> and the constructor calls it; set circuit_args.initialize
+compact-mock: 2 errors; nothing written.

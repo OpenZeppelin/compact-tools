@@ -74,23 +74,24 @@ export class LiveBackend<P, L> implements Backend<P, L> {
    * Pure circuits evaluate locally on the JS artifact (no tx); impure circuits
    * submit a tx via the per-alias handle and the result is normalized from
    * `FinalizedCallTxData.private.result` to the bare `R` dry returns.
+   *
+   * The call spends the single-use caller when it starts, so a call started
+   * while this one is pending runs as the persistent or default caller.
    */
   async call(
     kind: CircuitKind,
     name: string,
     args: unknown[],
   ): Promise<unknown> {
+    const alias = this.takeAlias();
     if (kind === 'pure') {
       const fn = this.pureSim.circuits.pure[name];
       if (typeof fn !== 'function') {
         throw new Error(`unknown pure circuit "${name}"`);
       }
-      const result = fn(...args);
-      this.consumeSingle();
-      return result;
+      return fn(...args);
     }
 
-    const alias = this.activeAlias();
     const handle = await this.ctx.handleFor(alias);
     const txFn = handle.callTx[name];
     if (typeof txFn !== 'function') {
@@ -100,7 +101,6 @@ export class LiveBackend<P, L> implements Backend<P, L> {
     // The assert message inside any rejection is preserved verbatim —
     // we await directly and never catch/rewrite it.
     const finalized = await txFn(...args);
-    this.consumeSingle();
     return finalized.private.result;
   }
 
@@ -162,16 +162,25 @@ export class LiveBackend<P, L> implements Backend<P, L> {
     return this.pureSim.witnesses;
   }
 
-  /** The alias active for the next call: single-shot takes priority over persistent. */
-  private activeAlias(): string | null {
-    return this.hasSingle ? this.singleAlias : this.persistentAlias;
+  /** The alias for a call that starts now; spends the single-shot caller. */
+  private takeAlias(): string | null {
+    const alias = this.hasSingle ? this.singleAlias : this.persistentAlias;
+    this.consumeSingleCaller();
+    return alias;
   }
 
-  /** Clears the single-shot caller after a call, reverting to persistent/default. */
-  private consumeSingle(): void {
-    if (this.hasSingle) {
-      this.hasSingle = false;
-      this.singleAlias = null;
-    }
+  /**
+   * Clears the single-shot caller, reverting to persistent/default, and
+   * returns a function that sets it again.
+   */
+  consumeSingleCaller(): () => void {
+    if (!this.hasSingle) return () => {};
+    const alias = this.singleAlias;
+    this.hasSingle = false;
+    this.singleAlias = null;
+    return () => {
+      this.singleAlias = alias;
+      this.hasSingle = true;
+    };
   }
 }

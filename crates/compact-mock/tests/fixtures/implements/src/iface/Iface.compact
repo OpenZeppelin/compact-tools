@@ -1,0 +1,11 @@
+pragma language_version >= 0.28.0;
+
+module Iface {
+  import CompactStandardLibrary;
+
+  export contract Tally {
+    circuit get(): Uint<64>;
+    circuit bump(by: Uint<16>): [];
+    circuit reset(): [];
+  }
+}

@@ -1,0 +1,10 @@
+[[mock.rules]]
+modules = ["calc/Calc"]
+instances = [{ suffix = "Flag", init = { flag = "ready" } }]
+
+[[mock.rules]]
+modules = ["calc/Switch"]
+instances = [
+  { suffix = "", init = { flag = "on" } },
+  { suffix = "Plain", init = "plain" },
+]

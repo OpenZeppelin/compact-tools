@@ -1,0 +1,29 @@
+pragma language_version >= 0.28.0;
+
+module Door {
+  import CompactStandardLibrary;
+
+  import { Badge, Account } from "../who/Who";
+  import "../who/Who" prefix Who_;
+
+  type Visitor = Badge;
+
+  export ledger _opener: Account;
+
+  export circuit initialize(keeper: Badge, opener: Account): [] {
+    _opener = disclose(opener);
+  }
+
+  export circuit open(caller: Badge): [] {
+  }
+
+  export circuit openFor(caller: Who_Badge, guest: Account): [] {
+  }
+
+  export circuit knock(times: Uint<8>, visitor: Visitor, note: Bytes<32>): [] {
+  }
+
+  export circuit peek(): Account {
+    return _opener;
+  }
+}

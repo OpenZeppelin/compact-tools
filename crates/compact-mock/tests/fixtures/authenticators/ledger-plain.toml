@@ -1,0 +1,4 @@
+[[mock.rules]]
+modules = ["access/Vault"]
+ledger_names = "plain"
+ledger = ["_keeper"]

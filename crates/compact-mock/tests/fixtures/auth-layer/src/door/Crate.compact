@@ -1,0 +1,21 @@
+pragma language_version >= 0.28.0;
+
+module Crate {
+  import CompactStandardLibrary;
+
+  import { Badge } from "../who/Who";
+
+  export struct Parcel {
+    sender: Badge;
+    weight: Uint<16>;
+  }
+
+  export circuit initialize(first: Parcel): [] {
+  }
+
+  export circuit ship(parcel: Parcel): [] {
+  }
+
+  export circuit weigh(weight: Uint<16>): [] {
+  }
+}

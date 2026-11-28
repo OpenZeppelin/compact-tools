@@ -1,0 +1,11 @@
+[[mock.rules]]
+modules = ["calc/Sum"]
+init = "plain"
+
+[[mock.rules]]
+modules = ["calc/Sum"]
+init = { flag = "ready" }
+
+[[mock.rules]]
+modules = ["calc/Calc"]
+init = { flag = "start" }

@@ -106,6 +106,34 @@ describe('LiveBackend adapter', () => {
     expect(world.lastAlias).toBeNull();
   });
 
+  it('spends the single-shot caller on a failed call', async () => {
+    const { backend, world } = makeBackend({
+      fails: async () => {
+        throw new Error('rejected');
+      },
+      noop: async () => ({ private: { result: undefined } }),
+    });
+    backend.setCaller('OWNER', 'single');
+    await expect(backend.call('impure', 'fails', [])).rejects.toThrow(
+      'rejected',
+    );
+    expect(world.lastAlias).toBe('OWNER');
+
+    await backend.call('impure', 'noop', []);
+    expect(world.lastAlias).toBeNull();
+  });
+
+  it('clears the single-shot caller on request and keeps the persistent one', async () => {
+    const { backend, world } = makeBackend({
+      noop: async () => ({ private: { result: undefined } }),
+    });
+    backend.setCaller('ALICE', 'persistent');
+    backend.setCaller('OWNER', 'single');
+    backend.consumeSingleCaller();
+    await backend.call('impure', 'noop', []);
+    expect(world.lastAlias).toBe('ALICE');
+  });
+
   it('keeps a persistent caller across calls', async () => {
     const { backend, world } = makeBackend({
       noop: async () => ({ private: { result: undefined } }),

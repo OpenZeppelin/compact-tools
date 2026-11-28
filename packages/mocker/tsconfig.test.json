@@ -1,0 +1,10 @@
+{
+  // Type-checks the test tree, which sits outside the build's `src` root.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist", "test/fixtures/**/artifacts"]
+}

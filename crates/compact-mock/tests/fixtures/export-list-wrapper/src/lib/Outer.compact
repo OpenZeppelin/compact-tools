@@ -1,0 +1,12 @@
+pragma language_version >= 0.28.0;
+
+module Outer {
+  import CompactStandardLibrary;
+
+  import { mint } from "./Inner";
+
+  export { mint };
+
+  export circuit ping(): [] {
+  }
+}

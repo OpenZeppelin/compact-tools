@@ -7,5 +7,5 @@ src/orphan/Orphan.compact:1:1 lint/constraints-unmeasurable ━━━━━━�
     2 │  * @module Orphan
     3 │  * @description Test fixture.
 
-  i Tried src/orphan/test/mocks/MockOrphan.compact, src/test/mocks/MockOrphan.compact; add one, or name it in constraints.overrides.
+  i Tried src/orphan/test/artifacts/MockOrphan.compact, src/orphan/test/mocks/MockOrphan.compact, src/test/mocks/MockOrphan.compact; add one, or name it in constraints.overrides.
 

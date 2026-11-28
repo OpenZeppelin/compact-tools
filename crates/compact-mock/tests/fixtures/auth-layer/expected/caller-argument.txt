@@ -1,0 +1,10 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockBin: module_args sets a type parameter to Badge, which is or contains Badge, so the mock could take a caller it does not authenticate; write the mock by hand
+compact-mock: MockBin: circuit_args.gen sets a type parameter to Badge, which is or contains Badge, so the mock could take a caller it does not authenticate; add gen to exclude
+compact-mock: MockShelf: circuit_args.stack sets a type parameter to Maybe<Badge>, which is or contains Badge, so the mock could take a caller it does not authenticate; add stack to exclude
+compact-mock: MockShelf: circuit_args.initialize sets a type parameter to Badge, which is or contains Badge, so the mock could take a caller it does not authenticate; set init = "none" and add initialize to exclude
+compact-mock: MockShelfCaller: circuit_args.stack sets a type parameter to Maybe<Badge>, which is or contains Badge, so the mock could take a caller it does not authenticate; add stack to exclude
+compact-mock: MockShelfCaller: circuit_args.initialize sets a type parameter to Badge, which is or contains Badge, so the mock could take a caller it does not authenticate; set init = "none" and add initialize to exclude
+compact-mock: 6 errors; nothing written.

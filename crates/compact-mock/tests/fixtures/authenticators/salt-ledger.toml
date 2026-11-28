@@ -1,0 +1,11 @@
+[mock]
+caller_type = { name = "Badge", module = "who/Who" }
+
+[mock.auth.prf]
+module = "auth/Prf"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["access/Vault"]
+auth = ["prf", "caller"]
+salt = { ledger = "_instanceSalt" }

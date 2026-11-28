@@ -1,0 +1,5 @@
+[[mock.rules]]
+modules = ["ok/Ok"]
+ledger_names = "plain"
+merge = true
+instances = [{ suffix = "A" }]

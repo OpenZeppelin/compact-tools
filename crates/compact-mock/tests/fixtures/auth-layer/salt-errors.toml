@@ -1,0 +1,28 @@
+[mock]
+caller_type = { name = "Badge", module = "who/Who" }
+
+[mock.auth.gate]
+params = ["caller", "keeper", "visitor"]
+module = "auth/Gate"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["door/Hinge"]
+auth = ["gate"]
+instances = [
+  { suffix = "Long", salt = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaé" },
+  { suffix = "Empty", salt = "" },
+  { suffix = "Quote", salt = 'a"b' },
+  { suffix = "Slash", salt = 'a\nb' },
+  { suffix = "Tab", salt = "a\tb" },
+]
+
+[[mock.rules]]
+modules = ["door/Bell"]
+auth = ["gate"]
+name = "MockConfidentialFungibleTokenRegister{suffix}"
+
+[[mock.rules]]
+modules = ["door/Twin"]
+auth = ["gate"]
+salt = "this salt is far longer than thirty-two bytes"

@@ -1,0 +1,6 @@
+exit: 2
+--- stdout
+--- stderr
+compact-mock: MockShapeHidden: sketch uses Draft, which shape/Shape does not export; the wrapper cannot name it
+compact-mock: MockShapeType: rename target Point clashes with type Point
+compact-mock: 2 errors; nothing written.

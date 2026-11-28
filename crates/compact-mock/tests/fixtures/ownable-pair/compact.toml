@@ -1,0 +1,12 @@
+[mock]
+spdx = "MIT"
+caller_type = { name = "Caller", module = "identifier/Identifier" }
+
+[mock.auth.prf]
+module = "crypto/authentication/AuthPrfPseudonym"
+call = 'authenticate(pad(32, "{salt}"))'
+
+[[mock.rules]]
+modules = ["access/Ownable"]
+auth = ["prf", "caller"]
+prf.init = { flag = "isInit" }

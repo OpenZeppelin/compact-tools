@@ -1,0 +1,7 @@
+[mock]
+
+[[mock.rules]]
+modules = ["**"]
+
+[[mock.rules]]
+modules = ["math/Gen", "math/Box", "math/Seed"]

@@ -1,0 +1,12 @@
+pragma language_version >= 0.28.0;
+
+module Twin {
+  import CompactStandardLibrary;
+
+  export struct Badge {
+    key: Bytes<32>;
+  }
+
+  export circuit wave(caller: Badge): [] {
+  }
+}

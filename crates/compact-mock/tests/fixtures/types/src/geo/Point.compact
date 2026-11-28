@@ -1,0 +1,10 @@
+pragma language_version >= 0.28.0;
+
+module Point {
+  import CompactStandardLibrary;
+
+  export struct Point {
+    x: Field;
+    y: Field;
+  }
+}

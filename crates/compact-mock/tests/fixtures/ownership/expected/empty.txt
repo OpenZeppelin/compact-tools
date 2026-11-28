@@ -1,0 +1,10 @@
+exit: 0
+--- stdout
+wrote src/lib/test/artifacts/MockLib.compact
+removed src/old/test/artifacts/MockOld.compact
+--- stderr
+compact-mock: 1 mock, 1 written, 0 unchanged, 1 removed.
+--- removed
+src/old/test/artifacts
+src/old/test/artifacts/.compact-mock-stamp
+src/old/test/artifacts/MockOld.compact

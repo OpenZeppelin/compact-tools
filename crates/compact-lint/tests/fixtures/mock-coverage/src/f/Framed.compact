@@ -1,0 +1,6 @@
+pragma language_version >= 0.28.0;
+
+module Framed {
+  export circuit initialize(n: Field): [] { }
+  export circuit go(): [] { }
+}

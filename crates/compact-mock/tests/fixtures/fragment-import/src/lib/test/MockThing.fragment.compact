@@ -1,0 +1,5 @@
+import "../../Other" prefix Other_;
+
+export circuit setTwice(x: Uint<64>): [] {
+  Thing_set(Other_twice(x));
+}

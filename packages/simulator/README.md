@@ -14,7 +14,15 @@ allowing you to simulate contract behavior locally without blockchain deployment
 > **Upgrading from 0.3.x?** Construction and every circuit call are now
 > asynchronous. See the [changelog](https://github.com/OpenZeppelin/compact-tools/blob/main/packages/simulator/CHANGELOG.md).
 
+> **Upgrading from 0.6.x?** `as()` applies to exactly one call on both
+> backends. On dry it used to stay in effect after the call, so a spec that
+> relied on that can fail. Call `as()` before each call that needs the caller,
+> or use `setPersistentCaller()`.
+
 ## Quick Start
+
+For a compiled contract module, [`defineSimulator`](#5-defining-a-simulator-from-the-artifact)
+needs none of the steps below. They show the underlying `createSimulator`.
 
 ```typescript
 import { createSimulator, type SimulatorOptions } from '@openzeppelin/compact-simulator';
@@ -175,6 +183,359 @@ public getBalance(): Promise<bigint> {
 }
 ```
 
+### 4. Flat Circuit Methods
+
+Every instance also has one async method per circuit, named after it:
+`await sim.setValue(5n)` calls `sim.circuits.impure.setValue(5n)`. Each call reads
+`circuits` afresh, so witness overrides apply. The methods exist on every class.
+`flatCircuits: true` in the config types them, so a subclass needs no forwarding
+methods.
+
+Before, as in step 2, one forwarding method per circuit:
+
+```typescript
+export class MyContractSimulator extends MyContractSimulatorBase {
+  static async create(/* ... */): Promise<MyContractSimulator> { /* ... */ }
+
+  public getValue(): Promise<bigint> {
+    return this.circuits.impure.getValue();
+  }
+
+  public setValue(val: bigint): Promise<[]> {
+    return this.circuits.impure.setValue(val);
+  }
+
+  public transfer(to: Uint8Array, amount: bigint): Promise<[]> {
+    return this.circuits.impure.transfer(to, amount);
+  }
+}
+```
+
+After, with the flag and no forwards:
+
+```typescript
+const MyContractSimulatorBase = createSimulator<
+  MyContractPrivateState,
+  ReturnType<typeof ledger>,
+  ReturnType<typeof MyContractWitnesses>,
+  MyContract<MyContractPrivateState>,
+  MyContractArgs
+>({
+  contractFactory: (witnesses) => new MyContract<MyContractPrivateState>(witnesses),
+  defaultPrivateState: () => MyContractPrivateState.generate(),
+  contractArgs: (arg1, arg2) => [arg1, arg2],
+  ledgerExtractor: (state) => ledger(state),
+  witnessesFactory: () => MyContractWitnesses(),
+  flatCircuits: true,
+});
+
+export class MyContractSimulator extends MyContractSimulatorBase {
+  static async create(
+    arg1: bigint,
+    arg2: string,
+    options: SimulatorOptions<
+      MyContractPrivateState,
+      ReturnType<typeof MyContractWitnesses>
+    > = {},
+  ): Promise<MyContractSimulator> {
+    return super._create([arg1, arg2], options) as Promise<MyContractSimulator>;
+  }
+}
+
+const sim = await MyContractSimulator.create(1n, 'a');
+await sim.setValue(5n);
+const value = await sim.getValue(); // 5n
+```
+
+Which circuits get a method:
+
+- A name the instance already has when the base constructor runs is skipped: base
+  members (`getPublicState`, `signers`, `as`), subclass methods and accessors, and
+  `Object.prototype` names (`toString`, `constructor`).
+- `then` and `toJSON` are never installed. `then` would make the instance
+  thenable, so `await create()` would call it, and `JSON.stringify` would call
+  `toJSON`.
+- A skipped circuit stays reachable through `sim.circuits.impure` or
+  `sim.circuits.pure`.
+- A subclass field of the same name replaces the method after `super()`.
+- The methods are non-enumerable, so spreads, `Object.keys` and JSON are unchanged.
+
+Typing with `flatCircuits: true`:
+
+- Base member names, `Object.prototype` names, `then` and `toJSON` keep their own
+  type, or none.
+- A subclass method named like a circuit fails with TS2425. Override it with a field
+  instead, with a type compatible with the circuit's:
+  `public readonly getValue = async (): Promise<bigint> => 42n;`. Or leave that class
+  without the flag.
+- The flag must reach `createSimulator` as the literal `true`. In a config declared
+  earlier it widens to `boolean`, the untyped overload is picked, and the error shows
+  up only at the first circuit call (TS2339). Write it at the call
+  (`createSimulator({ ...config, flatCircuits: true })`), or declare it
+  `flatCircuits: true as const`.
+
+### 5. Defining a Simulator from the Artifact
+
+`defineSimulator(artifact, definition?)` builds the simulator class from the
+compiled contract module. No config generics, no `create` override, no
+forwarding methods. A spec defines its simulator in one statement:
+
+```typescript
+import { defineSimulator } from '@openzeppelin/compact-simulator';
+import * as MockOwnable from '../artifacts/MockOwnable/contract/index.js';
+import {
+  OwnableHelpers,
+  OwnablePrivateState,
+  OwnableWitnesses,
+} from './witnesses/OwnableWitnesses.js';
+
+class OwnableSimulator extends defineSimulator(MockOwnable, {
+  witnesses: OwnableWitnesses,
+  privateState: OwnablePrivateState.generate,
+  extend: OwnableHelpers,
+  artifactName: 'MockOwnable',
+}) {}
+
+const sim = await OwnableSimulator.create(owner, true, { privateState });
+await sim.transferOwnership(newOwner);
+await sim.privateState.injectSecretKey(otherKey);
+```
+
+The class reads from the artifact:
+
+- `Contract` and `ledger`: the contract factory and the ledger extractor.
+- The constructor arity, from the compiled `initialState`, which checks its
+  argument count first. When it cannot be read, `defineSimulator` throws; pass
+  `arity` instead. Code rewritten before it loads, e.g. by an istanbul-style
+  coverage instrumenter or a minifier, no longer matches: pass `arity` there too.
+  V8 coverage leaves the code as compiled.
+- The contract's witness type. The definition's witnesses are checked against
+  it, with the private state the definition yields (see the table below).
+- `pureCircuits`: each pure circuit is also a synchronous static method
+  (`OwnableSimulator.hash(x)`). A name the class already has (`name`, `length`,
+  `create`, `Object.prototype` names), `then` or `toJSON` is skipped.
+
+Every circuit is an async instance method, as with `flatCircuits: true`.
+
+`create` takes the constructor arguments positionally, then an optional options
+object: `create(owner, true)` or `create(owner, true, { privateState })`. Any
+other argument count throws, and so does a value in the options slot that is
+not an options object or `undefined` (`create(owner, true, 5n)`). The count
+alone decides, so a struct as the last constructor argument is never read as
+options. It resolves to the calling class. The tuple form
+`_create([owner, true], options)` still works, except on a class with `prepare`.
+
+A subclass cannot override `create` with its own signature: TypeScript rejects
+it (TS2417). Write the signature as `prepare` instead.
+
+Definition fields, all optional:
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `witnesses` | no witnesses | Witness factory, or a list of factories merged into one. Required when the contract declares witnesses, unless `prepare` supplies them. |
+| `privateState` | `{}` | Factory for the initial private state, or a list merged into one. |
+| `extend` | none | `(sim) => members`. Added to every instance: helper bags, wrappers, sync versions of circuits. A member replaces the circuit method of the same name. Getters stay getters. |
+| `prepare` | positional `create` | `(...input) => ({ args, options?, fields? })`. `create` takes `prepare`'s parameters; `fields` become own fields of the instance. Without definition `witnesses`, a contract with witnesses needs `options.witnesses`. The class has no `_create`. |
+| `artifactName` | none | The `artifacts/<name>/` directory the live backend deploys. |
+| `arity` | read from the artifact | The constructor's argument count. |
+
+The witnesses must match the contract's `Witnesses<P>`, where `P` is the private
+state the definition yields. A missing witness, a wrong value type, or a witness
+that reads a private state the factories do not make fails to compile. The
+witnesses `prepare` or `create` passes in options are checked the same way.
+With a list of parts, `sim.witnesses` and the options take the contract's
+`Witnesses<P>` type; a single factory keeps its own type.
+
+`extend` and `fields` cannot take a name the simulator itself uses: a base
+member (`getPrivateState`, `circuits`, `signers`, `witnesses`, ...), an
+`Object.prototype` name, or `then`. Such a name throws at `create`.
+
+The live backend receives a full `SimulatorConfig`: identity `contractArgs`,
+the witness and private-state factories (merged), and `artifactName`.
+
+#### Witnesses and private state from parts
+
+A mock that pairs a module with an authenticator needs both parts' witnesses and
+a private state holding both. List the parts instead of writing a bundled
+factory. Here `TokenWitnesses` and `TokenPrivateState` hold the module's own
+witnesses and keys only, and the authenticator owns `secretKey`:
+
+```typescript
+class TokenSimulator extends defineSimulator(MockToken, {
+  witnesses: [TokenWitnesses, AuthPrfPseudonymWitnesses],
+  privateState: [TokenPrivateState.generate, AuthPrfPseudonymPrivateState.generate],
+}) {}
+// getPrivateState(): Promise<TokenPrivateState & AuthPrfPseudonymPrivateState>
+```
+
+- Each witness receives the whole merged private state. A part's witness may
+  return only its own part, typed on its own state
+  (`[{ ...privateState, nonce }, value]`). The merged witness writes that part
+  over the whole state, so the other parts' keys stay.
+- A witness part that names its private-state factory owns the keys that
+  factory returns, and an owned key its witness omits is deleted:
+  `Object.assign(AuthWitnesses, { privateState: AuthPrivateState.generate })`.
+  To own an optional key, return it from the factory set to `undefined`
+  (`{ secretKey, nonce: undefined }`). A key the factory does not return stays.
+- A part may return a class instance. Its prototype methods are kept and called
+  on it. A private-state part returns a plain object.
+- The merged witness writes the state a witness returns over the whole state
+  only when both are plain objects. Otherwise, e.g. for a class instance, the
+  returned state replaces the whole state as it is.
+- A witness name or private-state key that two parts define throws when the
+  definition runs, also if `prepare` or `create` supplies the witnesses or the
+  private state:
+  `witness "wit_AuthPrfPseudonymSK" is defined by both part 0 ("TokenWitnesses") and part 1 ("AuthPrfPseudonymWitnesses")`.
+  A bundled module factory that already includes the authenticator's witness
+  clashes this way; list the module's own part instead. Each part is called
+  once there to read its names.
+- Witnesses passed in `options`, by `prepare` or by `create`, are used as they
+  are: each returns the whole state.
+- `composeWitnesses(...parts)` and `composePrivateState(...parts)` return the
+  merged factory, with its `parts`, for `createSimulator` or a `prepare`
+  function. Merged witnesses fit the contract's `Witnesses<P>`, so
+  `contractFactory: (w) => new Contract<P>(w)` compiles with per-part types.
+
+#### Members that are not circuits
+
+Module-specific helpers live next to the module's witnesses and type `sim` with
+`PrivateStateAccess<P>`:
+
+```typescript
+// witnesses/OwnableWitnesses.ts
+export const OwnableHelpers = (sim: PrivateStateAccess<OwnablePrivateState>) => ({
+  privateState: {
+    injectSecretKey: (sk: Uint8Array): Promise<OwnablePrivateState> =>
+      sim.updatePrivateState(OwnablePrivateState.withSecretKey(sk)),
+  },
+});
+```
+
+`prepare` covers a `create` that takes named arguments, defaults, or state the
+witnesses close over:
+
+```typescript
+// witnesses/NoteTokenWitnesses.ts
+export const prepareNoteToken = ({
+  wallet = createNoteWallet(),
+  instanceSalt = INSTANCE_SALT,
+  ...options
+}: NoteTokenOptions = {}) => ({
+  args: [instanceSalt] as const,
+  options: { ...options, witnesses: options.witnesses ?? NoteTokenWitnesses(wallet) },
+  fields: { wallet },
+});
+
+// The spec
+class NoteTokenSimulator extends defineSimulator(MockNoteToken, {
+  privateState: NoteTokenPrivateState.generate,
+  prepare: prepareNoteToken,
+}) {}
+
+const token = await NoteTokenSimulator.create({ instanceSalt });
+token.wallet.pathOverride = path; // read by the witnesses
+```
+
+#### Before and after
+
+Before, a hand-written simulator file per mock:
+
+```typescript
+import { createSimulator, type SimulatorOptions } from '@openzeppelin/compact-simulator';
+import {
+  type ContractAddress,
+  type Either,
+  ledger,
+  Contract as MockOwnable,
+} from '../../../../artifacts/access/test/mocks/MockOwnable/contract/index.js';
+import { OwnablePrivateState, OwnableWitnesses } from '../witnesses/OwnableWitnesses.js';
+
+type OwnableArgs = readonly [initialOwner: Either<Uint8Array, ContractAddress>, isInit: boolean];
+
+const OwnableSimulatorBase = createSimulator<
+  OwnablePrivateState,
+  ReturnType<typeof ledger>,
+  ReturnType<typeof OwnableWitnesses>,
+  MockOwnable<OwnablePrivateState>,
+  OwnableArgs
+>({
+  contractFactory: (witnesses) => new MockOwnable<OwnablePrivateState>(witnesses),
+  defaultPrivateState: () => OwnablePrivateState.generate(),
+  contractArgs: (initialOwner, isInit) => [initialOwner, isInit],
+  ledgerExtractor: (state) => ledger(state),
+  witnessesFactory: () => OwnableWitnesses(),
+  artifactName: 'MockOwnable',
+});
+
+export class OwnableSimulator extends OwnableSimulatorBase {
+  static async create(
+    initialOwner: Either<Uint8Array, ContractAddress>,
+    isInit: boolean,
+    options: SimulatorOptions<OwnablePrivateState, ReturnType<typeof OwnableWitnesses>> = {},
+  ): Promise<OwnableSimulator> {
+    return super.create([initialOwner, isInit], options) as Promise<OwnableSimulator>;
+  }
+
+  public owner(): Promise<Either<Uint8Array, ContractAddress>> {
+    return this.circuits.impure.owner();
+  }
+
+  public transferOwnership(newOwner: Either<Uint8Array, ContractAddress>): Promise<[]> {
+    return this.circuits.impure.transferOwnership(newOwner);
+  }
+
+  public _unsafeTransferOwnership(newOwner: Either<Uint8Array, ContractAddress>): Promise<[]> {
+    return this.circuits.impure._unsafeTransferOwnership(newOwner);
+  }
+
+  public renounceOwnership(): Promise<[]> {
+    return this.circuits.impure.renounceOwnership();
+  }
+
+  public assertOnlyOwner(): Promise<[]> {
+    return this.circuits.impure.assertOnlyOwner();
+  }
+
+  public _transferOwnership(newOwner: Either<Uint8Array, ContractAddress>): Promise<[]> {
+    return this.circuits.impure._transferOwnership(newOwner);
+  }
+
+  public _unsafeUncheckedTransferOwnership(
+    newOwner: Either<Uint8Array, ContractAddress>,
+  ): Promise<[]> {
+    return this.circuits.impure._unsafeUncheckedTransferOwnership(newOwner);
+  }
+
+  public readonly privateState = {
+    injectSecretKey: (newSK: Uint8Array): Promise<OwnablePrivateState> =>
+      this.updatePrivateState(OwnablePrivateState.withSecretKey(newSK)),
+    getCurrentSecretKey: async (): Promise<Uint8Array> => {
+      const sk = (await this.getPrivateState()).secretKey;
+      if (typeof sk === 'undefined') {
+        throw new Error('Missing secret key');
+      }
+      return Uint8Array.from(sk);
+    },
+  };
+}
+```
+
+After, no simulator file. The spec defines the class, and the `privateState` bag
+moves next to the witnesses (`OwnableHelpers` above, with `getCurrentSecretKey`
+added):
+
+```typescript
+class OwnableSimulator extends defineSimulator(MockOwnable, {
+  witnesses: OwnableWitnesses,
+  privateState: OwnablePrivateState.generate,
+  extend: OwnableHelpers,
+  artifactName: 'MockOwnable',
+}) {}
+```
+
+The spec body is unchanged: `OwnableSimulator.create(owner, isInit, { privateState })`,
+`ownable.transferOwnership(...)`, `ownable.privateState.injectSecretKey(...)`.
+
 ## Advanced Features
 
 ### 👤 Callers and Signers
@@ -193,6 +554,18 @@ simulator.resetCaller();
 // Resolve an alias for use as a circuit argument
 const owner = await simulator.signers.eitherFor('OWNER');
 ```
+
+`as()` applies to the next call: a circuit method, a `circuits` call, or a
+function `extend` or `prepare` `fields` adds in place of a circuit method. That
+call spends it even if it fails. The call after it runs as the persistent
+caller, or the default one.
+A function in place of a circuit method takes it when it starts and runs its
+first circuit call as that caller, also after an `await`. A call that starts
+while it is pending runs as the persistent or default caller.
+Other `extend` members behave like subclass methods and do not spend the
+caller, so in `sim.as('OWNER').transfer(sim.helper())` the `transfer` circuit
+runs as `OWNER`. A helper that makes several circuit calls spends the caller on
+its first call. To run all of them as one caller, use `setPersistentCaller()`.
 
 > `ownPublicKey()` is a witness value and MUST NOT be used as an authentication
 > mechanism. These helpers exist for circuits that take the caller as an input
@@ -388,6 +761,7 @@ In live mode the address comes from the deployed contract. An explicit
 | Method | Description |
 | ------ | ----------- |
 | `static create(...args, options?)` | Construct a simulator (async; overridden per subclass) |
+| `<circuit>(...args)` | Call a circuit by name (async; see [Flat Circuit Methods](#4-flat-circuit-methods)) |
 | `contractAddress` | The deployed contract's address |
 | `signers` | Alias resolver (`keyFor`, `eitherFor`) for circuit arguments |
 | `as(alias)` | Set the caller for the next call only |

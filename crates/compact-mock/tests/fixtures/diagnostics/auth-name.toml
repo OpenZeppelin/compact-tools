@@ -1,0 +1,9 @@
+[mock]
+caller_type = { name = "Badge", module = "ok/Ok" }
+
+[mock.auth.Gate]
+module = "ok/Ok"
+call = "ping()"
+
+[[mock.rules]]
+modules = ["ok/Ok"]

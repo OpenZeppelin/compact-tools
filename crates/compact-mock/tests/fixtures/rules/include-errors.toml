@@ -1,0 +1,11 @@
+[[mock.rules]]
+modules = ["calc/Calc"]
+instances = [{ suffix = "Fragment" }]
+
+[[mock.rules]]
+modules = ["calc/Switch"]
+include = "MockSwitch.fragment.compact"
+
+[[mock.rules]]
+modules = ["calc/Sum"]
+include = "Broken.fragment.compact"

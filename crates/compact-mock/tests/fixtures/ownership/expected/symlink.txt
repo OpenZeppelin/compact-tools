@@ -1,0 +1,13 @@
+exit: 0
+--- stdout
+wrote src/lib/test/artifacts/MockLib.compact
+removed src/lib/test/artifacts/MockGone.compact
+removed src/old/test/artifacts/MockOld.compact
+--- stderr
+compact-mock: kept src/lib/test/artifacts/MockGone: it is a symlink
+compact-mock: 1 mock, 1 written, 0 unchanged, 2 removed.
+--- removed
+src/lib/test/artifacts/MockGone.compact
+src/old/test/artifacts
+src/old/test/artifacts/.compact-mock-stamp
+src/old/test/artifacts/MockOld.compact

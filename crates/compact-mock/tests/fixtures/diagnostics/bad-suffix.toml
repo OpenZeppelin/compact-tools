@@ -1,0 +1,5 @@
+[mock.auth.caller]
+suffix = "a-b"
+
+[[mock.rules]]
+modules = ["ok/Ok"]

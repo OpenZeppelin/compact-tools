@@ -1,0 +1,13 @@
+// Fixture module for the compact-mock end-to-end tests.
+
+pragma language_version >= 0.28.0;
+
+module Id {
+  import CompactStandardLibrary;
+
+  export type Account = Either<Bytes<32>, ContractAddress>;
+
+  export struct Caller {
+    account: Account;
+  }
+}

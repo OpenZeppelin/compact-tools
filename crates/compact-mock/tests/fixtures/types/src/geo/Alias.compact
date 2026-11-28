@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Alias {
+  import CompactStandardLibrary;
+
+  import { Point } from "./Point";
+
+  export type Spot = Point;
+}

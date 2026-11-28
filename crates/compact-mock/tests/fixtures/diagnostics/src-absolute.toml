@@ -1,0 +1,5 @@
+[mock]
+src = "/compact-mock-missing-src"
+
+[[mock.rules]]
+modules = ["ok/Ok"]

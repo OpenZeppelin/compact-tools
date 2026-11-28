@@ -1,0 +1,9 @@
+pragma language_version >= 0.28.0;
+
+module Ring {
+  import CompactStandardLibrary;
+
+  import "./Echo";
+
+  export { Badge };
+}
